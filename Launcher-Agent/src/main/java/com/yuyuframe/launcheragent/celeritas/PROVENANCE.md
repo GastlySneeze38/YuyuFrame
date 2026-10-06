@@ -2,8 +2,9 @@
 
 Base du renderer 1.8.9 (décision D5, `docs/LauncherAgent/v1.8.9/README.md`).
 
-**Rangé ici sans être branché** : rien dans l'agent ne l'appelle, et
-`build.bat` écarte ce dossier de toutes ses passes de compilation.
+**Branché depuis le 2026-10-06 (build v1229), éteint par défaut, jamais
+encore vu en jeu.** Il s'allume par le réglage « Renderer de terrain
+(expérimental) » du module Optimisation, sur la 1.8.9 seulement.
 
 ## D'où ça vient
 
@@ -74,27 +75,69 @@ Base : `com.yuyuframe.launcheragent.celeritas`. Les sous-paquets suivent.
 | `shader/` | Chargement des sources de shaders |
 | `raster/` | Rastérisation d'occlusion |
 | `util/` | Collections, tri, itérateurs, couleurs |
-| `v1_8_9/` | L'adaptateur des anciennes versions, **pas encore réécrit** (voir plus bas) |
+| `v1_8_9/` | L'adaptateur 1.8.9, porté en noms Yarn legacy (voir « Comment c'est branché ») |
+| `RendererSwitch.java` | L'interrupteur — notre code, pas celui de Celeritas |
 
 Les shaders sont dans `src/main/resources/assets/celeritas/shaders/` (chez
 l'amont : `assets/sodium/shaders/`). Le chemin de chargement sera à faire
 suivre au branchement.
 
-## État de la compilation
+## Comment c'est branché
 
-- **Le moteur (tout sauf `v1_8_9/`) compile**, vérifié le 2026-10-06 avec le
-  JDK 25 du launcher : 267 fichiers, aucune erreur. Il lui faut sur le
-  classpath, en plus de LWJGL 3 : **JOML 1.10.5**, **fastutil 7.1.0**,
-  **log4j-api** et les **annotations JetBrains** (compilation seulement).
-  JOML et fastutil ne sont pas dans la 1.8.9 : à ajouter au build et au
-  lancement quand on branchera.
-- **`v1_8_9/` ne compile pas** et ne le peut pas en l'état : il est écrit pour
-  le chargeur Ornithe, en noms Feather, avec des directives Stonecutter
-  (`//? if >=1.8 {`) qui mêlent plusieurs versions du jeu dans les mêmes
-  fichiers. C'est une référence à réécrire en Mixins Yarn legacy (décisions D2
-  et D4) ; ses mixins iront alors dans `apimixin/v1_8_9/renderer/`.
-  La correspondance des noms est dans `v1_8_9/FEATHER-YARN.md`, et les stubs
-  Yarn legacy des 36 classes du jeu qu'il cite sont dans `src/stubs/v1_8_9`.
+- **Compilation** — le moteur part avec la passe principale de `build.bat`,
+  l'adaptateur `v1_8_9/` avec l'unité 1.8.9 (contre les stubs Yarn legacy).
+  Bibliothèques : **JOML 1.10.5**, **fastutil 7.1.0**, **log4j-api** et les
+  **annotations JetBrains** (ces deux dernières à la compilation seulement),
+  déposées dans `lib/` par `build.bat`.
+- **Lancement** — JOML et fastutil manquent à la 1.8.9 : le launcher les
+  ajoute à ses bibliothèques (`Backend/…/legacy_lwjgl3_libraries.json`).
+  Sans elles (launcher plus ancien que l'agent), `RendererSwitch.available()`
+  est faux : le renderer reste éteint et aucune classe du moteur n'est touchée.
+- **Adaptateur** — `v1_8_9/` est le portage de l'adaptateur `ornithe` de
+  Celeritas, réduit à sa branche « 1.8 et plus » et réécrit en noms Yarn
+  legacy (table : `v1_8_9/FEATHER-YARN.md`). Code typé, marqué `@YarnNamed`,
+  traduit au chargement.
+- **Mixins** — `apimixin/v1_8_9/renderer/`, onze fichiers, enregistrés dans
+  `MixinHookPointRegistry` (toujours tissés) et dans la table de refmap de
+  `LauncherMixinService`. Ils ne nomment aucun type du jeu : tout passe par
+  `v1_8_9/RendererHooks189`.
+- **Interrupteur** — `RendererSwitch` (notre code). Il ne change d'état qu'au
+  rechargement des chunks, et une erreur du renderer le coupe et rend la main
+  au rendu vanilla.
+
+### Écarts voulus avec l'adaptateur d'amont
+
+- **Aucun `@Overwrite`.** L'amont remplace cinq méthodes du `WorldRenderer`
+  sans retour possible ; ici ce sont des injections en tête de méthode,
+  annulées seulement quand le renderer est actif. C'est ce qui permet de
+  l'éteindre en jeu.
+- **Une instance unique** (`CeleritasWorldRenderer.INSTANCE`) au lieu d'un
+  champ greffé sur le `WorldRenderer` : le jeu n'en a qu'un.
+- **Position de caméra recalculée** dans `renderEntities` au lieu de capturer
+  les variables locales de vanilla.
+- **Liste des chunks visibles de vanilla vidée** à l'activation : son
+  rechargement ne la vide pas, et vanilla dessinerait les entités en double.
+- **Non portés** : le suivi des chunks du serveur intégré (inutile au client),
+  l'optimisation de `TypeFilterableList.forEach`, les retouches de fenêtre de
+  `MinecraftMixin` (notre couche LWJGL crée déjà la fenêtre), le suivi de
+  transparence des textures (vide à partir de la 1.5).
+- **Une borne corrigée** dans `populateTileEntities` (`>=` au lieu de `>`).
+
+### Vérifié hors jeu, pas en jeu
+
+- Tout compile avec le JDK 25 du launcher.
+- Les 94 stubs 1.8.9 sont confrontés au vrai jar (existence, signature,
+  statique, visibilité, classe ou interface) : aucun écart.
+- Le code typé et les mixins du renderer (31 classes, 142 références au jeu) :
+  chaque membre existe dans Yarn et dans le jar, chaque classe qui cite un
+  type du jeu porte `@YarnNamed`, aucun mixin n'en cite.
+- Les cibles des injections sont relevées dans le bytecode de `bfr`
+  (`WorldRenderer`), dont les deux étapes du profileur « entities » et
+  « blockentities ».
+
+**Rien de tout cela ne dit que l'image est juste** : l'état OpenGL laissé au
+jeu, la cohabitation avec notre interface, les entités et les block entities
+ne se jugent qu'en jeu.
 
 ## Ce qui n'a pas été repris
 

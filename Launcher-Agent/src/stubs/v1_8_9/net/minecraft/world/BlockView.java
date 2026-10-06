@@ -10,4 +10,7 @@ import net.minecraft.world.biome.Biome;
 public interface BlockView {
 
     Biome getBiome(BlockPos pos);
+
+    /** {@code adq.p(BlockPos)} — déclarée ici : typer le receveur en {@code BlockView}. */
+    net.minecraft.block.BlockState getBlockState(BlockPos pos);
 }

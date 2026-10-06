@@ -1,5 +1,6 @@
 package com.yuyuframe.launcheragent.runtime.module.optimization;
 
+import com.yuyuframe.launcheragent.celeritas.RendererSwitch;
 import com.yuyuframe.launcheragent.runtime.game.ClientData;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
@@ -37,8 +38,25 @@ public final class OptimizationModule extends LauncherModule {
      */
     private boolean borderlessFullscreen = false;
 
+    static final String RENDERER_TITLE = "Renderer de terrain";
+    static final String RENDERER_TEXT =
+        "Le jeu d'origine envoie chaque chunk à la carte graphique un par un, et recalcule souvent ce qui est visible. "
+            + "Ce renderer regroupe les chunks par régions pour les dessiner en quelques appels, "
+            + "les construit sur d'autres cœurs du processeur, et n'envoie pas ce qui est caché ou hors de vue. "
+            + "Il repose sur Celeritas, un projet libre.";
+
+    /**
+     * Renderer de terrain repris de Celeritas ({@code launcheragent/celeritas}).
+     * Éteint par défaut tant qu'il n'est pas validé en jeu.
+     */
+    private boolean terrainRenderer = false;
+
     @Override
     protected void settings(SettingList list) {
+        list.info("renderer-info", RENDERER_TITLE, RENDERER_TEXT, "Renderer");
+        list.toggle("terrain-renderer", "Renderer de terrain (expérimental)",
+            "Remplace le rendu des chunks du jeu. Les chunks se rechargent à chaque changement de ce réglage.",
+            "Renderer", null, () -> terrainRenderer, v -> terrainRenderer = v);
         list.info("mouse-info", MOUSE_TITLE, MOUSE_TEXT, "Souris");
         list.toggle("borderless-fullscreen", "Plein écran sans bordure",
             "Le plein écran devient une fenêtre sans cadre qui couvre l'écran : alt-tab immédiat, sans écran noir.",
@@ -63,5 +81,13 @@ public final class OptimizationModule extends LauncherModule {
         boolean on = isEnabled();
         ClientData.setNativeMouse(on);
         ClientData.setBorderlessFullscreen(on && borderlessFullscreen);
+
+        // Le renderer ne change d'état qu'au rechargement des chunks : on ne le
+        // demande que si la consigne a réellement changé.
+        boolean wantRenderer = on && terrainRenderer;
+        if (wantRenderer != RendererSwitch.wanted()) {
+            RendererSwitch.setWanted(wantRenderer);
+            ClientData.reloadTerrain();
+        }
     }
 }

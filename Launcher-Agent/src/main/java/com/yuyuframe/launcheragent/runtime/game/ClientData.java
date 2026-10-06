@@ -163,6 +163,11 @@ public final class ClientData {
         AccessorRegistry.invoke(AccessPoint.CLIENT_NATIVE_MOUSE, null, Boolean.valueOf(wanted));
     }
 
+    /** Recharge les chunks affichés — voir {@link AccessPoint#CLIENT_RELOAD_TERRAIN}. 1.8.9 seulement. */
+    public static void reloadTerrain() {
+        AccessorRegistry.get(AccessPoint.CLIENT_RELOAD_TERRAIN);
+    }
+
     /** Plein écran sans bordure (vrai) ou exclusif (faux) — voir {@link AccessPoint#CLIENT_BORDERLESS_FULLSCREEN}. 1.8.9 seulement. */
     public static void setBorderlessFullscreen(boolean wanted) {
         AccessorRegistry.invoke(AccessPoint.CLIENT_BORDERLESS_FULLSCREEN, null, Boolean.valueOf(wanted));

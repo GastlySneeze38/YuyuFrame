@@ -19,4 +19,14 @@ public class GameRenderer {
     public void renderWorld(float p0, long p1) {
         throw new UnsupportedOperationException("stub compile-only");
     }
+
+    /** {@code bfk.i} — {@code enableLightMap} chez Feather. */
+    public void enableLightmap() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    /** {@code bfk.h} — {@code disableLightMap} chez Feather. */
+    public void disableLightmap() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
 }

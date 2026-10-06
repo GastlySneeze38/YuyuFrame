@@ -7,4 +7,10 @@ public class BlockRenderManager {
 
     protected BlockRenderManager() {
     }
+
+    /** {@code bgd.a(BlockState,BlockPos,BlockView,BufferBuilder)} — {@code tessellate} chez Feather. */
+    public boolean renderBlock(net.minecraft.block.BlockState state, net.minecraft.util.math.BlockPos pos,
+                               net.minecraft.world.BlockView world, net.minecraft.client.render.BufferBuilder buffer) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
 }

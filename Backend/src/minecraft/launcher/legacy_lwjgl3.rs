@@ -19,6 +19,13 @@ use super::agent_deploy::launcher_agent_libs_dir;
 /// Entrées de bibliothèque LWJGL 3.4.1, recopiées telles quelles (URL, sha1,
 /// taille, règles d'OS) du manifeste Mojang de la 26.1.2 : même pipeline de
 /// téléchargement vérifié que n'importe quelle bibliothèque vanilla.
+///
+/// S'y ajoutent, depuis le 2026-10-06, les deux bibliothèques dont le
+/// renderer de terrain de l'agent a besoin et que la 1.8.9 n'a pas : JOML
+/// 1.10.5 et fastutil 7.1.0 (`Launcher-Agent/…/celeritas/PROVENANCE.md`).
+/// Mêmes dépôt et forme que les autres ; empreintes relevées sur les jars
+/// servis par `libraries.minecraft.net`. Sans elles l'agent démarre quand
+/// même et garde le rendu d'origine.
 const LWJGL3_LIBRARIES: &str = include_str!("legacy_lwjgl3_libraries.json");
 
 /// Nom du jar de la couche de compatibilité, déployé avec l'agent.
@@ -95,6 +102,10 @@ mod tests {
         for module in ["lwjgl", "lwjgl-glfw", "lwjgl-opengl", "lwjgl-openal"] {
             let main = format!("org.lwjgl:{}:3.4.1", module);
             assert!(libs.iter().any(|l| l.name == main), "{} manquant", main);
+        }
+        // Bibliothèques du renderer de terrain de l'agent.
+        for name in ["org.joml:joml:1.10.5", "it.unimi.dsi:fastutil:7.1.0"] {
+            assert!(libs.iter().any(|l| l.name == name), "{} manquant", name);
         }
     }
 

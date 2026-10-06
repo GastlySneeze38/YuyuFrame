@@ -290,6 +290,12 @@ public enum AccessPoint {
      */
     CLIENT_BORDERLESS_FULLSCREEN,
     /**
+     * Recharge les chunks du {@code WorldRenderer} (comme F3+A). Sert au
+     * renderer de terrain de la 1.8.9, qui ne change d'état qu'à ce moment
+     * ({@code celeritas.RendererSwitch}). Sans effet hors partie.
+     */
+    CLIENT_RELOAD_TERRAIN,
+    /**
      * Utilisation d'objet en cours, rendue en
      * {@code int[]{ ticks restants, durée totale }} — {@code null} si le
      * joueur n'utilise rien.

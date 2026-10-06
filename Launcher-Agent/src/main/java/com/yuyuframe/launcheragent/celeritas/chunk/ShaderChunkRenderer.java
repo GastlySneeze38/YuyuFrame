@@ -65,13 +65,13 @@ public abstract class ShaderChunkRenderer implements ChunkRenderer {
         List<GlShader> loadedShaders = new ArrayList<>();
 
         loadedShaders.add(ShaderLoader.loadShader(ShaderType.VERTEX,
-                "sodium:" + path + ".vsh", constants));
+                "celeritas:" + path + ".vsh", constants));
 
         loadedShaders.add(ShaderLoader.loadShader(ShaderType.FRAGMENT,
-                "sodium:" + path + ".fsh", constants));
+                "celeritas:" + path + ".fsh", constants));
 
         try {
-            var builder = GlProgram.builder("sodium:chunk_shader");
+            var builder = GlProgram.builder("celeritas:chunk_shader");
             loadedShaders.forEach(builder::attachShader);
             int i = 0;
             for (var attr : options.pass().vertexType().getVertexFormat().getAttributes()) {

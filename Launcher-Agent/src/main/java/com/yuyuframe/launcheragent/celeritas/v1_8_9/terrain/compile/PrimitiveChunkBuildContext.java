@@ -1,128 +1,78 @@
 package com.yuyuframe.launcheragent.celeritas.v1_8_9.terrain.compile;
 
-import com.mojang.blaze3d.vertex.BufferBuilder;
+import net.minecraft.client.render.BufferBuilder;
 import net.minecraft.world.World;
-import com.yuyuframe.launcheragent.celeritas.util.MathUtil;
+import com.yuyuframe.launcheragent.apimixin.mapping.YarnNamed;
 import com.yuyuframe.launcheragent.celeritas.model.quad.properties.ModelQuadFacing;
 import com.yuyuframe.launcheragent.celeritas.chunk.RenderPassConfiguration;
 import com.yuyuframe.launcheragent.celeritas.chunk.compile.ChunkBuildBuffers;
 import com.yuyuframe.launcheragent.celeritas.chunk.compile.ChunkBuildContext;
-import com.yuyuframe.launcheragent.celeritas.chunk.sprite.SpriteTransparencyLevel;
 import com.yuyuframe.launcheragent.celeritas.chunk.terrain.material.Material;
 import com.yuyuframe.launcheragent.celeritas.chunk.vertex.format.ChunkVertexEncoder;
 import com.yuyuframe.launcheragent.celeritas.util.QuadUtil;
-import com.yuyuframe.launcheragent.celeritas.v1_8_9.terrain.CeleritasWorldRenderer;
-import com.yuyuframe.launcheragent.celeritas.v1_8_9.terrain.PrimitiveRenderPassConfigurationBuilder;
-import com.yuyuframe.launcheragent.celeritas.v1_8_9.terrain.SpriteTransparencyTracker;
 
 import java.nio.IntBuffer;
 
+/**
+ * Ce dont un thread de construction a besoin pour mailler une section : le
+ * monde, et son propre tampon de sommets vanilla.
+ *
+ * <p>Repris de l'adaptateur {@code ornithe} de Celeritas, branche « 1.8 et plus ».
+ */
+@YarnNamed
 public class PrimitiveChunkBuildContext extends ChunkBuildContext {
-    public static final int NUM_PASSES = 2;
-
     public final World world;
-    private final SpriteTransparencyTracker transparencyTracker;
-
+    /** Tampon dans lequel le rendu de blocs vanilla écrit, relu ensuite par {@link #copyRawBuffer}. */
     public final BufferBuilder tesselator;
 
     public PrimitiveChunkBuildContext(World world, RenderPassConfiguration renderPassConfiguration) {
         super(renderPassConfiguration);
         this.world = world;
-        this.transparencyTracker = CeleritasWorldRenderer.instance().getTransparencyTracker();
-        //? if >=1.8 {
-        //this.tesselator = new BufferBuilder(8192);
-        //?} else
-        this.tesselator = BufferBuilder.INSTANCE;
+        this.tesselator = new BufferBuilder(8192);
     }
 
     private final ChunkVertexEncoder.Vertex[] vertices = ChunkVertexEncoder.Vertex.uninitializedQuad();
 
-    private Material selectMaterial(Material material, SpriteTransparencyLevel transparencyLevel) {
-        if (transparencyLevel == SpriteTransparencyLevel.OPAQUE && material == PrimitiveRenderPassConfigurationBuilder.CUTOUT_MIPPED_MATERIAL) {
-            // Downgrade to solid
-            return PrimitiveRenderPassConfigurationBuilder.SOLID_MATERIAL;
-        } else if (material == PrimitiveRenderPassConfigurationBuilder.TRANSLUCENT_MATERIAL && transparencyLevel != SpriteTransparencyLevel.TRANSLUCENT) {
-            // Downgrade to cutout
-            return PrimitiveRenderPassConfigurationBuilder.CUTOUT_MIPPED_MATERIAL;
-        }
-        return material;
-    }
-
-    private static final int[] NORMAL_WINDING = new int[] {0, 1, 2, 3};
-    private static final int[] BACKFACE_WINDING = new int[] {3, 2, 1, 0};
-
+    /**
+     * Recopie les quads écrits par vanilla au format {@code BLOCK} (7 entiers
+     * par sommet : position, couleur, UV, lumière) dans les tampons du moteur.
+     */
     public void copyRawBuffer(IntBuffer rawBuffer, int vertexCount, ChunkBuildBuffers buffers, Material material) {
         if (vertexCount == 0) {
             return;
         }
 
-        // Require
+        // Des quads seulement.
         if ((vertexCount & 0x3) != 0) {
             throw new IllegalStateException();
         }
 
-        var celeritasVertices = this.vertices;
-
+        ChunkVertexEncoder.Vertex[] celeritasVertices = this.vertices;
         int numQuads = vertexCount / 4;
-        outputQuads(rawBuffer, celeritasVertices, numQuads, buffers, material, NORMAL_WINDING);
-        //? if <1.7 {
-        if (material.pass == PrimitiveRenderPassConfigurationBuilder.TRANSLUCENT_PASS) {
-            // We need to emulate backface culling as the legacy renderer relies on it. Write the same quads again
-            // in reverse winding order.
-            outputQuads(rawBuffer, celeritasVertices, numQuads, buffers, material, BACKFACE_WINDING);
-        }
-        //?}
-    }
-
-    private void outputQuads(IntBuffer rawBuffer, ChunkVertexEncoder.Vertex[] celeritasVertices, int numQuads, ChunkBuildBuffers buffers, Material material, int[] winding) {
         int ptr = 0;
-        var tracker = this.transparencyTracker;
+
         for (int quadIdx = 0; quadIdx < numQuads; quadIdx++) {
-            float uSum = 0, vSum = 0;
             for (int vIdx = 0; vIdx < 4; vIdx++) {
-                var vertex = celeritasVertices[winding[vIdx]];
+                ChunkVertexEncoder.Vertex vertex = celeritasVertices[vIdx];
                 vertex.x = Float.intBitsToFloat(rawBuffer.get(ptr++));
                 vertex.y = Float.intBitsToFloat(rawBuffer.get(ptr++));
                 vertex.z = Float.intBitsToFloat(rawBuffer.get(ptr++));
-
-                // In 1.8+, color comes before all UVs. In 1.7-, texture UV comes before color.
-                //? if >=1.8
-                //vertex.color = rawBuffer.get(ptr++);
-
-                float u = Float.intBitsToFloat(rawBuffer.get(ptr++));
-                float v = Float.intBitsToFloat(rawBuffer.get(ptr++));
-                vertex.u = u;
-                uSum += u;
-                vertex.v = v;
-                vSum += v;
-                //? if <1.8 {
+                // À partir de la 1.8, la couleur précède les UV.
                 vertex.color = rawBuffer.get(ptr++);
-                vertex.vanillaNormal = rawBuffer.get(ptr++);
-                //?}
+                vertex.u = Float.intBitsToFloat(rawBuffer.get(ptr++));
+                vertex.v = Float.intBitsToFloat(rawBuffer.get(ptr++));
                 vertex.light = rawBuffer.get(ptr++);
             }
-            int trueNormal = QuadUtil.calculateNormal(celeritasVertices);
-            for (int vIdx = 0; vIdx < 4; vIdx++) {
-                celeritasVertices[winding[vIdx]].trueNormal = trueNormal;
-            }
-            ModelQuadFacing facing = QuadUtil.findNormalFace(trueNormal);
-            // TODO implement render pass downgrading for 1.5+
-            //? if <1.5 {
-            // Pretend the atlas is 256x256 for the purposes of computing the sprite ID
-            uSum /= 4;
-            vSum /= 4;
-            int spriteX = MathUtil.mojfloor(uSum * 256.0f);
-            int spriteY = MathUtil.mojfloor(vSum * 256.0f);
-            int spriteId = (spriteY / 16) * 16 + spriteX / 16;
-            Material correctMaterial = selectMaterial(material, tracker.getTransparencyLevel(spriteId));
-            //?} else
-            //Material correctMaterial = material;
-            buffers.get(correctMaterial).getVertexBuffer(facing).push(celeritasVertices, correctMaterial);
-        }
-    }
 
-    @Override
-    public void cleanup() {
-        super.cleanup();
+            int trueNormal = QuadUtil.calculateNormal(celeritasVertices);
+
+            for (int vIdx = 0; vIdx < 4; vIdx++) {
+                celeritasVertices[vIdx].trueNormal = trueNormal;
+            }
+
+            ModelQuadFacing facing = QuadUtil.findNormalFace(trueNormal);
+
+            buffers.get(material).getVertexBuffer(facing).push(celeritasVertices, material);
+        }
     }
 }

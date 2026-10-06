@@ -1,32 +1,42 @@
 package com.yuyuframe.launcheragent.celeritas.v1_8_9.debug;
 
-import it.unimi.dsi.fastutil.Pair;
+import com.yuyuframe.launcheragent.celeritas.RendererSwitch;
 import com.yuyuframe.launcheragent.celeritas.util.MathUtil;
 import com.yuyuframe.launcheragent.celeritas.util.NativeBuffer;
-import com.yuyuframe.launcheragent.celeritas.v1_8_9.Celeritas;
 import com.yuyuframe.launcheragent.celeritas.v1_8_9.terrain.CeleritasWorldRenderer;
 
 import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Lignes ajoutées à droite de l'écran F3 quand notre renderer dessine.
+ *
+ * <p>Repris de l'adaptateur {@code ornithe} de Celeritas, en simples chaînes
+ * (l'amont rendait des paires texte/couleur, par une classe de fastutil 8
+ * absente de la version que nous livrons).
+ */
 public class CeleritasDebugStrings {
-    public static List<Pair<String, Integer>> getStringsToRender() {
-        List<Pair<String, Integer>> stringsToRender = new ArrayList<>();
 
-        stringsToRender.add(Pair.of(getNativeMemoryString(), -1));
-        stringsToRender.add(Pair.of("", -1));
+    /** Préfixe de couleur verte du jeu (§a) — évite de nommer Formatting ici. */
+    private static final String GREEN = "§a";
 
-        stringsToRender.add(Pair.of("%s Renderer (%s)".formatted("Celeritas", Celeritas.VERSION), 0xFF55FF55));
-        stringsToRender.add(Pair.of("", -1));
+    public static List<String> getStringsToRender() {
+        List<String> lines = new ArrayList<>();
 
-        var renderer = CeleritasWorldRenderer.instanceNullable();
-
-        if (renderer != null) {
-            renderer.getDebugStrings().forEach(str -> stringsToRender.add(Pair.of(str, -1)));
+        if (!RendererSwitch.active()) {
+            return lines;
         }
 
-        return stringsToRender;
+        lines.add("");
+        lines.add(getNativeMemoryString());
+        lines.add(GREEN + "YuyuFrame Renderer (Celeritas)");
+
+        if (CeleritasWorldRenderer.INSTANCE.isAttached()) {
+            lines.addAll(CeleritasWorldRenderer.INSTANCE.getDebugStrings());
+        }
+
+        return lines;
     }
 
     private static String getNativeMemoryString() {

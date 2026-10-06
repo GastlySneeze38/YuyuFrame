@@ -4,7 +4,7 @@
 #extension GL_EXT_gpu_shader4 : require
 #endif
 
-#import <sodium:include/fog.glsl>
+#import <celeritas:include/fog.glsl>
 
 in vec4 v_Color;
 in vec4 v_RdhFactor;

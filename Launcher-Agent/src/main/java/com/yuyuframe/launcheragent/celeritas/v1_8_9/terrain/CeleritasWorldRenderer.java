@@ -1,68 +1,55 @@
 package com.yuyuframe.launcheragent.celeritas.v1_8_9.terrain;
 
 import net.minecraft.block.entity.BlockEntity;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.render.block.entity.BlockEntityRenderDispatcher;
 import net.minecraft.entity.Entity;
 import net.minecraft.world.World;
+import com.yuyuframe.launcheragent.apimixin.mapping.YarnNamed;
 import com.yuyuframe.launcheragent.celeritas.gl.device.CommandList;
 import com.yuyuframe.launcheragent.celeritas.chunk.ChunkRenderMatrices;
 import com.yuyuframe.launcheragent.celeritas.chunk.vertex.format.ChunkMeshFormats;
 import com.yuyuframe.launcheragent.celeritas.chunk.terrain.SimpleWorldRenderer;
 import com.yuyuframe.launcheragent.celeritas.v1_8_9.terrain.fog.GLStateManagerFogService;
-import com.yuyuframe.launcheragent.celeritas.v1_8_9.extensions.RenderGlobalExtension;
 import com.yuyuframe.launcheragent.celeritas.v1_8_9.terrain.matrix.PrimitiveChunkMatrixGetter;
-import com.yuyuframe.launcheragent.celeritas.v1_8_9.mixin.MinecraftAccessor;
 
-import java.util.*;
+import java.util.List;
+import java.util.Objects;
 
 /**
- * Provides an extension to vanilla's world renderer.
+ * Le renderer de terrain de la 1.8.9 : ce que le moteur ne peut pas savoir
+ * seul — où est la caméra, quelle est la distance de rendu, comment dessiner
+ * un block entity.
+ *
+ * <p>Repris de l'adaptateur {@code ornithe} de Celeritas, branche « 1.8 et
+ * plus ». Deux écarts : l'instance est tenue par {@link #INSTANCE} au lieu
+ * d'être greffée sur le {@code WorldRenderer} du jeu (il n'y en a qu'un), et
+ * le suivi de transparence des textures, vide à partir de la 1.5, a disparu.
  */
+@YarnNamed
 public class CeleritasWorldRenderer extends SimpleWorldRenderer<World, PrimitiveRenderSectionManager, Object, BlockEntity, Float> {
-    private SpriteTransparencyTracker transparencyTracker;
 
-    public SpriteTransparencyTracker getTransparencyTracker() {
-        return this.transparencyTracker;
+    /** L'unique renderer : le jeu n'a qu'un {@code WorldRenderer}. */
+    public static final CeleritasWorldRenderer INSTANCE = new CeleritasWorldRenderer();
+
+    private CeleritasWorldRenderer() {
+    }
+
+    /** Le monde auquel le renderer est attaché, ou {@code null}. */
+    public World attachedWorld() {
+        return this.world;
     }
 
     /**
-     * @return The CeleritasWorldRenderer based on the current dimension
+     * Vrai si un monde est attaché. Sans type du jeu dans sa signature : c'est
+     * la forme à appeler depuis une classe qui ne porte pas {@link YarnNamed}.
      */
-    public static CeleritasWorldRenderer instance() {
-        var instance = instanceNullable();
-
-        if (instance == null) {
-            throw new IllegalStateException("No renderer attached to active world");
-        }
-
-        return instance;
-    }
-
-    /**
-     * @return The CeleritasWorldRenderer based on the current dimension, or null if none is attached
-     */
-    public static CeleritasWorldRenderer instanceNullable() {
-        var world = MinecraftAccessor.celeritas$getInstance().worldRenderer;
-
-        if (world instanceof RenderGlobalExtension extension) {
-            return extension.sodium$getWorldRenderer();
-        }
-
-        return null;
-    }
-
-    @Override
-    protected void loadWorld(World world) {
-        this.transparencyTracker = new SpriteTransparencyTracker();
-        super.loadWorld(world);
+    public boolean isAttached() {
+        return this.world != null;
     }
 
     public static CameraState captureCameraState(double ticks) {
-        //? if <1.8 {
-        Entity viewEntity = MinecraftAccessor.celeritas$getInstance().camera;
-        //?} else
-        //Entity viewEntity = MinecraftAccessor.celeritas$getInstance().getCamera();
-
+        Entity viewEntity = MinecraftClient.getInstance().getCameraEntity();
         Objects.requireNonNull(viewEntity, "Client must have view entity");
 
         double x = viewEntity.prevTickX + (viewEntity.x - viewEntity.prevTickX) * ticks;
@@ -78,15 +65,7 @@ public class CeleritasWorldRenderer extends SimpleWorldRenderer<World, Primitive
 
     @Override
     public int getEffectiveRenderDistance() {
-        //? if <1.7 {
-        int viewDist = MinecraftAccessor.celeritas$getInstance().options.viewDistance;
-        if (viewDist > 4) {
-            System.err.println("View distance cannot be zero, resetting");
-            MinecraftAccessor.celeritas$getInstance().options.viewDistance = viewDist = 0;
-        }
-        return 16 >> viewDist;
-        //?} else
-        //return MinecraftAccessor.celeritas$getInstance().options.viewDistance;
+        return MinecraftClient.getInstance().options.viewDistance;
     }
 
     @Override
@@ -96,10 +75,7 @@ public class CeleritasWorldRenderer extends SimpleWorldRenderer<World, Primitive
 
     @Override
     public int getMaximumBuildHeight() {
-        //? if >=1.2 {
-        return this.world.getHeight();
-        //?} else
-        //return 128;
+        return this.world.getMaxBuildHeight();
     }
 
     @Override
@@ -120,11 +96,12 @@ public class CeleritasWorldRenderer extends SimpleWorldRenderer<World, Primitive
     @Override
     protected void renderBlockEntityList(List<BlockEntity> list, Float partialTicksBoxed) {
         float partialTicks = partialTicksBoxed;
-        for (var blockEntity : list) {
+        for (BlockEntity blockEntity : list) {
             try {
-                BlockEntityRenderDispatcher.INSTANCE.render(blockEntity, partialTicks /*? if >=1.8 {*//*, -1 *//*?}*/);
-            } catch(RuntimeException e) {
-                if(blockEntity.isRemoved()) {
+                // -1 : pas d'étape de destruction en cours sur ce block entity.
+                BlockEntityRenderDispatcher.INSTANCE.renderEntity(blockEntity, partialTicks, -1);
+            } catch (RuntimeException e) {
+                if (blockEntity.isRemoved()) {
                     System.err.println("Suppressing crash from invalid tile entity");
                 } else {
                     throw e;

@@ -222,6 +222,23 @@ if not exist "%LIB%\jna-platform.jar" (
     if errorlevel 1 ( echo [ERREUR] Telechargement JNA-Platform echoue & goto :error )
 )
 
+:: Dependances du moteur de rendu repris de Celeritas (launcheragent\celeritas,
+:: voir son PROVENANCE.md) : JOML (matrices), fastutil (collections), log4j-api
+:: et les annotations JetBrains. COMPILATION SEULEMENT pour les deux dernieres :
+:: log4j est deja dans le jeu, les annotations ne servent qu'a javac. JOML et
+:: fastutil, eux, manquent a la 1.8.9 : c'est le launcher qui les met sur son
+:: classpath (legacy_lwjgl3.rs), jamais ce jar. Memes versions que l'amont.
+:: Copie depuis les bibliotheques du launcher si elles y sont, sinon Maven Central.
+call :fetchLib "joml.jar"        "org\joml\joml\1.10.5\joml-1.10.5.jar"                                   "org/joml/joml/1.10.5/joml-1.10.5.jar"
+if errorlevel 1 goto :error
+call :fetchLib "fastutil.jar"    "it\unimi\dsi\fastutil\7.1.0\fastutil-7.1.0.jar"                         "it/unimi/dsi/fastutil/7.1.0/fastutil-7.1.0.jar"
+if errorlevel 1 goto :error
+call :fetchLib "log4j-api.jar"   "org\apache\logging\log4j\log4j-api\2.0-beta9\log4j-api-2.0-beta9.jar"   "org/apache/logging/log4j/log4j-api/2.0-beta9/log4j-api-2.0-beta9.jar"
+if errorlevel 1 goto :error
+call :fetchLib "annotations.jar" "org\jetbrains\annotations\24.1.0\annotations-24.1.0.jar"                "org/jetbrains/annotations/24.1.0/annotations-24.1.0.jar"
+if errorlevel 1 goto :error
+set "CP_RENDERER=%LIB%\joml.jar;%LIB%\fastutil.jar;%LIB%\log4j-api.jar;%LIB%\annotations.jar"
+
 :: --- Compiler les stubs MC (compile-only, non inclus dans le JAR final) ------
 
 if exist "%OUT_STUBS%" rmdir /s /q "%OUT_STUBS%"
@@ -283,13 +300,13 @@ echo [Build] Compilation principale...
 :: dossier "v26_2" (unite 26.2), "v26_3" (unite 26.3), et pour la couche LWJGL 2 -> 3 (dossier
 :: lwjgl2compat + arborescence org\lwjgl), compilee dans son propre jar.
 ::
-:: Le dossier "celeritas" (launcheragent\celeritas, 2026-10-06) est EXCLU de
-:: TOUTES les passes : c'est le projet Celeritas tel qu'en amont (base du
-:: renderer 1.8.9, voir son PROVENANCE.md), pose la sans etre branche. Il ne
-:: compile pas ici : ses dependances (JOML, fastutil, Minecraft via Ornithe)
-:: ne sont pas sur ce classpath.
+:: Le dossier "celeritas" (launcheragent\celeritas, 2026-10-06) est le moteur
+:: de rendu repris de Celeritas (voir son PROVENANCE.md). Il ne connait pas
+:: Minecraft : il est compile ICI, avec ses dependances (%CP_RENDERER%). Son
+:: adaptateur 1.8.9 (celeritas\v1_8_9) part avec l'unite 1.8.9, comme tout
+:: dossier "v1_8_9".
 set "SRCLIST=%TEMP%\launcheragent_sources.txt"
-powershell -NoProfile -Command "$q=[char]34; $files=Get-ChildItem -Recurse -Filter '*.java' '%SRC_MAIN%' | Select-Object -ExpandProperty FullName | Where-Object { $_ -notmatch '\\v1_21_11\\' -and $_ -notmatch '\\v1_8_9\\' -and $_ -notmatch '\\v26_2\\' -and $_ -notmatch '\\v26_3\\' -and $_ -notmatch '\\lwjgl2compat\\' -and $_ -notmatch '\\src\\main\\java\\org\\lwjgl\\' -and $_ -notmatch '\\launcheragent\\celeritas\\' } | ForEach-Object { $q+$_.Replace('\','/')+$q }; [IO.File]::WriteAllLines('%SRCLIST%', $files)"
+powershell -NoProfile -Command "$q=[char]34; $files=Get-ChildItem -Recurse -Filter '*.java' '%SRC_MAIN%' | Select-Object -ExpandProperty FullName | Where-Object { $_ -notmatch '\\v1_21_11\\' -and $_ -notmatch '\\v1_8_9\\' -and $_ -notmatch '\\v26_2\\' -and $_ -notmatch '\\v26_3\\' -and $_ -notmatch '\\lwjgl2compat\\' -and $_ -notmatch '\\src\\main\\java\\org\\lwjgl\\' } | ForEach-Object { $q+$_.Replace('\','/')+$q }; [IO.File]::WriteAllLines('%SRCLIST%', $files)"
 
 :: Meme garde-fou que pour STUBLIST — voir plus haut.
 for %%A in ("%SRCLIST%") do if %%~zA==0 (
@@ -308,7 +325,7 @@ for %%A in ("%SRCLIST%") do if %%~zA==0 (
 :: gardes-fous ci-dessus. -proc:none l'empeche de tourner du tout, plutot
 :: que de corriger un mecanisme qu'on ne veut pas.
 "%JAVAC_CMD%" --release %JAVA_RELEASE% -encoding UTF-8 -proc:none ^
-  -cp "%LIB%\mixin.jar;%LIB%\asm-9.5.jar;%LIB%\asm-tree-9.5.jar;%LIB%\jna.jar;%LIB%\jna-platform.jar;%LIB%\mixinextras.jar;%OUT_STUBS%;%CP_LWJGL3%" ^
+  -cp "%LIB%\mixin.jar;%LIB%\asm-9.5.jar;%LIB%\asm-tree-9.5.jar;%LIB%\jna.jar;%LIB%\jna-platform.jar;%LIB%\mixinextras.jar;%CP_RENDERER%;%OUT_STUBS%;%CP_LWJGL3%" ^
   -d "%OUT_MAIN%" ^
   "@%SRCLIST%"
 set "JAVAC_RC=!errorlevel!"
@@ -559,11 +576,10 @@ if not "!JAVAC_RC!"=="0" (
 echo [Stubs 1.8.9] OK
 
 echo [Build 1.8.9] Compilation du code type 1.8.9...
-:: launcheragent\celeritas\v1_8_9 (adaptateur 1.8.9 de Celeritas, 2026-10-06)
-:: est ecarte tant qu'il n'est pas reecrit : il est encore en noms Feather,
-:: avec ses directives Stonecutter. Voir celeritas\PROVENANCE.md.
+:: launcheragent\celeritas\v1_8_9 (adaptateur 1.8.9 du moteur de rendu) en
+:: fait partie : d'ou %CP_RENDERER% sur le -cp ci-dessous.
 set "SRCLIST_189=%TEMP%\launcheragent_sources_189.txt"
-powershell -NoProfile -Command "$q=[char]34; $files=Get-ChildItem -Recurse -Filter '*.java' '%SRC_MAIN%' | Select-Object -ExpandProperty FullName | Where-Object { $_ -match '\\v1_8_9\\' -and $_ -notmatch '\\launcheragent\\celeritas\\' } | ForEach-Object { $q+$_.Replace('\','/')+$q }; [IO.File]::WriteAllLines('%SRCLIST_189%', $files)"
+powershell -NoProfile -Command "$q=[char]34; $files=Get-ChildItem -Recurse -Filter '*.java' '%SRC_MAIN%' | Select-Object -ExpandProperty FullName | Where-Object { $_ -match '\\v1_8_9\\' } | ForEach-Object { $q+$_.Replace('\','/')+$q }; [IO.File]::WriteAllLines('%SRCLIST_189%', $files)"
 
 :: Meme garde-fou — voir plus haut.
 for %%A in ("%SRCLIST_189%") do if %%~zA==0 (
@@ -574,7 +590,7 @@ for %%A in ("%SRCLIST_189%") do if %%~zA==0 (
 
 :: -proc:none : meme raison que la compilation principale (voir plus haut).
 "%JAVAC_CMD%" --release %JAVA_RELEASE% -encoding UTF-8 -proc:none ^
-  -cp "%LIB%\mixin.jar;%LIB%\mixinextras.jar;%OUT_MAIN%;%OUT_STUBS_189%;%OUT_COMPAT%;%CP_LWJGL3%" ^
+  -cp "%LIB%\mixin.jar;%LIB%\mixinextras.jar;%OUT_MAIN%;%OUT_STUBS_189%;%OUT_COMPAT%;%CP_LWJGL3%;%CP_RENDERER%" ^
   -d "%OUT_MAIN%" ^
   "@%SRCLIST_189%"
 set "JAVAC_RC=!errorlevel!"
@@ -700,6 +716,20 @@ echo    %LIBS_DEPLOY_DIR%\mixin.jar + asm-*.jar
 echo  ================================================
 echo.
 if not defined CI pause
+exit /b 0
+
+:: Depose une bibliotheque dans lib\ : %1 = nom local, %2 = chemin sous les
+:: bibliotheques du launcher, %3 = chemin sous Maven Central.
+:fetchLib
+if exist "%LIB%\%~1" exit /b 0
+if exist "%APPDATA%\YuyuFrame\.minecraft\libraries\%~2" (
+    echo [Deps] Copie %~1 depuis les bibliotheques du launcher...
+    copy /Y "%APPDATA%\YuyuFrame\.minecraft\libraries\%~2" "%LIB%\%~1" >nul
+) else (
+    echo [Deps] Telechargement %~1...
+    powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://repo1.maven.org/maven2/%~3' -OutFile '%LIB%\%~1' -UseBasicParsing"
+)
+if not exist "%LIB%\%~1" ( echo [ERREUR] %~1 introuvable & exit /b 1 )
 exit /b 0
 
 :: Sous-routine et non test en ligne : dans un bloc if(...) parenthese, cmd

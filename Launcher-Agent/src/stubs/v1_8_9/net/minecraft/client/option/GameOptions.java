@@ -48,6 +48,9 @@ public class GameOptions {
     /** {@code avh.t} — même nom chez Feather. */
     public boolean vsync;
 
+    /** {@code avh.c} — distance de rendu, en chunks. */
+    public int viewDistance;
+
     private GameOptions() {
     }
 }

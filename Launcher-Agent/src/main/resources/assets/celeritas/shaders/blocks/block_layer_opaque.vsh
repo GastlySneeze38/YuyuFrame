@@ -4,10 +4,10 @@
 #extension GL_EXT_gpu_shader4 : require
 #endif
 
-#import <sodium:include/fog.glsl>
-#import <sodium:include/chunk_vertex.glsl>
-#import <sodium:include/chunk_matrices.glsl>
-#import <sodium:include/chunk_material.glsl>
+#import <celeritas:include/fog.glsl>
+#import <celeritas:include/chunk_vertex.glsl>
+#import <celeritas:include/chunk_matrices.glsl>
+#import <celeritas:include/chunk_material.glsl>
 
 // Avoid z-fighting between the solid and cutout copies of this program
 invariant gl_Position;

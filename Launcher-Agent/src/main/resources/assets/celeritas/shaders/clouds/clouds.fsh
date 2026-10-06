@@ -1,6 +1,6 @@
 #version 150
 
-#import <sodium:include/fog.glsl>
+#import <celeritas:include/fog.glsl>
 
 uniform mat4 ProjMat;
 uniform vec4 ColorModulator;

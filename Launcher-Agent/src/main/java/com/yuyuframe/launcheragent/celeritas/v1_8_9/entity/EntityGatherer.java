@@ -1,52 +1,60 @@
 package com.yuyuframe.launcheragent.celeritas.v1_8_9.entity;
 
-//? if >=1.8 {
-/*
-import net.minecraft.client.world.ClientWorld;
-import net.minecraft.entity.Entity;
-import net.minecraft.util.TypeInstanceMultiMap;
-import net.minecraft.world.chunk.WorldChunk;
-import com.yuyuframe.launcheragent.celeritas.v1_8_9.mixin.ClientChunkCacheAccessor;
-import com.yuyuframe.launcheragent.celeritas.v1_8_9.mixin.WorldChunkAccessor;
+import net.minecraft.util.TypeFilterableList;
+import net.minecraft.world.World;
+import net.minecraft.world.chunk.Chunk;
+import com.yuyuframe.launcheragent.apimixin.mapping.YarnNamed;
+import com.yuyuframe.launcheragent.apimixin.v1_8_9.renderer.ChunkAccessor189;
+import com.yuyuframe.launcheragent.apimixin.v1_8_9.renderer.ClientChunkProviderAccessor189;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
-import java.util.function.Consumer;
 
+/**
+ * Rassemble les entités à dessiner en parcourant les chunks chargés.
+ *
+ * <p>Vanilla les prend dans la liste des chunks VISIBLES de son propre
+ * renderer de terrain. Quand c'est le nôtre qui dessine, cette liste est
+ * vide : on repart donc des chunks chargés.
+ *
+ * <p>Repris de l'adaptateur {@code ornithe} de Celeritas. Les entités sont
+ * tenues en {@code Object} : c'est {@code RendererHooks189} qui les type.
+ */
+@YarnNamed
 public class EntityGatherer {
-    private final List<Entity> entityList;
-    private final Consumer<Entity> addEntity;
-
-    public EntityGatherer() {
-        this.entityList = new ArrayList<>();
-        this.addEntity = this.entityList::add;
-    }
+    private final List<Object> entityList = new ArrayList<>();
 
     public void clear() {
         this.entityList.clear();
     }
 
-    public List<Entity> getLoadedEntityList(ClientWorld world) {
-        Consumer<Entity> addEntity = this.addEntity;
-        // Iterate directly over chunk entity lists where possible - mods may create multipart entities that are not
-        // added to the main loadedEntityList.
-        if (world.getChunkSource() instanceof ClientChunkCacheAccessor provider) {
-            var loadedChunks = provider.getAllChunks();
-            for (WorldChunk chunk : loadedChunks) {
-                if (!((WorldChunkAccessor)chunk).getHasEntities()) {
+    public List<Object> getLoadedEntityList(World world) {
+        List<Object> out = this.entityList;
+
+        Object provider = world.getChunkProvider();
+
+        if (provider instanceof ClientChunkProviderAccessor189 accessor) {
+            for (Object loaded : accessor.la$chunks()) {
+                if (!((ChunkAccessor189) loaded).la$containsEntities()) {
                     continue;
                 }
-                TypeInstanceMultiMap<Entity>[] entityMaps = chunk.getEntities();
-                for (TypeInstanceMultiMap<Entity> map : entityMaps) {
-                    map.forEach(addEntity);
+
+                Chunk chunk = (Chunk) loaded;
+                TypeFilterableList[] entityMaps = chunk.getEntities();
+
+                for (TypeFilterableList map : entityMaps) {
+                    // Vue Collection : addAll/iterator sont des méthodes du JDK,
+                    // que le traducteur de noms n'a pas à connaître.
+                    Collection<?> entities = map;
+                    out.addAll(entities);
                 }
             }
         } else {
-            // Best we can do is the loaded entity list - this will miss some multipart entities
-            world.entities.forEach(addEntity);
+            // Autre fournisseur de chunks (monde intégré) : la liste générale.
+            out.addAll(world.loadedEntities);
         }
-        return this.entityList;
+
+        return out;
     }
 }
-
-*///?}

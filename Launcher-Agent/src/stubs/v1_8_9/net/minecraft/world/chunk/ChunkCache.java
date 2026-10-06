@@ -10,6 +10,16 @@ public class ChunkCache implements net.minecraft.world.BlockView {
     protected ChunkCache() {
     }
 
+    /** {@code adv.<init>} — vue figée du monde entre deux coins, élargie de {@code margin} blocs. */
+    public ChunkCache(net.minecraft.world.World world, net.minecraft.util.math.BlockPos min, net.minecraft.util.math.BlockPos max, int margin) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    @Override
+    public net.minecraft.block.BlockState getBlockState(net.minecraft.util.math.BlockPos pos) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
     @Override
     public net.minecraft.world.biome.Biome getBiome(net.minecraft.util.math.BlockPos pos) {
         throw new UnsupportedOperationException("stub compile-only");

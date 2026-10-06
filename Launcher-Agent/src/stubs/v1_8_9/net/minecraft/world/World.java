@@ -11,6 +11,20 @@ public abstract class World implements BlockView {
     protected World() {
     }
 
+    /** {@code adm.f} — {@code entities} chez Feather : toutes les entités chargées. */
+    public java.util.List loadedEntities;
+
+    /** {@code adm.N} — {@code getChunkSource} chez Feather. */
+    public net.minecraft.world.chunk.ChunkProvider getChunkProvider() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    /** Exigée par {@link BlockView} ; appeler sur un receveur typé {@code BlockView}. */
+    @Override
+    public net.minecraft.block.BlockState getBlockState(net.minecraft.util.math.BlockPos pos) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
     /** {@code adm.U} — {@code getHeight} chez Feather : hauteur maximale de construction. */
     public int getMaxBuildHeight() {
         throw new UnsupportedOperationException("stub compile-only");

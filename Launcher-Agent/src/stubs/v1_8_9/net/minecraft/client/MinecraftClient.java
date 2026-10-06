@@ -89,6 +89,9 @@ public class MinecraftClient {
     /** {@code ave.o} — {@code gameRenderer} chez Feather. */
     public net.minecraft.client.render.GameRenderer gameRenderer;
 
+    /** {@code ave.g} — même nom chez Feather. */
+    public net.minecraft.client.render.WorldRenderer worldRenderer;
+
     /** {@code ave.a} — {@code setWorld} chez Feather : change de monde. */
     public void connect(ClientWorld world) {
         throw new UnsupportedOperationException("stub compile-only");

@@ -28,4 +28,21 @@ public class BlockPos extends Vec3i {
     public BlockPos offset(Direction direction, int distance) {
         throw new UnsupportedOperationException("stub compile-only");
     }
+
+    /** {@code cj$a} — position réutilisable, pour ne pas allouer dans une boucle. */
+    public static final class Mutable extends BlockPos {
+
+        public Mutable() {
+            super(0, 0, 0);
+        }
+
+        public Mutable(int x, int y, int z) {
+            super(x, y, z);
+        }
+
+        /** {@code cj$a.c(III)} — {@code set} chez Feather. */
+        public Mutable setPosition(int x, int y, int z) {
+            throw new UnsupportedOperationException("stub compile-only");
+        }
+    }
 }
