@@ -64,11 +64,6 @@ public abstract class DefaultChunkRenderer extends ShaderChunkRenderer {
             return;
         }
 
-        // YuyuFrame : mesures par passe, voir PassStats.
-        long statsStart = System.nanoTime();
-        int statsRegions = 0;
-        this.statsRebuiltBatches = 0;
-
         this.begin(renderPass);
 
         // If there is no active program, shader compilation probably failed, and we can't render anything.
@@ -119,7 +114,6 @@ public abstract class DefaultChunkRenderer extends ShaderChunkRenderer {
                     setModelMatrixUniforms(shader, region, camera);
                     shader.setSectionAges(timestamp, region.getSectionLoadTimes());
                     this.executeBatch(commandList, batch, cached.getTessellation(), primitiveType);
-                    statsRegions++;
                 }
             }
 
@@ -130,11 +124,7 @@ public abstract class DefaultChunkRenderer extends ShaderChunkRenderer {
         }
 
         this.end(renderPass);
-
-        PassStats.record(renderPass.name(), System.nanoTime() - statsStart, statsRegions, this.statsRebuiltBatches);
     }
-
-    private int statsRebuiltBatches;
 
     protected @Nullable CachedBatch getRegionBatch(CommandList commandList,
                                                    RenderRegion region,
@@ -150,7 +140,6 @@ public abstract class DefaultChunkRenderer extends ShaderChunkRenderer {
                 occlusionCamera.intX, occlusionCamera.intY, occlusionCamera.intZ)) {
             cached = BatchAssembler.createCachedBatch(region, storage, renderList, occlusionCamera, renderPass,
                     useBlockFaceCulling, commandList, this.tessellationProvider);
-            this.statsRebuiltBatches++;
 
             storage.storeCachedMultiDrawBatch(cacheParams, cached);
         }

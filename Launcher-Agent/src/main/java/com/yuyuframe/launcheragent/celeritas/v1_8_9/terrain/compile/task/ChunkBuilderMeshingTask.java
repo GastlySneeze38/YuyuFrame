@@ -37,7 +37,6 @@ import com.yuyuframe.launcheragent.celeritas.v1_8_9.world.ChunkRenderContext;
 import com.yuyuframe.launcheragent.celeritas.v1_8_9.world.WorldSlice189;
 
 import com.yuyuframe.launcheragent.celeritas.raster.PackedBox;
-import com.yuyuframe.launcheragent.celeritas.v1_8_9.debug.MeshStats;
 import com.yuyuframe.launcheragent.celeritas.v1_8_9.nativecore.NativeMesh;
 import com.yuyuframe.launcheragent.celeritas.v1_8_9.world.BlockFlags189;
 import com.yuyuframe.launcheragent.celeritas.v1_8_9.world.FluidData189;
@@ -93,7 +92,6 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
     @Override
     public ChunkBuildOutput execute(ChunkBuildContext context, CancellationToken cancellationToken) {
         PrimitiveChunkBuildContext buildContext = (PrimitiveChunkBuildContext) context;
-        long taskStart = System.nanoTime();
         PrimitiveBuiltRenderSectionData renderData = new PrimitiveBuiltRenderSectionData();
         // La forme de la section (visibilité, boîtes occultantes) se calcule dans le
         // noyau natif, à partir des seuls identifiants de blocs. Sans lui, c'est le
@@ -127,10 +125,7 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
         BlockRenderer189 blockRenderer = buildContext.blockRenderer;
         QuadCommands commands = buildContext.quadCommands;
         commands.reset();
-        long nativeStart = System.nanoTime();
         boolean nativeQuads = NativeMesh.quadsAvailable() && this.prepareNativeQuads(buildContext, minX, minY, minZ);
-        // Le temps passé dans le noyau pour les quads : préparation ici, écriture plus bas.
-        long nativeNanos = System.nanoTime() - nativeStart;
 
         BufferBuilder tesselator = buildContext.tesselator;
         BlockPos.Mutable blockPos = new BlockPos.Mutable(minX, minY, minZ);
@@ -138,14 +133,6 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
 
         // Pour le repli : vanilla écrit ses sommets relativement à l'origine de la section.
         tesselator.offset(-minX, -minY, -minZ);
-
-        // Mesures (MeshStats) : ce que contient la section, et sur une section
-        // sur seize le détail du temps passé à interroger le jeu.
-        int solidBlocks = 0;
-        int modelBlocks = 0;
-        int fluidBlocks = 0;
-        blockRenderer.startProfile(MeshStats.takeSample());
-        long loopStart = System.nanoTime();
 
         // Les blocs enterrés (cube opaque entre six cubes opaques, fluide au milieu
         // du même fluide) n'ont rien à dessiner : le noyau rend ceux qui restent,
@@ -178,7 +165,6 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
                             continue;
                         }
                         blockPos.setPosition(x, y, z);
-                        solidBlocks++;
 
                         if (block.hasBlockEntity()) {
                             BlockEntity blockEntity = slice.blockEntityAt(x, y, z);
@@ -197,7 +183,6 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
 
                         int type = block.getBlockType();
                         if (type == TYPE_MODEL) {
-                            modelBlocks++;
                             int mark = commands.count();
                             try {
                                 if (!nativeQuads) {
@@ -213,7 +198,6 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
                             }
                         } else if (type == TYPE_FLUID) {
                             // L'eau et la lave : le noyau les dessine de bout en bout, comme vanilla.
-                            fluidBlocks++;
                             int mark = commands.count();
                             boolean emitted = false;
                             if (nativeQuads && NATIVE_FLUIDS) {
@@ -247,38 +231,27 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
             tesselator.offset(0, 0, 0);
             slice.release();
         }
-        long loopNanos = System.nanoTime() - loopStart;
-        int commandCount = commands.count();
 
-        if (nativeQuads && commands.count() > 0 && !this.writeNativeQuadsTimed(buildContext, commands)) {
+        if (nativeQuads && commands.count() > 0 && !this.writeNativeQuads(buildContext, commands)) {
             // Le noyau a échoué : il est mis hors service, et la section est refaite par le Java.
             NativeMesh.disableQuads();
             LauncherLog.err("[RENDERER] le noyau natif a échoué sur l'écriture des quads — le rendu Java reprend pour toute la session");
             return this.execute(context, cancellationToken);
         }
 
-        long assembleStart = System.nanoTime();
         Reference2ReferenceMap<TerrainRenderPass, BuiltSectionMeshParts> meshes = BuiltSectionMeshParts.groupFromBuildBuffers(buffers, (float) (camera.x - minX), (float) (camera.y - minY), (float) (camera.z - minZ));
-        long assembleNanos = System.nanoTime() - assembleStart;
 
         if (!meshes.isEmpty()) {
             renderData.hasBlockGeometry = true;
         }
 
-        long shapeStart = System.nanoTime();
-        long shapeNanos;
         if (nativeShape) {
             // La section du milieu des 27 copies : celle que l'on maille.
             this.applyNativeShape(this.renderContext.sections()[13].blocks, renderData);
-            shapeNanos = System.nanoTime() - shapeStart;
         } else {
             encodeVisibilityData(occluder, renderData);
             renderData.occluderBoxes = rasterShape.computeOccluderBoxes();
-            shapeNanos = System.nanoTime() - shapeStart;
         }
-        MeshStats.section(System.nanoTime() - taskStart, loopNanos, nativeNanos, this.writeNanos, assembleNanos, shapeNanos,
-            solidBlocks, modelBlocks, fluidBlocks, commandCount);
-        blockRenderer.finishProfile(modelBlocks);
 
         return new ChunkBuildOutput(this.render, renderData, meshes, this.buildTime);
     }
@@ -324,16 +297,6 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
             }
             return null;
         }
-    }
-
-    /** Le temps de {@link #writeNativeQuads} pour cette tâche, pour les mesures. */
-    private long writeNanos;
-
-    private boolean writeNativeQuadsTimed(PrimitiveChunkBuildContext buildContext, QuadCommands commands) {
-        long start = System.nanoTime();
-        boolean written = this.writeNativeQuads(buildContext, commands);
-        this.writeNanos = System.nanoTime() - start;
-        return written;
     }
 
     /** Réserve la place des quads dans les tampons de la section et les fait écrire par le noyau. */

@@ -250,16 +250,6 @@ public final class RendererHooks189 {
         CeleritasWorldRenderer renderer = CeleritasWorldRenderer.INSTANCE;
         LauncherLog.renderer(1, "métriques : " + Math.round(frames / seconds) + " fps | "
             + renderer.getChunksDebugString() + " | " + String.join(" | ", renderer.getDebugStrings()));
-        String mesh = com.yuyuframe.launcheragent.celeritas.v1_8_9.debug.MeshStats.drain(
-            com.yuyuframe.launcheragent.celeritas.v1_8_9.nativecore.NativeMesh.available(),
-            com.yuyuframe.launcheragent.celeritas.v1_8_9.nativecore.NativeMesh.quadsAvailable());
-        if (mesh != null) {
-            LauncherLog.renderer(1, mesh);
-        }
-        String passes = com.yuyuframe.launcheragent.celeritas.chunk.PassStats.drain();
-        if (passes != null) {
-            LauncherLog.renderer(1, passes);
-        }
     }
 
     /** À la place de {@code WorldRenderer.renderLayer} : dessine une couche de blocs. */

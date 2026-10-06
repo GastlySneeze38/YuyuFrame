@@ -14,7 +14,6 @@ import com.yuyuframe.launcheragent.celeritas.model.light.data.QuadLightData;
 import com.yuyuframe.launcheragent.celeritas.model.quad.properties.ModelQuadFacing;
 import com.yuyuframe.launcheragent.celeritas.model.quad.properties.ModelQuadOrientation;
 import com.yuyuframe.launcheragent.celeritas.util.ModelQuadUtil;
-import com.yuyuframe.launcheragent.celeritas.v1_8_9.debug.MeshStats;
 import com.yuyuframe.launcheragent.celeritas.v1_8_9.terrain.compile.light.LightCache189;
 import com.yuyuframe.launcheragent.celeritas.v1_8_9.world.WorldSlice189;
 import net.minecraft.block.Block;
@@ -168,16 +167,10 @@ public final class BlockRenderer189 {
         int y = at.getY();
         int z = at.getZ();
 
-        long profileStart = this.profiling ? System.nanoTime() : 0L;
         BlockQuadCache189.Model model = BlockQuadCache189.of(this.blockRenderManager.getModel(state, this.slice, pos));
         boolean smooth = MinecraftClient.isAmbientOcclusionEnabled() && block.getLightLevel() == 0 && model.ambientOcclusion;
 
         block.setBoundingBox(this.slice, pos);
-        if (this.profiling) {
-            long now = System.nanoTime();
-            this.profileModelNanos += now - profileStart;
-            profileStart = now;
-        }
 
         // Le décalage des herbes et des fleurs se calcule dans le noyau : on ne lui dit que sa sorte.
         Block.OffsetType offsetType = block.getOffsetType();
@@ -218,36 +211,7 @@ public final class BlockRenderer189 {
                 packed | commands.bucketOf(firstBucket, quad.getNormalFace()) << QuadCommands.BUCKET_SHIFT,
                 this.tintOf(quad, block, pos));
         }
-        if (this.profiling) {
-            this.profileFacesNanos += System.nanoTime() - profileStart;
-        }
         return true;
-    }
-
-    // ── Mesures ──────────────────────────────────────────────────────────────
-    //
-    // Sur une section sur seize, le temps passé dans les questions posées au
-    // jeu pour chaque bloc : son modèle (et sa boîte), puis ses faces cachées
-    // et sa teinte. Deux lectures d'horloge par bloc, d'où l'échantillon.
-
-    private boolean profiling;
-    private long profileModelNanos;
-    private long profileFacesNanos;
-    private long profileTintNanos;
-
-    public void startProfile(boolean profiling) {
-        this.profiling = profiling;
-        this.profileModelNanos = 0L;
-        this.profileFacesNanos = 0L;
-        this.profileTintNanos = 0L;
-    }
-
-    /** Rend à {@code MeshStats} ce qui a été mesuré sur la section, si elle était de l'échantillon. */
-    public void finishProfile(int modelBlocks) {
-        if (this.profiling) {
-            this.profiling = false;
-            MeshStats.sample(modelBlocks, this.profileModelNanos, this.profileFacesNanos - this.profileTintNanos, this.profileTintNanos);
-        }
     }
 
     /**
@@ -298,11 +262,7 @@ public final class BlockRenderer189 {
             return -1;
         }
         if (quad.getColorIndex() != this.tintLayer) {
-            long profileStart = this.profiling ? System.nanoTime() : 0L;
             int rgb = block.getBlockColor(this.slice, pos, quad.getColorIndex());
-            if (this.profiling) {
-                this.profileTintNanos += System.nanoTime() - profileStart;
-            }
             this.tint = 0xFF000000 | (rgb & 0xFF) << 16 | (rgb & 0xFF00) | (rgb >> 16 & 0xFF);
             this.tintLayer = quad.getColorIndex();
         }
