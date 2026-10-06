@@ -7,6 +7,7 @@ import net.minecraft.block.Blocks;
 import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
+import net.minecraft.util.math.Vec3i;
 import net.minecraft.world.BlockView;
 import net.minecraft.world.World;
 import net.minecraft.world.biome.Biome;
@@ -86,14 +87,31 @@ public final class WorldSlice189 implements BlockView {
         return state == null ? this.air : (BlockState) state;
     }
 
+    // Les coordonnées d'une position se lisent sur un receveur typé Vec3i :
+    // c'est là que Yarn range getX/getY/getZ. Sur BlockPos, le traducteur de
+    // noms trouve plusieurs candidates et ne traduit pas — plantage du
+    // 2026-10-06 (NoSuchMethodError: cj.getX()).
+
+    private static int xOf(Vec3i pos) {
+        return pos.getX();
+    }
+
+    private static int yOf(Vec3i pos) {
+        return pos.getY();
+    }
+
+    private static int zOf(Vec3i pos) {
+        return pos.getZ();
+    }
+
     @Override
     public BlockState getBlockState(BlockPos pos) {
-        return this.stateAt(pos.getX(), pos.getY(), pos.getZ());
+        return this.stateAt(xOf(pos), yOf(pos), zOf(pos));
     }
 
     @Override
     public boolean isAir(BlockPos pos) {
-        return this.stateAt(pos.getX(), pos.getY(), pos.getZ()).getBlock() == Blocks.AIR;
+        return this.stateAt(xOf(pos), yOf(pos), zOf(pos)).getBlock() == Blocks.AIR;
     }
 
     public BlockEntity blockEntityAt(int x, int y, int z) {
@@ -103,12 +121,12 @@ public final class WorldSlice189 implements BlockView {
 
     @Override
     public BlockEntity getBlockEntity(BlockPos pos) {
-        return this.blockEntityAt(pos.getX(), pos.getY(), pos.getZ());
+        return this.blockEntityAt(xOf(pos), yOf(pos), zOf(pos));
     }
 
     @Override
     public int getStrongRedstonePower(BlockPos pos, Direction direction) {
-        BlockState state = this.stateAt(pos.getX(), pos.getY(), pos.getZ());
+        BlockState state = this.stateAt(xOf(pos), yOf(pos), zOf(pos));
         return state.getBlock().getStrongRedstonePower(this, pos, state, direction);
     }
 
@@ -120,9 +138,9 @@ public final class WorldSlice189 implements BlockView {
      */
     @Override
     public int getLight(BlockPos pos, int minBlockLight) {
-        int x = pos.getX();
-        int y = pos.getY();
-        int z = pos.getZ();
+        int x = xOf(pos);
+        int y = yOf(pos);
+        int z = zOf(pos);
         int sky = this.lightWithNeighbours(true, x, y, z);
         int block = this.lightWithNeighbours(false, x, y, z);
         if (block < minBlockLight) {
@@ -184,9 +202,11 @@ public final class WorldSlice189 implements BlockView {
     @Override
     public Biome getBiome(BlockPos pos) {
         // Le biome ne dépend pas de la hauteur : la section du milieu en hauteur fait l'affaire.
-        SectionSnapshot section = this.sectionAt(pos.getX(), this.baseY + 16, pos.getZ());
+        int x = xOf(pos);
+        int z = zOf(pos);
+        SectionSnapshot section = this.sectionAt(x, this.baseY + 16, z);
         if (section != null) {
-            Biome biome = Biome.byId(section.biomes[(pos.getZ() & 15) << 4 | (pos.getX() & 15)] & 255);
+            Biome biome = Biome.byId(section.biomes[(z & 15) << 4 | (x & 15)] & 255);
             if (biome != null) {
                 return biome;
             }

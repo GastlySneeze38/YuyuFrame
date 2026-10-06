@@ -36,8 +36,14 @@ import com.yuyuframe.launcheragent.celeritas.v1_8_9.util.Direction;
 import com.yuyuframe.launcheragent.celeritas.v1_8_9.world.ChunkRenderContext;
 import com.yuyuframe.launcheragent.celeritas.v1_8_9.world.WorldSlice189;
 
+import com.yuyuframe.launcheragent.celeritas.raster.PackedBox;
+import com.yuyuframe.launcheragent.celeritas.v1_8_9.debug.MeshStats;
+import com.yuyuframe.launcheragent.celeritas.v1_8_9.nativecore.NativeMesh;
+import com.yuyuframe.launcheragent.celeritas.v1_8_9.world.BlockFlags189;
+
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Maille une section de 16×16×16 blocs sur un fil de construction.
@@ -80,7 +86,14 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
     @Override
     public ChunkBuildOutput execute(ChunkBuildContext context, CancellationToken cancellationToken) {
         PrimitiveChunkBuildContext buildContext = (PrimitiveChunkBuildContext) context;
+        long taskStart = System.nanoTime();
         PrimitiveBuiltRenderSectionData renderData = new PrimitiveBuiltRenderSectionData();
+        // La forme de la section (visibilité, boîtes occultantes) se calcule dans le
+        // noyau natif, à partir des seuls identifiants de blocs. Sans lui — ou le
+        // temps du contrôle, voir MeshStats — c'est le Java qui la relève bloc par bloc.
+        boolean nativeShape = NativeMesh.available();
+        boolean probe = nativeShape && MeshStats.takeProbe();
+        boolean javaShape = !nativeShape || probe;
         ChunkOcclusionDataBuilder occluder = new ChunkOcclusionDataBuilder();
         // Pour le culling par rastérisation : quels blocs bouchent la vue, et
         // dans quel volume de la section il y a quelque chose à dessiner.
@@ -153,11 +166,13 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
                             this.renderWithVanilla(vanillaRenderer, blockState, blockPos, slice, tesselator, buildContext, buffers, block);
                         }
 
-                        rasterShape.markRenderable(x, y, z);
-                        // « hasTransparency » chez Yarn legacy désigne le cube opaque (afh.c).
-                        if (block.hasTransparency()) {
-                            occluder.markClosed(x, y, z);
-                            rasterShape.markOpaque(x, y, z);
+                        if (javaShape) {
+                            rasterShape.markRenderable(x, y, z);
+                            // « hasTransparency » chez Yarn legacy désigne le cube opaque (afh.c).
+                            if (block.hasTransparency()) {
+                                occluder.markClosed(x, y, z);
+                                rasterShape.markOpaque(x, y, z);
+                            }
                         }
                     }
                 }
@@ -173,10 +188,53 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
             renderData.hasBlockGeometry = true;
         }
 
-        encodeVisibilityData(occluder, renderData);
-        renderData.occluderBoxes = rasterShape.computeOccluderBoxes();
+        long shapeStart = System.nanoTime();
+        long shapeNanos;
+        if (nativeShape) {
+            // La section du milieu des 27 copies : celle que l'on maille.
+            this.applyNativeShape(this.renderContext.sections()[13].blocks, renderData);
+            shapeNanos = System.nanoTime() - shapeStart;
+            if (probe) {
+                long nativeVisibility = renderData.visibilityData;
+                int[] nativeData = renderData.occluderBoxes;
+                long javaStart = System.nanoTime();
+                encodeVisibilityData(occluder, renderData);
+                int[] javaData = rasterShape.computeOccluderBoxes();
+                MeshStats.probe(System.nanoTime() - javaStart, shapeNanos, renderData.visibilityData, nativeVisibility, javaData, nativeData);
+                renderData.visibilityData = nativeVisibility;
+            }
+        } else {
+            encodeVisibilityData(occluder, renderData);
+            renderData.occluderBoxes = rasterShape.computeOccluderBoxes();
+            shapeNanos = System.nanoTime() - shapeStart;
+        }
+        MeshStats.section(System.nanoTime() - taskStart, shapeNanos);
 
         return new ChunkBuildOutput(this.render, renderData, meshes, this.buildTime);
+    }
+
+    private static final AtomicBoolean NATIVE_FAILURE_WARNED = new AtomicBoolean();
+
+    private void applyNativeShape(char[] blocks, BuiltRenderSectionData renderData) {
+        if (blocks == null) {
+            // Section vide : on voit tout à travers, rien à dessiner ni à occulter.
+            renderData.visibilityData = VisibilityEncoding.EVERYTHING;
+            renderData.occluderBoxes = null;
+            return;
+        }
+        int[] out = new int[NativeMesh.SHAPE_OUT_LENGTH];
+        int boxes = NativeMesh.sectionShape(blocks, BlockFlags189.table(), out);
+        if (boxes == NativeMesh.SHAPE_FAILED) {
+            // Image juste, culling en moins : tout se voit, la section entière est à dessiner.
+            if (NATIVE_FAILURE_WARNED.compareAndSet(false, true)) {
+                LauncherLog.err("[RENDERER] le noyau natif a échoué sur la forme d'une section — section traitée comme entièrement visible");
+            }
+            renderData.visibilityData = VisibilityEncoding.EVERYTHING;
+            renderData.occluderBoxes = new int[] { PackedBox.FULL_BOX };
+            return;
+        }
+        renderData.visibilityData = NativeMesh.visibility(out);
+        renderData.occluderBoxes = boxes == NativeMesh.SHAPE_NO_DATA ? null : NativeMesh.occluderData(out, boxes);
     }
 
     /** Le chemin d'avant : vanilla dessine le bloc dans son tampon, que l'on recopie au format du moteur. */

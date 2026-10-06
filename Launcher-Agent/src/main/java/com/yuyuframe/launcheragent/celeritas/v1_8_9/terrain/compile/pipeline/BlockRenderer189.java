@@ -21,6 +21,7 @@ import net.minecraft.block.BlockState;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.render.block.BlockRenderManager;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Vec3i;
 
 /**
  * Notre rendu de blocs : il remplace celui de vanilla pour tous les blocs à
@@ -77,9 +78,12 @@ public final class BlockRenderer189 {
 
     public void render(BlockState state, BlockPos pos, ChunkBuildBuffers buffers) {
         Block block = state.getBlock();
-        int x = pos.getX();
-        int y = pos.getY();
-        int z = pos.getZ();
+        // Receveur typé Vec3i : c'est là que Yarn range getX/getY/getZ, et sur
+        // BlockPos le traducteur de noms ne sait pas trancher (plantage du 2026-10-06).
+        Vec3i at = pos;
+        int x = at.getX();
+        int y = at.getY();
+        int z = at.getZ();
 
         BlockQuadCache189.Model model = BlockQuadCache189.of(this.blockRenderManager.getModel(state, this.slice, pos));
 

@@ -1,7 +1,7 @@
 package com.yuyuframe.launcheragent.celeritas.v1_8_9.world;
 
 import com.yuyuframe.launcheragent.apimixin.mapping.YarnNamed;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Vec3i;
 import net.minecraft.world.World;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.ChunkNibbleArray;
@@ -101,7 +101,8 @@ public final class SectionSnapshot {
         Map<?, ?> all = chunk.getBlockEntities();
         if (section != null && !all.isEmpty()) {
             for (Map.Entry<?, ?> entry : all.entrySet()) {
-                BlockPos pos = (BlockPos) entry.getKey();
+                // Typé Vec3i : c'est là que Yarn range getX/getY/getZ (sur BlockPos, le traducteur ne tranche pas).
+                Vec3i pos = (Vec3i) entry.getKey();
                 if (pos.getY() >> 4 != sectionY) {
                     continue;
                 }
