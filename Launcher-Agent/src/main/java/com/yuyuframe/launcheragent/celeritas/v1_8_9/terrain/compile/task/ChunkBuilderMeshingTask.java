@@ -47,7 +47,6 @@ import com.yuyuframe.launcheragent.celeritas.v1_8_9.terrain.compile.pipeline.Qua
 import com.yuyuframe.launcheragent.celeritas.chunk.vertex.builder.ChunkMeshBufferBuilder;
 
 import java.lang.foreign.MemorySegment;
-import java.lang.foreign.ValueLayout;
 
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -124,8 +123,7 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
 
         // Les quads des blocs à modèle : le Java décide lesquels se dessinent, le
         // noyau natif calcule leur lumière et écrit leurs sommets, en un appel à la
-        // fin de la section. Le temps du contrôle (MeshStats), le Java les écrit
-        // aussi, dans les vrais tampons, et le noyau à côté pour comparer.
+        // fin de la section.
         BlockRenderer189 blockRenderer = buildContext.blockRenderer;
         QuadCommands commands = buildContext.quadCommands;
         commands.reset();
@@ -133,8 +131,6 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
         boolean nativeQuads = NativeMesh.quadsAvailable() && this.prepareNativeQuads(buildContext, minX, minY, minZ);
         // Le temps passé dans le noyau pour les quads : préparation ici, écriture plus bas.
         long nativeNanos = System.nanoTime() - nativeStart;
-        boolean probe = nativeQuads && MeshStats.takeProbe();
-        boolean vanillaFallback = false;
 
         BufferBuilder tesselator = buildContext.tesselator;
         BlockPos.Mutable blockPos = new BlockPos.Mutable(minX, minY, minZ);
@@ -178,22 +174,17 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
                             try {
                                 if (!nativeQuads) {
                                     blockRenderer.render(blockState, blockPos, buffers);
-                                } else if (probe) {
-                                    blockRenderer.emit(blockState, blockPos, buffers, commands);
-                                    blockRenderer.render(blockState, blockPos, buffers);
                                 } else if (!blockRenderer.emit(blockState, blockPos, buffers, commands)) {
                                     // Format de sommets que le noyau n'écrit pas : ces quads restent au Java.
                                     blockRenderer.render(blockState, blockPos, buffers);
                                 }
                             } catch (Throwable failure) {
                                 commands.truncate(mark);
-                                vanillaFallback = true;
                                 warnFallback(block, "notre rendu a levé une exception", failure);
                                 this.renderWithVanilla(vanillaRenderer, blockState, blockPos, slice, tesselator, buildContext, buffers, block);
                             }
                         } else if (type == TYPE_FLUID) {
                             // L'eau et la lave : le noyau les dessine de bout en bout, comme vanilla.
-                            // Le temps du contrôle, vanilla les dessine aussi, pour comparer.
                             int mark = commands.count();
                             boolean emitted = false;
                             if (nativeQuads && NATIVE_FLUIDS) {
@@ -201,15 +192,13 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
                                     emitted = blockRenderer.emitFluid(blockState, blockPos, buffers, commands);
                                 } catch (Throwable failure) {
                                     commands.truncate(mark);
-                                    vanillaFallback = true;
                                     warnFallback(block, "notre rendu de fluide a levé une exception", failure);
                                 }
                             }
-                            if (!emitted || probe) {
+                            if (!emitted) {
                                 this.renderWithVanilla(vanillaRenderer, blockState, blockPos, slice, tesselator, buildContext, buffers, block);
                             }
                         } else if (type != TYPE_INVISIBLE && type != TYPE_BLOCK_ENTITY_ONLY) {
-                            vanillaFallback = true;
                             warnFallback(block, "type de rendu inconnu : " + type, null);
                             this.renderWithVanilla(vanillaRenderer, blockState, blockPos, slice, tesselator, buildContext, buffers, block);
                         }
@@ -230,20 +219,11 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
             slice.release();
         }
 
-        if (nativeQuads && commands.count() > 0) {
-            if (probe) {
-                if (vanillaFallback) {
-                    // Un repli a écrit dans les mêmes tampons : ils ne se comparent plus un à un.
-                    MeshStats.probeSkipped();
-                } else {
-                    this.probeNativeQuads(buildContext, commands);
-                }
-            } else if (!this.writeNativeQuadsTimed(buildContext, commands)) {
-                // Le noyau a échoué : il est mis hors service, et la section est refaite par le Java.
-                NativeMesh.disableQuads();
-                LauncherLog.err("[RENDERER] le noyau natif a échoué sur l'écriture des quads — le rendu Java reprend pour toute la session");
-                return this.execute(context, cancellationToken);
-            }
+        if (nativeQuads && commands.count() > 0 && !this.writeNativeQuadsTimed(buildContext, commands)) {
+            // Le noyau a échoué : il est mis hors service, et la section est refaite par le Java.
+            NativeMesh.disableQuads();
+            LauncherLog.err("[RENDERER] le noyau natif a échoué sur l'écriture des quads — le rendu Java reprend pour toute la session");
+            return this.execute(context, cancellationToken);
         }
 
         Reference2ReferenceMap<TerrainRenderPass, BuiltSectionMeshParts> meshes = BuiltSectionMeshParts.groupFromBuildBuffers(buffers, (float) (camera.x - minX), (float) (camera.y - minY), (float) (camera.z - minZ));
@@ -348,71 +328,6 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
 
     private static MemorySegment fluidData(QuadCommands commands) {
         return commands.hasFluids() ? FluidData189.data() : MemorySegment.NULL;
-    }
-
-    /**
-     * Le contrôle : le Java a écrit les quads dans les tampons de la section ;
-     * le noyau écrit les mêmes à côté, et les deux doivent être identiques à
-     * l'octet près.
-     */
-    private void probeNativeQuads(PrimitiveChunkBuildContext buildContext, QuadCommands commands) {
-        int buckets = commands.bucketCount();
-        int[] quads = commands.bucketQuads();
-        long quadBytes = 4L * NativeMesh.VERTEX_BYTES;
-        long[] destinations = commands.destinations();
-        MemorySegment scratch = null;
-        int totalQuads = 0;
-
-        String difference = null;
-        try {
-            if (!NativeMesh.prepare(buildContext.nativeWorkspace, BlockFlags189.properties(), fluidData(commands),
-                commands.words(), commands.count(), quads, buckets, this.render.getSectionIndex())) {
-                difference = "le noyau a rendu une erreur au comptage";
-            } else {
-                for (int bucket = 0; bucket < buckets; bucket++) {
-                    totalQuads += quads[bucket];
-                }
-                scratch = buildContext.probeScratch(Math.max(1, totalQuads) * quadBytes);
-                long at = 0;
-                for (int bucket = 0; bucket < buckets; bucket++) {
-                    destinations[bucket] = quads[bucket] == 0 ? 0L : scratch.address() + at;
-                    at += quads[bucket] * quadBytes;
-                }
-                if (!NativeMesh.emitQuads(buildContext.nativeWorkspace, BlockFlags189.properties(), commands.words(),
-                    commands.count(), destinations, buckets, this.render.getSectionIndex())) {
-                    difference = "le noyau a rendu une erreur à l'écriture";
-                }
-            }
-        } catch (Throwable failure) {
-            difference = "exception à l'appel : " + failure;
-        }
-
-        long offset = 0;
-        for (int bucket = 0; bucket < buckets && difference == null; bucket++) {
-            // Une passe triée n'a qu'un tampon, le septième : les six autres rangs le désignent aussi, sans rien y commander.
-            if (commands.isUnusedBucket(bucket)) {
-                continue;
-            }
-            ChunkMeshBufferBuilder javaBuffer = commands.vertexBuffer(bucket);
-            long bytes = quads[bucket] * quadBytes;
-            if (javaBuffer.count() != quads[bucket] * 4) {
-                difference = "tampon " + bucket + " : " + javaBuffer.count() + " sommets en Java, " + quads[bucket] * 4 + " commandés";
-            } else if (bytes > 0) {
-                MemorySegment javaBytes = MemorySegment.ofBuffer(javaBuffer.slice());
-                MemorySegment nativeBytes = scratch.asSlice(offset, bytes);
-                long at = javaBytes.mismatch(nativeBytes);
-                if (at >= 0) {
-                    long word = at / 4;
-                    difference = "tampon " + bucket + ", quad " + word / 32 + ", sommet " + word / 8 % 4
-                        + ", mot " + word % 8 + " : Java "
-                        + Integer.toHexString(javaBytes.get(ValueLayout.JAVA_INT_UNALIGNED, word * 4))
-                        + ", natif " + Integer.toHexString(nativeBytes.get(ValueLayout.JAVA_INT_UNALIGNED, word * 4))
-                        + " (section " + this.render.getOriginX() + " " + this.render.getOriginY() + " " + this.render.getOriginZ() + ")";
-                }
-            }
-            offset += bytes;
-        }
-        MeshStats.probe(totalQuads, difference);
     }
 
     private static final AtomicBoolean NATIVE_FAILURE_WARNED = new AtomicBoolean();

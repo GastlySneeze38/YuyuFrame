@@ -52,7 +52,6 @@ public class ChunkMeshBufferBuilder {
             for (ChunkVertexEncoder.Vertex vertex : vertices) {
                 this.analyzer.capture(vertex);
             }
-            this.capturedQuads += vertices.length / 4;
         }
 
         for (ChunkVertexEncoder.Vertex vertex : vertices) {
@@ -95,8 +94,6 @@ public class ChunkMeshBufferBuilder {
     }
 
     private void captureRange(int firstVertex, int vertexCount) {
-        this.capturedQuads += vertexCount / 4;
-
         var vertex = this.captureScratch;
         long ptr = LWJGL.memAddress(this.buffer, firstVertex * this.stride);
 
@@ -153,7 +150,6 @@ public class ChunkMeshBufferBuilder {
     public void start(int sectionIndex) {
         this.count = 0;
         this.sectionIndex = sectionIndex;
-        this.capturedQuads = 0;
         if(this.analyzer != null) {
             this.analyzer.clear();
         }
@@ -169,23 +165,15 @@ public class ChunkMeshBufferBuilder {
         }
 
         // YuyuFrame : le noyau natif relit les positions dans le tampon lui-même
-        // et choisit le tri. Le temps du contrôle (NativeSort.probing), le tri
-        // Java est fait aussi, sur les quads relevés au fil de l'eau, et comparé.
-        boolean captured = this.capturedQuads == this.count / 4 && this.count > 0;
+        // et choisit le tri. Les quads n'ont donc pas été relevés au fil de l'eau.
         SortState nativeState = this.count == 0 ? SortState.NONE
                 : NativeSort.analyze(LWJGL.memAddress(this.buffer, 0), this.count / 4, this.stride);
 
         if (nativeState == null) {
             // Le noyau a échoué : on relève tout le tampon et on trie en Java.
-            if (!captured) {
-                this.analyzer.clear();
-                this.capturedQuads = 0;
-                this.captureRange(0, this.count);
-            }
+            this.analyzer.clear();
+            this.captureRange(0, this.count);
             return this.analyzer.getSortState();
-        }
-        if (captured && NativeSort.probing()) {
-            NativeSort.probe(this.analyzer.getSortState(), nativeState, this.count / 4);
         }
         return nativeState;
     }
@@ -195,19 +183,12 @@ public class ChunkMeshBufferBuilder {
         return this.stride == VanillaLikeChunkVertex.STRIDE && NativeSort.available();
     }
 
-    /** Vrai s'il faut relever les quads pour le tri Java : pas de tri natif, ou le temps de son contrôle. */
+    /** Vrai s'il faut relever les quads au fil de l'eau pour le tri Java : seulement sans tri natif. */
     private boolean capturesForJavaSort() {
-        if (this.sortsNatively() && !NativeSort.probing()) {
-            return false;
-        }
-        return true;
+        return !this.sortsNatively();
     }
 
-    /** Quads relevés pour le tri Java depuis {@link #start} : s'il en manque, le tri Java n'a pas tout vu. */
-    private int capturedQuads;
-
     public void resetSortState() {
-        this.capturedQuads = 0;
         if (this.analyzer != null) {
             this.analyzer.clear();
         }

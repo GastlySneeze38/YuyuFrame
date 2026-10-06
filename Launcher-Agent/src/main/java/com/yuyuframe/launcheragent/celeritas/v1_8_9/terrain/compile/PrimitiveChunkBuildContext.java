@@ -17,7 +17,6 @@ import com.yuyuframe.launcheragent.celeritas.v1_8_9.world.WorldSlice189;
 import com.yuyuframe.launcheragent.celeritas.v1_8_9.nativecore.NativeMesh;
 import com.yuyuframe.launcheragent.celeritas.v1_8_9.terrain.compile.pipeline.QuadCommands;
 
-import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.nio.IntBuffer;
 
@@ -54,16 +53,6 @@ public class PrimitiveChunkBuildContext extends ChunkBuildContext {
     public final QuadCommands quadCommands = new QuadCommands();
     /** La mémoire de travail du noyau natif pour ce fil, ou {@code null} sans noyau. */
     public final MemorySegment nativeWorkspace;
-
-    private MemorySegment probeScratch;
-
-    /** Pour le contrôle du noyau : de la mémoire où il écrit à côté des vrais tampons. */
-    public MemorySegment probeScratch(long bytes) {
-        if (this.probeScratch == null || this.probeScratch.byteSize() < bytes) {
-            this.probeScratch = Arena.ofAuto().allocate(Math.max(bytes, 256 * 1024), 8);
-        }
-        return this.probeScratch;
-    }
 
     private final ChunkVertexEncoder.Vertex[] vertices = ChunkVertexEncoder.Vertex.uninitializedQuad();
 

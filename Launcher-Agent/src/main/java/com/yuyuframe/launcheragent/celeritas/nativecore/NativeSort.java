@@ -3,7 +3,6 @@ package com.yuyuframe.launcheragent.celeritas.nativecore;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.celeritas.chunk.sorting.PartitionTree;
 import com.yuyuframe.launcheragent.celeritas.chunk.sorting.SortState;
-import com.yuyuframe.launcheragent.celeritas.chunk.sorting.TranslucentSorter;
 
 import java.lang.foreign.Arena;
 import java.lang.foreign.FunctionDescriptor;
@@ -15,9 +14,7 @@ import java.lang.invoke.MethodHandle;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
-import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Le tri du translucide fait par le noyau natif ({@code content_core.dll},
@@ -204,52 +201,4 @@ public final class NativeSort {
         }
     }
 
-    // ── Contrôle provisoire ──────────────────────────────────────────────────
-    //
-    // Sur les premières sections qui ont du translucide, le tri est fait des
-    // deux façons et comparé : même genre de tri, et même ordre de dessin
-    // depuis deux positions de caméra. Une ligne de bilan, puis plus rien.
-
-    private static final int PROBE_COUNT = 300;
-    private static final AtomicInteger PROBE_DONE = new AtomicInteger();
-    private static final AtomicInteger PROBE_DIFFS = new AtomicInteger();
-    private static final AtomicBoolean PROBE_SUMMARY = new AtomicBoolean();
-    private static final int[] PROBE_KINDS = new int[4];
-
-    /** Vrai tant que le contrôle dure : les tampons relèvent alors leurs quads pour le tri Java aussi. */
-    public static boolean probing() {
-        return ANALYZE != null && PROBE_DONE.get() < PROBE_COUNT;
-    }
-
-    public static void probe(SortState java, SortState nativeState, int quadCount) {
-        String difference = null;
-        if (java.debugIndex() != nativeState.debugIndex()) {
-            difference = "genre " + SortState.DEBUG_NAMES[java.debugIndex()] + " en Java, "
-                + SortState.DEBUG_NAMES[nativeState.debugIndex()] + " en natif";
-        } else {
-            float[][] cameras = { { 8.0F, 8.0F, 8.0F }, { -21.5F, 40.25F, 3.0F } };
-            for (float[] camera : cameras) {
-                int[] expected = TranslucentSorter.order(java, camera[0], camera[1], camera[2]);
-                int[] actual = TranslucentSorter.order(nativeState, camera[0], camera[1], camera[2]);
-                if (!Arrays.equals(expected, actual)) {
-                    difference = "ordre différent (" + SortState.DEBUG_NAMES[java.debugIndex()] + ") depuis "
-                        + Arrays.toString(camera);
-                    break;
-                }
-            }
-        }
-        synchronized (PROBE_KINDS) {
-            PROBE_KINDS[nativeState.debugIndex()]++;
-        }
-        if (difference != null && PROBE_DIFFS.getAndIncrement() < 3) {
-            LauncherLog.err("[RENDERER] contrôle du tri natif : ÉCART avec le Java — " + difference + ", " + quadCount + " quads");
-        }
-        if (PROBE_DONE.incrementAndGet() >= PROBE_COUNT && PROBE_SUMMARY.compareAndSet(false, true)) {
-            synchronized (PROBE_KINDS) {
-                LauncherLog.renderer(1, String.format(Locale.ROOT,
-                    "contrôle du tri natif : %d sections comparées, %d avec écart | rien à trier %d, ordre fixe %d, arbre %d, par distance %d",
-                    PROBE_DONE.get(), PROBE_DIFFS.get(), PROBE_KINDS[0], PROBE_KINDS[1], PROBE_KINDS[2], PROBE_KINDS[3]));
-            }
-        }
-    }
 }
