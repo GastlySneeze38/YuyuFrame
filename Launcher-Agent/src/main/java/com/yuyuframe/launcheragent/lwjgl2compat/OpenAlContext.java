@@ -8,7 +8,10 @@ import org.lwjgl.openal.AL;
 import org.lwjgl.openal.ALC;
 import org.lwjgl.openal.ALC10;
 import org.lwjgl.openal.ALCCapabilities;
+import org.lwjgl.openal.EXTDisconnect;
+import org.lwjgl.openal.EnumerateAllExt;
 import org.lwjgl.openal.SOFTHRTF;
+import org.lwjgl.openal.SOFTReopenDevice;
 import org.lwjgl.system.MemoryStack;
 
 /**
@@ -70,14 +73,95 @@ public final class OpenAlContext {
 			ALC10.alcMakeContextCurrent(contextPtr);
 			AL.createCapabilities(deviceCaps);
 			created = true;
+			startDeviceWatch(deviceCaps);
 		} catch (LWJGLException e) {
 			exit();
 			throw e;
 		}
 	}
 
+	// ── Suivi du périphérique de sortie (YuyuFrame, 2026-10-06) ──────────────
+	//
+	// La 1.8.9 ouvre sa sortie son une fois, au démarrage. Casque débranché,
+	// ou autre sortie choisie dans Windows : le jeu restait muet (ou sur
+	// l'ancienne sortie) jusqu'au redémarrage. Les versions récentes du jeu
+	// surveillent la sortie une fois par seconde ; on fait de même, et on
+	// ROUVRE le périphérique sur place (ALC_SOFT_reopen_device) : contexte,
+	// sources et tampons survivent, paulscode ne voit rien.
+
+	/** Entre deux contrôles. Lister les sorties interroge Windows : pas à chaque image. */
+	private static final long WATCH_PERIOD_MS = 1000L;
+
+	private static final Object WATCH_LOCK = new Object();
+	/** Change à chaque ouverture/fermeture : un surveillant d'une ouverture passée s'arrête de lui-même. */
+	private static int watchGeneration;
+
+	private static void startDeviceWatch(ALCCapabilities caps) {
+		if (!caps.ALC_SOFT_reopen_device) {
+			LegacyLwjgl3.info("Suivi de la sortie son indisponible (OpenAL sans ALC_SOFT_reopen_device)");
+			return;
+		}
+		final boolean canDetectLoss = caps.ALC_EXT_disconnect;
+		final boolean canListOutputs = caps.ALC_ENUMERATE_ALL_EXT;
+		final int generation;
+		synchronized (WATCH_LOCK) {
+			generation = ++watchGeneration;
+		}
+		Thread watch = new Thread(() -> watchDevice(generation, canDetectLoss, canListOutputs), "YuyuFrame Audio Watch");
+		watch.setDaemon(true);
+		watch.start();
+	}
+
+	private static String defaultOutput() {
+		return ALC10.alcGetString(0L, EnumerateAllExt.ALC_DEFAULT_ALL_DEVICES_SPECIFIER);
+	}
+
+	private static void watchDevice(int generation, boolean canDetectLoss, boolean canListOutputs) {
+		String knownDefault = canListOutputs ? defaultOutput() : null;
+		while (true) {
+			try {
+				Thread.sleep(WATCH_PERIOD_MS);
+			} catch (InterruptedException e) {
+				return;
+			}
+			// Hors verrou : lister les sorties peut prendre plusieurs millisecondes.
+			String currentDefault = canListOutputs ? defaultOutput() : null;
+			synchronized (WATCH_LOCK) {
+				if (generation != watchGeneration || !created) {
+					return;
+				}
+				boolean lost = canDetectLoss && ALC10.alcGetInteger(devicePtr, EXTDisconnect.ALC_CONNECTED) == 0;
+				boolean moved = currentDefault != null && !currentDefault.equals(knownDefault);
+				if (!lost && !moved) {
+					continue;
+				}
+				// Nom nul = la sortie par défaut du moment ; mêmes attributs qu'à l'ouverture.
+				boolean reopened = SOFTReopenDevice.alcReopenDeviceSOFT(devicePtr, (ByteBuffer) null,
+					new int[] {SOFTHRTF.ALC_HRTF_SOFT, ALC10.ALC_FALSE, 0});
+				if (reopened) {
+					knownDefault = currentDefault;
+					LegacyLwjgl3.info("Sortie son rouverte sur " + (currentDefault == null ? "la sortie par défaut" : currentDefault)
+						+ (lost ? " (l'ancienne a disparu)" : " (sortie par défaut changée)"));
+				} else if (lost) {
+					// Aucune sortie disponible pour l'instant : on réessaiera au prochain tour.
+					knownDefault = null;
+				} else {
+					knownDefault = currentDefault;
+					LegacyLwjgl3.warn("Sortie son par défaut changée, mais la réouverture a échoué — le son reste sur l'ancienne");
+				}
+			}
+		}
+	}
+
 	/** Ferme contexte et périphérique — l'équivalent de {@code AL.destroy()} en LWJGL 2. */
 	public static void exit() {
+		synchronized (WATCH_LOCK) {
+			watchGeneration++;
+			closeDevice();
+		}
+	}
+
+	private static void closeDevice() {
 		if (contextPtr != -1L && contextPtr != 0L) {
 			ALC10.alcMakeContextCurrent(0L);
 			ALC10.alcDestroyContext(contextPtr);

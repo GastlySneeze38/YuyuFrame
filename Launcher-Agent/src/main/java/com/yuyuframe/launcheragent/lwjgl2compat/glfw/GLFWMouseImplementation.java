@@ -37,6 +37,8 @@ public class GLFWMouseImplementation implements MouseImplementation {
     private double accum_dx;
     private double accum_dy;
     private double accum_dz;
+    /** Fraction de cran de molette pas encore rendue au jeu (YuyuFrame). */
+    private double wheel_remainder;
     protected byte[] button_states = new byte[this.getButtonCount()];
 
 	@Override
@@ -86,8 +88,17 @@ public class GLFWMouseImplementation implements MouseImplementation {
             }
         });
         this.scrollCallback = GLFWScrollCallback.create((window, xoffset, yoffset) -> {
-            accum_dz += yoffset;
-            putMouseEvent((byte)-1, (byte)0, (int) yoffset, System.nanoTime());
+            // YuyuFrame (2026-10-06) : un pavé tactile ou une molette fine
+            // envoie des fractions de cran. Tronquées une à une, elles
+            // valaient toutes zéro et le défilement était perdu : on les
+            // cumule, et on ne rend que les crans entiers.
+            wheel_remainder += yoffset;
+            int notches = (int) wheel_remainder;
+            if (notches == 0)
+                return;
+            wheel_remainder -= notches;
+            accum_dz += notches;
+            putMouseEvent((byte)-1, (byte)0, notches, System.nanoTime());
         });
         this.cursorEnterCallback = GLFWCursorEnterCallback.create((window, entered) -> this.isInsideWindow = entered);
 
