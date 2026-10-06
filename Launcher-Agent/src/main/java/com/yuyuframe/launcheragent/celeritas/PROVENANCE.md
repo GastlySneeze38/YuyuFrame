@@ -93,6 +93,8 @@ suivre au branchement.
   (`//? if >=1.8 {`) qui mêlent plusieurs versions du jeu dans les mêmes
   fichiers. C'est une référence à réécrire en Mixins Yarn legacy (décisions D2
   et D4) ; ses mixins iront alors dans `apimixin/v1_8_9/renderer/`.
+  La correspondance des noms est dans `v1_8_9/FEATHER-YARN.md`, et les stubs
+  Yarn legacy des 36 classes du jeu qu'il cite sont dans `src/stubs/v1_8_9`.
 
 ## Ce qui n'a pas été repris
 

@@ -10,6 +10,9 @@ public final class Formatting {
 
     public static Formatting GRAY;
 
+    /** {@code a.k} */
+    public static Formatting GREEN;
+
     private Formatting() {
     }
 }

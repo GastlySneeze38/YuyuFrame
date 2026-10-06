@@ -39,6 +39,15 @@ public class GameOptions {
 
     public KeyBinding useKey;
 
+    /** {@code avh.g} — {@code fpsLimit} chez Feather. */
+    public int maxFramerate;
+
+    /** {@code avh.i} — même nom chez Feather. */
+    public boolean fancyGraphics;
+
+    /** {@code avh.t} — même nom chez Feather. */
+    public boolean vsync;
+
     private GameOptions() {
     }
 }

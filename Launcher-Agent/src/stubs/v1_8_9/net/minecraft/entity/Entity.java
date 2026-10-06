@@ -40,4 +40,29 @@ public class Entity {
     public boolean isSprinting() {
         throw new UnsupportedOperationException("stub compile-only");
     }
+
+    // ── Renderer (adaptateur Celeritas, voir celeritas/v1_8_9/FEATHER-YARN.md) ──
+
+    /** {@code pk.P} — position au tick précédent, pour l'interpolation. */
+    public double prevTickX;
+
+    /** {@code pk.Q} */
+    public double prevTickY;
+
+    /** {@code pk.R} */
+    public double prevTickZ;
+
+    /** {@code pk.T} */
+    public boolean noClip;
+
+    /** {@code pk.l} — l'entité qui chevauche celle-ci. */
+    public Entity rider;
+
+    /** {@code pk.o} */
+    public net.minecraft.world.World world;
+
+    /** {@code pk.a(World)} */
+    public void setWorld(net.minecraft.world.World world) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
 }

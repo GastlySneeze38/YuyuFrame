@@ -9,4 +9,9 @@ public class InGameHud {
     public ChatHud getChatHud() {
         throw new UnsupportedOperationException("stub compile-only");
     }
+
+    /** {@code avo.a(F)} — même nom chez Feather ({@code GameGui}). */
+    public void render(float tickDelta) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
 }

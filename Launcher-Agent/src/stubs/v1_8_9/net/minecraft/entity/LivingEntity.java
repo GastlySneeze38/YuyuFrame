@@ -48,4 +48,9 @@ public class LivingEntity extends Entity {
     public ItemStack getArmorSlot(int slot) {
         throw new UnsupportedOperationException("stub compile-only");
     }
+
+    /** {@code pr.bJ} — même nom chez Feather. */
+    public boolean isSleeping() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
 }

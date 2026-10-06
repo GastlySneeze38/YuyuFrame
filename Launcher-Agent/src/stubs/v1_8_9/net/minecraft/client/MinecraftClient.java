@@ -83,4 +83,34 @@ public class MinecraftClient {
     public ServerInfo getCurrentServerEntry() {
         throw new UnsupportedOperationException("stub compile-only");
     }
+
+    // ── Renderer (adaptateur Celeritas, voir celeritas/v1_8_9/FEATHER-YARN.md) ──
+
+    /** {@code ave.o} — {@code gameRenderer} chez Feather. */
+    public net.minecraft.client.render.GameRenderer gameRenderer;
+
+    /** {@code ave.a} — {@code setWorld} chez Feather : change de monde. */
+    public void connect(ClientWorld world) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    /** {@code ave.a} — {@code setWorld} chez Feather, avec le message de l'écran de chargement. */
+    public void connect(ClientWorld world, String loadingMessage) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    /** {@code ave.ac} — {@code getCamera} chez Feather. */
+    public net.minecraft.entity.Entity getCameraEntity() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    /** {@code ave.ae} — {@code getBlockRenderDispatcher} chez Feather. */
+    public net.minecraft.client.render.block.BlockRenderManager getBlockRenderManager() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    /** {@code ave.af} — {@code getEntityRenderDispatcher} chez Feather. */
+    public net.minecraft.client.render.entity.EntityRenderDispatcher getEntityRenderManager() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
 }
