@@ -23,6 +23,46 @@ public final class GlStateManager {
         throw new UnsupportedOperationException("stub compile-only");
     }
 
+    /** {@code bfl.e()} */
+    public static void enableLighting() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    /** {@code bfl.f()} */
+    public static void disableLighting() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    /** {@code bfl.i()} */
+    public static void disableDepthTest() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    /** {@code bfl.j()} */
+    public static void enableDepthTest() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    /** {@code bfl.a(Z)} */
+    public static void depthMask(boolean write) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    /** {@code bfl.w()} */
+    public static void enableTexture() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    /** {@code bfl.x()} */
+    public static void disableTexture() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    /** {@code bfl.i(I)} */
+    public static void bindTexture(int id) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
     /** {@code bfl.k()} */
     public static void disableBlend() {
         throw new UnsupportedOperationException("stub compile-only");

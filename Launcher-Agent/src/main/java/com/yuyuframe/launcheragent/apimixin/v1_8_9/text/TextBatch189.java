@@ -63,6 +63,56 @@ public final class TextBatch189 {
         enabled = value;
     }
 
+    public static boolean isEnabled() {
+        return enabled;
+    }
+
+    // ── Capture ──────────────────────────────────────────────────────────────
+
+    /**
+     * Reçoit les caractères d'un texte au lieu de les voir dessinés. Sert au
+     * regroupement des étiquettes de nom, qui garde la géométrie d'un texte
+     * pour la redessiner ailleurs, avec les autres.
+     */
+    public interface GlyphSink {
+        /**
+         * @param glyphPage {@link #PAGE_ASCII} ou une page unicode ; sa texture est liée à cet instant
+         * @param strip     16 flottants : x, y, u, v pour les quatre sommets, dans l'ordre d'un quad
+         * @param rgb       couleur du caractère, sans alpha
+         */
+        void quad(int glyphPage, float[] strip, int rgb);
+    }
+
+    private static GlyphSink sink;
+    private static int sinkRgb = 0xFFFFFF;
+    private static final float[] SINK_QUAD = new float[4 * FLOATS_PER_VERTEX];
+
+    /** Tant que la capture est ouverte, rien n'est dessiné ni changé dans OpenGL (sauf les textures liées). */
+    public static void beginCapture(GlyphSink target) {
+        sink = target;
+        sinkRgb = 0xFFFFFF;
+    }
+
+    public static void endCapture() {
+        sink = null;
+    }
+
+    /**
+     * Vanilla veut changer la couleur du texte.
+     *
+     * @return vrai si la couleur a été retenue pour la capture : l'appelant ne doit alors pas toucher à OpenGL
+     */
+    public static boolean onColor(float red, float green, float blue) {
+        if (sink != null) {
+            sinkRgb = ((int) (red * 255.0F) & 0xFF) << 16 | ((int) (green * 255.0F) & 0xFF) << 8
+                | ((int) (blue * 255.0F) & 0xFF);
+            return true;
+        }
+        // Les caractères en attente partent avec l'ancienne couleur.
+        flush();
+        return false;
+    }
+
     // ── Bornes d'une chaîne ──────────────────────────────────────────────────
 
     /** Début d'une chaîne : rien ne doit traîner d'un appel précédent interrompu par une exception. */
@@ -79,6 +129,10 @@ public final class TextBatch189 {
      */
     public static void beginGlyph(int glyphPage) {
         if (!enabled) {
+            return;
+        }
+        if (sink != null) {
+            page = glyphPage;
             return;
         }
         if (page != glyphPage) {
@@ -129,6 +183,14 @@ public final class TextBatch189 {
         }
         capturing = false;
         if (stripVertex != 4) {
+            return;
+        }
+        if (sink != null) {
+            // Même réordonnancement que plus bas : bande 0-1-2-3 → quad 0-1-3-2.
+            System.arraycopy(STRIP, 0, SINK_QUAD, 0, 2 * FLOATS_PER_VERTEX);
+            System.arraycopy(STRIP, 3 * FLOATS_PER_VERTEX, SINK_QUAD, 2 * FLOATS_PER_VERTEX, FLOATS_PER_VERTEX);
+            System.arraycopy(STRIP, 2 * FLOATS_PER_VERTEX, SINK_QUAD, 3 * FLOATS_PER_VERTEX, FLOATS_PER_VERTEX);
+            sink.quad(page, SINK_QUAD, sinkRgb);
             return;
         }
         if (quads == MAX_QUADS) {

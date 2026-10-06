@@ -6,6 +6,11 @@ public class Item {
     protected Item() {
     }
 
+    /** {@code zw.a(zx, I)} — la teinte d'une couche du modèle pour cet objet ; blanc pour un objet ordinaire. */
+    public int getDisplayColor(ItemStack stack, int layer) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
     /** Objet dessiné retourné en main — la canne à pêche ({@code zw.e()Z}). */
     public boolean shouldRotate() {
         throw new UnsupportedOperationException("stub compile-only");

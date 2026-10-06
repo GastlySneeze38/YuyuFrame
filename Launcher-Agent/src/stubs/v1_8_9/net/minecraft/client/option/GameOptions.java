@@ -48,6 +48,9 @@ public class GameOptions {
     /** {@code avh.t} — même nom chez Feather. */
     public boolean vsync;
 
+    /** {@code avh.e} — mode 3D rouge/cyan. */
+    public boolean anaglyph3d;
+
     /** {@code avh.c} — distance de rendu, en chunks. */
     public int viewDistance;
 

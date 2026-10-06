@@ -10,6 +10,15 @@ public class EntityRenderDispatcher {
     /** {@code biu.b} — {@code world} chez Feather. */
     public net.minecraft.world.World world;
 
+    /** {@code biu.c} — l'entité depuis laquelle on regarde (sans nom chez Yarn). */
+    public net.minecraft.entity.Entity field_11098;
+
+    /** {@code biu.e} — lacet de la caméra, en degrés. */
+    public float yaw;
+
+    /** {@code biu.f} — tangage de la caméra, en degrés. */
+    public float pitch;
+
     /** {@code biu.g} — {@code options} chez Feather. */
     public net.minecraft.client.option.GameOptions options;
 

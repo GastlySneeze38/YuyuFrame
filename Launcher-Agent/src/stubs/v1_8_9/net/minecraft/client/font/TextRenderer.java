@@ -11,6 +11,11 @@ public class TextRenderer {
         throw new UnsupportedOperationException("stub compile-only");
     }
 
+    /** {@code avn.a(String,int,int,int)} — sans ombre. */
+    public int draw(String text, int x, int y, int color) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
     /** {@code avn.a(String,float,float,int)} — même nom chez Feather. */
     public int drawWithShadow(String text, float x, float y, int color) {
         throw new UnsupportedOperationException("stub compile-only");

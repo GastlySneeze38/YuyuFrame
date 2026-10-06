@@ -61,6 +61,24 @@ public class Entity {
     /** {@code pk.T} */
     public boolean noClip;
 
+    /** {@code pk.K} */
+    public float height;
+
+    /** {@code pk.b(F)} — lumière du bloc où se trouve l'entité, ciel dans les 16 bits hauts. */
+    public int getLightmapCoordinates(float tickDelta) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    /** {@code pk.h(pk)} */
+    public double squaredDistanceTo(Entity other) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    /** {@code pk.at()} */
+    public boolean isOnFire() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
     /** {@code pk.aN()} — le nom personnalisé s'affiche en permanence au-dessus de l'entité (hologrammes). */
     public boolean isCustomNameVisible() {
         throw new UnsupportedOperationException("stub compile-only");

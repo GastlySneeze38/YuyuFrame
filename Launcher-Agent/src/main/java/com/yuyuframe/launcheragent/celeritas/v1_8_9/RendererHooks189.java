@@ -27,6 +27,7 @@ import com.yuyuframe.launcheragent.celeritas.chunk.map.ChunkStatus;
 import com.yuyuframe.launcheragent.celeritas.chunk.map.ChunkTrackerHolder;
 import com.yuyuframe.launcheragent.celeritas.gl.device.RenderDevice;
 import com.yuyuframe.launcheragent.celeritas.v1_8_9.entity.EntityGatherer;
+import com.yuyuframe.launcheragent.celeritas.v1_8_9.entity.LabelBatch189;
 import com.yuyuframe.launcheragent.celeritas.v1_8_9.terrain.CeleritasWorldRenderer;
 import com.yuyuframe.launcheragent.celeritas.v1_8_9.terrain.fog.GLStateManagerFogService;
 import com.yuyuframe.launcheragent.celeritas.v1_8_9.terrain.matrix.PrimitiveChunkMatrixGetter;
@@ -214,6 +215,56 @@ public final class RendererHooks189 {
         CeleritasWorldRenderer renderer = CeleritasWorldRenderer.INSTANCE;
         LauncherLog.renderer(1, "métriques : " + Math.round(frames / seconds) + " fps | "
             + renderer.getChunksDebugString() + " | " + String.join(" | ", renderer.getDebugStrings()));
+        logEntityCosts(Math.max(1, frames));
+        String detail = com.yuyuframe.launcheragent.apimixin.v1_8_9.renderer.EntityCostProbe189.drain(Math.max(1, frames));
+        if (detail != null) {
+            LauncherLog.renderer(1, detail);
+        }
+        String labels = LabelBatch189.drainStats();
+        if (labels != null) {
+            LauncherLog.renderer(1, labels);
+        }
+    }
+
+    /**
+     * Mesure préalable au regroupement des entités (2026-10-06) : ce que coûte
+     * le dessin de chaque sorte d'entité, pour savoir lesquelles regrouper.
+     * Clé = classe de l'entité (nom du jar, à traduire avec les mappings) ;
+     * valeur = nombre de dessins et nanosecondes cumulées depuis le dernier relevé.
+     */
+    private static final java.util.HashMap<Class<?>, long[]> ENTITY_COSTS = new java.util.HashMap<>();
+
+    private static void recordEntityCost(Object entity, long nanos) {
+        // Une classe passée telle quelle sert d'étiquette à un poste qui n'est pas une entité.
+        Class<?> key = entity instanceof Class ? (Class<?>) entity : entity.getClass();
+        long[] cost = ENTITY_COSTS.get(key);
+        if (cost == null) {
+            cost = new long[2];
+            ENTITY_COSTS.put(key, cost);
+        }
+        cost[0]++;
+        cost[1] += nanos;
+    }
+
+    private static void logEntityCosts(int frames) {
+        if (ENTITY_COSTS.isEmpty()) {
+            return;
+        }
+        java.util.ArrayList<java.util.Map.Entry<Class<?>, long[]>> entries = new java.util.ArrayList<>(ENTITY_COSTS.entrySet());
+        entries.sort((a, b) -> Long.compare(b.getValue()[1], a.getValue()[1]));
+        StringBuilder line = new StringBuilder("entités, par image : ");
+        long total = 0L;
+        for (java.util.Map.Entry<Class<?>, long[]> entry : entries) {
+            long[] cost = entry.getValue();
+            total += cost[1];
+            line.append(entry.getKey().getName())
+                .append(" ×").append(String.format("%.1f", cost[0] / (double) frames))
+                .append(" = ").append(cost[1] / frames / 1000L).append(" µs")
+                .append(" (").append(cost[1] / Math.max(1L, cost[0]) / 1000L).append(" µs l'une) ; ");
+        }
+        line.append("total ").append(total / frames / 1000L).append(" µs");
+        LauncherLog.renderer(1, line.toString());
+        ENTITY_COSTS.clear();
     }
 
     /** À la place de {@code WorldRenderer.renderLayer} : dessine une couche de blocs. */
@@ -439,6 +490,23 @@ public final class RendererHooks189 {
 
         BlockPos.Mutable entityBlockPos = new BlockPos.Mutable();
 
+        // Les étiquettes de nom sont notées pendant la boucle et dessinées ensemble après.
+        LabelBatch189.begin(tickDelta);
+        try {
+            renderEntityList(entities, dispatcher, cameraView, camX, camY, camZ, viewEntity, player, viewSleeping,
+                client, world, entityBlockPos, counters, tickDelta);
+        } finally {
+            long started = System.nanoTime();
+            LabelBatch189.end();
+            recordEntityCost(LabelBatch189.class, System.nanoTime() - started);
+        }
+    }
+
+    private static void renderEntityList(List<Object> entities, EntityRenderDispatcher dispatcher, CameraView cameraView,
+                                         double camX, double camY, double camZ, Entity viewEntity, Entity player,
+                                         boolean viewSleeping, MinecraftClient client, World world,
+                                         BlockPos.Mutable entityBlockPos, WorldRendererAccessor189 counters,
+                                         float tickDelta) {
         for (int i = 0; i < entities.size(); i++) {
             Entity entity = (Entity) entities.get(i);
 
@@ -478,7 +546,9 @@ public final class RendererHooks189 {
             }
 
             counters.la$setHiddenEntityCount(counters.la$getHiddenEntityCount() + 1);
+            long started = System.nanoTime();
             dispatcher.renderEntity(entity, tickDelta);
+            recordEntityCost(entity, System.nanoTime() - started);
         }
     }
 }

@@ -84,6 +84,8 @@ Base : `com.yuyuframe.launcheragent.celeritas`. Les sous-paquets suivent.
 | `RendererSwitch.java` | L'interrupteur — notre code, pas celui de Celeritas |
 | `v1_8_9/sky/CloudRenderer189.java` | Les nuages détaillés réécrits — notre code (2026-10-06) : maillage gardé sur la carte graphique, 2 dessins par image au lieu de 128 |
 
+| `v1_8_9/entity/LabelBatch189.java` | Les étiquettes de nom dessinées ensemble — notre code (2026-10-06) : notées pendant la boucle des entités, envoyées en trois dessins à la fin |
+
 Notre code aussi, dans `v1_8_9/RendererHooks189` et actif seulement avec le
 renderer (2026-10-06) : le ciel caché quand le brouillard est rapproché
 (correctif repris de Sodium), et les particules hors champ non calculées.

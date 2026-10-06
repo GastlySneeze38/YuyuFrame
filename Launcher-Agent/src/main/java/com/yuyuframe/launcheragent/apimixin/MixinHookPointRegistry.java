@@ -843,6 +843,12 @@ public final class MixinHookPointRegistry {
         always("1.8.9", "v1_8_9.renderer.DebugHudRendererMixin189");
         always("1.8.9", "v1_8_9.renderer.ParticleCullMixin189");
         always("1.8.9", "v1_8_9.renderer.WorldRendererSkyMixin189");
+        // Étiquettes de nom : notées pendant le dessin des entités, dessinées ensemble à la fin.
+        always("1.8.9", "v1_8_9.renderer.EntityLabelBatchMixin189");
+        // Sonde temporaire (2026-10-06) : détail du coût d'une entité vivante.
+        always("1.8.9", "v1_8_9.renderer.EntityCostProbeMixin189");
+        // Modèles d'objets : géométrie enregistrée une fois, rejouée ensuite.
+        always("1.8.9", "v1_8_9.item.ItemModelCacheMixin189");
         // Texte regroupé : un envoi par chaîne au lieu de dix appels par caractère.
         always("1.8.9", "v1_8_9.text.TextRendererBatchMixin189");
 
