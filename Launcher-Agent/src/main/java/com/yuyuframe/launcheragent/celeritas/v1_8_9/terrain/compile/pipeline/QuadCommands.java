@@ -101,6 +101,11 @@ public final class QuadCommands {
         return this.passes[firstBucket / FACINGS].isSorted();
     }
 
+    /** Vrai pour les six premiers rangs d'une passe triée : rien n'y est jamais commandé. */
+    public boolean isUnusedBucket(int bucket) {
+        return bucket % FACINGS != ModelQuadFacing.UNASSIGNED.ordinal() && this.passes[bucket / FACINGS].isSorted();
+    }
+
     /** Le tampon d'un quad de cette passe dont la normale regarde vers {@code normalFace}. */
     public int bucketOf(int firstBucket, ModelQuadFacing normalFace) {
         return firstBucket + (this.isSorted(firstBucket) ? ModelQuadFacing.UNASSIGNED.ordinal() : normalFace.ordinal());

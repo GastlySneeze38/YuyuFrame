@@ -43,10 +43,17 @@ public final class MeshStats {
     private MeshStats() {
     }
 
-    public static void section(long taskNanos, long shapeNanos) {
+    private static final LongAdder QUAD_NANOS = new LongAdder();
+
+    /**
+     * @param quadNanos le temps passé dans le noyau pour les quads (copie des sections, lumière,
+     *                  écriture des sommets) ; le reste de la tâche est du Java, surtout des appels au jeu
+     */
+    public static void section(long taskNanos, long shapeNanos, long quadNanos) {
         SECTIONS.increment();
         TASK_NANOS.add(taskNanos);
         SHAPE_NANOS.add(shapeNanos);
+        QUAD_NANOS.add(quadNanos);
     }
 
     /** Vrai si cette section fait partie du contrôle : l'appelant écrit alors ses quads des deux façons. */
@@ -96,11 +103,13 @@ public final class MeshStats {
         long sections = SECTIONS.sumThenReset();
         long taskNanos = TASK_NANOS.sumThenReset();
         long shapeNanos = SHAPE_NANOS.sumThenReset();
+        long quadNanos = QUAD_NANOS.sumThenReset();
         if (sections == 0) {
             return null;
         }
-        return String.format(Locale.ROOT, "Maillage: %d sections, %.0f µs/section (quads %s) dont forme %.1f µs (%s)",
+        return String.format(Locale.ROOT,
+            "Maillage: %d sections, %.0f µs/section (quads %s) dont noyau des quads %.1f µs, forme %.1f µs (%s)",
             sections, taskNanos / 1000.0 / sections, nativeQuads ? "natifs" : "Java",
-            shapeNanos / 1000.0 / sections, nativeShape ? "natif" : "Java");
+            quadNanos / 1000.0 / sections, shapeNanos / 1000.0 / sections, nativeShape ? "natif" : "Java");
     }
 }

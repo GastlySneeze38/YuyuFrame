@@ -129,7 +129,10 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
         BlockRenderer189 blockRenderer = buildContext.blockRenderer;
         QuadCommands commands = buildContext.quadCommands;
         commands.reset();
+        long nativeStart = System.nanoTime();
         boolean nativeQuads = NativeMesh.quadsAvailable() && this.prepareNativeQuads(buildContext, minX, minY, minZ);
+        // Le temps passé dans le noyau pour les quads : préparation ici, écriture plus bas.
+        long nativeNanos = System.nanoTime() - nativeStart;
         boolean probe = nativeQuads && MeshStats.takeProbe();
         boolean vanillaFallback = false;
 
@@ -235,7 +238,7 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
                 } else {
                     this.probeNativeQuads(buildContext, commands);
                 }
-            } else if (!this.writeNativeQuads(buildContext, commands)) {
+            } else if (!this.writeNativeQuadsTimed(buildContext, commands)) {
                 // Le noyau a échoué : il est mis hors service, et la section est refaite par le Java.
                 NativeMesh.disableQuads();
                 LauncherLog.err("[RENDERER] le noyau natif a échoué sur l'écriture des quads — le rendu Java reprend pour toute la session");
@@ -260,7 +263,7 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
             renderData.occluderBoxes = rasterShape.computeOccluderBoxes();
             shapeNanos = System.nanoTime() - shapeStart;
         }
-        MeshStats.section(System.nanoTime() - taskStart, shapeNanos);
+        MeshStats.section(System.nanoTime() - taskStart, shapeNanos, nativeNanos + this.writeNanos);
 
         return new ChunkBuildOutput(this.render, renderData, meshes, this.buildTime);
     }
@@ -290,6 +293,16 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
             LauncherLog.err("[RENDERER] le noyau natif a échoué à la préparation d'une section — le rendu Java reprend pour toute la session", failure);
             return false;
         }
+    }
+
+    /** Le temps de {@link #writeNativeQuads} pour cette tâche, pour les mesures. */
+    private long writeNanos;
+
+    private boolean writeNativeQuadsTimed(PrimitiveChunkBuildContext buildContext, QuadCommands commands) {
+        long start = System.nanoTime();
+        boolean written = this.writeNativeQuads(buildContext, commands);
+        this.writeNanos = System.nanoTime() - start;
+        return written;
     }
 
     /** Réserve la place des quads dans les tampons de la section et les fait écrire par le noyau. */
@@ -376,6 +389,10 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
 
         long offset = 0;
         for (int bucket = 0; bucket < buckets && difference == null; bucket++) {
+            // Une passe triée n'a qu'un tampon, le septième : les six autres rangs le désignent aussi, sans rien y commander.
+            if (commands.isUnusedBucket(bucket)) {
+                continue;
+            }
             ChunkMeshBufferBuilder javaBuffer = commands.vertexBuffer(bucket);
             long bytes = quads[bucket] * quadBytes;
             if (javaBuffer.count() != quads[bucket] * 4) {
