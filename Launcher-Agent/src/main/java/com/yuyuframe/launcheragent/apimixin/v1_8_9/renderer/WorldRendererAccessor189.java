@@ -30,6 +30,10 @@ public interface WorldRendererAccessor189 {
     @Accessor("hiddenEntityCount")
     void la$setHiddenEntityCount(int value);
 
+    /** {@code bfr.w} — fait défiler les nuages. Pas d'homonyme {@code W} de même type (vérifié sur le jar). */
+    @Accessor("ticks")
+    int la$ticks();
+
     @Accessor("visibleChunks")
     List<Object> la$visibleChunks();
 }

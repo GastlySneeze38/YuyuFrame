@@ -1,6 +1,9 @@
 package com.yuyuframe.launcheragent.celeritas.v1_8_9;
 
+import net.minecraft.block.material.Material;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.render.Camera;
+import com.yuyuframe.launcheragent.celeritas.v1_8_9.sky.CloudRenderer189;
 import net.minecraft.client.render.BaseFrustum;
 import net.minecraft.client.render.CameraView;
 import net.minecraft.client.render.DiffuseLighting;
@@ -239,6 +242,36 @@ public final class RendererHooks189 {
         }
 
         gameRenderer.disableLightmap();
+    }
+
+    // ── Ciel et nuages ───────────────────────────────────────────────────────
+
+    /** À la place de {@code WorldRenderer.renderFancyClouds} — voir {@link CloudRenderer189}. */
+    public static void renderFancyClouds(Object worldRenderer, float tickDelta) {
+        CloudRenderer189.render(((WorldRendererAccessor189) worldRenderer).la$ticks(), tickDelta);
+    }
+
+    /** Identifiant numérique de la cécité : la 1.8.9 désigne ses effets ainsi. */
+    private static final int BLINDNESS_ID = 15;
+
+    /**
+     * Vrai quand le brouillard est rapproché : œil dans l'eau ou la lave, ou
+     * cécité. Les mêmes cas que {@code GameRenderer.updateFog} de vanilla. Le
+     * moteur n'envoie pas les chunks cachés par ce brouillard ; le ciel dessiné
+     * derrière se verrait à leur place.
+     */
+    public static boolean isSkyHidden(float tickDelta) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        Entity camera = client.getCameraEntity();
+        World world = client.world;
+        if (camera == null || world == null) {
+            return false;
+        }
+        if (camera instanceof LivingEntity && ((LivingEntity) camera).hasStatusEffect(BLINDNESS_ID)) {
+            return true;
+        }
+        Material material = Camera.getSubmergedBlock(world, camera, tickDelta).getMaterial();
+        return material == Material.WATER || material == Material.LAVA;
     }
 
     // ── Particules ───────────────────────────────────────────────────────────

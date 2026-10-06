@@ -659,6 +659,12 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
             "net/minecraft/client/render/GameRenderer", "fogBlue"),
         new RefmapEntry(M189 + "renderer/DebugHudRendererMixin189",
             "net/minecraft/client/gui/hud/DebugHud", "getRightText", "()Ljava/util/List;", null),
+        RefmapEntry.field(M189 + "renderer/WorldRendererAccessor189",
+            "net/minecraft/client/render/WorldRenderer", "ticks"),
+        new RefmapEntry(M189 + "renderer/WorldRendererSkyMixin189",
+            "net/minecraft/client/render/WorldRenderer", "renderFancyClouds", "(FI)V", null),
+        new RefmapEntry(M189 + "renderer/WorldRendererSkyMixin189",
+            "net/minecraft/client/render/WorldRenderer", "renderSky", "(FI)V", null),
         new RefmapEntry(M189 + "renderer/ParticleCullMixin189",
             "net/minecraft/client/particle/ParticleManager", "renderParticles", "(Lnet/minecraft/entity/Entity;F)V", null),
         // ── apimixin 1.8.9 : texte regroupé ───────────────────────────────

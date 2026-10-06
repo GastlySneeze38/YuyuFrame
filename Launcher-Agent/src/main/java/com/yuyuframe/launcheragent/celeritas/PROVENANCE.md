@@ -82,6 +82,11 @@ Base : `com.yuyuframe.launcheragent.celeritas`. Les sous-paquets suivent.
 | `util/` | Collections, tri, itérateurs, couleurs |
 | `v1_8_9/` | L'adaptateur 1.8.9, porté en noms Yarn legacy (voir « Comment c'est branché ») |
 | `RendererSwitch.java` | L'interrupteur — notre code, pas celui de Celeritas |
+| `v1_8_9/sky/CloudRenderer189.java` | Les nuages détaillés réécrits — notre code (2026-10-06) : maillage gardé sur la carte graphique, 2 dessins par image au lieu de 128 |
+
+Notre code aussi, dans `v1_8_9/RendererHooks189` et actif seulement avec le
+renderer (2026-10-06) : le ciel caché quand le brouillard est rapproché
+(correctif repris de Sodium), et les particules hors champ non calculées.
 
 Les shaders sont dans `src/main/resources/assets/celeritas/shaders/` (chez
 l'amont : `assets/sodium/shaders/`). Le chemin de chargement sera à faire

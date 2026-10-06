@@ -11,6 +11,14 @@ public abstract class World implements BlockView {
     protected World() {
     }
 
+    /** {@code adm.t} */
+    public net.minecraft.world.dimension.Dimension dimension;
+
+    /** {@code adm.e(F)} */
+    public net.minecraft.util.math.Vec3d getCloudColor(float tickDelta) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
     /** {@code adm.f} — {@code entities} chez Feather : toutes les entités chargées. */
     public java.util.List loadedEntities;
 

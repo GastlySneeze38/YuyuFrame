@@ -842,6 +842,7 @@ public final class MixinHookPointRegistry {
         always("1.8.9", "v1_8_9.renderer.FogColorCaptureMixin189");
         always("1.8.9", "v1_8_9.renderer.DebugHudRendererMixin189");
         always("1.8.9", "v1_8_9.renderer.ParticleCullMixin189");
+        always("1.8.9", "v1_8_9.renderer.WorldRendererSkyMixin189");
         // Texte regroupé : un envoi par chaîne au lieu de dix appels par caractère.
         always("1.8.9", "v1_8_9.text.TextRendererBatchMixin189");
 

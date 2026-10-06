@@ -16,6 +16,12 @@ public class Entity {
 
     public double z;
 
+    /** {@code pk.p} — position au tick précédent. */
+    public double prevX;
+
+    /** {@code pk.r} */
+    public double prevZ;
+
     public float yaw;
 
     public float pitch;

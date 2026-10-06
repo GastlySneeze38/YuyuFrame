@@ -15,6 +15,11 @@ public class Block {
         throw new UnsupportedOperationException("stub compile-only");
     }
 
+    /** {@code afh.t()} */
+    public net.minecraft.block.material.Material getMaterial() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
     /** {@code afh.c} — {@code isOpaqueCube} chez Feather. */
     public boolean hasTransparency() {
         throw new UnsupportedOperationException("stub compile-only");
