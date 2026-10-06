@@ -56,6 +56,15 @@ public final class RendererHooks189 {
 
     private static boolean failureReported;
 
+    /**
+     * La distance de rendu au dernier rechargement, tenue ici et non lue dans
+     * le {@code WorldRenderer} : son champ ({@code bfr.P}) a un homonyme à la
+     * casse près ({@code bfr.p}, même type), et un {@code @Accessor} de Mixin
+     * retrouve sa cible sans tenir compte de la casse — il lisait {@code p}.
+     * La garde voyait donc une différence à chaque image et rechargeait tout.
+     */
+    private static int reloadedViewDistance = -1;
+
     // ── Cycle de vie ─────────────────────────────────────────────────────────
 
     /**
@@ -71,6 +80,7 @@ public final class RendererHooks189 {
 
         boolean wanted = RendererSwitch.wanted();
         RendererSwitch.latch(wanted);
+        reloadedViewDistance = MinecraftClient.getInstance().options.viewDistance;
 
         if (wanted) {
             // reload() ne vide pas la liste des chunks visibles de vanilla, qui ne
@@ -145,7 +155,7 @@ public final class RendererHooks189 {
         MinecraftClient client = MinecraftClient.getInstance();
 
         // Même garde que vanilla en tête de setupTerrain.
-        if (client.options.viewDistance != ((WorldRendererAccessor189) worldRenderer).la$getRenderDistance()) {
+        if (client.options.viewDistance != reloadedViewDistance) {
             ((WorldRenderer) worldRenderer).reload();
             if (!RendererSwitch.active()) {
                 return;

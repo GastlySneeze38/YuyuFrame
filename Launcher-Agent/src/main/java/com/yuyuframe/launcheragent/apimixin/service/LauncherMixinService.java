@@ -632,8 +632,6 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
             "net/minecraft/client/render/WorldRenderer", "renderEntities",
             "(Lnet/minecraft/entity/Entity;Lnet/minecraft/client/render/CameraView;F)V", null),
         RefmapEntry.field(M189 + "renderer/WorldRendererAccessor189",
-            "net/minecraft/client/render/WorldRenderer", "renderDistance"),
-        RefmapEntry.field(M189 + "renderer/WorldRendererAccessor189",
             "net/minecraft/client/render/WorldRenderer", "hiddenEntityCount"),
         RefmapEntry.field(M189 + "renderer/WorldRendererAccessor189",
             "net/minecraft/client/render/WorldRenderer", "visibleChunks"),
