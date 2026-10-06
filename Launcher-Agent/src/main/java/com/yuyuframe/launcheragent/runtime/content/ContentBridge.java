@@ -45,7 +45,8 @@ public final class ContentBridge {
 
     public static boolean isLoaded() { return loaded; }
 
-    // ── Fonctions JNI — implémentées dans content-core/src/jni/content.rs ────
+    // ── Fonctions JNI — implémentées dans content-core/src/modrinth/bridge.rs
+    //    (et image/bridge.rs pour fetchImageRgba) ────────────────────────────
 
     /**
      * Recherche Modrinth (resource packs/shaders). Retourne le JSON brut,

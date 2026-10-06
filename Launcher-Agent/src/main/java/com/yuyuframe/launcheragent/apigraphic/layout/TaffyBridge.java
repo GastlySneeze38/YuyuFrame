@@ -5,7 +5,7 @@ import com.yuyuframe.launcheragent.runtime.content.ContentBridge;
 /**
  * Pont JNI vers le moteur de layout Flexbox/Grid (roadmap Phase 5.2, crate
  * Rust {@code taffy} — même lib que Bevy UI/Dioxus/Zed). Fonction native
- * implémentée dans {@code content-core/src/jni/layout.rs} — MÊME DLL que
+ * implémentée dans {@code content-core/src/layout/bridge.rs} — MÊME DLL que
  * {@link ContentBridge} (aucune dépendance partagée entre les deux, juste le
  * même binaire chargé une fois, voir {@code content-core/src/lib.rs}), donc
  * {@link #ensureLoaded()} délègue simplement à {@code ContentBridge}.

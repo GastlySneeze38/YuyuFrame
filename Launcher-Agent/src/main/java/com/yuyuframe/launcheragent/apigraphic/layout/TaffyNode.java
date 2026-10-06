@@ -29,7 +29,7 @@ public final class TaffyNode {
         return this;
     }
 
-    /** Sérialise l'arbre entier — voir content-core/src/layout.rs pour le schéma attendu côté Rust. */
+    /** Sérialise l'arbre entier — voir content-core/src/layout/mod.rs pour le schéma attendu côté Rust. */
     public String toJson() {
         StringBuilder out = new StringBuilder(256);
         writeJson(out);

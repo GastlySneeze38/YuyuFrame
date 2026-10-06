@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * ContentBridge.downloadFile} + un fichier de cache (voir historique de
  * session : demande explicite de l'utilisateur, "je veux éviter de passer
  * par le téléchargement de l'image, je veux tout faire par internet").
- * Décodage côté Rust ({@code content-core/src/modrinth.rs::fetch_image_rgba},
+ * Décodage côté Rust ({@code content-core/src/image/fetch.rs::fetch_image_rgba},
  * crate {@code image}) pour supporter WebP en plus de PNG/JPEG/GIF/BMP/ICO/
  * TIFF — {@code javax.imageio.ImageIO} (Java) ne décode PAS WebP nativement,
  * et ajouter une lib Java tierce aurait demandé de gérer un jar à la main

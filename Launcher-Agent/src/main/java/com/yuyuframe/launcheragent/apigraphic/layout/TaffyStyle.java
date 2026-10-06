@@ -2,7 +2,7 @@ package com.yuyuframe.launcheragent.apigraphic.layout;
 
 /**
  * Style d'un {@link TaffyNode} — miroir Java du schéma JSON attendu par
- * {@code content-core/src/layout.rs} (voir sa javadoc de module pour le
+ * {@code content-core/src/layout/} (voir sa javadoc de module pour le
  * détail complet). Toute dimension (largeur/hauteur/marge/padding/gap/inset)
  * est une {@code String} : {@link #AUTO}, {@code "50%"} (pourcentage), ou un
  * nombre en pixels ({@code "120"}, voir {@link #px}) — même convention des
@@ -32,7 +32,7 @@ public final class TaffyStyle {
     public String display = "flex";        // "flex" | "grid" | "none"
     public String flexDirection = "row";    // "row" | "column" | "row-reverse" | "column-reverse"
     public String flexWrap = "no-wrap";     // "no-wrap" | "wrap" | "wrap-reverse"
-    /** {@code null} = hérite du défaut Taffy (flex-start) — voir content-core/src/layout.rs#parse_justify_content pour les valeurs acceptées. */
+    /** {@code null} = hérite du défaut Taffy (flex-start) — voir content-core/src/layout/tree.rs#parse_justify_content pour les valeurs acceptées. */
     public String justifyContent;
     public String alignItems;
     public String alignContent;

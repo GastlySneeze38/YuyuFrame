@@ -17,7 +17,7 @@ import java.nio.file.Path;
  * Souris brute lue par {@code content_core.dll} (docs/LauncherAgent/v1.8.9/
  * README.md § 9 bis), appelée par FFM — pas par JNI : les fonctions
  * {@code yf_mouse_*} sont cherchées par leur nom dans la DLL. Leur contrat est
- * dans {@code content-core/src/rawinput.rs}.
+ * dans {@code content-core/src/mouse/bridge.rs}.
  *
  * <p>La DLL cumule les déplacements dans deux totaux qui ne reviennent jamais
  * à zéro ; {@link #poll()} en fait la différence avec la lecture précédente.
@@ -28,7 +28,7 @@ import java.nio.file.Path;
  */
 public final class NativeMouse {
 
-	/** Même valeur que {@code ABI_VERSION} dans rawinput.rs. */
+	/** Même valeur que {@code ABI_VERSION} dans mouse/bridge.rs. */
 	private static final int ABI_VERSION = 1;
 
 	/** {@code -Dyuyuframe.mouse.nativeRawInput=false} garde la souris de GLFW. */
