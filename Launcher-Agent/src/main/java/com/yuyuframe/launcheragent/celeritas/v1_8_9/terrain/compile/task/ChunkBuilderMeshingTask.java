@@ -10,6 +10,7 @@ import net.minecraft.client.render.BufferBuilder;
 import net.minecraft.client.render.VertexFormats;
 import net.minecraft.client.render.block.BlockRenderManager;
 import net.minecraft.client.render.block.entity.BlockEntityRenderDispatcher;
+import net.minecraft.client.render.block.entity.BlockEntityRenderer;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
 import net.minecraft.world.chunk.Chunk;
@@ -101,8 +102,16 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
 
                         if (block.hasBlockEntity()) {
                             BlockEntity tileEntity = chunk.getBlockEntity(blockPos, Chunk.Status.CHECK);
-                            if (BlockEntityRenderDispatcher.INSTANCE.getRenderer(tileEntity) != null) {
-                                renderData.globalBlockEntities.add(tileEntity);
+                            BlockEntityRenderer renderer = BlockEntityRenderDispatcher.INSTANCE.getRenderer(tileEntity);
+                            if (renderer != null) {
+                                // Écart avec l'amont, qui les range tous en « global » (dessinés
+                                // à chaque image, visibles ou non). Comme vanilla : seuls ceux qui
+                                // se voient hors de leur bloc échappent au culling de leur section.
+                                if (renderer.rendersOutsideBoundingBox()) {
+                                    renderData.globalBlockEntities.add(tileEntity);
+                                } else {
+                                    renderData.culledBlockEntities.add(tileEntity);
+                                }
                             }
                         }
 

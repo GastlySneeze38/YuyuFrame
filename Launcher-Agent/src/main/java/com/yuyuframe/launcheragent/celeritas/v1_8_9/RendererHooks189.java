@@ -12,6 +12,7 @@ import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.projectile.WitherSkullEntity;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Box;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.world.World;
 import com.yuyuframe.launcheragent.apimixin.mapping.YarnNamed;
@@ -305,6 +306,16 @@ public final class RendererHooks189 {
             // En première personne, on ne se dessine pas soi-même (sauf endormi).
             if (entity == viewEntity && client.options.perspective == 0 && !viewSleeping) {
                 continue;
+            }
+
+            // Culling d'occlusion : une entité dont toutes les sections sont cachées
+            // n'est pas dessinée. Vanilla fait de même, puisqu'il ne parcourt que
+            // les entités de ses chunks visibles — étiquette de nom comprise.
+            if (entity != viewEntity && !entity.ignoreCameraFrustum && entity.rider != player) {
+                Box box = entity.getBoundingBox();
+                if (!CeleritasWorldRenderer.INSTANCE.isBoxVisible(box.minX, box.minY, box.minZ, box.maxX, box.maxY, box.maxZ)) {
+                    continue;
+                }
             }
 
             if (entity.y >= 0.0 && entity.y < 256.0) {

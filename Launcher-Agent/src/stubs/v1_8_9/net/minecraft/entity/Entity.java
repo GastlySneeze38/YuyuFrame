@@ -55,6 +55,14 @@ public class Entity {
     /** {@code pk.T} */
     public boolean noClip;
 
+    /** {@code pk.ah} — toujours dessinée, même hors du champ de la caméra. */
+    public boolean ignoreCameraFrustum;
+
+    /** {@code pk.aR()} */
+    public net.minecraft.util.math.Box getBoundingBox() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
     /** {@code pk.l} — l'entité qui chevauche celle-ci. */
     public Entity rider;
 

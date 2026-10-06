@@ -126,6 +126,15 @@ suivre au branchement.
   l'optimisation de `TypeFilterableList.forEach`, les retouches de fenêtre de
   `MinecraftMixin` (notre couche LWJGL crée déjà la fenêtre), le suivi de
   transparence des textures (vide à partir de la 1.5).
+- **Block entities soumis au culling** (2026-10-06) : l'amont les range tous
+  dans la liste « globale », dessinée à chaque image quelle que soit la
+  visibilité (mesuré : 1,48 ms par image contre 0,99 ms pour vanilla sur un
+  lobby). Ici, seuls ceux dont le rendu déclare `rendersOutsideBoundingBox`
+  (faisceau de balise) y vont ; les autres suivent la visibilité de leur section.
+- **Entités soumises au culling d'occlusion** (2026-10-06) : une entité dont la
+  boîte ne touche aucune section visible n'est pas dessinée — comme vanilla,
+  qui ne parcourt que ses chunks visibles. Exceptions : l'entité de vue, celles
+  marquées `ignoreCameraFrustum`, et la monture du joueur.
 - **Une borne corrigée** dans `populateTileEntities` (`>=` au lieu de `>`).
 
 ### Vérifié hors jeu, pas en jeu

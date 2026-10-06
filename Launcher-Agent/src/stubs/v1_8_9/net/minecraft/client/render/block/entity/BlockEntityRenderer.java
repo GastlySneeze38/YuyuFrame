@@ -7,4 +7,9 @@ public abstract class BlockEntityRenderer {
 
     protected BlockEntityRenderer() {
     }
+
+    /** {@code bhd.a()} — vrai pour ce qui se voit de loin hors de son bloc (faisceau de balise). */
+    public boolean rendersOutsideBoundingBox() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
 }
