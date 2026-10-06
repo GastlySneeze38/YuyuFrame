@@ -13,6 +13,7 @@ import net.minecraft.client.render.WorldRenderer;
 import net.minecraft.client.render.entity.EntityRenderDispatcher;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.entity.projectile.WitherSkullEntity;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
@@ -365,21 +366,44 @@ public final class RendererHooks189 {
         Vector3f offset = new Vector3f();
         modelMatrix.transformPosition(offset);
 
-        return new Viewport(new FrustumTester(frustum), new Vector3d(x + offset.x, y + offset.y, z + offset.z));
+        // Deux repères : vanilla travaille autour de l'ORIGINE du rendu (les pieds
+        // de l'entité de vue), le moteur autour de l'ŒIL. « offset » est l'œil vu
+        // depuis l'origine : hauteur des yeux, plus le recul en troisième personne.
+        //
+        // La matrice sert au culling par rastérisation. Celle de vanilla
+        // (projection × vue) part de l'origine ; on la fait partir de l'œil.
+        Matrix4f viewProjection = new Matrix4f();
+        viewProjection.set(frustum.clipMatrix);
+        viewProjection.translate(offset.x, offset.y, offset.z);
+
+        return new Viewport(new FrustumTester(frustum, offset.x, offset.y, offset.z),
+                new Vector3d(x + offset.x, y + offset.y, z + offset.z), viewProjection);
     }
 
     /** Classe nommée et non lambda : elle tient un type du jeu. */
     @YarnNamed
     private static final class FrustumTester implements com.yuyuframe.launcheragent.celeritas.viewport.frustum.Frustum {
         private final BaseFrustum frustum;
+        private final float offsetX, offsetY, offsetZ;
 
-        FrustumTester(BaseFrustum frustum) {
+        FrustumTester(BaseFrustum frustum, float offsetX, float offsetY, float offsetZ) {
             this.frustum = frustum;
+            this.offsetX = offsetX;
+            this.offsetY = offsetY;
+            this.offsetZ = offsetZ;
         }
 
+        /**
+         * Le moteur donne des coordonnées autour de l'œil, les plans de vanilla
+         * sont autour de l'origine du rendu : on revient à celle-ci. Écart
+         * corrigé par rapport à l'amont (2026-10-06), qui passait les
+         * coordonnées telles quelles — tout le test était décalé de la hauteur
+         * des yeux, soit 1,62 bloc de sections coupées trop tôt en haut de l'écran.
+         */
         @Override
         public boolean testAab(float minX, float minY, float minZ, float maxX, float maxY, float maxZ) {
-            return this.frustum.isInFrustum(minX, minY, minZ, maxX, maxY, maxZ);
+            return this.frustum.isInFrustum(minX + this.offsetX, minY + this.offsetY, minZ + this.offsetZ,
+                    maxX + this.offsetX, maxY + this.offsetY, maxZ + this.offsetZ);
         }
     }
 
@@ -431,9 +455,15 @@ public final class RendererHooks189 {
             }
 
             // Culling d'occlusion : une entité dont toutes les sections sont cachées
-            // n'est pas dessinée. Vanilla fait de même, puisqu'il ne parcourt que
-            // les entités de ses chunks visibles — étiquette de nom comprise.
-            if (entity != viewEntity && !entity.ignoreCameraFrustum && entity.rider != player) {
+            // n'est pas dessinée.
+            //
+            // Règle de Sodium : jamais pour une entité dont le nom s'affiche — les
+            // joueurs, et les entités à nom toujours visible (hologrammes). Le
+            // culling par rastérisation cache ce qui est derrière un mur ; sans
+            // cette règle, on verrait moins de pseudos à travers les murs qu'en
+            // vanilla, ce qui compte en PvP.
+            boolean nameShown = entity instanceof PlayerEntity || entity.isCustomNameVisible();
+            if (!nameShown && entity != viewEntity && !entity.ignoreCameraFrustum && entity.rider != player) {
                 Box box = entity.getBoundingBox();
                 if (!CeleritasWorldRenderer.INSTANCE.isBoxVisible(box.minX, box.minY, box.minZ, box.maxX, box.maxY, box.maxZ)) {
                     continue;

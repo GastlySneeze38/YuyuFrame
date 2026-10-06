@@ -24,6 +24,7 @@ import com.yuyuframe.launcheragent.celeritas.chunk.compile.tasks.ChunkBuilderTas
 import com.yuyuframe.launcheragent.celeritas.chunk.data.BuiltRenderSectionData;
 import com.yuyuframe.launcheragent.celeritas.chunk.data.BuiltSectionMeshParts;
 import com.yuyuframe.launcheragent.celeritas.chunk.occlusion.GraphDirection;
+import com.yuyuframe.launcheragent.celeritas.chunk.occlusion.SectionVisibilityBuilder;
 import com.yuyuframe.launcheragent.celeritas.chunk.occlusion.VisibilityEncoding;
 import com.yuyuframe.launcheragent.celeritas.chunk.terrain.TerrainRenderPass;
 import com.yuyuframe.launcheragent.celeritas.util.task.CancellationToken;
@@ -62,6 +63,9 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
         PrimitiveChunkBuildContext buildContext = (PrimitiveChunkBuildContext) context;
         PrimitiveBuiltRenderSectionData renderData = new PrimitiveBuiltRenderSectionData();
         ChunkOcclusionDataBuilder occluder = new ChunkOcclusionDataBuilder();
+        // Pour le culling par rastérisation : quels blocs bouchent la vue, et
+        // dans quel volume de la section il y a quelque chose à dessiner.
+        SectionVisibilityBuilder rasterShape = new SectionVisibilityBuilder();
 
         ChunkBuildBuffers buffers = buildContext.buffers;
         buffers.init(renderData, this.render.getSectionIndex());
@@ -124,8 +128,10 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
                         tesselator.reset();
 
                         // « hasTransparency » chez Yarn legacy désigne le cube opaque (afh.c).
+                        rasterShape.markRenderable(x, y, z);
                         if (block.hasTransparency()) {
                             occluder.markClosed(x, y, z);
+                            rasterShape.markOpaque(x, y, z);
                         }
                     }
                 }
@@ -141,6 +147,7 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
         }
 
         encodeVisibilityData(occluder, renderData);
+        renderData.occluderBoxes = rasterShape.computeOccluderBoxes();
 
         return new ChunkBuildOutput(this.render, renderData, meshes, this.buildTime);
     }

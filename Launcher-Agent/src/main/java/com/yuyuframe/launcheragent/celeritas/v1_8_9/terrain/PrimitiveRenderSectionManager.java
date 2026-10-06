@@ -88,9 +88,15 @@ public class PrimitiveRenderSectionManager extends RenderSectionManager {
         return true;
     }
 
+    /**
+     * Allumé (2026-10-06) — l'amont le laisse éteint sur cette version. Le
+     * maillage fournit les boîtes opaques dont le test a besoin
+     * ({@code ChunkBuilderMeshingTask}), et le volume de vue sa matrice
+     * ({@code RendererHooks189.createViewport}).
+     */
     @Override
     protected boolean useRasterOcclusionCulling() {
-        return false;
+        return true;
     }
 
     @Override

@@ -140,6 +140,17 @@ suivre au branchement.
   boîte ne touche aucune section visible n'est pas dessinée — comme vanilla,
   qui ne parcourt que ses chunks visibles. Exceptions : l'entité de vue, celles
   marquées `ignoreCameraFrustum`, et la monture du joueur.
+- **Culling par rastérisation allumé** (2026-10-06), éteint chez l'amont sur
+  cette version : le maillage fournit les boîtes opaques de chaque section
+  (`SectionVisibilityBuilder`, mêmes blocs opaques que le graphe de
+  visibilité), et le volume de vue sa matrice projection × vue, ramenée de
+  l'origine du rendu à l'œil. Règle de Sodium pour les entités : une entité
+  dont le nom s'affiche (joueur, nom toujours visible) n'est jamais cachée
+  par l'occlusion.
+- **Test de frustum recalé sur l'origine du rendu** (2026-10-06) : le moteur
+  donne des coordonnées autour de l'œil, les plans de vanilla sont autour des
+  pieds de l'entité de vue. L'amont les passait telles quelles, d'où un test
+  décalé de la hauteur des yeux (1,62 bloc).
 - **Une borne corrigée** dans `populateTileEntities` (`>=` au lieu de `>`).
 
 ### Vérifié hors jeu, pas en jeu

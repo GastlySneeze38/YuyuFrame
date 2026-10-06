@@ -13,6 +13,9 @@ public class BaseFrustum {
     /** {@code bid.c} — {@code modelMatrix} chez Feather. */
     public float[] modelMatrix;
 
+    /** {@code bid.d} — projection × vue, 16 flottants rangés par colonnes comme dans OpenGL. */
+    public float[] clipMatrix;
+
     protected BaseFrustum() {
     }
 

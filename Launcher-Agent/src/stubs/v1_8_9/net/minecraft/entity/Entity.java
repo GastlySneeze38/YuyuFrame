@@ -61,6 +61,11 @@ public class Entity {
     /** {@code pk.T} */
     public boolean noClip;
 
+    /** {@code pk.aN()} — le nom personnalisé s'affiche en permanence au-dessus de l'entité (hologrammes). */
+    public boolean isCustomNameVisible() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
     /** {@code pk.ah} — toujours dessinée, même hors du champ de la caméra. */
     public boolean ignoreCameraFrustum;
 
