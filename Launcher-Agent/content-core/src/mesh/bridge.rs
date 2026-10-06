@@ -6,6 +6,7 @@ use std::cell::RefCell;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
 use super::emit::{emit_quads, prepare, Command, FluidBatch, MAX_BUCKETS};
+use super::expose::{exposed_blocks, MASK_WORDS};
 use super::fluid::{FluidData, FLUID_DATA_LEN};
 use super::light::{LightReader, SectionData, Workspace as LightWorkspace, WORKSPACE_BYTES};
 use super::shape::{Workspace, BLOCKS, STATES};
@@ -18,7 +19,11 @@ use super::shape::{Workspace, BLOCKS, STATES};
 /// `yf_mesh_load_section`, `yf_mesh_emit_quads`).
 /// 3 : fluides et passes triées (`yf_mesh_prepare`, `yf_mesh_fluid_data_len`) ;
 /// `yf_mesh_emit_quads` attend désormais un `yf_mesh_prepare` juste avant.
-const ABI_VERSION: u32 = 3;
+/// 4 : blocs exposés (`yf_mesh_exposed`) ; deux bits de plus dans la table des
+/// propriétés (tout sauf l'air, block entity), l'occlusion ambiante sur 13 bits.
+/// 5 : préparation en deux temps — `yf_mesh_load_section` remplacé par
+/// `yf_mesh_load_states`, `yf_mesh_begin_light` et `yf_mesh_load_light`.
+const ABI_VERSION: u32 = 5;
 
 /// Réponse de `yf_mesh_emit_quads` : tout est écrit.
 const EMIT_OK: i32 = 0;
@@ -38,6 +43,29 @@ thread_local! {
     static WORKSPACE: RefCell<(Workspace, Vec<i32>)> = RefCell::new((Workspace::new(), Vec::new()));
     // Les quads de fluides de la section en cours, entre son comptage et son écriture.
     static FLUIDS: RefCell<FluidBatch> = RefCell::new(FluidBatch::default());
+}
+
+/// Relève les blocs de la section qui peuvent avoir quelque chose à dessiner
+/// (règle dans expose.rs) : Java ne parcourt que ceux-là.
+///
+/// - `workspace` : préparé par `yf_mesh_begin` et `yf_mesh_load_states` ;
+/// - `props` : la table des propriétés par état ;
+/// - `mask` : 64 mots de 64 bits, un bit par bloc à l'indice `y << 8 | z << 4 | x`.
+///
+/// Rend le nombre de blocs exposés, ou −2 en cas d'erreur.
+///
+/// # Safety
+/// `workspace` et `props` comme pour `yf_mesh_emit_quads` ; `mask` doit pointer sur 64 `u64` inscriptibles.
+#[no_mangle]
+pub unsafe extern "C" fn yf_mesh_exposed(workspace: *mut u8, props: *const u32, mask: *mut u64) -> i32 {
+    if workspace.is_null() || props.is_null() || mask.is_null() {
+        return EMIT_FAILED;
+    }
+    let props = &*(props as *const [u32; super::light::STATES]);
+    let mask = &mut *(mask as *mut [u64; MASK_WORDS]);
+    let workspace = &mut *(workspace as *mut LightWorkspace);
+    let result = catch_unwind(AssertUnwindSafe(|| exposed_blocks(&LightReader::new(workspace, props), mask) as i32));
+    result.unwrap_or(EMIT_FAILED)
 }
 
 /// Longueur du tableau `fluid_data` de `yf_mesh_prepare`, pour que Java vérifie la sienne.
@@ -104,10 +132,14 @@ pub unsafe extern "C" fn yf_mesh_section_shape(blocks: *const u16, flags: *const
 
 // ── Écriture des quads ───────────────────────────────────────────────────────
 //
-// Une section se maille en trois temps, depuis un même fil :
-// `yf_mesh_begin`, puis `yf_mesh_load_section` pour chacune des 27 sections
-// copiées, puis `yf_mesh_emit_quads`. Le noyau ne garde rien d'un appel à
-// l'autre : tout tient dans l'espace de travail, alloué par Java.
+// Une section se maille depuis un même fil, dans cet ordre :
+//   1. `yf_mesh_begin`, puis `yf_mesh_load_states` pour chacune des 27 sections ;
+//   2. `yf_mesh_exposed` : les blocs qui peuvent avoir quelque chose à dessiner ;
+//   3. s'il y a des quads à écrire : `yf_mesh_begin_light`, `yf_mesh_load_light`
+//      pour chacune des 27, `yf_mesh_prepare`, `yf_mesh_emit_quads`.
+// La plupart des sections s'arrêtent au 2. Tout tient dans l'espace de
+// travail, alloué par Java ; seuls les quads de fluides sont gardés ici entre
+// `yf_mesh_prepare` et `yf_mesh_emit_quads`.
 
 /// Taille, en octets, de l'espace de travail que Java alloue par fil de
 /// construction (mémoire à zéro, alignée sur 8) et tend aux appels suivants.
@@ -129,18 +161,49 @@ pub unsafe extern "C" fn yf_mesh_begin(workspace: *mut u8, base_x: i32, base_y: 
     (*(workspace as *mut LightWorkspace)).begin(base_x, base_y, base_z, has_sky_light != 0);
 }
 
-/// Tend une des 27 sections copiées. `slot` : son rang dans le tableau de
-/// `ChunkRenderContext` (`dx + 3 * (dz + 3 * dy)`, 13 = la section à mailler).
+/// Premier temps : tend les blocs d'une des 27 sections copiées. À appeler
+/// pour **chacune** des 27, absentes comprises (rien n'est remis à zéro
+/// d'avance). `slot` : son rang dans le tableau de `ChunkRenderContext`
+/// (`dx + 3 * (dz + 3 * dy)`, 13 = la section à mailler). `blocks` : les
+/// 4 096 états de `SectionSnapshot`, ou nul pour une section vide ou absente.
 ///
-/// Les quatre tableaux sont ceux de `SectionSnapshot`, tels quels, et peuvent
-/// être nuls : `blocks` (4 096 états) nul = section vide, dont `heights` (256
+/// Après les 27, `yf_mesh_exposed` peut être appelé : il ne lit que les blocs.
+///
+/// # Safety
+/// `blocks`, s'il n'est pas nul, doit pointer sur 4 096 `u16` lisibles.
+#[no_mangle]
+pub unsafe extern "C" fn yf_mesh_load_states(workspace: *mut u8, slot: i32, blocks: *const u16) {
+    if workspace.is_null() || !(0..27).contains(&slot) {
+        return;
+    }
+    let slot = slot as usize;
+    (*(workspace as *mut LightWorkspace)).load_states(slot % 3, slot / 9, (slot / 3) % 3, (blocks as *const [u16; 4096]).as_ref());
+}
+
+/// Second temps, seulement s'il y a des quads à écrire : commence la lumière
+/// de la section. À faire suivre de `yf_mesh_load_light` pour chacune des 27
+/// sections, puis de `yf_mesh_prepare` et `yf_mesh_emit_quads`.
+///
+/// # Safety
+/// `workspace` comme pour `yf_mesh_begin`.
+#[no_mangle]
+pub unsafe extern "C" fn yf_mesh_begin_light(workspace: *mut u8) {
+    if workspace.is_null() {
+        return;
+    }
+    (*(workspace as *mut LightWorkspace)).begin_light();
+}
+
+/// Tend la lumière d'une des 27 sections copiées — pour chacune, absentes
+/// comprises. Les tableaux sont ceux de `SectionSnapshot`, tels quels, et
+/// peuvent être nuls : `blocks` nul = section vide, dont `heights` (256
 /// hauteurs de colonnes) dit alors où commence le ciel ; `block_light` et
 /// `sky_light` (2 048 octets, 4 bits par bloc).
 ///
 /// # Safety
 /// Chaque pointeur non nul doit pointer sur un tableau lisible de la taille dite.
 #[no_mangle]
-pub unsafe extern "C" fn yf_mesh_load_section(
+pub unsafe extern "C" fn yf_mesh_load_light(
     workspace: *mut u8,
     slot: i32,
     blocks: *const u16,
@@ -158,7 +221,7 @@ pub unsafe extern "C" fn yf_mesh_load_section(
         heights: (heights as *const [i32; 256]).as_ref(),
     };
     let slot = slot as usize;
-    (*(workspace as *mut LightWorkspace)).load_section(slot % 3, slot / 9, (slot / 3) % 3, &data);
+    (*(workspace as *mut LightWorkspace)).load_light(slot % 3, slot / 9, (slot / 3) % 3, &data);
 }
 
 /// Calcule la lumière des quads commandés et écrit leurs sommets.
@@ -177,7 +240,7 @@ pub unsafe extern "C" fn yf_mesh_load_section(
 /// # Safety
 /// Les tableaux doivent avoir les tailles dites, chaque commande porter
 /// l'adresse d'un quad valide, et `workspace` avoir été préparé par
-/// `yf_mesh_begin` et `yf_mesh_load_section`.
+/// `yf_mesh_begin`, `yf_mesh_load_states` et `yf_mesh_load_light`.
 #[no_mangle]
 pub unsafe extern "C" fn yf_mesh_emit_quads(
     workspace: *mut u8,

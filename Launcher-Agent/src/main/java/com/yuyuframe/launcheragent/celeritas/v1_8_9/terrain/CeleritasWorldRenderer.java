@@ -88,7 +88,8 @@ public class CeleritasWorldRenderer extends SimpleWorldRenderer<World, Primitive
 
     @Override
     public int getEffectiveRenderDistance() {
-        return MinecraftClient.getInstance().options.viewDistance;
+        // La distance une fois le curseur posé : le moteur recharge dès qu'elle change.
+        return com.yuyuframe.launcheragent.celeritas.v1_8_9.RendererHooks189.settledViewDistance();
     }
 
     @Override

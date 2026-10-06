@@ -29,7 +29,7 @@ import java.nio.file.Path;
 public final class NativeMesh {
 
     /** Même valeur que {@code ABI_VERSION} dans mesh/bridge.rs. */
-    private static final int ABI_VERSION = 3;
+    private static final int ABI_VERSION = 5;
 
     /** {@code -Dyuyuframe.renderer.nativeMesh=false} garde le calcul Java (pour comparer). */
     private static final String PROPERTY = "yuyuframe.renderer.nativeMesh";
@@ -46,9 +46,12 @@ public final class NativeMesh {
 
     // Remplis par load() ; tous nuls si le noyau n'est pas disponible.
     private static MethodHandle begin;
-    private static MethodHandle loadSection;
+    private static MethodHandle loadStates;
+    private static MethodHandle beginLight;
+    private static MethodHandle loadLight;
     private static MethodHandle emitQuads;
     private static MethodHandle prepare;
+    private static MethodHandle exposed;
     private static int workspaceBytes;
     private static int fluidDataLength;
 
@@ -115,7 +118,12 @@ public final class NativeMesh {
                 FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT,
                     ValueLayout.JAVA_INT, ValueLayout.JAVA_INT),
                 Linker.Option.critical(false));
-            loadSection = linker.downcallHandle(lib.find("yf_mesh_load_section").orElseThrow(),
+            loadStates = linker.downcallHandle(lib.find("yf_mesh_load_states").orElseThrow(),
+                FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS),
+                Linker.Option.critical(true));
+            beginLight = linker.downcallHandle(lib.find("yf_mesh_begin_light").orElseThrow(),
+                FunctionDescriptor.ofVoid(ValueLayout.ADDRESS), Linker.Option.critical(false));
+            loadLight = linker.downcallHandle(lib.find("yf_mesh_load_light").orElseThrow(),
                 FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS,
                     ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS),
                 Linker.Option.critical(true));
@@ -126,6 +134,9 @@ public final class NativeMesh {
                 FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS,
                     ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS,
                     ValueLayout.JAVA_INT, ValueLayout.JAVA_INT),
+                Linker.Option.critical(true));
+            exposed = linker.downcallHandle(lib.find("yf_mesh_exposed").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS),
                 Linker.Option.critical(true));
             emitQuads = linker.downcallHandle(lib.find("yf_mesh_emit_quads").orElseThrow(),
                 FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS,
@@ -161,8 +172,10 @@ public final class NativeMesh {
 
     // ── Écriture des quads ───────────────────────────────────────────────────
     //
-    // Une section : begin, puis loadSection pour chacune des 27 copies, puis
-    // emitQuads. Tout depuis le même fil, avec son propre espace de travail.
+    // Une section, depuis un même fil avec son propre espace de travail :
+    // begin et loadStates pour chacune des 27 copies ; exposed ; puis, seulement
+    // s'il y a des quads à écrire, beginLight, loadLight pour chacune des 27,
+    // prepare et emitQuads.
 
     /** Octets d'un sommet écrit par le noyau : le format {@code VanillaLikeChunkVertex}. */
     public static final int VERTEX_BYTES = 32;
@@ -180,12 +193,41 @@ public final class NativeMesh {
     }
 
     /**
-     * Tend une des 27 sections copiées, par son rang dans {@code ChunkRenderContext.sections()}.
-     * Les quatre tableaux sont ceux de {@code SectionSnapshot} ; un tableau absent se passe en {@link MemorySegment#NULL}.
+     * Premier temps : tend les blocs d'une des 27 sections copiées, par son
+     * rang dans {@code ChunkRenderContext.sections()}. À appeler pour chacune
+     * des 27 — une section vide ou absente se passe en {@link MemorySegment#NULL}.
      */
-    public static void loadSection(MemorySegment workspace, int slot, MemorySegment blocks, MemorySegment blockLight,
-                                   MemorySegment skyLight, MemorySegment heights) throws Throwable {
-        loadSection.invokeExact(workspace, slot, blocks, blockLight, skyLight, heights);
+    public static void loadStates(MemorySegment workspace, int slot, MemorySegment blocks) throws Throwable {
+        loadStates.invokeExact(workspace, slot, blocks);
+    }
+
+    /** Second temps, seulement s'il y a des quads à écrire : commence la lumière de la section. */
+    public static void beginLight(MemorySegment workspace) throws Throwable {
+        beginLight.invokeExact(workspace);
+    }
+
+    /**
+     * Tend la lumière d'une des 27 sections copiées, pour chacune des 27. Les
+     * tableaux sont ceux de {@code SectionSnapshot} ; un tableau absent se passe en {@link MemorySegment#NULL}.
+     */
+    public static void loadLight(MemorySegment workspace, int slot, MemorySegment blocks, MemorySegment blockLight,
+                                 MemorySegment skyLight, MemorySegment heights) throws Throwable {
+        loadLight.invokeExact(workspace, slot, blocks, blockLight, skyLight, heights);
+    }
+
+    /** Mots de 64 bits du relevé des blocs exposés : un bit par bloc de la section. */
+    public static final int EXPOSED_WORDS = 64;
+
+    /**
+     * Relève les blocs de la section qui peuvent avoir quelque chose à dessiner :
+     * tout, sauf les cubes opaques entre six cubes opaques et les fluides au
+     * milieu du même fluide. Après {@link #begin} et {@link #loadStates}.
+     *
+     * @param mask {@link #EXPOSED_WORDS} mots, remplis d'un bit par bloc à l'indice {@code y << 8 | z << 4 | x}
+     * @return le nombre de blocs exposés, ou un nombre négatif si le noyau a échoué
+     */
+    public static int exposed(MemorySegment workspace, MemorySegment properties, long[] mask) throws Throwable {
+        return (int) exposed.invokeExact(workspace, properties, MemorySegment.ofArray(mask));
     }
 
     /** La longueur que le noyau attend pour le tableau des fluides ({@code FluidData189}). */

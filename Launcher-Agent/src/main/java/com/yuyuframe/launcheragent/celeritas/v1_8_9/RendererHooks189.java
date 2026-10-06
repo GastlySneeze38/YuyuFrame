@@ -75,6 +75,36 @@ public final class RendererHooks189 {
      */
     private static int reloadedViewDistance = -1;
 
+    /** Combien de temps la distance de rendu doit rester la même avant qu'on recharge. */
+    private static final long VIEW_DISTANCE_SETTLE_NANOS = 400_000_000L;
+    private static int pendingViewDistance = -1;
+    private static long pendingViewDistanceSince;
+
+    /**
+     * La distance de rendu sur laquelle le renderer doit tourner : celle des
+     * options, mais seulement une fois qu'elle a cessé de bouger.
+     *
+     * <p>Faire glisser le curseur de 12 à 32 fait passer l'option par toutes
+     * les valeurs intermédiaires, une par image ou presque. Recharger à chacune
+     * (ce que fait vanilla, et ce que nous faisions) arrête et relance les
+     * fils de construction et jette tout le terrain une vingtaine de fois de
+     * suite. On garde donc l'ancienne distance tant que la nouvelle n'a pas
+     * tenu 0,4 seconde, et on ne recharge qu'une fois.
+     */
+    public static int settledViewDistance() {
+        int wanted = MinecraftClient.getInstance().options.viewDistance;
+        if (reloadedViewDistance < 0 || wanted == reloadedViewDistance) {
+            pendingViewDistance = -1;
+            return wanted;
+        }
+        long now = System.nanoTime();
+        if (wanted != pendingViewDistance) {
+            pendingViewDistance = wanted;
+            pendingViewDistanceSince = now;
+        }
+        return now - pendingViewDistanceSince >= VIEW_DISTANCE_SETTLE_NANOS ? wanted : reloadedViewDistance;
+    }
+
     // ── Cycle de vie ─────────────────────────────────────────────────────────
 
     /**
@@ -91,6 +121,8 @@ public final class RendererHooks189 {
         boolean wanted = RendererSwitch.wanted();
         RendererSwitch.latch(wanted);
         reloadedViewDistance = MinecraftClient.getInstance().options.viewDistance;
+        // Vanilla vient de reposer ce qui dépend des réglages graphiques (feuilles opaques ou non).
+        com.yuyuframe.launcheragent.celeritas.v1_8_9.world.BlockFlags189.invalidate();
 
         if (wanted) {
             // reload() ne vide pas la liste des chunks visibles de vanilla, qui ne
@@ -164,8 +196,9 @@ public final class RendererHooks189 {
     public static void setupTerrain(Object worldRenderer, Object cameraView, double tickDelta) {
         MinecraftClient client = MinecraftClient.getInstance();
 
-        // Même garde que vanilla en tête de setupTerrain.
-        if (client.options.viewDistance != reloadedViewDistance) {
+        // Même garde que vanilla en tête de setupTerrain, mais sur la distance
+        // une fois le curseur posé — voir settledViewDistance.
+        if (settledViewDistance() != reloadedViewDistance) {
             ((WorldRenderer) worldRenderer).reload();
             if (!RendererSwitch.active()) {
                 return;
@@ -222,6 +255,10 @@ public final class RendererHooks189 {
             com.yuyuframe.launcheragent.celeritas.v1_8_9.nativecore.NativeMesh.quadsAvailable());
         if (mesh != null) {
             LauncherLog.renderer(1, mesh);
+        }
+        String passes = com.yuyuframe.launcheragent.celeritas.chunk.PassStats.drain();
+        if (passes != null) {
+            LauncherLog.renderer(1, passes);
         }
     }
 

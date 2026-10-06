@@ -39,6 +39,8 @@ public final class BlockFlags189 {
     private static final int RULE_FLUID = 2;
     private static final int PROP_EMITTED_SHIFT = 8;
     private static final int PROP_AO_SHIFT = 12;
+    private static final int PROP_NON_AIR = 1 << 25;
+    private static final int PROP_BLOCK_ENTITY = 1 << 26;
     private static final int PROP_MATERIAL_SOLID = 1;
     private static final int PROP_BLOCKS_MOVEMENT = 1 << 7;
     private static final int PROP_FLUID_SHIFT = 28;
@@ -52,20 +54,38 @@ public final class BlockFlags189 {
     private BlockFlags189() {
     }
 
-    // Remplies au premier appel, par le premier fil de construction qui en a besoin.
-    private static final class Holder {
-        static final MemorySegment TABLE = MemorySegment.ofArray(buildFlags());
-        static final MemorySegment PROPERTIES = MemorySegment.ofArray(buildProperties());
+    // Remplies au premier besoin, par le premier fil de construction qui les demande.
+    private static volatile MemorySegment table;
+    private static volatile MemorySegment properties;
+
+    /**
+     * À chaque rechargement du renderer : une propriété au moins dépend d'un
+     * réglage — les feuilles sont des cubes opaques en graphismes rapides, pas
+     * en graphismes détaillés. Vanilla la change juste avant de recharger.
+     */
+    public static void invalidate() {
+        table = null;
+        properties = null;
     }
 
     /** Un octet par état : {@link #RENDERABLE}, {@link #OPAQUE}. Pour la forme de la section. */
     public static MemorySegment table() {
-        return Holder.TABLE;
+        MemorySegment current = table;
+        if (current == null) {
+            current = MemorySegment.ofArray(buildFlags());
+            table = current;
+        }
+        return current;
     }
 
-    /** Un entier par état : ce que le calcul de lumière lit d'un bloc. */
+    /** Un entier par état : ce que le noyau lit d'un bloc (lumière, fluides, blocs exposés). */
     public static MemorySegment properties() {
-        return Holder.PROPERTIES;
+        MemorySegment current = properties;
+        if (current == null) {
+            current = MemorySegment.ofArray(buildProperties());
+            properties = current;
+        }
+        return current;
     }
 
     private static byte[] buildFlags() {
@@ -100,6 +120,13 @@ public final class BlockFlags189 {
     /** Mêmes lectures, mêmes arrondis que {@code LightCache189.compute}. */
     private static int propertiesOf(Block block) {
         int properties = 0;
+        // Pour le relevé des blocs exposés (content-core/src/mesh/expose.rs).
+        if (block != Blocks.AIR) {
+            properties |= PROP_NON_AIR;
+        }
+        if (block.hasBlockEntity()) {
+            properties |= PROP_BLOCK_ENTITY;
+        }
         if (block.hasTransparency()) {
             properties |= PROP_FULL_OPAQUE;
         }
@@ -137,7 +164,8 @@ public final class BlockFlags189 {
             properties |= PROP_FULL_BLOCK;
         }
         properties |= (block.getLightLevel() & 0xF) << PROP_EMITTED_SHIFT;
-        properties |= ((int) (block.getAmbientOcclusionLightLevel() * 4096.0F) & 0xFFFF) << PROP_AO_SHIFT;
+        // Treize bits : la valeur va de 0 à 4096.
+        properties |= ((int) (block.getAmbientOcclusionLightLevel() * 4096.0F) & 0x1FFF) << PROP_AO_SHIFT;
         return properties;
     }
 }

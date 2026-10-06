@@ -44,8 +44,15 @@ pub const RULE_SLAB: u32 = 1;
 pub const RULE_FLUID: u32 = 2;
 /// Lumière émise, 0 à 15.
 pub const PROP_EMITTED_SHIFT: u32 = 8;
-/// Occlusion ambiante du bloc, en 4096ᵉ (0 à 4096). Seize bits : 12 à 27.
+/// Occlusion ambiante du bloc, en 4096ᵉ (0 à 4096). Treize bits : 12 à 24.
 pub const PROP_AO_SHIFT: u32 = 12;
+const PROP_AO_MASK: u32 = 0x1FFF;
+
+// Ce que lit le relevé des blocs exposés (expose.rs).
+/// Tout sauf l'air.
+pub const PROP_NON_AIR: u32 = 1 << 25;
+/// Le bloc a un block entity : jamais écarté, même enterré.
+pub const PROP_BLOCK_ENTITY: u32 = 1 << 26;
 
 // Ce que le rendu des fluides lit en plus (fluid.rs).
 /// Le matériau du bloc est solide (`Material.isSolid`).
@@ -181,19 +188,40 @@ fn cell(x: i32, y: i32, z: i32) -> usize {
 }
 
 impl Workspace {
-    /// Avant une section : tout est de l'air en plein jour, comme hors des copies côté Java.
+    // Une section se prépare en deux temps (2026-10-06) : d'abord les blocs
+    // des 27 sections, qui suffisent à dire s'il y a quelque chose à dessiner ;
+    // puis leur lumière, seulement s'il y en a. Sept sections maillées sur dix
+    // n'ont rien à dessiner : elles s'arrêtent au premier temps.
+    //
+    // Rien n'est remis à zéro d'avance : chaque temps écrit toutes les cases
+    // de chacune des 27 sections. Java doit donc tendre les 27, absentes comprises.
+
+    /// Avant une section : son coin, en blocs du monde, et si la dimension a un ciel.
     pub fn begin(&mut self, base_x: i32, base_y: i32, base_z: i32, has_sky: bool) {
-        self.words.fill(0);
-        self.states.fill(0);
-        self.block.fill(0);
-        self.sky.fill(if has_sky { DEFAULT_SKY_LIGHT } else { 0 });
         self.base = [base_x, base_y, base_z];
         self.has_sky = has_sky as u32;
     }
 
-    /// Recopie ce qui, d'une des 27 sections, tombe à trois blocs ou moins de
-    /// la section à mailler. `dx`, `dy`, `dz` : 0, 1 ou 2 (1 = la section elle-même).
-    pub fn load_section(&mut self, dx: usize, dy: usize, dz: usize, data: &SectionData) {
+    /// Avant la lumière : les mots de lumière de la section précédente ne valent plus rien.
+    pub fn begin_light(&mut self) {
+        self.words.fill(0);
+    }
+
+    /// Tout est de l'air en plein jour, comme hors des copies côté Java. Pour
+    /// les tests, qui posent ensuite leurs blocs un par un.
+    #[cfg(test)]
+    pub fn fill_defaults(&mut self) {
+        self.words.fill(0);
+        self.states.fill(0);
+        self.block.fill(0);
+        self.sky.fill(if self.has_sky != 0 { DEFAULT_SKY_LIGHT } else { 0 });
+    }
+
+    /// Ce qui, d'une des 27 sections, tombe à trois blocs ou moins de la
+    /// section à mailler : pour chaque case, son rang dans l'espace de travail,
+    /// son rang dans la section source et sa hauteur dans le monde.
+    /// `dx`, `dy`, `dz` : 0, 1 ou 2 (1 = la section elle-même).
+    fn for_each_cell(base_y: i32, dx: usize, dy: usize, dz: usize, mut visit: impl FnMut(usize, usize, i32)) {
         // Pour chaque axe : (première coordonnée dans la section source, première coordonnée locale, longueur).
         let span = |d: usize| -> (usize, i32, usize) {
             match d {
@@ -205,43 +233,60 @@ impl Workspace {
         let (sx0, lx0, nx) = span(dx);
         let (sy0, ly0, ny) = span(dy);
         let (sz0, lz0, nz) = span(dz);
-        let has_sky = self.has_sky != 0;
 
         for iy in 0..ny {
-            let sy = sy0 + iy;
             let ly = ly0 + iy as i32;
-            let world_y = self.base[1] + ly;
-            if world_y > 255 {
-                // Au-dessus du monde : air en plein jour, déjà en place.
-                continue;
-            }
+            let world_y = base_y + ly;
             for iz in 0..nz {
-                let sz = sz0 + iz;
                 let lz = lz0 + iz as i32;
                 for ix in 0..nx {
-                    let sx = sx0 + ix;
                     let at = cell(lx0 + ix as i32, ly, lz);
-                    let source = sy << 8 | sz << 4 | sx;
-                    match data.blocks {
-                        Some(blocks) => {
-                            self.states[at] = blocks[source];
-                            self.block[at] = data.block_light.map_or(0, |light| nibble(light, source));
-                            self.sky[at] = match data.sky_light {
-                                Some(light) if has_sky => nibble(light, source),
-                                _ => 0,
-                            };
-                        }
-                        None => {
-                            // Section vide : le ciel n'éclaire qu'au-dessus du plus haut bloc de la colonne.
-                            self.states[at] = 0;
-                            self.block[at] = 0;
-                            let lit = data.heights.map_or(true, |heights| world_y >= heights[sz << 4 | sx]);
-                            self.sky[at] = if lit && has_sky { DEFAULT_SKY_LIGHT } else { 0 };
-                        }
-                    }
+                    let source = (sy0 + iy) << 8 | (sz0 + iz) << 4 | (sx0 + ix);
+                    visit(at, source, world_y);
                 }
             }
         }
+    }
+
+    /// Premier temps : les blocs d'une des 27 sections. Sans blocs (section vide ou absente) : de l'air.
+    pub fn load_states(&mut self, dx: usize, dy: usize, dz: usize, blocks: Option<&[u16; 4096]>) {
+        let states = &mut self.states;
+        Self::for_each_cell(self.base[1], dx, dy, dz, |at, source, world_y| {
+            states[at] = match blocks {
+                Some(blocks) if world_y <= 255 => blocks[source],
+                _ => 0,
+            };
+        });
+    }
+
+    /// Second temps : la lumière d'une des 27 sections.
+    pub fn load_light(&mut self, dx: usize, dy: usize, dz: usize, data: &SectionData) {
+        let has_sky = self.has_sky != 0;
+        let default_sky = if has_sky { DEFAULT_SKY_LIGHT } else { 0 };
+        let (block_out, sky_out) = (&mut self.block, &mut self.sky);
+        Self::for_each_cell(self.base[1], dx, dy, dz, |at, source, world_y| {
+            let (block, sky) = if world_y > 255 {
+                // Au-dessus du monde : air en plein jour.
+                (0, default_sky)
+            } else {
+                match data.blocks {
+                    Some(_) => (
+                        data.block_light.map_or(0, |light| nibble(light, source)),
+                        match data.sky_light {
+                            Some(light) if has_sky => nibble(light, source),
+                            _ => 0,
+                        },
+                    ),
+                    None => {
+                        // Section vide : le ciel n'éclaire qu'au-dessus du plus haut bloc de la colonne.
+                        let lit = data.heights.map_or(true, |heights| world_y >= heights[source & 0xFF]);
+                        (0, if lit { default_sky } else { 0 })
+                    }
+                }
+            };
+            block_out[at] = block;
+            sky_out[at] = sky;
+        });
     }
 }
 
@@ -335,7 +380,7 @@ impl<'a> LightReader<'a> {
 
         // Rien ne se dessine à l'intérieur d'un cube opaque : sa lumière ne sert pas.
         let (block, sky) = if full_opaque && emitted == 0 { (0, 0) } else { self.brightness(x, y, z, props) };
-        let ao = if emitted == 0 { (props >> PROP_AO_SHIFT) & 0xFFFF } else { 4096 };
+        let ao = if emitted == 0 { (props >> PROP_AO_SHIFT) & PROP_AO_MASK } else { 4096 };
 
         ((props & PROP_FULL_CUBE != 0) as u32) << 31
             | (full_opaque as u32) << 30
@@ -678,6 +723,7 @@ pub mod tests {
         // Comme Java : de la mémoire à zéro, de la bonne taille.
         let mut ws: Box<Workspace> = unsafe { Box::new(std::mem::zeroed()) };
         ws.begin(0, 64, 0, true);
+        ws.fill_defaults();
         ws
     }
 
@@ -787,7 +833,8 @@ pub mod tests {
         let mut block_light = [0u8; 2048];
         block_light[(2 << 8 | 3 << 4 | 15) >> 1] = 0xA0;
         let data = SectionData { blocks: Some(&blocks), block_light: Some(&block_light), sky_light: None, heights: None };
-        ws.load_section(0, 1, 1, &data);
+        ws.load_states(0, 1, 1, data.blocks);
+        ws.load_light(0, 1, 1, &data);
 
         let at = cell(-1, 2, 3);
         assert_eq!(ws.states[at], STONE);
@@ -798,7 +845,9 @@ pub mod tests {
         let mut heights = [0i32; 256];
         heights[5 << 4 | 4] = 82;
         let data = SectionData { blocks: None, block_light: None, sky_light: None, heights: Some(&heights) };
-        ws.load_section(1, 2, 1, &data);
+        ws.load_states(1, 2, 1, data.blocks);
+        ws.load_light(1, 2, 1, &data);
+        assert_eq!(ws.states[cell(4, 17, 5)], AIR);
         assert_eq!(ws.sky[cell(4, 17, 5)], 0); // y du monde = 81
         assert_eq!(ws.sky[cell(4, 18, 5)], 15); // y du monde = 82
         assert_eq!(ws.sky[cell(5, 16, 5)], 15);

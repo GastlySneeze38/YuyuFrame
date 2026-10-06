@@ -15,6 +15,7 @@
 mod boxes;
 mod bridge;
 mod emit;
+mod expose;
 mod fluid;
 mod light;
 mod shape;

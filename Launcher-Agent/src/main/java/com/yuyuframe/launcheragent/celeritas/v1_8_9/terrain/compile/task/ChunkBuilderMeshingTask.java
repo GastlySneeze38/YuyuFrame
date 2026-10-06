@@ -147,13 +147,31 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
         blockRenderer.startProfile(MeshStats.takeSample());
         long loopStart = System.nanoTime();
 
+        // Les blocs enterrés (cube opaque entre six cubes opaques, fluide au milieu
+        // du même fluide) n'ont rien à dessiner : le noyau rend ceux qui restent,
+        // et on ne lit ni n'interroge les autres. Sans noyau, tous sont parcourus.
+        long[] exposed = nativeQuads && !javaShape ? this.exposedBlocks(buildContext) : null;
+
         try {
             for (int y = minY; y < maxY; y++) {
                 if (cancellationToken.isCancelled()) {
                     return null;
                 }
+                int layer = (y & 15) << 2;
+                if (exposed != null && (exposed[layer] | exposed[layer + 1] | exposed[layer + 2] | exposed[layer + 3]) == 0L) {
+                    continue;
+                }
                 for (int z = minZ; z < maxZ; z++) {
+                    // Les seize blocs de la rangée, un bit chacun.
+                    int row = exposed == null ? 0xFFFF
+                        : (int) (exposed[layer + ((z & 15) >> 2)] >>> ((z & 3) << 4)) & 0xFFFF;
+                    if (row == 0) {
+                        continue;
+                    }
                     for (int x = minX; x < maxX; x++) {
+                        if ((row >> (x & 15) & 1) == 0) {
+                            continue;
+                        }
                         BlockState blockState = slice.stateAt(x, y, z);
                         Block block = blockState.getBlock();
                         if (block == Blocks.AIR) {
@@ -276,19 +294,35 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
         }
         try {
             NativeMesh.begin(workspace, minX, minY, minZ, buildContext.slice.skyLit());
+            // Premier temps : les blocs seulement. Ils suffisent à savoir s'il y a
+            // quelque chose à dessiner ; la lumière ne vient que si c'est le cas.
             SectionSnapshot[] sections = this.renderContext.sections();
             for (int slot = 0; slot < sections.length; slot++) {
                 SectionSnapshot section = sections[slot];
-                if (section != null) {
-                    NativeMesh.loadSection(workspace, slot, section.blocksSegment, section.blockLightSegment,
-                        section.skyLightSegment, section.heightsSegment);
-                }
+                NativeMesh.loadStates(workspace, slot, section == null ? MemorySegment.NULL : section.blocksSegment);
             }
             return true;
         } catch (Throwable failure) {
             NativeMesh.disableQuads();
             LauncherLog.err("[RENDERER] le noyau natif a échoué à la préparation d'une section — le rendu Java reprend pour toute la session", failure);
             return false;
+        }
+    }
+
+    /**
+     * Les blocs de la section qui peuvent avoir quelque chose à dessiner, un bit
+     * chacun à l'indice {@code y << 8 | z << 4 | x} ; {@code null} si le noyau
+     * n'a pas su le dire (tous les blocs sont alors parcourus).
+     */
+    private long[] exposedBlocks(PrimitiveChunkBuildContext buildContext) {
+        long[] mask = buildContext.exposedMask;
+        try {
+            return NativeMesh.exposed(buildContext.nativeWorkspace, BlockFlags189.properties(), mask) < 0 ? null : mask;
+        } catch (Throwable failure) {
+            if (NATIVE_FAILURE_WARNED.compareAndSet(false, true)) {
+                LauncherLog.err("[RENDERER] le noyau natif a échoué sur le relevé des blocs exposés — tous les blocs sont parcourus", failure);
+            }
+            return null;
         }
     }
 
@@ -309,6 +343,20 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
         long[] destinations = commands.destinations();
         int[] firstVertex = new int[buckets];
         try {
+            // Second temps de la préparation : il y a des quads, donc il faut la lumière des 27 sections.
+            MemorySegment workspace = buildContext.nativeWorkspace;
+            NativeMesh.beginLight(workspace);
+            SectionSnapshot[] sections = this.renderContext.sections();
+            for (int slot = 0; slot < sections.length; slot++) {
+                SectionSnapshot section = sections[slot];
+                if (section == null) {
+                    NativeMesh.loadLight(workspace, slot, MemorySegment.NULL, MemorySegment.NULL, MemorySegment.NULL, MemorySegment.NULL);
+                } else {
+                    NativeMesh.loadLight(workspace, slot, section.blocksSegment, section.blockLightSegment,
+                        section.skyLightSegment, section.heightsSegment);
+                }
+            }
+
             // Le noyau compte d'abord : le nombre de quads d'un fluide ne se connaît qu'en les faisant.
             if (!NativeMesh.prepare(buildContext.nativeWorkspace, BlockFlags189.properties(), fluidData(commands),
                 commands.words(), commands.count(), quads, buckets, this.render.getSectionIndex())) {

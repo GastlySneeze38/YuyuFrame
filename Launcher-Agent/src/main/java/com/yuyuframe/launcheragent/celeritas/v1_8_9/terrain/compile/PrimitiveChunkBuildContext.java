@@ -53,6 +53,8 @@ public class PrimitiveChunkBuildContext extends ChunkBuildContext {
     public final QuadCommands quadCommands = new QuadCommands();
     /** La mémoire de travail du noyau natif pour ce fil, ou {@code null} sans noyau. */
     public final MemorySegment nativeWorkspace;
+    /** Les blocs exposés de la section en cours, rendus par le noyau : un bit par bloc. */
+    public final long[] exposedMask = new long[NativeMesh.EXPOSED_WORDS];
 
     private final ChunkVertexEncoder.Vertex[] vertices = ChunkVertexEncoder.Vertex.uninitializedQuad();
 

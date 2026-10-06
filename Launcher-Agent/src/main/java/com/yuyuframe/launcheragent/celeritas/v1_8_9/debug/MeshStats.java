@@ -116,12 +116,12 @@ public final class MeshStats {
         long other = taskNanos - loopNanos - prepareNanos - writeNanos - assembleNanos - shapeNanos;
         StringBuilder out = new StringBuilder();
         out.append(String.format(Locale.ROOT,
-            "Maillage: %d sections, %.0f µs/section (quads %s, forme %s) | boucle des blocs %.0f | noyau: copie %.0f, écriture %.0f, forme %.0f | assemblage %.0f | reste %.0f",
+            "Maillage: %d sections, %.0f µs/section (quads %s, forme %s) | boucle des blocs %.0f | noyau: copie des blocs %.0f, lumière et sommets %.0f, forme %.0f | assemblage %.0f | reste %.0f",
             sections, taskNanos / perSection, nativeQuads ? "natifs" : "Java", nativeShape ? "native" : "Java",
             loopNanos / perSection, prepareNanos / perSection, writeNanos / perSection, shapeNanos / perSection,
             assembleNanos / perSection, other / perSection));
         out.append(String.format(Locale.ROOT,
-            " || contenu par section: %.0f blocs non vides, %.0f à modèle, %.0f de fluide, %.0f commandes | %d sections sans rien à dessiner | fils: %.0f ms cumulés",
+            " || contenu par section: %.0f blocs parcourus, %.0f à modèle, %.0f de fluide, %.0f commandes | %d sections sans rien à dessiner | fils: %.0f ms cumulés",
             (double) solid / sections, (double) model / sections, (double) fluid / sections, (double) commands / sections,
             blank, taskNanos / 1.0e6));
         if (sampleBlocks > 0) {
