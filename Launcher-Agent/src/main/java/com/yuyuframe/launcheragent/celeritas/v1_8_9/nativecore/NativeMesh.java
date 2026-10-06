@@ -29,7 +29,7 @@ import java.nio.file.Path;
 public final class NativeMesh {
 
     /** Même valeur que {@code ABI_VERSION} dans mesh/bridge.rs. */
-    private static final int ABI_VERSION = 2;
+    private static final int ABI_VERSION = 3;
 
     /** {@code -Dyuyuframe.renderer.nativeMesh=false} garde le calcul Java (pour comparer). */
     private static final String PROPERTY = "yuyuframe.renderer.nativeMesh";
@@ -48,7 +48,9 @@ public final class NativeMesh {
     private static MethodHandle begin;
     private static MethodHandle loadSection;
     private static MethodHandle emitQuads;
+    private static MethodHandle prepare;
     private static int workspaceBytes;
+    private static int fluidDataLength;
 
     private static final MethodHandle SECTION_SHAPE = load();
 
@@ -117,6 +119,14 @@ public final class NativeMesh {
                 FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS,
                     ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS),
                 Linker.Option.critical(true));
+            MethodHandle fluidLength = linker.downcallHandle(lib.find("yf_mesh_fluid_data_len").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT));
+            fluidDataLength = (int) fluidLength.invokeExact();
+            prepare = linker.downcallHandle(lib.find("yf_mesh_prepare").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS,
+                    ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS,
+                    ValueLayout.JAVA_INT, ValueLayout.JAVA_INT),
+                Linker.Option.critical(true));
             emitQuads = linker.downcallHandle(lib.find("yf_mesh_emit_quads").orElseThrow(),
                 FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS,
                     ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT,
@@ -178,8 +188,31 @@ public final class NativeMesh {
         loadSection.invokeExact(workspace, slot, blocks, blockLight, skyLight, heights);
     }
 
+    /** La longueur que le noyau attend pour le tableau des fluides ({@code FluidData189}). */
+    public static int fluidDataLength() {
+        return fluidDataLength;
+    }
+
+    /**
+     * Compte les quads que {@link #emitQuads} écrira dans chaque tampon, pour y
+     * réserver la place. À appeler juste avant, depuis le même fil, avec les
+     * mêmes commandes : les quads des fluides sont calculés ici.
+     *
+     * @param fluidData {@code FluidData189.data()}, ou {@link MemorySegment#NULL} sans commande de fluide
+     * @param counts    rempli du nombre de quads de chaque tampon
+     * @return vrai si le comptage a réussi
+     */
+    public static boolean prepare(MemorySegment workspace, MemorySegment properties, MemorySegment fluidData,
+                                  int[] commands, int commandCount, int[] counts, int bucketCount,
+                                  int sectionIndex) throws Throwable {
+        int result = (int) prepare.invokeExact(workspace, properties, fluidData, MemorySegment.ofArray(commands),
+            commandCount, MemorySegment.ofArray(counts), bucketCount, sectionIndex);
+        return result == 0;
+    }
+
     /**
      * Calcule la lumière des quads commandés et écrit leurs sommets dans les tampons de destination.
+     * {@link #prepare} doit avoir été appelé juste avant.
      *
      * @param properties   {@code BlockFlags189.properties()}
      * @param commands     quatre entiers par quad — voir {@code Command} dans mesh/emit.rs

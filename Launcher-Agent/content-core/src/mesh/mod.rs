@@ -6,7 +6,8 @@
 //!   à dessiner, boîtes occultantes (`boxes.rs`) — à partir des seuls
 //!   identifiants de blocs de la copie figée (`SectionSnapshot.blocks`) ;
 //! - la lumière et l'occlusion ambiante des quads (`light.rs`) et l'écriture
-//!   de leurs sommets au format du moteur (`emit.rs`).
+//!   de leurs sommets au format du moteur (`emit.rs`) ;
+//! - l'eau et la lave, de bout en bout (`fluid.rs`).
 //!
 //! Java y entre par `bridge.rs`, appelé par FFM depuis les fils de
 //! construction. Côté Java : `celeritas/v1_8_9/nativecore/NativeMesh.java`.
@@ -14,5 +15,6 @@
 mod boxes;
 mod bridge;
 mod emit;
+mod fluid;
 mod light;
 mod shape;

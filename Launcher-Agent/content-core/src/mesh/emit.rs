@@ -8,6 +8,7 @@
 //! `ChunkMeshBufferBuilder.push`, `VanillaLikeChunkVertex`). Même résultat au
 //! bit près : c'est ce que vérifie le contrôle en jeu.
 
+use super::fluid::{fluid_quads, FluidData, FluidQuad};
 use super::light::{flat, LightReader, Lighter, QuadLight, QuadShape, UNASSIGNED};
 
 /// Un quad de modèle, tel que Java le range une fois pour toutes en mémoire
@@ -54,7 +55,64 @@ pub const CMD_BUCKET_MASK: u32 = 31;
 /// Bits du matériau, recopiés dans chaque sommet.
 pub const CMD_MATERIAL_SHIFT: u32 = 23;
 
+/// Dans le champ de la face : la commande est un bloc de fluide, pas un quad.
+/// L'adresse du quad est alors inutilisée, `tint` est la teinte du bloc
+/// (rouge, vert, bleu), le tampon est le premier des sept de sa passe, et
+/// `CMD_SMOOTH` prend un autre sens — voir `CMD_FLUID_SORTED`.
+pub const CMD_FLUID: u32 = 7;
+/// Pour un fluide : sa passe est triée, tous ses quads vont dans le tampon
+/// « sans face » (le septième) ; sinon chacun va dans celui de sa normale.
+pub const CMD_FLUID_SORTED: u32 = CMD_SMOOTH;
+
 pub const MAX_BUCKETS: usize = 32;
+
+/// Les quads de fluides d'une section, calculés au comptage et recopiés à l'écriture.
+#[derive(Default)]
+pub struct FluidBatch {
+    /// Dans l'ordre des commandes ; `facing` y est remplacé par le tampon de destination.
+    quads: Vec<FluidQuad>,
+    /// Le nombre de quads de chaque commande de fluide, dans l'ordre.
+    per_command: Vec<u32>,
+}
+
+/// Compte les quads de chaque tampon, et calcule au passage ceux des fluides
+/// (leur nombre ne se connaît qu'en les faisant). Faux si une commande est invalide.
+pub fn prepare(light: &LightReader, fluid_data: Option<&FluidData>, commands: &[Command], counts: &mut [i32], section_index: u32, batch: &mut FluidBatch) -> bool {
+    batch.quads.clear();
+    batch.per_command.clear();
+    counts.fill(0);
+
+    for command in commands {
+        let packed = command.packed;
+        let bucket = ((packed >> CMD_BUCKET_SHIFT) & CMD_BUCKET_MASK) as usize;
+        if (packed >> CMD_CULL_SHIFT) & 7 != CMD_FLUID {
+            if bucket >= counts.len() {
+                return false;
+            }
+            counts[bucket] += 1;
+            continue;
+        }
+
+        let Some(data) = fluid_data else {
+            return false;
+        };
+        let (lx, ly, lz) = ((packed & 15) as i32, ((packed >> 4) & 15) as i32, ((packed >> 8) & 15) as i32);
+        let parameters = (section_index & 0xFF) << 8 | (packed >> CMD_MATERIAL_SHIFT) & 0xFF;
+        let first = batch.quads.len();
+        fluid_quads(light, data, lx, ly, lz, command.tint, parameters, &mut batch.quads);
+        batch.per_command.push((batch.quads.len() - first) as u32);
+
+        for quad in &mut batch.quads[first..] {
+            let target = bucket + if packed & CMD_FLUID_SORTED != 0 { UNASSIGNED } else { quad.facing as usize };
+            if target >= counts.len() {
+                return false;
+            }
+            quad.facing = target as u8;
+            counts[target] += 1;
+        }
+    }
+    true
+}
 
 /// Octets d'un sommet (`VanillaLikeChunkVertex.STRIDE`).
 pub const VERTEX_BYTES: usize = 32;
@@ -124,8 +182,10 @@ fn model_offset(kind: u32, world_x: i32, world_z: i32) -> [f32; 3] {
 /// Chaque commande doit porter l'adresse d'un `QuadRecord` valide, et chaque
 /// tampon de `dests` avoir la place pour tous les quads qui lui reviennent
 /// (4 sommets de `VERTEX_BYTES` octets chacun).
-pub unsafe fn emit_quads(light: &mut LightReader, commands: &[Command], dests: &mut [*mut u8], section_index: u32) {
+pub unsafe fn emit_quads(light: &mut LightReader, commands: &[Command], dests: &mut [*mut u8], section_index: u32, fluids: &FluidBatch) -> bool {
     let base = light.base();
+    let mut next_fluid = 0;
+    let mut next_fluid_quad = 0;
     let mut lighter = Lighter::new();
     let mut quad_light = QuadLight::default();
 
@@ -138,8 +198,28 @@ pub unsafe fn emit_quads(light: &mut LightReader, commands: &[Command], dests: &
     let mut face_flipped = false;
 
     for command in commands {
-        let quad = &*((command.quad_low as u64 | (command.quad_high as u64) << 32) as usize as *const QuadRecord);
         let packed = command.packed;
+        if (packed >> CMD_CULL_SHIFT) & 7 == CMD_FLUID {
+            // Les quads de ce bloc de fluide ont été calculés au comptage : on les recopie.
+            let Some(&count) = fluids.per_command.get(next_fluid) else {
+                return false;
+            };
+            next_fluid += 1;
+            let Some(quads) = fluids.quads.get(next_fluid_quad..next_fluid_quad + count as usize) else {
+                return false;
+            };
+            next_fluid_quad += count as usize;
+            for quad in quads {
+                let Some(dest) = dests.get_mut(quad.facing as usize).filter(|dest| !dest.is_null()) else {
+                    return false;
+                };
+                std::ptr::copy_nonoverlapping(quad.words.as_ptr() as *const u8, *dest, 4 * VERTEX_BYTES);
+                *dest = dest.add(4 * VERTEX_BYTES);
+            }
+            continue;
+        }
+
+        let quad = &*((command.quad_low as u64 | (command.quad_high as u64) << 32) as usize as *const QuadRecord);
         let (lx, ly, lz) = ((packed & 15) as i32, ((packed >> 4) & 15) as i32, ((packed >> 8) & 15) as i32);
         let cull_face = ((packed >> CMD_CULL_SHIFT) & 7) as usize;
 
@@ -202,6 +282,9 @@ pub unsafe fn emit_quads(light: &mut LightReader, commands: &[Command], dests: &
         let material = (packed >> CMD_MATERIAL_SHIFT) & 0xFF;
         let parameters = (section_index & 0xFF) << 8 | material;
 
+        if bucket >= dests.len() || dests[bucket].is_null() {
+            return false;
+        }
         let mut out = dests[bucket] as *mut u32;
         for dst in 0..4 {
             let src = sources[dst];
@@ -220,6 +303,7 @@ pub unsafe fn emit_quads(light: &mut LightReader, commands: &[Command], dests: &
         }
         dests[bucket] = out as *mut u8;
     }
+    true
 }
 
 #[cfg(test)]
@@ -287,7 +371,7 @@ mod tests {
 
         let mut buffers = [[0u8; 4 * VERTEX_BYTES]; 2];
         let mut dests = [buffers[0].as_mut_ptr(), buffers[1].as_mut_ptr()];
-        unsafe { emit_quads(&mut light, &commands, &mut dests, 0x1AB) };
+        assert!(unsafe { emit_quads(&mut light, &commands, &mut dests, 0x1AB, &FluidBatch::default()) });
 
         // Rien dans le premier tampon, quatre sommets dans le second.
         assert_eq!(dests[0], buffers[0].as_mut_ptr());
@@ -325,7 +409,7 @@ mod tests {
 
         let mut buffer = [0u8; 8 * VERTEX_BYTES];
         let mut dests = [buffer.as_mut_ptr()];
-        unsafe { emit_quads(&mut light, &commands, &mut dests, 0) };
+        assert!(unsafe { emit_quads(&mut light, &commands, &mut dests, 0, &FluidBatch::default()) });
 
         let out = words(&buffer);
         // La diagonale 0-2 est la plus sombre : le quad est retourné, il commence par le sommet 1 (x = 0, z = 1).

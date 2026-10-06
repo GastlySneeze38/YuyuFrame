@@ -203,19 +203,27 @@ DLL manque et de référence pour le contrôle.
 | `light.rs` (lumière, occlusion ambiante) | `model/light/**`, et `v1_8_9/world/WorldSlice189` + `terrain/compile/light/LightCache189` pour la lumière d'un bloc | celle du moteur (Sodium) |
 | `emit.rs` (écriture des sommets) | `v1_8_9/terrain/compile/pipeline/BlockRenderer189.renderQuad`, `ModelQuadOrientation`, `ChunkColorWriter.EMBEDDIUM`, `ModelQuadUtil.mixARGBColors`, `ChunkMeshBufferBuilder.push`, `VanillaLikeChunkVertex` | celle du moteur |
 
+| `fluid.rs` (eau et lave) | **vanilla 1.8.9**, relevé dans le bytecode du jeu : `FluidRenderer.render` (`bge`) et `AbstractFluidBlock` (`ahv`) ; `QuadUtil.calculateNormal` / `findNormalFace` pour le tampon de chaque quad | code de Mojang, refait d'après son comportement |
+
 Écarts avec le Java :
 - **boîtes occultantes** : à volume égal, deux boîtes peuvent être choisies
   dans un autre ordre (le Java dépend de l'ordre d'une table de hachage) ;
-- **quads** : aucun, le résultat doit être identique à l'octet près. Seuls
-  passent par le noyau les blocs à modèle des passes non triées, au format
-  `VanillaLikeChunkVertex` ; le translucide et les fluides restent au Java ;
+- **quads** : aucun, le résultat doit être identique à l'octet près. Passent
+  par le noyau tous les blocs à modèle et les fluides dont la passe est au
+  format `VanillaLikeChunkVertex`, passes triées comprises (leurs quads sont
+  relevés pour le tri après écriture, `ChunkMeshBufferBuilder.captureReserved`) ;
+- **fluides** : l'image est celle de vanilla (éclairage à plat, une lumière
+  par face), pas celle de Sodium. Le sinus et le cosinus du courant viennent
+  d'une table remplie par Java avec les fonctions du jeu (`FluidData189`),
+  pour ne pas refaire en Rust son arc tangente approchée ;
 - **lumière d'un bloc** : `Block.getBrightness` n'est pas appelé, ses trois
   variantes de la 1.8.9 (commune, dalle, fluide — vérifié dans le jar : seuls
   `afh`, `ahv` et `aju` la définissent, et `aju` renvoie à la commune) sont
   refaites à partir d'une table de propriétés par état (`BlockFlags189`).
 
 Ajouts dans le code du moteur pour ce noyau :
-`ChunkMeshBufferBuilder.reserve` (réserver la place de sommets écrits ailleurs).
+`ChunkMeshBufferBuilder.reserve` (réserver la place de sommets écrits ailleurs)
+et `captureReserved` (les relever ensuite pour le tri du translucide).
 
 ## Ce qui n'a pas été repris
 

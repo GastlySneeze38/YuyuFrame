@@ -43,6 +43,8 @@ public abstract class ItemModelCacheMixin189 {
         // Les modèles de blocs décodés par le renderer de terrain datent eux aussi d'avant.
         if (com.yuyuframe.launcheragent.celeritas.RendererSwitch.available()) {
             com.yuyuframe.launcheragent.celeritas.v1_8_9.terrain.compile.pipeline.BlockQuadCache189.clear();
+            // Et les textures de l'eau et de la lave ont pu changer de place dans l'atlas.
+            com.yuyuframe.launcheragent.celeritas.v1_8_9.world.FluidData189.invalidate();
         }
     }
 }

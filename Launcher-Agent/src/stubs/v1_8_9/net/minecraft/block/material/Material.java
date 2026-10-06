@@ -9,6 +9,19 @@ public class Material {
     /** {@code arm.i} */
     public static final Material LAVA = null;
 
+    /** {@code arm.w} */
+    public static final Material ICE = null;
+
     protected Material() {
+    }
+
+    /** {@code arm.a()} */
+    public boolean isSolid() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    /** {@code arm.c()} */
+    public boolean blocksMovement() {
+        throw new UnsupportedOperationException("stub compile-only");
     }
 }

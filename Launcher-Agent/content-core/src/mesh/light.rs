@@ -44,8 +44,24 @@ pub const RULE_SLAB: u32 = 1;
 pub const RULE_FLUID: u32 = 2;
 /// Lumière émise, 0 à 15.
 pub const PROP_EMITTED_SHIFT: u32 = 8;
-/// Occlusion ambiante du bloc, en 4096ᵉ (0 à 4096).
+/// Occlusion ambiante du bloc, en 4096ᵉ (0 à 4096). Seize bits : 12 à 27.
 pub const PROP_AO_SHIFT: u32 = 12;
+
+// Ce que le rendu des fluides lit en plus (fluid.rs).
+/// Le matériau du bloc est solide (`Material.isSolid`).
+pub const PROP_MATERIAL_SOLID: u32 = 1 << 0;
+/// Le matériau du bloc arrête le mouvement (`Material.blocksMovement`).
+pub const PROP_BLOCKS_MOVEMENT: u32 = 1 << 7;
+/// Le matériau du bloc : 0 = ni eau ni lave, 1 = eau, 2 = lave.
+pub const PROP_FLUID_SHIFT: u32 = 28;
+// Le rendu ne distingue que la lave : la constante dit le contrat de la table.
+#[allow(dead_code)]
+pub const FLUID_WATER: u32 = 1;
+pub const FLUID_LAVA: u32 = 2;
+/// Le matériau du bloc est la glace.
+pub const PROP_ICE: u32 = 1 << 30;
+/// `Block.isFullBlock`.
+pub const PROP_FULL_BLOCK: u32 = 1 << 31;
 
 pub const STATES: usize = 65536;
 
@@ -244,8 +260,22 @@ impl<'a> LightReader<'a> {
         self.ws.base
     }
 
-    fn props_at(&self, x: i32, y: i32, z: i32) -> u32 {
+    pub fn state_at(&self, x: i32, y: i32, z: i32) -> u16 {
+        self.ws.states[cell(x, y, z)]
+    }
+
+    pub fn props_at(&self, x: i32, y: i32, z: i32) -> u32 {
         self.props[self.ws.states[cell(x, y, z)] as usize]
+    }
+
+    /// La lumière qu'un fluide prend à cet endroit, quel que soit le bloc qui
+    /// s'y trouve (`AbstractFluidBlock.getBrightness`) : la plus forte de
+    /// celle du bloc et de celle du dessus. Rangée comme le jeu : blocs dans
+    /// les bits 4 et plus, ciel dans les bits 20 et plus.
+    pub fn fluid_light(&self, x: i32, y: i32, z: i32) -> u32 {
+        let (block, sky) = self.combined_light(x, y, z, 0);
+        let (block_up, sky_up) = self.combined_light(x, y + 1, z, 0);
+        pack_lightmap(block.max(block_up), sky.max(sky_up))
     }
 
     /// `World.getLight` de la 1.8.9 pour une des deux lumières : un bloc qui

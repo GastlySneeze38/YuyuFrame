@@ -150,8 +150,9 @@ public final class BlockRenderer189 {
      * trois questions posées au jeu (modèle, faces cachées, teinte) sont les
      * mêmes que dans {@link #render}, dans le même ordre.
      *
-     * @return faux si les quads de ce bloc ne passent pas par le noyau (passe
-     *         triée) : rien n'est rangé, à l'appelant d'appeler {@link #render}
+     * @return faux si les quads de ce bloc ne passent pas par le noyau (format
+     *         de sommets qu'il n'écrit pas) : rien n'est rangé, à l'appelant
+     *         d'appeler {@link #render}
      */
     public boolean emit(BlockState state, BlockPos pos, ChunkBuildBuffers buffers, QuadCommands commands) {
         Block block = state.getBlock();
@@ -197,7 +198,7 @@ public final class BlockRenderer189 {
             for (int i = 0; i < quads.length; i++) {
                 CachedQuad quad = quads[i];
                 commands.add(quad.nativeAddress,
-                    packed | (firstBucket + quad.getNormalFace().ordinal()) << QuadCommands.BUCKET_SHIFT,
+                    packed | commands.bucketOf(firstBucket, quad.getNormalFace()) << QuadCommands.BUCKET_SHIFT,
                     this.tintOf(quad, block, pos));
             }
         }
@@ -207,9 +208,47 @@ public final class BlockRenderer189 {
         for (int i = 0; i < inner.length; i++) {
             CachedQuad quad = inner[i];
             commands.add(quad.nativeAddress,
-                packed | (firstBucket + quad.getNormalFace().ordinal()) << QuadCommands.BUCKET_SHIFT,
+                packed | commands.bucketOf(firstBucket, quad.getNormalFace()) << QuadCommands.BUCKET_SHIFT,
                 this.tintOf(quad, block, pos));
         }
+        return true;
+    }
+
+    /**
+     * Un bloc d'eau ou de lave, pour le noyau natif : il le dessine de bout en
+     * bout, comme vanilla (faces, hauteur des coins, courant, lumière). On ne
+     * lui donne que la teinte du bloc, qui dépend du biome.
+     *
+     * @return faux si ce fluide ne passe pas par le noyau : à l'appelant de le
+     *         confier au rendu vanilla
+     */
+    public boolean emitFluid(BlockState state, BlockPos pos, ChunkBuildBuffers buffers, QuadCommands commands) {
+        Block block = state.getBlock();
+        Material material = buffers.getRenderPassConfiguration().getMaterialForRenderType(block.getRenderLayerType());
+        int firstBucket = commands.firstBucket(material, buffers);
+        if (firstBucket < 0) {
+            return false;
+        }
+
+        Vec3i at = pos;
+        int x = at.getX();
+        int y = at.getY();
+        int z = at.getZ();
+
+        // Entouré du même fluide des six côtés, le bloc n'a aucune face à
+        // dessiner (c'est le premier test de vanilla) : pas la peine de
+        // demander sa teinte, qui coûte une lecture des biomes voisins.
+        net.minecraft.block.material.Material fluid = block.getMaterial();
+        if (this.slice.stateAt(x, y + 1, z).getBlock().getMaterial() == fluid
+            && this.slice.stateAt(x, y - 1, z).getBlock().getMaterial() == fluid
+            && this.slice.stateAt(x, y, z - 1).getBlock().getMaterial() == fluid
+            && this.slice.stateAt(x, y, z + 1).getBlock().getMaterial() == fluid
+            && this.slice.stateAt(x - 1, y, z).getBlock().getMaterial() == fluid
+            && this.slice.stateAt(x + 1, y, z).getBlock().getMaterial() == fluid) {
+            return true;
+        }
+
+        commands.addFluid(x & 15, y & 15, z & 15, firstBucket, material.bits(), block.getBlockColor(this.slice, pos, 0));
         return true;
     }
 

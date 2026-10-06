@@ -40,6 +40,7 @@ import com.yuyuframe.launcheragent.celeritas.raster.PackedBox;
 import com.yuyuframe.launcheragent.celeritas.v1_8_9.debug.MeshStats;
 import com.yuyuframe.launcheragent.celeritas.v1_8_9.nativecore.NativeMesh;
 import com.yuyuframe.launcheragent.celeritas.v1_8_9.world.BlockFlags189;
+import com.yuyuframe.launcheragent.celeritas.v1_8_9.world.FluidData189;
 import com.yuyuframe.launcheragent.celeritas.v1_8_9.world.SectionSnapshot;
 import com.yuyuframe.launcheragent.celeritas.v1_8_9.terrain.compile.pipeline.BlockRenderer189;
 import com.yuyuframe.launcheragent.celeritas.v1_8_9.terrain.compile.pipeline.QuadCommands;
@@ -178,7 +179,7 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
                                     blockRenderer.emit(blockState, blockPos, buffers, commands);
                                     blockRenderer.render(blockState, blockPos, buffers);
                                 } else if (!blockRenderer.emit(blockState, blockPos, buffers, commands)) {
-                                    // Passe triée (verre, glace) : ses quads restent au Java.
+                                    // Format de sommets que le noyau n'écrit pas : ces quads restent au Java.
                                     blockRenderer.render(blockState, blockPos, buffers);
                                 }
                             } catch (Throwable failure) {
@@ -188,8 +189,22 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
                                 this.renderWithVanilla(vanillaRenderer, blockState, blockPos, slice, tesselator, buildContext, buffers, block);
                             }
                         } else if (type == TYPE_FLUID) {
-                            vanillaFallback = true;
-                            this.renderWithVanilla(vanillaRenderer, blockState, blockPos, slice, tesselator, buildContext, buffers, block);
+                            // L'eau et la lave : le noyau les dessine de bout en bout, comme vanilla.
+                            // Le temps du contrôle, vanilla les dessine aussi, pour comparer.
+                            int mark = commands.count();
+                            boolean emitted = false;
+                            if (nativeQuads && NATIVE_FLUIDS) {
+                                try {
+                                    emitted = blockRenderer.emitFluid(blockState, blockPos, buffers, commands);
+                                } catch (Throwable failure) {
+                                    commands.truncate(mark);
+                                    vanillaFallback = true;
+                                    warnFallback(block, "notre rendu de fluide a levé une exception", failure);
+                                }
+                            }
+                            if (!emitted || probe) {
+                                this.renderWithVanilla(vanillaRenderer, blockState, blockPos, slice, tesselator, buildContext, buffers, block);
+                            }
                         } else if (type != TYPE_INVISIBLE && type != TYPE_BLOCK_ENTITY_ONLY) {
                             vanillaFallback = true;
                             warnFallback(block, "type de rendu inconnu : " + type, null);
@@ -280,18 +295,46 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
     /** Réserve la place des quads dans les tampons de la section et les fait écrire par le noyau. */
     private boolean writeNativeQuads(PrimitiveChunkBuildContext buildContext, QuadCommands commands) {
         int buckets = commands.bucketCount();
-        int[] quads = commands.countBuckets();
+        int[] quads = commands.bucketQuads();
         long[] destinations = commands.destinations();
-        for (int bucket = 0; bucket < buckets; bucket++) {
-            destinations[bucket] = quads[bucket] == 0 ? 0L : commands.vertexBuffer(bucket).reserve(quads[bucket] * 4);
-        }
+        int[] firstVertex = new int[buckets];
         try {
-            return NativeMesh.emitQuads(buildContext.nativeWorkspace, BlockFlags189.properties(), commands.words(),
-                commands.count(), destinations, buckets, this.render.getSectionIndex());
+            // Le noyau compte d'abord : le nombre de quads d'un fluide ne se connaît qu'en les faisant.
+            if (!NativeMesh.prepare(buildContext.nativeWorkspace, BlockFlags189.properties(), fluidData(commands),
+                commands.words(), commands.count(), quads, buckets, this.render.getSectionIndex())) {
+                return false;
+            }
+            for (int bucket = 0; bucket < buckets; bucket++) {
+                if (quads[bucket] == 0) {
+                    destinations[bucket] = 0L;
+                } else {
+                    ChunkMeshBufferBuilder buffer = commands.vertexBuffer(bucket);
+                    firstVertex[bucket] = buffer.count();
+                    destinations[bucket] = buffer.reserve(quads[bucket] * 4);
+                }
+            }
+            if (!NativeMesh.emitQuads(buildContext.nativeWorkspace, BlockFlags189.properties(), commands.words(),
+                commands.count(), destinations, buckets, this.render.getSectionIndex())) {
+                return false;
+            }
         } catch (Throwable failure) {
             LauncherLog.err("[RENDERER] exception à l'appel du noyau natif", failure);
             return false;
         }
+        // Passe triée : le tri a besoin de la position des quads que le noyau vient d'écrire.
+        for (int bucket = 0; bucket < buckets; bucket++) {
+            if (quads[bucket] != 0) {
+                commands.vertexBuffer(bucket).captureReserved(firstVertex[bucket], quads[bucket] * 4);
+            }
+        }
+        return true;
+    }
+
+    /** Vrai si le tableau des fluides a la longueur que le noyau attend : sinon les fluides restent à vanilla. */
+    private static final boolean NATIVE_FLUIDS = NativeMesh.available() && NativeMesh.fluidDataLength() == FluidData189.LENGTH;
+
+    private static MemorySegment fluidData(QuadCommands commands) {
+        return commands.hasFluids() ? FluidData189.data() : MemorySegment.NULL;
     }
 
     /**
@@ -301,27 +344,37 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
      */
     private void probeNativeQuads(PrimitiveChunkBuildContext buildContext, QuadCommands commands) {
         int buckets = commands.bucketCount();
-        int[] quads = commands.countBuckets();
+        int[] quads = commands.bucketQuads();
         long quadBytes = 4L * NativeMesh.VERTEX_BYTES;
-        MemorySegment scratch = buildContext.probeScratch(commands.count() * quadBytes);
         long[] destinations = commands.destinations();
-        long offset = 0;
-        for (int bucket = 0; bucket < buckets; bucket++) {
-            destinations[bucket] = quads[bucket] == 0 ? 0L : scratch.address() + offset;
-            offset += quads[bucket] * quadBytes;
-        }
+        MemorySegment scratch = null;
+        int totalQuads = 0;
 
         String difference = null;
         try {
-            if (!NativeMesh.emitQuads(buildContext.nativeWorkspace, BlockFlags189.properties(), commands.words(),
-                commands.count(), destinations, buckets, this.render.getSectionIndex())) {
-                difference = "le noyau a rendu une erreur";
+            if (!NativeMesh.prepare(buildContext.nativeWorkspace, BlockFlags189.properties(), fluidData(commands),
+                commands.words(), commands.count(), quads, buckets, this.render.getSectionIndex())) {
+                difference = "le noyau a rendu une erreur au comptage";
+            } else {
+                for (int bucket = 0; bucket < buckets; bucket++) {
+                    totalQuads += quads[bucket];
+                }
+                scratch = buildContext.probeScratch(Math.max(1, totalQuads) * quadBytes);
+                long at = 0;
+                for (int bucket = 0; bucket < buckets; bucket++) {
+                    destinations[bucket] = quads[bucket] == 0 ? 0L : scratch.address() + at;
+                    at += quads[bucket] * quadBytes;
+                }
+                if (!NativeMesh.emitQuads(buildContext.nativeWorkspace, BlockFlags189.properties(), commands.words(),
+                    commands.count(), destinations, buckets, this.render.getSectionIndex())) {
+                    difference = "le noyau a rendu une erreur à l'écriture";
+                }
             }
         } catch (Throwable failure) {
             difference = "exception à l'appel : " + failure;
         }
 
-        offset = 0;
+        long offset = 0;
         for (int bucket = 0; bucket < buckets && difference == null; bucket++) {
             ChunkMeshBufferBuilder javaBuffer = commands.vertexBuffer(bucket);
             long bytes = quads[bucket] * quadBytes;
@@ -342,7 +395,7 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
             }
             offset += bytes;
         }
-        MeshStats.probe(commands.count(), difference);
+        MeshStats.probe(totalQuads, difference);
     }
 
     private static final AtomicBoolean NATIVE_FAILURE_WARNED = new AtomicBoolean();

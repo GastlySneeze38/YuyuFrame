@@ -5,7 +5,8 @@
 use std::cell::RefCell;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
-use super::emit::{emit_quads, Command, MAX_BUCKETS};
+use super::emit::{emit_quads, prepare, Command, FluidBatch, MAX_BUCKETS};
+use super::fluid::{FluidData, FLUID_DATA_LEN};
 use super::light::{LightReader, SectionData, Workspace as LightWorkspace, WORKSPACE_BYTES};
 use super::shape::{Workspace, BLOCKS, STATES};
 
@@ -15,7 +16,9 @@ use super::shape::{Workspace, BLOCKS, STATES};
 ///
 /// 2 : écriture des quads (`yf_mesh_workspace_bytes`, `yf_mesh_begin`,
 /// `yf_mesh_load_section`, `yf_mesh_emit_quads`).
-const ABI_VERSION: u32 = 2;
+/// 3 : fluides et passes triées (`yf_mesh_prepare`, `yf_mesh_fluid_data_len`) ;
+/// `yf_mesh_emit_quads` attend désormais un `yf_mesh_prepare` juste avant.
+const ABI_VERSION: u32 = 3;
 
 /// Réponse de `yf_mesh_emit_quads` : tout est écrit.
 const EMIT_OK: i32 = 0;
@@ -33,6 +36,14 @@ const SHAPE_FAILED: i32 = -2;
 thread_local! {
     // Un espace de travail par fil de construction : gros, donc gardé d'un appel à l'autre.
     static WORKSPACE: RefCell<(Workspace, Vec<i32>)> = RefCell::new((Workspace::new(), Vec::new()));
+    // Les quads de fluides de la section en cours, entre son comptage et son écriture.
+    static FLUIDS: RefCell<FluidBatch> = RefCell::new(FluidBatch::default());
+}
+
+/// Longueur du tableau `fluid_data` de `yf_mesh_prepare`, pour que Java vérifie la sienne.
+#[no_mangle]
+pub extern "C" fn yf_mesh_fluid_data_len() -> i32 {
+    FLUID_DATA_LEN as i32
 }
 
 #[no_mangle]
@@ -191,20 +202,69 @@ pub unsafe extern "C" fn yf_mesh_emit_quads(
     for (bucket, cursor) in cursors.iter_mut().enumerate().take(bucket_count) {
         *cursor = dests.add(bucket).read_unaligned() as usize as *mut u8;
     }
-    // Une commande qui vise un tampon absent écrirait n'importe où.
-    let valid = commands.iter().all(|command| {
-        let bucket = ((command.packed >> super::emit::CMD_BUCKET_SHIFT) & super::emit::CMD_BUCKET_MASK) as usize;
-        bucket < bucket_count && !cursors[bucket].is_null()
-    });
-    if !valid {
-        return EMIT_FAILED;
-    }
 
     let workspace = &mut *(workspace as *mut LightWorkspace);
     let result = catch_unwind(AssertUnwindSafe(|| {
-        let mut light = LightReader::new(workspace, props);
-        emit_quads(&mut light, commands, &mut cursors[..bucket_count], section_index as u32);
-        EMIT_OK
+        FLUIDS.with(|cell| {
+            let fluids = cell.borrow();
+            let mut light = LightReader::new(workspace, props);
+            // Une commande qui vise un tampon absent est refusée plutôt qu'écrite n'importe où.
+            if emit_quads(&mut light, commands, &mut cursors[..bucket_count], section_index as u32, &fluids) {
+                EMIT_OK
+            } else {
+                EMIT_FAILED
+            }
+        })
+    }));
+    result.unwrap_or(EMIT_FAILED)
+}
+
+/// Compte les quads que `yf_mesh_emit_quads` écrira dans chaque tampon, pour
+/// que Java y réserve la place. À appeler juste avant, depuis le même fil,
+/// avec les mêmes commandes : les quads des fluides sont calculés ici (leur
+/// nombre ne se connaît qu'en les faisant) et gardés pour l'écriture.
+///
+/// - `fluid_data` : les textures des fluides et la table du courant
+///   (`FLUID_DATA_LEN` flottants, voir fluid.rs) ; peut être nul s'il n'y a
+///   aucune commande de fluide ;
+/// - `counts` : `bucket_count` entiers, remplis du nombre de quads de chaque tampon.
+///
+/// Rend 0, ou −2 en cas d'erreur.
+///
+/// # Safety
+/// Comme `yf_mesh_emit_quads` ; `counts` doit pointer sur `bucket_count` `i32` inscriptibles.
+#[no_mangle]
+pub unsafe extern "C" fn yf_mesh_prepare(
+    workspace: *mut u8,
+    props: *const u32,
+    fluid_data: *const f32,
+    commands: *const u32,
+    command_count: i32,
+    counts: *mut i32,
+    bucket_count: i32,
+    section_index: i32,
+) -> i32 {
+    if workspace.is_null() || props.is_null() || commands.is_null() || counts.is_null() {
+        return EMIT_FAILED;
+    }
+    if command_count < 0 || bucket_count < 0 || bucket_count as usize > MAX_BUCKETS {
+        return EMIT_FAILED;
+    }
+    let props = &*(props as *const [u32; super::light::STATES]);
+    let commands = std::slice::from_raw_parts(commands as *const Command, command_count as usize);
+    let counts = std::slice::from_raw_parts_mut(counts, bucket_count as usize);
+    let fluid_data = (fluid_data as *const [f32; FLUID_DATA_LEN]).as_ref().map(|values| FluidData { values });
+
+    let workspace = &mut *(workspace as *mut LightWorkspace);
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        FLUIDS.with(|cell| {
+            let light = LightReader::new(workspace, props);
+            if prepare(&light, fluid_data.as_ref(), commands, counts, section_index as u32, &mut cell.borrow_mut()) {
+                EMIT_OK
+            } else {
+                EMIT_FAILED
+            }
+        })
     }));
     result.unwrap_or(EMIT_FAILED)
 }

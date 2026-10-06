@@ -20,6 +20,11 @@ public class Block {
         throw new UnsupportedOperationException("stub compile-only");
     }
 
+    /** {@code afh.o()} */
+    public boolean isFullBlock() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
     /** {@code afh.c} — {@code isOpaqueCube} chez Feather. */
     public boolean hasTransparency() {
         throw new UnsupportedOperationException("stub compile-only");

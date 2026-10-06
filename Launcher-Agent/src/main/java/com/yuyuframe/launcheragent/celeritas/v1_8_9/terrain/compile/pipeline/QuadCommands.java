@@ -21,8 +21,11 @@ import java.util.Arrays;
  * dans {@code content-core/src/mesh/emit.rs}.
  *
  * <p>Un « tampon » est le couple (passe de rendu, face de la normale) : sept
- * par passe. Les passes triées (le translucide) n'en ont pas — leurs quads
- * doivent être relevés un par un pour le tri, ils restent au Java.
+ * par passe. Une passe triée (le translucide) n'utilise que le septième, « sans
+ * face » ; une fois écrits, ses quads sont relevés pour le tri
+ * ({@code ChunkMeshBufferBuilder.captureReserved}).
+ *
+ * <p>Une commande peut aussi être un bloc de fluide ({@link #addFluid}).
  *
  * <p>Un exemplaire par fil de construction.
  */
@@ -35,12 +38,15 @@ public final class QuadCommands {
     // Bits du troisième entier d'une commande, après la position du bloc (12 bits).
     public static final int CULL_SHIFT = 12;
     public static final int SMOOTH = 1 << 15;
+    /** Dans le champ de la face : la commande est un bloc de fluide. SMOOTH dit alors « passe triée ». */
+    private static final int FLUID = 7;
     public static final int OFFSET_SHIFT = 16;
     public static final int BUCKET_SHIFT = 18;
     public static final int MATERIAL_SHIFT = 23;
 
     private int[] words = new int[WORDS_PER_COMMAND * 2048];
     private int count;
+    private int fluids;
 
     private final TerrainRenderPass[] passes = new TerrainRenderPass[MAX_PASSES];
     private final ChunkModelBuilder[] builders = new ChunkModelBuilder[MAX_PASSES];
@@ -54,6 +60,7 @@ public final class QuadCommands {
     /** Avant chaque section. */
     public void reset() {
         this.count = 0;
+        this.fluids = 0;
         Arrays.fill(this.passes, 0, this.passCount, null);
         Arrays.fill(this.builders, 0, this.passCount, null);
         this.passCount = 0;
@@ -74,8 +81,8 @@ public final class QuadCommands {
         if (pass == this.refusedPass) {
             return -1;
         }
-        // Le noyau n'écrit que le format « vanilla-like », et pas les passes triées.
-        if (pass.isSorted() || this.passCount == MAX_PASSES
+        // Le noyau n'écrit que le format « vanilla-like ».
+        if (this.passCount == MAX_PASSES
             || buffers.getRenderPassConfiguration().getVertexTypeForPass(pass) != ChunkMeshFormats.VANILLA_LIKE) {
             this.refusedPass = pass;
             return -1;
@@ -83,6 +90,39 @@ public final class QuadCommands {
         this.passes[this.passCount] = pass;
         this.builders[this.passCount] = buffers.get(pass);
         return this.passCount++ * FACINGS;
+    }
+
+    /**
+     * Vrai si la passe de ce tampon est triée (le translucide) : tous ses
+     * quads vont alors dans son tampon « sans face », le septième, quelle
+     * que soit leur normale.
+     */
+    public boolean isSorted(int firstBucket) {
+        return this.passes[firstBucket / FACINGS].isSorted();
+    }
+
+    /** Le tampon d'un quad de cette passe dont la normale regarde vers {@code normalFace}. */
+    public int bucketOf(int firstBucket, ModelQuadFacing normalFace) {
+        return firstBucket + (this.isSorted(firstBucket) ? ModelQuadFacing.UNASSIGNED.ordinal() : normalFace.ordinal());
+    }
+
+    /**
+     * Un bloc de fluide : le noyau fait tout, de ses faces à ses sommets. Il
+     * ne lui manque que la teinte du bloc (rouge, vert, bleu), qui dépend du biome.
+     */
+    public void addFluid(int localX, int localY, int localZ, int firstBucket, int materialBits, int tint) {
+        int packed = localX | localY << 4 | localZ << 8
+            | FLUID << CULL_SHIFT
+            | (this.isSorted(firstBucket) ? SMOOTH : 0)
+            | firstBucket << BUCKET_SHIFT
+            | (materialBits & 0xFF) << MATERIAL_SHIFT;
+        this.add(0L, packed, tint);
+        this.fluids++;
+    }
+
+    /** Vrai si la section a au moins un bloc de fluide commandé. */
+    public boolean hasFluids() {
+        return this.fluids > 0;
     }
 
     public void add(long quadAddress, int packed, int tint) {
@@ -114,12 +154,8 @@ public final class QuadCommands {
         return this.passCount * FACINGS;
     }
 
-    /** Le nombre de quads de chaque tampon, recompté sur les commandes. */
-    public int[] countBuckets() {
-        Arrays.fill(this.bucketQuads, 0);
-        for (int i = 0; i < this.count; i++) {
-            this.bucketQuads[this.words[i * WORDS_PER_COMMAND + 2] >>> BUCKET_SHIFT & 31]++;
-        }
+    /** Le nombre de quads de chaque tampon, à faire remplir par le noyau ({@code NativeMesh.prepare}). */
+    public int[] bucketQuads() {
         return this.bucketQuads;
     }
 

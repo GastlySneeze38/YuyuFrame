@@ -6,6 +6,7 @@ import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 import net.minecraft.block.SlabBlock;
+import net.minecraft.block.material.Material;
 
 import java.lang.foreign.MemorySegment;
 
@@ -38,6 +39,13 @@ public final class BlockFlags189 {
     private static final int RULE_FLUID = 2;
     private static final int PROP_EMITTED_SHIFT = 8;
     private static final int PROP_AO_SHIFT = 12;
+    private static final int PROP_MATERIAL_SOLID = 1;
+    private static final int PROP_BLOCKS_MOVEMENT = 1 << 7;
+    private static final int PROP_FLUID_SHIFT = 28;
+    private static final int FLUID_WATER = 1;
+    private static final int FLUID_LAVA = 2;
+    private static final int PROP_ICE = 1 << 30;
+    private static final int PROP_FULL_BLOCK = 1 << 31;
 
     private static final int STATES = 65536;
 
@@ -109,6 +117,24 @@ public final class BlockFlags189 {
             properties |= RULE_FLUID << PROP_RULE_SHIFT;
         } else if (block instanceof SlabBlock) {
             properties |= RULE_SLAB << PROP_RULE_SHIFT;
+        }
+        // Pour le rendu des fluides (content-core/src/mesh/fluid.rs).
+        Material material = block.getMaterial();
+        if (material.isSolid()) {
+            properties |= PROP_MATERIAL_SOLID;
+        }
+        if (material.blocksMovement()) {
+            properties |= PROP_BLOCKS_MOVEMENT;
+        }
+        if (material == Material.WATER) {
+            properties |= FLUID_WATER << PROP_FLUID_SHIFT;
+        } else if (material == Material.LAVA) {
+            properties |= FLUID_LAVA << PROP_FLUID_SHIFT;
+        } else if (material == Material.ICE) {
+            properties |= PROP_ICE;
+        }
+        if (block.isFullBlock()) {
+            properties |= PROP_FULL_BLOCK;
         }
         properties |= (block.getLightLevel() & 0xF) << PROP_EMITTED_SHIFT;
         properties |= ((int) (block.getAmbientOcclusionLightLevel() * 4096.0F) & 0xFFFF) << PROP_AO_SHIFT;

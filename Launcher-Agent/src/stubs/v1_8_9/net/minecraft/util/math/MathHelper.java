@@ -15,6 +15,21 @@ public class MathHelper {
         throw new UnsupportedOperationException("stub compile-only");
     }
 
+    /** {@code ns.a(F)} — sinus par table. */
+    public static float sin(float p0) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    /** {@code ns.b(F)} — cosinus par table. */
+    public static float cos(float p0) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    /** {@code ns.b(DD)} — arc tangente approchée du jeu. */
+    public static double atan2(double p0, double p1) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
     /** {@code ns.d} — {@code floor} chez Feather. */
     public static int floor(float p0) {
         throw new UnsupportedOperationException("stub compile-only");

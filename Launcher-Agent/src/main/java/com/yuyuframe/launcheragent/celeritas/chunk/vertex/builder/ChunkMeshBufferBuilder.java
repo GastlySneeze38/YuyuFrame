@@ -62,14 +62,10 @@ public class ChunkMeshBufferBuilder {
     /**
      * YuyuFrame : réserve la place de {@code vertexCount} sommets à la suite de
      * ceux déjà écrits et rend l'adresse où les écrire. C'est le noyau natif du
-     * maillage qui les écrit, au format de l'encodeur. Pas pour une passe triée :
-     * ses quads doivent passer par {@link #push}, qui les relève pour le tri.
+     * maillage qui les écrit, au format de l'encodeur. Dans une passe triée,
+     * appeler ensuite {@link #captureReserved} : le tri a besoin de leurs positions.
      */
     public long reserve(int vertexCount) {
-        if (this.analyzer != null) {
-            throw new IllegalStateException("Sorted passes must go through push()");
-        }
-
         var vertexStart = this.count * this.stride;
         var vertexSize = vertexCount * this.stride;
 
@@ -81,6 +77,31 @@ public class ChunkMeshBufferBuilder {
 
         return LWJGL.memAddress(this.buffer, vertexStart);
     }
+
+    /**
+     * YuyuFrame : relève pour le tri les sommets écrits dans une place
+     * réservée par {@link #reserve}, comme {@link #push} le fait pour les siens.
+     * Sans effet hors d'une passe triée. Suppose le format « vanilla-like » :
+     * la position en trois flottants au début du sommet.
+     */
+    public void captureReserved(int firstVertex, int vertexCount) {
+        if (this.analyzer == null) {
+            return;
+        }
+
+        var vertex = this.captureScratch;
+        long ptr = LWJGL.memAddress(this.buffer, firstVertex * this.stride);
+
+        for (int i = 0; i < vertexCount; i++) {
+            vertex.x = LWJGL.memGetFloat(ptr);
+            vertex.y = LWJGL.memGetFloat(ptr + 4);
+            vertex.z = LWJGL.memGetFloat(ptr + 8);
+            this.analyzer.capture(vertex);
+            ptr += this.stride;
+        }
+    }
+
+    private final ChunkVertexEncoder.Vertex captureScratch = new ChunkVertexEncoder.Vertex();
 
     private static void postprocessVertices(ChunkVertexEncoder.Vertex[] vertices) {
         if (vertices.length != 4) {
