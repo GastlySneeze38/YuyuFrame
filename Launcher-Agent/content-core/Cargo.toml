@@ -21,3 +21,16 @@ ureq = { version = "2", features = ["json"] }
 # ImageIO (Java) ne le décode PAS nativement — c'était le vrai motif de cet ajout.
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp", "ico", "tiff"] }
 taffy = { version = "0.14.0", features = ["serde"] }
+
+# Souris brute (src/mouse/windows.rs) : liaisons vers l'API Windows, sans code
+# autour. Déjà dans l'arbre de dépendances par ureq — même version.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Threading",
+    "Win32_UI_Input",
+    # SendInput : seulement pour le test de bout en bout (mouvement injecté).
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_WindowsAndMessaging",
+] }

@@ -18,13 +18,19 @@ pub extern "C" fn yf_mouse_abi() -> u32 {
 /// pas disponible — Java garde alors la souris de GLFW.
 #[no_mangle]
 pub extern "C" fn yf_mouse_start() -> i32 {
-    0
+    #[cfg(windows)]
+    let running = super::windows::start();
+    #[cfg(not(windows))]
+    let running = false;
+    running as i32
 }
 
 /// Arrête la lecture. Sans effet si elle ne tourne pas.
 #[no_mangle]
 pub extern "C" fn yf_mouse_stop() {
     counters::set_active(false);
+    #[cfg(windows)]
+    super::windows::stop();
 }
 
 /// Java dit si la souris est capturée par le jeu (0 = non).

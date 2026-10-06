@@ -17,8 +17,7 @@ pub(super) fn set_active(active: bool) {
 
 /// Ajoute un déplacement relatif, en comptes bruts de la souris (Y vers le
 /// bas, comme Windows le donne). Appelé par le thread de lecture.
-// Sans appelant tant que la source Windows n'est pas écrite.
-#[cfg_attr(not(test), allow(dead_code))]
+#[cfg_attr(not(windows), allow(dead_code))]
 pub(super) fn accumulate(dx: i64, dy: i64) {
     if !ACTIVE.load(Ordering::Relaxed) {
         return;
