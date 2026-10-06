@@ -18,7 +18,15 @@ import org.lwjgl.opengl.GL11;
 public class GLStateManagerFogService implements FogService {
     public static final GLStateManagerFogService INSTANCE = new GLStateManagerFogService();
 
-    public static float fogColorRed, fogColorGreen, fogColorBlue;
+    /**
+     * La couleur est relue dans l'état OpenGL elle aussi (2026-10-06). L'amont
+     * la relève dans trois champs privés de {@code GameRenderer} ; ici ces
+     * champs ({@code bfk.Q/R/S}) ont des homonymes de même type à la casse
+     * près ({@code q/r/s}, la distance de la caméra à la troisième personne),
+     * et l'accessor Mixin lisait ceux-là : un brouillard jaune vif (4, 4, 0).
+     */
+    private static final float[] color = { 0.0F, 0.0F, 0.0F, 1.0F };
+    private static final float[] colorScratch = new float[4];
 
     private static boolean cached;
     private static ChunkFogMode mode = ChunkFogMode.NONE;
@@ -40,6 +48,10 @@ public class GLStateManagerFogService implements FogService {
         start = GL11.glGetFloat(GL11.GL_FOG_START);
         end = GL11.glGetFloat(GL11.GL_FOG_END);
         density = GL11.glGetFloat(GL11.GL_FOG_DENSITY);
+        GL11.glGetFloatv(GL11.GL_FOG_COLOR, colorScratch);
+        color[0] = colorScratch[0];
+        color[1] = colorScratch[1];
+        color[2] = colorScratch[2];
         cached = true;
     }
 
@@ -73,7 +85,8 @@ public class GLStateManagerFogService implements FogService {
 
     @Override
     public float[] getFogColor() {
-        return new float[]{fogColorRed, fogColorGreen, fogColorBlue, 1.0F};
+        refresh();
+        return new float[]{color[0], color[1], color[2], 1.0F};
     }
 
     @Override

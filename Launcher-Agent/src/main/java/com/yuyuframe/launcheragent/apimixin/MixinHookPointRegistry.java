@@ -834,12 +834,10 @@ public final class MixinHookPointRegistry {
         always("1.8.9", "v1_8_9.renderer.ClientChunkProviderAccessor189");
         always("1.8.9", "v1_8_9.renderer.ChunkAccessor189");
         always("1.8.9", "v1_8_9.renderer.CullingCameraViewAccessor189");
-        always("1.8.9", "v1_8_9.renderer.GameRendererFogAccessor189");
         always("1.8.9", "v1_8_9.renderer.WorldRendererTerrainMixin189");
         always("1.8.9", "v1_8_9.renderer.ClientChunkTrackerMixin189");
         always("1.8.9", "v1_8_9.renderer.WorldChunkTrackerMixin189");
         always("1.8.9", "v1_8_9.renderer.CullingCameraViewMixin189");
-        always("1.8.9", "v1_8_9.renderer.FogColorCaptureMixin189");
         always("1.8.9", "v1_8_9.renderer.DebugHudRendererMixin189");
         always("1.8.9", "v1_8_9.renderer.ParticleCullMixin189");
         always("1.8.9", "v1_8_9.renderer.WorldRendererSkyMixin189");
