@@ -5,4 +5,9 @@ public abstract class BaseText implements Text {
 
     protected BaseText() {
     }
+
+    @Override
+    public String asFormattedString() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
 }

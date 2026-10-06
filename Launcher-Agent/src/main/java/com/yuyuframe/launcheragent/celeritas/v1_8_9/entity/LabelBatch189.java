@@ -5,10 +5,14 @@ import com.yuyuframe.launcheragent.apimixin.mapping.YarnNamed;
 import com.yuyuframe.launcheragent.apimixin.v1_8_9.text.TextBatch189;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.render.entity.EntityRenderDispatcher;
+import net.minecraft.command.CommandSource;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.decoration.ArmorStandEntity;
+import net.minecraft.entity.player.PlayerEntity;
 import org.joml.Matrix4f;
-import org.joml.Vector3f;
 import org.lwjgl.BufferUtils;
+import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL13;
 import org.lwjgl.opengl.GL15;
@@ -218,13 +222,18 @@ public final class LabelBatch189 {
     }
 
     private static final Matrix4f TRANSFORM = new Matrix4f();
-    private static final Vector3f POINT = new Vector3f();
+
+    /** Les deux axes du plan des étiquettes pour l'image en cours — voir {@link #defer}. */
+    private static boolean axesReady;
+    private static float axisXx, axisXy, axisXz;
+    private static float axisYx, axisYy, axisYz;
 
     // ── Pendant le dessin des entités ────────────────────────────────────────
 
     /** Avant la boucle des entités : les étiquettes sont désormais notées au lieu d'être dessinées. */
     public static void begin(float delta) {
         tickDelta = delta;
+        axesReady = false;
         backgroundVertices = 0;
         for (int i = 0; i < TEXTURES.size(); i++) {
             TEXTURES.get(i).count = 0;
@@ -254,12 +263,27 @@ public final class LabelBatch189 {
         Geometry geometry = geometryOf(text);
         int offsetY = "deadmau5".equals(text) ? -10 : 0;
 
-        // Les mêmes transformations que vanilla, dans le même ordre : au-dessus
-        // de l'entité, face à la caméra, à l'échelle du texte.
-        TRANSFORM.translation((float) x, (float) y + entity.height + 0.5F, (float) z)
-            .rotateY(-dispatcher.yaw * DEGREES_TO_RADIANS)
-            .rotateX(dispatcher.pitch * DEGREES_TO_RADIANS)
-            .scale(-SCALE, -SCALE, SCALE);
+        // Toutes les étiquettes d'une image ont la même orientation (face à la
+        // caméra) et la même échelle : seule leur position diffère. On calcule
+        // donc une fois par image les deux axes de leur plan — où mènent un pas
+        // vers la droite et un pas vers le bas du texte — et chaque sommet
+        // devient : position de l'étiquette + x × axe X + y × axe Y. Mêmes
+        // transformations que vanilla (lacet, tangage, échelle), dans le même ordre.
+        if (!axesReady) {
+            TRANSFORM.rotationY(-dispatcher.yaw * DEGREES_TO_RADIANS)
+                .rotateX(dispatcher.pitch * DEGREES_TO_RADIANS)
+                .scale(-SCALE, -SCALE, SCALE);
+            axisXx = TRANSFORM.m00();
+            axisXy = TRANSFORM.m01();
+            axisXz = TRANSFORM.m02();
+            axisYx = TRANSFORM.m10();
+            axisYy = TRANSFORM.m11();
+            axisYz = TRANSFORM.m12();
+            axesReady = true;
+        }
+        float originX = (float) x;
+        float originY = (float) y + entity.height + 0.5F;
+        float originZ = (float) z;
 
         // La lumière que vanilla a posée pour cette entité, et qui éclaire aussi son étiquette.
         int light = entity.isOnFire() ? FULL_BRIGHT : entity.getLightmapCoordinates(tickDelta);
@@ -267,32 +291,44 @@ public final class LabelBatch189 {
         short lightV = (short) (light / 65536);
 
         int halfWidth = geometry.width / 2;
-        background(-halfWidth - 1, -1 + offsetY);
-        background(-halfWidth - 1, 8 + offsetY);
-        background(halfWidth + 1, 8 + offsetY);
-        background(halfWidth + 1, -1 + offsetY);
+        background(originX, originY, originZ, -halfWidth - 1, -1 + offsetY);
+        background(originX, originY, originZ, -halfWidth - 1, 8 + offsetY);
+        background(originX, originY, originZ, halfWidth + 1, 8 + offsetY);
+        background(originX, originY, originZ, halfWidth + 1, -1 + offsetY);
 
         for (int r = 0; r < geometry.runs.size(); r++) {
             GlyphRun run = geometry.runs.get(r);
             TextureBatch batch = batchFor(run.textureId);
             batch.reserve(run.quads * 4);
-            ByteBuffer vertices = batch.vertices;
-            int at = batch.count * TextureBatch.STRIDE;
-            int colorAt = batch.count * 4;
+            // Écriture directe en mémoire : la place vient d'être réservée, et
+            // chaque écriture par ByteBuffer revérifiait ses bornes.
+            long at = MemoryUtil.memAddress(batch.vertices, 0) + (long) batch.count * TextureBatch.STRIDE;
+            long dimAt = MemoryUtil.memAddress(batch.dimColors, 0) + (long) batch.count * 4L;
+            long fullAt = MemoryUtil.memAddress(batch.fullColors, 0) + (long) batch.count * 4L;
+            float[] source = run.vertices;
+            int from = 0;
             for (int q = 0; q < run.quads; q++) {
                 int rgb = run.rgb[q];
                 // En mémoire : rouge, vert, bleu, alpha.
                 int abgr = (rgb & 0xFF) << 16 | (rgb & 0xFF00) | (rgb >> 16 & 0xFF);
+                int dim = DIM_ALPHA << 24 | abgr;
+                int full = FULL_ALPHA << 24 | abgr;
                 for (int v = 0; v < 4; v++) {
-                    int from = q * 16 + v * 4;
-                    TRANSFORM.transformPosition(run.vertices[from], run.vertices[from + 1] + offsetY, 0.0F, POINT);
-                    vertices.putFloat(at, POINT.x).putFloat(at + 4, POINT.y).putFloat(at + 8, POINT.z);
-                    vertices.putFloat(at + 12, run.vertices[from + 2]).putFloat(at + 16, run.vertices[from + 3]);
-                    vertices.putShort(at + 20, lightU).putShort(at + 22, lightV);
-                    batch.dimColors.putInt(colorAt, DIM_ALPHA << 24 | abgr);
-                    batch.fullColors.putInt(colorAt, FULL_ALPHA << 24 | abgr);
+                    float labelX = source[from];
+                    float labelY = source[from + 1] + offsetY;
+                    MemoryUtil.memPutFloat(at, originX + labelX * axisXx + labelY * axisYx);
+                    MemoryUtil.memPutFloat(at + 4L, originY + labelX * axisXy + labelY * axisYy);
+                    MemoryUtil.memPutFloat(at + 8L, originZ + labelX * axisXz + labelY * axisYz);
+                    MemoryUtil.memPutFloat(at + 12L, source[from + 2]);
+                    MemoryUtil.memPutFloat(at + 16L, source[from + 3]);
+                    MemoryUtil.memPutShort(at + 20L, lightU);
+                    MemoryUtil.memPutShort(at + 22L, lightV);
+                    MemoryUtil.memPutInt(dimAt, dim);
+                    MemoryUtil.memPutInt(fullAt, full);
                     at += TextureBatch.STRIDE;
-                    colorAt += 4;
+                    dimAt += 4L;
+                    fullAt += 4L;
+                    from += 4;
                 }
             }
             batch.count += run.quads * 4;
@@ -300,7 +336,7 @@ public final class LabelBatch189 {
         return true;
     }
 
-    private static void background(int labelX, int labelY) {
+    private static void background(float originX, float originY, float originZ, int labelX, int labelY) {
         if (backgroundVertices * 3 + 3 > backgrounds.capacity()) {
             FloatBuffer grown = BufferUtils.createFloatBuffer(backgrounds.capacity() * 2);
             backgrounds.position(0).limit(backgroundVertices * 3);
@@ -308,10 +344,78 @@ public final class LabelBatch189 {
             grown.clear();
             backgrounds = grown;
         }
-        TRANSFORM.transformPosition((float) labelX, (float) labelY, 0.0F, POINT);
         int at = backgroundVertices * 3;
-        backgrounds.put(at, POINT.x).put(at + 1, POINT.y).put(at + 2, POINT.z);
+        backgrounds.put(at, originX + labelX * axisXx + labelY * axisYx)
+            .put(at + 1, originY + labelX * axisXy + labelY * axisYy)
+            .put(at + 2, originZ + labelX * axisXz + labelY * axisYz);
         backgroundVertices++;
+    }
+
+    // ── Hologrammes ──────────────────────────────────────────────────────────
+
+    /** Portée du nom d'une entité vivante qui n'est pas accroupie, au carré. */
+    private static final double NAME_RANGE_SQUARED = 64.0 * 64.0;
+
+    /**
+     * Chemin court pour un hologramme : un porte-armure invisible et sans
+     * équipement, dont vanilla ne dessine rien d'autre que le nom.
+     *
+     * <p>Vanilla lui fait pourtant suivre tout le parcours d'une entité —
+     * lumière, matrices, animation du modèle, trois couches vides. Mesuré le
+     * 2026-10-06 dans un lobby : 3 à 7 µs par porte-armure, dont 1 à 2 pour le
+     * nom, et il y en a 150 à 300 par image. Ici on ne garde que le nom, avec
+     * les mêmes conditions que vanilla (relevées dans le bytecode de
+     * {@code LivingEntityRenderer} et d'{@code ArmorStandEntityRenderer}).
+     *
+     * <p>Au moindre doute — visible, équipé, en feu, vu par un spectateur,
+     * première image de sa vie, nom au style non géré — on rend la main.
+     *
+     * @return vrai si l'entité est entièrement prise en charge : vanilla ne doit alors pas la dessiner
+     */
+    public static boolean hologram(Entity entity, double cameraX, double cameraY, double cameraZ) {
+        if (!deferring || !(entity instanceof ArmorStandEntity)) {
+            return false;
+        }
+        // À sa première image, vanilla recale la position précédente de l'entité avant de la dessiner.
+        if (entity.ticksAlive == 0 || !entity.isInvisible() || entity.isOnFire()) {
+            return false;
+        }
+        MinecraftClient client = MinecraftClient.getInstance();
+        PlayerEntity viewer = client.player;
+        // Un spectateur voit les entités invisibles en transparence.
+        if (viewer == null || !entity.isInvisibleTo(viewer)) {
+            return false;
+        }
+        LivingEntity living = (LivingEntity) entity;
+        for (int slot = 0; slot < 5; slot++) {
+            if (living.getMainSlot(slot) != null) {
+                return false;
+            }
+        }
+
+        // Rien à dessiner du tout : ni modèle, ni équipement, ni nom.
+        if (!entity.isCustomNameVisible()) {
+            return true;
+        }
+        EntityRenderDispatcher dispatcher = client.getEntityRenderManager();
+        if (entity.squaredDistanceTo(dispatcher.field_11098) >= NAME_RANGE_SQUARED) {
+            return true;
+        }
+
+        CommandSource named = entity;
+        String text = named.getName().asFormattedString();
+        if (hasUnsupportedStyle(text)) {
+            return false;
+        }
+
+        // La position que vanilla passe au dessin : interpolée, relative à la caméra.
+        double x = entity.prevTickX + (entity.x - entity.prevTickX) * (double) tickDelta - cameraX;
+        double y = entity.prevTickY + (entity.y - entity.prevTickY) * (double) tickDelta - cameraY;
+        double z = entity.prevTickZ + (entity.z - entity.prevTickZ) * (double) tickDelta - cameraZ;
+        if (living.isBaby()) {
+            y -= (double) (entity.height / 2.0F);
+        }
+        return defer(entity, text, x, y, z, 64);
     }
 
     /** Barré (§m), souligné (§n), brouillé (§k) : laissés à vanilla. */
@@ -339,6 +443,8 @@ public final class LabelBatch189 {
         long started = System.nanoTime();
 
         GlStateManager.disableLighting();
+        // Vanilla le pose avant chaque nom d'entité vivante ; le chemin court des hologrammes ne passe pas par là.
+        GlStateManager.alphaFunc(GL11.GL_GREATER, 0.1F);
         GlStateManager.depthMask(false);
         GlStateManager.disableDepthTest();
         GlStateManager.enableBlend();

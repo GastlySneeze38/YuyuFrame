@@ -49,6 +49,16 @@ public class LivingEntity extends Entity {
         throw new UnsupportedOperationException("stub compile-only");
     }
 
+    /** {@code pr.p(I)} — 0 = objet tenu, 1 à 4 = armure. */
+    public ItemStack getMainSlot(int slot) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    /** {@code pr.j_()} — petit modèle (enfant, petit porte-armure). */
+    public boolean isBaby() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
     /** {@code pr.bJ} — même nom chez Feather. */
     public boolean isSleeping() {
         throw new UnsupportedOperationException("stub compile-only");

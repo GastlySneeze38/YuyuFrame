@@ -547,7 +547,10 @@ public final class RendererHooks189 {
 
             counters.la$setHiddenEntityCount(counters.la$getHiddenEntityCount() + 1);
             long started = System.nanoTime();
-            dispatcher.renderEntity(entity, tickDelta);
+            // Un hologramme n'a que son nom à dessiner : on saute le reste du parcours de vanilla.
+            if (!LabelBatch189.hologram(entity, camX, camY, camZ)) {
+                dispatcher.renderEntity(entity, tickDelta);
+            }
             recordEntityCost(entity, System.nanoTime() - started);
         }
     }

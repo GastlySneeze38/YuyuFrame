@@ -13,4 +13,7 @@ public interface Text {
     Style getStyle();
 
     String asUnformattedString();
+
+    /** {@code eu.d()} — le texte avec ses codes § de couleur et de style. */
+    String asFormattedString();
 }

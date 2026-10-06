@@ -23,6 +23,11 @@ public final class GlStateManager {
         throw new UnsupportedOperationException("stub compile-only");
     }
 
+    /** {@code bfl.a(IF)} */
+    public static void alphaFunc(int function, float reference) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
     /** {@code bfl.e()} */
     public static void enableLighting() {
         throw new UnsupportedOperationException("stub compile-only");

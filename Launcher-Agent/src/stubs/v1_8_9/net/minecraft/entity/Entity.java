@@ -8,7 +8,16 @@ package net.minecraft.entity;
  * sur une variable typée {@code Entity} : javac écrit le type statique du
  * receveur comme propriétaire du {@code getfield}, et Yarn range le champ ici.
  */
-public class Entity {
+public class Entity implements net.minecraft.command.CommandSource {
+
+    /**
+     * {@code m.f_()} — Yarn range cette méthode sur {@code CommandSource} :
+     * toujours l'appeler sur une variable de ce type, jamais sur {@code Entity}.
+     */
+    @Override
+    public net.minecraft.text.Text getName() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
 
     public double x;
 
@@ -60,6 +69,19 @@ public class Entity {
 
     /** {@code pk.T} */
     public boolean noClip;
+
+    /** {@code pk.W} — nombre de ticks vécus ; 0 à la toute première image. */
+    public int ticksAlive;
+
+    /** {@code pk.ax()} */
+    public boolean isInvisible() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    /** {@code pk.f(wn)} — invisible, sauf pour un spectateur. */
+    public boolean isInvisibleTo(net.minecraft.entity.player.PlayerEntity player) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
 
     /** {@code pk.K} */
     public float height;
