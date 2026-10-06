@@ -133,8 +133,11 @@ public final class NativeSort {
             }
             int[] ints = new int[header.getAtIndex(ValueLayout.JAVA_INT, 1)];
             float[] floats = new float[header.getAtIndex(ValueLayout.JAVA_INT, 2)];
-            take.invokeExact(ints.length == 0 ? MemorySegment.NULL : MemorySegment.ofArray(ints),
-                floats.length == 0 ? MemorySegment.NULL : MemorySegment.ofArray(floats));
+            // Dans des variables : javac type en Object une expression « ? : » passée
+            // telle quelle à invokeExact, et l'appel est alors refusé à l'exécution.
+            MemorySegment intsOut = ints.length == 0 ? MemorySegment.NULL : MemorySegment.ofArray(ints);
+            MemorySegment floatsOut = floats.length == 0 ? MemorySegment.NULL : MemorySegment.ofArray(floats);
+            take.invokeExact(intsOut, floatsOut);
 
             switch (kind) {
                 case KIND_STATIC:
@@ -154,10 +157,15 @@ public final class NativeSort {
                     return SortState.NONE;
             }
         } catch (Throwable error) {
-            LauncherLog.err("[RENDERER] exception à l'analyse native du translucide", error);
+            // Une fois : la même erreur reviendrait à chaque section.
+            if (ANALYZE_FAILURE_LOGGED.compareAndSet(false, true)) {
+                LauncherLog.err("[RENDERER] exception à l'analyse native du translucide — tri Java pour cette section", error);
+            }
             return null;
         }
     }
+
+    private static final AtomicBoolean ANALYZE_FAILURE_LOGGED = new AtomicBoolean();
 
     /**
      * Relit un arbre pour une position de caméra et écrit l'ordre de dessin à l'adresse donnée.
