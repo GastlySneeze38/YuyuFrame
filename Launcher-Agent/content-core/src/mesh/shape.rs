@@ -13,6 +13,8 @@ pub const BLOCKS: usize = 4096;
 pub const STATES: usize = 65536;
 
 /// Le bloc se dessine ou compte dans le volume de la section (tout sauf l'air).
+/// Le calcul ne teste que « différent de zéro » : la constante dit le contrat de la table.
+#[allow(dead_code)]
 pub const FLAG_RENDERABLE: u8 = 1;
 /// Le bloc est un cube plein opaque : il bouche la vue.
 pub const FLAG_OPAQUE: u8 = 2;

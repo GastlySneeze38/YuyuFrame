@@ -188,6 +188,35 @@ suivre au branchement.
 jeu, la cohabitation avec notre interface, les entités et les block entities
 ne se jugent qu'en jeu.
 
+## Noyau natif du maillage (2026-10-06)
+
+Une partie du maillage d'une section est calculée en Rust, dans
+`content-core/src/mesh/` (`content_core.dll`), appelé par FFM depuis les fils
+de construction (`v1_8_9/nativecore/NativeMesh`). Ce sont des **ports** de
+code de ce dossier ; les originaux Java restent, ils servent de repli quand la
+DLL manque et de référence pour le contrôle.
+
+| Rust | Porté de | Licence d'origine |
+|---|---|---|
+| `shape.rs` (visibilité, volume à dessiner) | `v1_8_9/terrain/occlusion/ChunkOcclusionDataBuilder`, `chunk/occlusion/SectionVisibilityBuilder`, `RenderableBounds` | celle du moteur |
+| `boxes.rs` (boîtes occultantes) | `chunk/occlusion/geometry/{Area,AreaFinder,BoxFinder,OccluderBoxes}` | **LGPL-3.0, Canvas (grondag)** — en-tête gardé |
+| `light.rs` (lumière, occlusion ambiante) | `model/light/**`, et `v1_8_9/world/WorldSlice189` + `terrain/compile/light/LightCache189` pour la lumière d'un bloc | celle du moteur (Sodium) |
+| `emit.rs` (écriture des sommets) | `v1_8_9/terrain/compile/pipeline/BlockRenderer189.renderQuad`, `ModelQuadOrientation`, `ChunkColorWriter.EMBEDDIUM`, `ModelQuadUtil.mixARGBColors`, `ChunkMeshBufferBuilder.push`, `VanillaLikeChunkVertex` | celle du moteur |
+
+Écarts avec le Java :
+- **boîtes occultantes** : à volume égal, deux boîtes peuvent être choisies
+  dans un autre ordre (le Java dépend de l'ordre d'une table de hachage) ;
+- **quads** : aucun, le résultat doit être identique à l'octet près. Seuls
+  passent par le noyau les blocs à modèle des passes non triées, au format
+  `VanillaLikeChunkVertex` ; le translucide et les fluides restent au Java ;
+- **lumière d'un bloc** : `Block.getBrightness` n'est pas appelé, ses trois
+  variantes de la 1.8.9 (commune, dalle, fluide — vérifié dans le jar : seuls
+  `afh`, `ahv` et `aju` la définissent, et `aju` renvoie à la commune) sont
+  refaites à partir d'une table de propriétés par état (`BlockFlags189`).
+
+Ajouts dans le code du moteur pour ce noyau :
+`ChunkMeshBufferBuilder.reserve` (réserver la place de sommets écrits ailleurs).
+
 ## Ce qui n'a pas été repris
 
 - l'écran d'options de Sodium et son API (`impl/gui`, `org.taumc.celeritas.api`) ;

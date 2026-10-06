@@ -216,7 +216,7 @@ pub unsafe fn emit_quads(light: &mut LightReader, commands: &[Command], dests: &
             (out.add(5) as *mut f32).write_unaligned(quad.v[src].min(0.99999997f32));
             out.add(6).write_unaligned(parameters | encoded_light << 16);
             out.add(7).write_unaligned(correction);
-            out = out.add(8);
+            out = out.add(VERTEX_BYTES / 4);
         }
         dests[bucket] = out as *mut u8;
     }
