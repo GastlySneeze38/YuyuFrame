@@ -19,6 +19,7 @@ import com.yuyuframe.launcheragent.runtime.module.gameplay.MumbleLinkModule;
 import com.yuyuframe.launcheragent.runtime.module.visual.NoDarknessModule;
 import com.yuyuframe.launcheragent.runtime.module.visual.NoFogModule;
 import com.yuyuframe.launcheragent.runtime.module.visual.NoPumpkinOverlayModule;
+import com.yuyuframe.launcheragent.runtime.module.optimization.OptimizationModule;
 import com.yuyuframe.launcheragent.runtime.module.hud.PingModule;
 import com.yuyuframe.launcheragent.runtime.module.hud.PotionEffectsModule;
 import com.yuyuframe.launcheragent.runtime.module.hud.SaturationModule;
@@ -181,6 +182,9 @@ public final class ModuleRegistry {
         // Les modules « Optimisations » 1.8.9 (optimodule) et la fenêtre sans
         // bordure ont été retirés le 2026-09-13 : le renderer 1.8.9 et LWJGL 3
         // les remplacent (docs/LauncherAgent/v1.8.9/README.md).
+        // Depuis le 2026-10-06, UN module « Optimisation » porte ce qui les
+        // remplace — la souris brute native aujourd'hui, le renderer ensuite.
+        if (IS_1_8_9) safeRegister(() -> new OptimizationModule());
         safeRegister(() -> new MumbleLinkModule());
         // Macros + connexion automatique — 26.1.2 ET 1.21.11 depuis le
         // 2026-09-12. La restriction d'origine disait « la détection du login

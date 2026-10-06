@@ -167,6 +167,11 @@ public final class SettingList {
         return add(new Setting.Action(id, name, description, category, null, run));
     }
 
+    /** Bloc de texte explicatif (titre + paragraphe) — voir {@link Setting.Info}. */
+    public SettingList info(String id, String title, String text, String category) {
+        return add(new Setting.Info(id, title, text, category));
+    }
+
     /** Donnée persistée que le module édite dans son PROPRE écran — voir {@link Setting.Opaque}. */
     public SettingList opaque(String id, Supplier<String> get, Consumer<String> set) {
         return add(new Setting.Opaque(id, get, set));

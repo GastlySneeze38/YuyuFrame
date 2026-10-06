@@ -4,6 +4,7 @@ package com.yuyuframe.launcheragent.lwjgl2compat.glfw;
 // LICENSE-legacy-lwjgl3.txt) ; le paquet change, et la souris brute native
 // (NativeMouse) y est branchée.
 
+import com.yuyuframe.launcheragent.lwjgl2compat.LegacyLwjgl3;
 import com.yuyuframe.launcheragent.lwjgl2compat.input.MouseImplementation;
 import com.yuyuframe.launcheragent.lwjgl2compat.rawinput.NativeMouse;
 import org.lwjgl.glfw.*;
@@ -24,6 +25,8 @@ public class GLFWMouseImplementation implements MouseImplementation {
     private boolean isInsideWindow;
     /** Souris brute lue par content_core.dll — null = souris de GLFW (YuyuFrame). */
     private NativeMouse nativeMouse;
+    /** {@code -Dorg.lwjgl.input.Mouse.disableRawInput=true} : ni la nôtre, ni celle de GLFW. */
+    private boolean rawDisabled;
 
     private final EventQueue event_queue = new EventQueue(Mouse.EVENT_SIZE);
 
@@ -45,11 +48,11 @@ public class GLFWMouseImplementation implements MouseImplementation {
         // Raw Input par type de périphérique pour tout le processus, et GLFW
         // retire la sienne — donc la nôtre — chaque fois que le curseur est
         // libéré. Tant que son option reste éteinte, GLFW n'y touche pas.
-        boolean rawDisabled = Mouse.getPrivilegedBoolean("org.lwjgl.input.Mouse.disableRawInput");
-        if (!rawDisabled)
+        this.rawDisabled = Mouse.getPrivilegedBoolean("org.lwjgl.input.Mouse.disableRawInput");
+        if (!rawDisabled && LegacyLwjgl3.nativeMouseWanted())
             this.nativeMouse = NativeMouse.tryStart();
-        if (this.nativeMouse == null && !rawDisabled && GLFW.glfwRawMouseMotionSupported())
-            GLFW.glfwSetInputMode(this.windowHandle, GLFW.GLFW_RAW_MOUSE_MOTION, GLFW.GLFW_TRUE);
+        if (this.nativeMouse == null)
+            setGlfwRawMotion(true);
 
         this.buttonCallback = GLFWMouseButtonCallback.create((window, button, action, mods) -> {
             byte state = action == GLFW.GLFW_PRESS ? (byte)1 : (byte)0;
@@ -143,6 +146,37 @@ public class GLFWMouseImplementation implements MouseImplementation {
             this.nativeMouse.stop();
             this.nativeMouse = null;
         }
+    }
+
+    private void setGlfwRawMotion(boolean on) {
+        if (rawDisabled || !GLFW.glfwRawMouseMotionSupported())
+            return;
+        GLFW.glfwSetInputMode(this.windowHandle, GLFW.GLFW_RAW_MOUSE_MOTION, on ? GLFW.GLFW_TRUE : GLFW.GLFW_FALSE);
+    }
+
+    /**
+     * Passe de la souris brute native à celle de GLFW, ou l'inverse, en cours
+     * de partie (voir {@link LegacyLwjgl3#setNativeMouse}). L'ordre compte :
+     * celle qui part retire son inscription Raw Input AVANT que l'autre pose
+     * la sienne, sinon la sortante emporterait celle de l'entrante.
+     */
+    public void setNativeRawInput(boolean wanted) {
+        if (rawDisabled || this.windowHandle == 0 || wanted == (this.nativeMouse != null))
+            return;
+        if (wanted) {
+            setGlfwRawMotion(false);
+            this.nativeMouse = NativeMouse.tryStart();
+            if (this.nativeMouse == null) {
+                setGlfwRawMotion(true);
+                return;
+            }
+            this.nativeMouse.setActive(this.grabbed);
+        } else {
+            this.nativeMouse.stop();
+            this.nativeMouse = null;
+            setGlfwRawMotion(true);
+        }
+        accum_dx = accum_dy = 0;
     }
 
     /**

@@ -7,6 +7,8 @@ import com.yuyuframe.launcheragent.apigraphic.hud.HudElement;
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
+import com.yuyuframe.launcheragent.apigraphic.text.UiRichText;
+import com.yuyuframe.launcheragent.apigraphic.text.UiTextSpan;
 import com.yuyuframe.launcheragent.apigraphic.widget.UiWidget;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiButton;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTextField;
@@ -497,6 +499,9 @@ public final class ConfigScreenBuilder {
             // qu'on veut sur le disque.
             return buttonRow(rows, x, w, cursor, label, () -> { a2.run.run(); commit.run(); });
         }
+        if (setting instanceof Setting.Info) {
+            return infoRow(rows, x, w, cursor, label, tooltip);
+        }
         if (setting instanceof Setting.Opaque) {
             // Persisté mais volontairement invisible ici — le module l'édite
             // dans son propre écran (voir Setting.Opaque). Ce n'est pas un
@@ -585,6 +590,60 @@ public final class ConfigScreenBuilder {
         addRowBackground(rows, x, w, rowY);
         rows.add(new UiLabel(x + UiTheme.scaled(10f), rowY + ROW_H / 2f - UiTheme.scaled(5f), label, UiTheme.TEXT_PRIMARY, LABEL_SCALE).tooltip(tooltip));
         return rowY;
+    }
+
+    /**
+     * Bloc de texte (voir {@link Setting.Info}) : un titre en gras, puis un
+     * paragraphe qui revient à la ligne dans la largeur de la ligne. Le fond
+     * prend la hauteur du texte, pas {@link #ROW_H}.
+     *
+     * <p>Un widget par LIGNE de texte, pas un seul pour le bloc : la zone
+     * défilante estompe un widget entier dès que son bord dépasse, donc un
+     * bloc haut disparaîtrait d'un coup en défilant.
+     */
+    private static float infoRow(List<UiWidget> rows, float x, float w, float cursor, String title, String text) {
+        float pad = UiTheme.scaled(12f);
+        List<UiTextSpan> spans = new ArrayList<>(2);
+        if (title != null && !title.isEmpty()) spans.add(UiTextSpan.bold(title + "\n", UiTheme.TEXT_PRIMARY));
+        if (text != null && !text.isEmpty()) spans.add(UiTextSpan.plain(text, UiTheme.TEXT_SECONDARY));
+        UiRichText.Layout layout = UiRichText.layout(spans, w - 2f * pad, LABEL_SCALE);
+        float height = layout.height + 2f * pad;
+        float rowY = cursor - height;
+        rows.add(new RowBackground(x, rowY, w, height));
+
+        // run.y = ligne de base, comptée vers le bas depuis le haut du bloc :
+        // les mots d'une même ligne partagent la même valeur.
+        float top = rowY + height - pad;
+        InfoLine line = null;
+        float lineRunY = Float.NaN;
+        for (UiRichText.Run run : layout.runs) {
+            if (line == null || run.y != lineRunY) {
+                lineRunY = run.y;
+                line = new InfoLine(x + pad, top + run.y);
+                rows.add(line);
+            }
+            line.runs.add(run);
+        }
+        return rowY - ROW_GAP;
+    }
+
+    /** Une ligne d'un bloc de texte. {@code y} = ligne de base (hauteur nulle, comme UiLabel). */
+    private static final class InfoLine extends UiWidget {
+        final List<UiRichText.Run> runs = new ArrayList<>();
+
+        InfoLine(float x, float baseline) { super(x, baseline, 0, 0); }
+
+        @Override
+        public boolean contains(double mx, double my) { return false; }
+
+        @Override
+        public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
+            if (clipFade <= 0.01f) return;
+            for (UiRichText.Run run : runs) {
+                renderer.drawText(run.span.bold ? UiFont.BOLD : UiFont.REGULAR, run.text, x + run.x, y,
+                    run.span.color.multiplyAlpha(clipFade), run.scale, vpWidth, vpHeight);
+            }
+        }
     }
 
     private static float toggleRow(List<UiWidget> rows, float x, float w, float cursor, String label, String tooltip,

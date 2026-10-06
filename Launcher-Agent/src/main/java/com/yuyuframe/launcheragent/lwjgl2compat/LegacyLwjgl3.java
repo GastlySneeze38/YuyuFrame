@@ -1,5 +1,6 @@
 package com.yuyuframe.launcheragent.lwjgl2compat;
 
+import com.yuyuframe.launcheragent.lwjgl2compat.glfw.GLFWMouseImplementation;
 import org.lwjgl.Sys;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.opengl.Display;
@@ -41,21 +42,55 @@ public final class LegacyLwjgl3 {
 		return defaultValue;
 	}
 
+	// Vrai par défaut : la souris est créée avant que le client intégré ait
+	// relu ses réglages, qui la coupent ensuite s'il le faut.
+	private static volatile boolean nativeMouseWanted = true;
+
+	public static boolean nativeMouseWanted() {
+		return nativeMouseWanted;
+	}
+
+	/**
+	 * Choisit la souris brute native (content_core.dll) ou celle de GLFW,
+	 * tout de suite si la souris existe déjà, sinon à sa création. Appelé par
+	 * le module « Optimisation » du client intégré, depuis le thread du jeu.
+	 */
+	public static void setNativeMouse(boolean wanted) {
+		nativeMouseWanted = wanted;
+		if (LWJGLImplementationUtils._mouseImplementation instanceof GLFWMouseImplementation mouse) {
+			mouse.setNativeRawInput(wanted);
+		}
+	}
+
 	/**
 	 * Journal minimal : la 1.8.9 vanilla n'embarque pas slf4j, et ce jar ne
 	 * dépend pas de l'agent. La sortie standard du jeu est déjà recueillie par
 	 * le launcher.
 	 */
 	public static void warn(String message, Throwable error) {
-		System.err.println("[LegacyLWJGL3] " + message + (error == null ? "" : " : " + error));
+		ERR.println("[WARN] [LegacyLWJGL3] " + message + (error == null ? "" : " : " + error));
 	}
 
 	public static void warn(String message) {
 		warn(message, null);
 	}
 
+	/**
+	 * Ligne d'information, à la forme d'un journal de niveau 3 de l'agent
+	 * ({@code LauncherLog.agent(3, …)} : « [!] [AGENT] … »). Écrite à la main :
+	 * ce jar ne dépend pas de l'agent, donc pas de {@code LauncherLog} ici.
+	 */
 	public static void info(String message) {
-		System.out.println("[LegacyLWJGL3] " + message);
+		OUT.println("[!] [AGENT] [LegacyLWJGL3] " + message);
+	}
+
+	// Le launcher lit la sortie du jeu en UTF-8, alors que System.out écrit
+	// dans l'encodage de Windows : les accents y arrivaient abîmés.
+	private static final java.io.PrintStream OUT = utf8(java.io.FileDescriptor.out);
+	private static final java.io.PrintStream ERR = utf8(java.io.FileDescriptor.err);
+
+	private static java.io.PrintStream utf8(java.io.FileDescriptor target) {
+		return new java.io.PrintStream(new java.io.FileOutputStream(target), true, java.nio.charset.StandardCharsets.UTF_8);
 	}
 
 	/** Presse-papier via GLFW — remplace l'AWT de {@code Screen.getClipboard}. */

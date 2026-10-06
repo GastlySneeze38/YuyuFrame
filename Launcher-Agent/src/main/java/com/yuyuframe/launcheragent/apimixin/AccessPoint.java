@@ -276,6 +276,13 @@ public enum AccessPoint {
      */
     CLIENT_BLOCK_HIT_PARTICLES,
     /**
+     * Choisit la souris brute native ({@code content_core.dll}) ou celle de
+     * GLFW — argument {@code Boolean}, vrai = native. Lié sur la 1.8.9
+     * seulement, la seule version dont l'agent fournit la couche d'entrées
+     * (docs/LauncherAgent/v1.8.9/README.md § 9 bis).
+     */
+    CLIENT_NATIVE_MOUSE,
+    /**
      * Utilisation d'objet en cours, rendue en
      * {@code int[]{ ticks restants, durée totale }} — {@code null} si le
      * joueur n'utilise rien.

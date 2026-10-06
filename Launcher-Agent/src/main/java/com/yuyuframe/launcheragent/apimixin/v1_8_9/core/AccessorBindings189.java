@@ -441,6 +441,13 @@ public final class AccessorBindings189 {
             if (pos != null) c.particleManager.addBlockBreakingParticles(pos, hit.direction);
             return null;
         });
+        // Pas un accès au jeu : la couche d'entrées de la 1.8.9 est la nôtre
+        // (lwjgl2-compat.jar), et seule cette tranche est compilée contre elle.
+        AccessorRegistry.bind(AccessPoint.CLIENT_NATIVE_MOUSE, (r, a) -> {
+            com.yuyuframe.launcheragent.lwjgl2compat.LegacyLwjgl3.setNativeMouse(
+                a.length > 0 && Boolean.TRUE.equals(a[0]));
+            return null;
+        });
         AccessorRegistry.bind(AccessPoint.PLAYER_ITEM_USE, (r, a) -> {
             PlayerEntity p = player(r);
             if (p == null) return null;

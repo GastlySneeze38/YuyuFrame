@@ -342,6 +342,23 @@ public abstract class Setting {
         @Override public boolean deserialize(String raw) { return true; }
     }
 
+    /**
+     * Bloc de TEXTE — un titre en gras et un paragraphe qui revient à la
+     * ligne. Rien à régler ni à persister : sert à expliquer ce que fait un
+     * module (voir {@code OptimizationModule}).
+     *
+     * <p>{@link #name} = le titre, {@link #description} = le paragraphe.
+     */
+    public static final class Info extends Setting {
+        Info(String id, String title, String text, String cat) {
+            super(id, title, text, cat, null);
+            this.persistent = false;
+        }
+
+        @Override public String serialize() { return null; }
+        @Override public boolean deserialize(String raw) { return true; }
+    }
+
     public static final class Opaque extends Setting {
         public final Supplier<String> get;
         public final Consumer<String> set;
