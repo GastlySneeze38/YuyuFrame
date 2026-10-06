@@ -7,6 +7,7 @@ import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.ChunkNibbleArray;
 import net.minecraft.world.chunk.ChunkSection;
 
+import java.lang.foreign.MemorySegment;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -62,7 +63,18 @@ public final class SectionSnapshot {
         this.heights = heights;
         this.biomes = biomes;
         this.blockEntities = blockEntities;
+        this.blocksSegment = blocks == null ? MemorySegment.NULL : MemorySegment.ofArray(blocks);
+        this.blockLightSegment = blockLight == null ? MemorySegment.NULL : MemorySegment.ofArray(blockLight);
+        this.skyLightSegment = skyLight == null ? MemorySegment.NULL : MemorySegment.ofArray(skyLight);
+        this.heightsSegment = heights == null ? MemorySegment.NULL : MemorySegment.ofArray(heights);
     }
+
+    // Les mêmes tableaux, sous la forme que prend un appel au noyau natif
+    // (aucune copie : il lit les tableaux eux-mêmes). NULL pour un tableau absent.
+    public final MemorySegment blocksSegment;
+    public final MemorySegment blockLightSegment;
+    public final MemorySegment skyLightSegment;
+    public final MemorySegment heightsSegment;
 
     /** À appeler sur le fil du jeu. Un chunk non chargé donne une section vide. */
     public static SectionSnapshot capture(World world, int sectionX, int sectionY, int sectionZ) {

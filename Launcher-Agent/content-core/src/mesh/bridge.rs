@@ -5,12 +5,22 @@
 use std::cell::RefCell;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
+use super::emit::{emit_quads, Command, MAX_BUCKETS};
+use super::light::{LightReader, SectionData, Workspace as LightWorkspace, WORKSPACE_BYTES};
 use super::shape::{Workspace, BLOCKS, STATES};
 
 /// Version du contrat. À incrémenter dès qu'une fonction change de signature
 /// ou de sens : Java refuse une DLL qui n'annonce pas la version qu'il attend
 /// (`NativeMesh.ABI_VERSION`), au lieu de l'appeler de travers.
-const ABI_VERSION: u32 = 1;
+///
+/// 2 : écriture des quads (`yf_mesh_workspace_bytes`, `yf_mesh_begin`,
+/// `yf_mesh_load_section`, `yf_mesh_emit_quads`).
+const ABI_VERSION: u32 = 2;
+
+/// Réponse de `yf_mesh_emit_quads` : tout est écrit.
+const EMIT_OK: i32 = 0;
+/// Réponse de `yf_mesh_emit_quads` : erreur interne ou arguments invalides, les tampons ne sont pas à lire.
+const EMIT_FAILED: i32 = -2;
 
 /// Cases de `out` avant les boîtes : visibilité (deux moitiés), volume à dessiner.
 const HEADER: usize = 3;
@@ -79,6 +89,124 @@ pub unsafe extern "C" fn yf_mesh_section_shape(blocks: *const u16, flags: *const
         })
     }));
     result.unwrap_or(SHAPE_FAILED)
+}
+
+// ── Écriture des quads ───────────────────────────────────────────────────────
+//
+// Une section se maille en trois temps, depuis un même fil :
+// `yf_mesh_begin`, puis `yf_mesh_load_section` pour chacune des 27 sections
+// copiées, puis `yf_mesh_emit_quads`. Le noyau ne garde rien d'un appel à
+// l'autre : tout tient dans l'espace de travail, alloué par Java.
+
+/// Taille, en octets, de l'espace de travail que Java alloue par fil de
+/// construction (mémoire à zéro, alignée sur 8) et tend aux appels suivants.
+#[no_mangle]
+pub extern "C" fn yf_mesh_workspace_bytes() -> i32 {
+    WORKSPACE_BYTES as i32
+}
+
+/// Commence une section : `base_*` est son coin en blocs du monde,
+/// `has_sky_light` vaut 0 dans une dimension sans ciel.
+///
+/// # Safety
+/// `workspace` doit pointer sur `yf_mesh_workspace_bytes()` octets inscriptibles, alignés sur 8.
+#[no_mangle]
+pub unsafe extern "C" fn yf_mesh_begin(workspace: *mut u8, base_x: i32, base_y: i32, base_z: i32, has_sky_light: i32) {
+    if workspace.is_null() {
+        return;
+    }
+    (*(workspace as *mut LightWorkspace)).begin(base_x, base_y, base_z, has_sky_light != 0);
+}
+
+/// Tend une des 27 sections copiées. `slot` : son rang dans le tableau de
+/// `ChunkRenderContext` (`dx + 3 * (dz + 3 * dy)`, 13 = la section à mailler).
+///
+/// Les quatre tableaux sont ceux de `SectionSnapshot`, tels quels, et peuvent
+/// être nuls : `blocks` (4 096 états) nul = section vide, dont `heights` (256
+/// hauteurs de colonnes) dit alors où commence le ciel ; `block_light` et
+/// `sky_light` (2 048 octets, 4 bits par bloc).
+///
+/// # Safety
+/// Chaque pointeur non nul doit pointer sur un tableau lisible de la taille dite.
+#[no_mangle]
+pub unsafe extern "C" fn yf_mesh_load_section(
+    workspace: *mut u8,
+    slot: i32,
+    blocks: *const u16,
+    block_light: *const u8,
+    sky_light: *const u8,
+    heights: *const i32,
+) {
+    if workspace.is_null() || !(0..27).contains(&slot) {
+        return;
+    }
+    let data = SectionData {
+        blocks: (blocks as *const [u16; 4096]).as_ref(),
+        block_light: (block_light as *const [u8; 2048]).as_ref(),
+        sky_light: (sky_light as *const [u8; 2048]).as_ref(),
+        heights: (heights as *const [i32; 256]).as_ref(),
+    };
+    let slot = slot as usize;
+    (*(workspace as *mut LightWorkspace)).load_section(slot % 3, slot / 9, (slot / 3) % 3, &data);
+}
+
+/// Calcule la lumière des quads commandés et écrit leurs sommets.
+///
+/// - `props` : 65 536 mots, un par état de bloc (`PROP_*` dans light.rs) ;
+/// - `commands` : `command_count` commandes de quatre mots (`Command` dans emit.rs) ;
+/// - `dests` : `bucket_count` adresses, une par tampon de destination. Chaque
+///   tampon doit avoir la place pour les quads qui lui reviennent : 4 sommets
+///   de 32 octets par quad, écrits à la suite depuis l'adresse donnée ;
+/// - `section_index` : recopié dans chaque sommet.
+///
+/// Rend 0, ou −2 en cas d'erreur (les tampons ne sont alors pas à lire).
+///
+/// Ne prend aucun verrou et ne rappelle jamais Java (option `critical` de FFM).
+///
+/// # Safety
+/// Les tableaux doivent avoir les tailles dites, chaque commande porter
+/// l'adresse d'un quad valide, et `workspace` avoir été préparé par
+/// `yf_mesh_begin` et `yf_mesh_load_section`.
+#[no_mangle]
+pub unsafe extern "C" fn yf_mesh_emit_quads(
+    workspace: *mut u8,
+    props: *const u32,
+    commands: *const u32,
+    command_count: i32,
+    dests: *const i64,
+    bucket_count: i32,
+    section_index: i32,
+) -> i32 {
+    if workspace.is_null() || props.is_null() || commands.is_null() || dests.is_null() {
+        return EMIT_FAILED;
+    }
+    if command_count < 0 || bucket_count < 0 || bucket_count as usize > MAX_BUCKETS {
+        return EMIT_FAILED;
+    }
+    let props = &*(props as *const [u32; super::light::STATES]);
+    let commands = std::slice::from_raw_parts(commands as *const Command, command_count as usize);
+    let bucket_count = bucket_count as usize;
+
+    let mut cursors = [std::ptr::null_mut::<u8>(); MAX_BUCKETS];
+    for (bucket, cursor) in cursors.iter_mut().enumerate().take(bucket_count) {
+        *cursor = dests.add(bucket).read_unaligned() as usize as *mut u8;
+    }
+    // Une commande qui vise un tampon absent écrirait n'importe où.
+    let valid = commands.iter().all(|command| {
+        let bucket = ((command.packed >> super::emit::CMD_BUCKET_SHIFT) & super::emit::CMD_BUCKET_MASK) as usize;
+        bucket < bucket_count && !cursors[bucket].is_null()
+    });
+    if !valid {
+        return EMIT_FAILED;
+    }
+
+    let workspace = &mut *(workspace as *mut LightWorkspace);
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        let mut light = LightReader::new(workspace, props);
+        emit_quads(&mut light, commands, &mut cursors[..bucket_count], section_index as u32);
+        EMIT_OK
+    }));
+    result.unwrap_or(EMIT_FAILED)
 }
 
 #[cfg(test)]

@@ -5,6 +5,7 @@ import com.yuyuframe.launcheragent.celeritas.model.quad.BakedQuadView;
 import com.yuyuframe.launcheragent.celeritas.model.quad.properties.ModelQuadFacing;
 import com.yuyuframe.launcheragent.celeritas.model.quad.properties.ModelQuadFlags;
 import com.yuyuframe.launcheragent.celeritas.util.ModelQuadUtil;
+import com.yuyuframe.launcheragent.celeritas.v1_8_9.nativecore.QuadStore;
 
 /**
  * Un quad de modèle de bloc, décodé une fois pour toutes dans la forme que
@@ -59,6 +60,26 @@ public final class CachedQuad implements BakedQuadView {
         this.computedNormal = ModelQuadUtil.calculateNormal(this);
         this.normalFace = ModelQuadUtil.findNormalFace(this.computedNormal);
         this.flags = ModelQuadFlags.getQuadFlags(this, lightFace);
+        this.nativeAddress = QuadStore.store(this.nativeRecord());
+    }
+
+    /** L'adresse de la copie native du quad, lue par le noyau de maillage ({@link QuadStore}). */
+    public final long nativeAddress;
+
+    private int[] nativeRecord() {
+        int[] words = new int[QuadStore.RECORD_WORDS];
+        for (int i = 0; i < 4; i++) {
+            words[i] = Float.floatToRawIntBits(this.x[i]);
+            words[4 + i] = Float.floatToRawIntBits(this.y[i]);
+            words[8 + i] = Float.floatToRawIntBits(this.z[i]);
+            words[12 + i] = Float.floatToRawIntBits(this.u[i]);
+            words[16 + i] = Float.floatToRawIntBits(this.v[i]);
+            words[20 + i] = this.color[i];
+        }
+        words[QuadStore.WORD_FLAGS] = this.flags;
+        words[QuadStore.WORD_FACES] = this.lightFace.ordinal() | this.normalFace.ordinal() << 8;
+        words[QuadStore.WORD_NORMAL] = this.computedNormal;
+        return words;
     }
 
     @Override
@@ -142,6 +163,7 @@ public final class CachedQuad implements BakedQuadView {
     @Override
     public void addFlags(int extra) {
         this.flags |= extra;
+        QuadStore.setWord(this.nativeAddress, QuadStore.WORD_FLAGS, this.flags);
     }
 
     @Override

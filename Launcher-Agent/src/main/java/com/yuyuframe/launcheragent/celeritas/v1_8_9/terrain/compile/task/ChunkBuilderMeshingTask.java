@@ -40,6 +40,13 @@ import com.yuyuframe.launcheragent.celeritas.raster.PackedBox;
 import com.yuyuframe.launcheragent.celeritas.v1_8_9.debug.MeshStats;
 import com.yuyuframe.launcheragent.celeritas.v1_8_9.nativecore.NativeMesh;
 import com.yuyuframe.launcheragent.celeritas.v1_8_9.world.BlockFlags189;
+import com.yuyuframe.launcheragent.celeritas.v1_8_9.world.SectionSnapshot;
+import com.yuyuframe.launcheragent.celeritas.v1_8_9.terrain.compile.pipeline.BlockRenderer189;
+import com.yuyuframe.launcheragent.celeritas.v1_8_9.terrain.compile.pipeline.QuadCommands;
+import com.yuyuframe.launcheragent.celeritas.chunk.vertex.builder.ChunkMeshBufferBuilder;
+
+import java.lang.foreign.MemorySegment;
+import java.lang.foreign.ValueLayout;
 
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -89,11 +96,10 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
         long taskStart = System.nanoTime();
         PrimitiveBuiltRenderSectionData renderData = new PrimitiveBuiltRenderSectionData();
         // La forme de la section (visibilité, boîtes occultantes) se calcule dans le
-        // noyau natif, à partir des seuls identifiants de blocs. Sans lui — ou le
-        // temps du contrôle, voir MeshStats — c'est le Java qui la relève bloc par bloc.
+        // noyau natif, à partir des seuls identifiants de blocs. Sans lui, c'est le
+        // Java qui la relève bloc par bloc.
         boolean nativeShape = NativeMesh.available();
-        boolean probe = nativeShape && MeshStats.takeProbe();
-        boolean javaShape = !nativeShape || probe;
+        boolean javaShape = !nativeShape;
         ChunkOcclusionDataBuilder occluder = new ChunkOcclusionDataBuilder();
         // Pour le culling par rastérisation : quels blocs bouchent la vue, et
         // dans quel volume de la section il y a quelque chose à dessiner.
@@ -114,6 +120,17 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
         slice.init(this.renderContext);
         buildContext.lightCache.reset(minX, minY, minZ);
         buildContext.blockRenderer.reset();
+
+        // Les quads des blocs à modèle : le Java décide lesquels se dessinent, le
+        // noyau natif calcule leur lumière et écrit leurs sommets, en un appel à la
+        // fin de la section. Le temps du contrôle (MeshStats), le Java les écrit
+        // aussi, dans les vrais tampons, et le noyau à côté pour comparer.
+        BlockRenderer189 blockRenderer = buildContext.blockRenderer;
+        QuadCommands commands = buildContext.quadCommands;
+        commands.reset();
+        boolean nativeQuads = NativeMesh.quadsAvailable() && this.prepareNativeQuads(buildContext, minX, minY, minZ);
+        boolean probe = nativeQuads && MeshStats.takeProbe();
+        boolean vanillaFallback = false;
 
         BufferBuilder tesselator = buildContext.tesselator;
         BlockPos.Mutable blockPos = new BlockPos.Mutable(minX, minY, minZ);
@@ -153,15 +170,28 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
 
                         int type = block.getBlockType();
                         if (type == TYPE_MODEL) {
+                            int mark = commands.count();
                             try {
-                                buildContext.blockRenderer.render(blockState, blockPos, buffers);
+                                if (!nativeQuads) {
+                                    blockRenderer.render(blockState, blockPos, buffers);
+                                } else if (probe) {
+                                    blockRenderer.emit(blockState, blockPos, buffers, commands);
+                                    blockRenderer.render(blockState, blockPos, buffers);
+                                } else if (!blockRenderer.emit(blockState, blockPos, buffers, commands)) {
+                                    // Passe triée (verre, glace) : ses quads restent au Java.
+                                    blockRenderer.render(blockState, blockPos, buffers);
+                                }
                             } catch (Throwable failure) {
+                                commands.truncate(mark);
+                                vanillaFallback = true;
                                 warnFallback(block, "notre rendu a levé une exception", failure);
                                 this.renderWithVanilla(vanillaRenderer, blockState, blockPos, slice, tesselator, buildContext, buffers, block);
                             }
                         } else if (type == TYPE_FLUID) {
+                            vanillaFallback = true;
                             this.renderWithVanilla(vanillaRenderer, blockState, blockPos, slice, tesselator, buildContext, buffers, block);
                         } else if (type != TYPE_INVISIBLE && type != TYPE_BLOCK_ENTITY_ONLY) {
+                            vanillaFallback = true;
                             warnFallback(block, "type de rendu inconnu : " + type, null);
                             this.renderWithVanilla(vanillaRenderer, blockState, blockPos, slice, tesselator, buildContext, buffers, block);
                         }
@@ -182,6 +212,22 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
             slice.release();
         }
 
+        if (nativeQuads && commands.count() > 0) {
+            if (probe) {
+                if (vanillaFallback) {
+                    // Un repli a écrit dans les mêmes tampons : ils ne se comparent plus un à un.
+                    MeshStats.probeSkipped();
+                } else {
+                    this.probeNativeQuads(buildContext, commands);
+                }
+            } else if (!this.writeNativeQuads(buildContext, commands)) {
+                // Le noyau a échoué : il est mis hors service, et la section est refaite par le Java.
+                NativeMesh.disableQuads();
+                LauncherLog.err("[RENDERER] le noyau natif a échoué sur l'écriture des quads — le rendu Java reprend pour toute la session");
+                return this.execute(context, cancellationToken);
+            }
+        }
+
         Reference2ReferenceMap<TerrainRenderPass, BuiltSectionMeshParts> meshes = BuiltSectionMeshParts.groupFromBuildBuffers(buffers, (float) (camera.x - minX), (float) (camera.y - minY), (float) (camera.z - minZ));
 
         if (!meshes.isEmpty()) {
@@ -194,15 +240,6 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
             // La section du milieu des 27 copies : celle que l'on maille.
             this.applyNativeShape(this.renderContext.sections()[13].blocks, renderData);
             shapeNanos = System.nanoTime() - shapeStart;
-            if (probe) {
-                long nativeVisibility = renderData.visibilityData;
-                int[] nativeData = renderData.occluderBoxes;
-                long javaStart = System.nanoTime();
-                encodeVisibilityData(occluder, renderData);
-                int[] javaData = rasterShape.computeOccluderBoxes();
-                MeshStats.probe(System.nanoTime() - javaStart, shapeNanos, renderData.visibilityData, nativeVisibility, javaData, nativeData);
-                renderData.visibilityData = nativeVisibility;
-            }
         } else {
             encodeVisibilityData(occluder, renderData);
             renderData.occluderBoxes = rasterShape.computeOccluderBoxes();
@@ -211,6 +248,101 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
         MeshStats.section(System.nanoTime() - taskStart, shapeNanos);
 
         return new ChunkBuildOutput(this.render, renderData, meshes, this.buildTime);
+    }
+
+    /**
+     * Tend au noyau les 27 sections copiées. Faux si l'appel échoue : le noyau
+     * est alors mis hors service et le Java garde la section.
+     */
+    private boolean prepareNativeQuads(PrimitiveChunkBuildContext buildContext, int minX, int minY, int minZ) {
+        MemorySegment workspace = buildContext.nativeWorkspace;
+        if (workspace == null) {
+            return false;
+        }
+        try {
+            NativeMesh.begin(workspace, minX, minY, minZ, buildContext.slice.skyLit());
+            SectionSnapshot[] sections = this.renderContext.sections();
+            for (int slot = 0; slot < sections.length; slot++) {
+                SectionSnapshot section = sections[slot];
+                if (section != null) {
+                    NativeMesh.loadSection(workspace, slot, section.blocksSegment, section.blockLightSegment,
+                        section.skyLightSegment, section.heightsSegment);
+                }
+            }
+            return true;
+        } catch (Throwable failure) {
+            NativeMesh.disableQuads();
+            LauncherLog.err("[RENDERER] le noyau natif a échoué à la préparation d'une section — le rendu Java reprend pour toute la session", failure);
+            return false;
+        }
+    }
+
+    /** Réserve la place des quads dans les tampons de la section et les fait écrire par le noyau. */
+    private boolean writeNativeQuads(PrimitiveChunkBuildContext buildContext, QuadCommands commands) {
+        int buckets = commands.bucketCount();
+        int[] quads = commands.countBuckets();
+        long[] destinations = commands.destinations();
+        for (int bucket = 0; bucket < buckets; bucket++) {
+            destinations[bucket] = quads[bucket] == 0 ? 0L : commands.vertexBuffer(bucket).reserve(quads[bucket] * 4);
+        }
+        try {
+            return NativeMesh.emitQuads(buildContext.nativeWorkspace, BlockFlags189.properties(), commands.words(),
+                commands.count(), destinations, buckets, this.render.getSectionIndex());
+        } catch (Throwable failure) {
+            LauncherLog.err("[RENDERER] exception à l'appel du noyau natif", failure);
+            return false;
+        }
+    }
+
+    /**
+     * Le contrôle : le Java a écrit les quads dans les tampons de la section ;
+     * le noyau écrit les mêmes à côté, et les deux doivent être identiques à
+     * l'octet près.
+     */
+    private void probeNativeQuads(PrimitiveChunkBuildContext buildContext, QuadCommands commands) {
+        int buckets = commands.bucketCount();
+        int[] quads = commands.countBuckets();
+        long quadBytes = 4L * NativeMesh.VERTEX_BYTES;
+        MemorySegment scratch = buildContext.probeScratch(commands.count() * quadBytes);
+        long[] destinations = commands.destinations();
+        long offset = 0;
+        for (int bucket = 0; bucket < buckets; bucket++) {
+            destinations[bucket] = quads[bucket] == 0 ? 0L : scratch.address() + offset;
+            offset += quads[bucket] * quadBytes;
+        }
+
+        String difference = null;
+        try {
+            if (!NativeMesh.emitQuads(buildContext.nativeWorkspace, BlockFlags189.properties(), commands.words(),
+                commands.count(), destinations, buckets, this.render.getSectionIndex())) {
+                difference = "le noyau a rendu une erreur";
+            }
+        } catch (Throwable failure) {
+            difference = "exception à l'appel : " + failure;
+        }
+
+        offset = 0;
+        for (int bucket = 0; bucket < buckets && difference == null; bucket++) {
+            ChunkMeshBufferBuilder javaBuffer = commands.vertexBuffer(bucket);
+            long bytes = quads[bucket] * quadBytes;
+            if (javaBuffer.count() != quads[bucket] * 4) {
+                difference = "tampon " + bucket + " : " + javaBuffer.count() + " sommets en Java, " + quads[bucket] * 4 + " commandés";
+            } else if (bytes > 0) {
+                MemorySegment javaBytes = MemorySegment.ofBuffer(javaBuffer.slice());
+                MemorySegment nativeBytes = scratch.asSlice(offset, bytes);
+                long at = javaBytes.mismatch(nativeBytes);
+                if (at >= 0) {
+                    long word = at / 4;
+                    difference = "tampon " + bucket + ", quad " + word / 32 + ", sommet " + word / 8 % 4
+                        + ", mot " + word % 8 + " : Java "
+                        + Integer.toHexString(javaBytes.get(ValueLayout.JAVA_INT_UNALIGNED, word * 4))
+                        + ", natif " + Integer.toHexString(nativeBytes.get(ValueLayout.JAVA_INT_UNALIGNED, word * 4))
+                        + " (section " + this.render.getOriginX() + " " + this.render.getOriginY() + " " + this.render.getOriginZ() + ")";
+                }
+            }
+            offset += bytes;
+        }
+        MeshStats.probe(commands.count(), difference);
     }
 
     private static final AtomicBoolean NATIVE_FAILURE_WARNED = new AtomicBoolean();

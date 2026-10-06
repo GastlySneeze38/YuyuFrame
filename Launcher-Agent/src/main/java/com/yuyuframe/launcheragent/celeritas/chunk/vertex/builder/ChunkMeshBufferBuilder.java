@@ -59,6 +59,29 @@ public class ChunkMeshBufferBuilder {
         this.count += vertices.length;
     }
 
+    /**
+     * YuyuFrame : réserve la place de {@code vertexCount} sommets à la suite de
+     * ceux déjà écrits et rend l'adresse où les écrire. C'est le noyau natif du
+     * maillage qui les écrit, au format de l'encodeur. Pas pour une passe triée :
+     * ses quads doivent passer par {@link #push}, qui les relève pour le tri.
+     */
+    public long reserve(int vertexCount) {
+        if (this.analyzer != null) {
+            throw new IllegalStateException("Sorted passes must go through push()");
+        }
+
+        var vertexStart = this.count * this.stride;
+        var vertexSize = vertexCount * this.stride;
+
+        if (vertexStart + vertexSize >= this.capacity) {
+            this.grow(vertexSize);
+        }
+
+        this.count += vertexCount;
+
+        return LWJGL.memAddress(this.buffer, vertexStart);
+    }
+
     private static void postprocessVertices(ChunkVertexEncoder.Vertex[] vertices) {
         if (vertices.length != 4) {
             for (var vertex : vertices) {

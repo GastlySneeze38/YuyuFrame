@@ -55,6 +55,11 @@ public final class WorldSlice189 implements BlockView {
         this.baseZ = (context.origin().z() - 1) << 4;
     }
 
+    /** Vrai si la dimension a une lumière du ciel. Nom à nous, exprès : pas celui d'une méthode du jeu. */
+    public boolean skyLit() {
+        return this.hasSkyLight;
+    }
+
     /** Lâche les copies : la tâche est finie, elles n'ont pas à vivre jusqu'à la suivante. */
     public void release() {
         this.sections = null;

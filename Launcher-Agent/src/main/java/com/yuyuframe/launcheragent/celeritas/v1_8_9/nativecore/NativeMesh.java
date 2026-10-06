@@ -29,7 +29,7 @@ import java.nio.file.Path;
 public final class NativeMesh {
 
     /** Même valeur que {@code ABI_VERSION} dans mesh/bridge.rs. */
-    private static final int ABI_VERSION = 1;
+    private static final int ABI_VERSION = 2;
 
     /** {@code -Dyuyuframe.renderer.nativeMesh=false} garde le calcul Java (pour comparer). */
     private static final String PROPERTY = "yuyuframe.renderer.nativeMesh";
@@ -44,13 +44,31 @@ public final class NativeMesh {
     /** Le noyau a échoué : la sortie n'est pas à lire. */
     public static final int SHAPE_FAILED = -2;
 
+    // Remplis par load() ; tous nuls si le noyau n'est pas disponible.
+    private static MethodHandle begin;
+    private static MethodHandle loadSection;
+    private static MethodHandle emitQuads;
+    private static int workspaceBytes;
+
     private static final MethodHandle SECTION_SHAPE = load();
+
+    /** Passe à vrai si le noyau échoue une fois sur l'écriture des quads : le Java reprend pour de bon. */
+    private static volatile boolean quadsBroken;
 
     private NativeMesh() {
     }
 
     public static boolean available() {
         return SECTION_SHAPE != null;
+    }
+
+    /** Vrai si le noyau écrit les quads (lumière et sommets) à la place du Java. */
+    public static boolean quadsAvailable() {
+        return SECTION_SHAPE != null && !quadsBroken;
+    }
+
+    public static void disableQuads() {
+        quadsBroken = true;
     }
 
     private static MethodHandle load() {
@@ -87,6 +105,24 @@ public final class NativeMesh {
                 FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS,
                     ValueLayout.ADDRESS, ValueLayout.JAVA_INT),
                 Linker.Option.critical(true));
+
+            MethodHandle size = linker.downcallHandle(lib.find("yf_mesh_workspace_bytes").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT));
+            workspaceBytes = (int) size.invokeExact();
+            begin = linker.downcallHandle(lib.find("yf_mesh_begin").orElseThrow(),
+                FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT,
+                    ValueLayout.JAVA_INT, ValueLayout.JAVA_INT),
+                Linker.Option.critical(false));
+            loadSection = linker.downcallHandle(lib.find("yf_mesh_load_section").orElseThrow(),
+                FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS,
+                    ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS),
+                Linker.Option.critical(true));
+            emitQuads = linker.downcallHandle(lib.find("yf_mesh_emit_quads").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS,
+                    ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT,
+                    ValueLayout.JAVA_INT),
+                Linker.Option.critical(true));
+
             LauncherLog.renderer(2, "Noyau natif du maillage chargé");
             return shape;
         } catch (Throwable error) {
@@ -111,6 +147,50 @@ public final class NativeMesh {
         } catch (Throwable error) {
             return SHAPE_FAILED;
         }
+    }
+
+    // ── Écriture des quads ───────────────────────────────────────────────────
+    //
+    // Une section : begin, puis loadSection pour chacune des 27 copies, puis
+    // emitQuads. Tout depuis le même fil, avec son propre espace de travail.
+
+    /** Octets d'un sommet écrit par le noyau : le format {@code VanillaLikeChunkVertex}. */
+    public static final int VERTEX_BYTES = 32;
+    /** Tampons de destination au plus par appel. */
+    public static final int MAX_BUCKETS = 32;
+
+    /** La mémoire de travail d'un fil de construction ; rendue au système quand plus rien ne la tient. */
+    public static MemorySegment allocateWorkspace() {
+        return Arena.ofAuto().allocate(workspaceBytes, 8);
+    }
+
+    /** Commence une section, dont ({@code baseX}, {@code baseY}, {@code baseZ}) est le coin en blocs du monde. */
+    public static void begin(MemorySegment workspace, int baseX, int baseY, int baseZ, boolean hasSkyLight) throws Throwable {
+        begin.invokeExact(workspace, baseX, baseY, baseZ, hasSkyLight ? 1 : 0);
+    }
+
+    /**
+     * Tend une des 27 sections copiées, par son rang dans {@code ChunkRenderContext.sections()}.
+     * Les quatre tableaux sont ceux de {@code SectionSnapshot} ; un tableau absent se passe en {@link MemorySegment#NULL}.
+     */
+    public static void loadSection(MemorySegment workspace, int slot, MemorySegment blocks, MemorySegment blockLight,
+                                   MemorySegment skyLight, MemorySegment heights) throws Throwable {
+        loadSection.invokeExact(workspace, slot, blocks, blockLight, skyLight, heights);
+    }
+
+    /**
+     * Calcule la lumière des quads commandés et écrit leurs sommets dans les tampons de destination.
+     *
+     * @param properties   {@code BlockFlags189.properties()}
+     * @param commands     quatre entiers par quad — voir {@code Command} dans mesh/emit.rs
+     * @param destinations une adresse par tampon, 0 pour un tampon sans quad
+     * @return vrai si tout est écrit
+     */
+    public static boolean emitQuads(MemorySegment workspace, MemorySegment properties, int[] commands, int commandCount,
+                                    long[] destinations, int bucketCount, int sectionIndex) throws Throwable {
+        int result = (int) emitQuads.invokeExact(workspace, properties, MemorySegment.ofArray(commands), commandCount,
+            MemorySegment.ofArray(destinations), bucketCount, sectionIndex);
+        return result == 0;
     }
 
     /** La visibilité écrite par {@link #sectionShape}, au format {@code VisibilityEncoding}. */

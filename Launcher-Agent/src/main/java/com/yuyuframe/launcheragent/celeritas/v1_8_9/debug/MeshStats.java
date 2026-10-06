@@ -16,10 +16,11 @@ import java.util.concurrent.atomic.LongAdder;
  * <ul>
  *   <li>le temps moyen d'une section, et dedans celui du calcul de sa forme —
  *       la référence pour mesurer chaque pièce portée dans le noyau natif ;</li>
- *   <li>un <b>contrôle</b> du noyau natif, provisoire : sur 500 sections, la
- *       forme est calculée des deux façons, comparée et chronométrée. Une
- *       ligne de bilan, puis plus rien. Les 300 premières sections sont
- *       laissées passer : le Java n'y est pas encore compilé à chaud.</li>
+ *   <li>un <b>contrôle</b> du noyau natif, provisoire : sur 500 sections, les
+ *       quads sont écrits des deux façons — par le Java dans les vrais
+ *       tampons, par le noyau à côté — et comparés octet par octet. Une ligne
+ *       de bilan, puis plus rien. Les 300 premières sections sont laissées
+ *       passer.</li>
  * </ul>
  */
 public final class MeshStats {
@@ -32,14 +33,11 @@ public final class MeshStats {
     private static final LongAdder SHAPE_NANOS = new LongAdder();
 
     private static final AtomicInteger PROBE_TICKETS = new AtomicInteger();
-    private static final AtomicInteger PROBE_DONE = new AtomicInteger();
-    private static final LongAdder PROBE_JAVA_NANOS = new LongAdder();
-    private static final LongAdder PROBE_NATIVE_NANOS = new LongAdder();
-    private static final LongAdder PROBE_JAVA_BOXES = new LongAdder();
-    private static final LongAdder PROBE_NATIVE_BOXES = new LongAdder();
-    private static final LongAdder PROBE_VISIBILITY_DIFFS = new LongAdder();
-    private static final LongAdder PROBE_BOUNDS_DIFFS = new LongAdder();
-    private static final AtomicBoolean DIFF_LOGGED = new AtomicBoolean();
+    private static final LongAdder PROBE_SECTIONS = new LongAdder();
+    private static final LongAdder PROBE_QUADS = new LongAdder();
+    private static final LongAdder PROBE_SKIPPED = new LongAdder();
+    private static final LongAdder PROBE_DIFFS = new LongAdder();
+    private static final AtomicInteger DIFFS_LOGGED = new AtomicInteger();
     private static final AtomicBoolean SUMMARY_LOGGED = new AtomicBoolean();
 
     private MeshStats() {
@@ -51,7 +49,7 @@ public final class MeshStats {
         SHAPE_NANOS.add(shapeNanos);
     }
 
-    /** Vrai si cette section fait partie du contrôle : l'appelant calcule alors aussi la forme en Java. */
+    /** Vrai si cette section fait partie du contrôle : l'appelant écrit alors ses quads des deux façons. */
     public static boolean takeProbe() {
         if (PROBE_TICKETS.get() >= PROBE_SKIP + PROBE_COUNT) {
             return false;
@@ -60,47 +58,40 @@ public final class MeshStats {
         return ticket >= PROBE_SKIP && ticket < PROBE_SKIP + PROBE_COUNT;
     }
 
-    public static void probe(long javaNanos, long nativeNanos, long javaVisibility, long nativeVisibility,
-                             int[] javaData, int[] nativeData) {
-        PROBE_JAVA_NANOS.add(javaNanos);
-        PROBE_NATIVE_NANOS.add(nativeNanos);
-        PROBE_JAVA_BOXES.add(javaData == null ? 0 : javaData.length - 1);
-        PROBE_NATIVE_BOXES.add(nativeData == null ? 0 : nativeData.length - 1);
+    /** Une section du contrôle qui n'a pas pu être comparée (un repli vanilla a écrit dans les mêmes tampons). */
+    public static void probeSkipped() {
+        PROBE_SKIPPED.increment();
+    }
 
-        boolean visibilityDiffers = javaVisibility != nativeVisibility;
-        // Le volume à dessiner doit être le même ; les boîtes, elles, peuvent différer à volume égal.
-        boolean boundsDiffer = (javaData == null) != (nativeData == null)
-            || (javaData != null && javaData[0] != nativeData[0]);
-        if (visibilityDiffers) {
-            PROBE_VISIBILITY_DIFFS.increment();
+    /**
+     * Le résultat d'une section du contrôle.
+     *
+     * @param difference {@code null} si le noyau a écrit exactement ce qu'a écrit le Java, sinon où et quoi
+     */
+    public static void probe(int quads, String difference) {
+        PROBE_SECTIONS.increment();
+        PROBE_QUADS.add(quads);
+        if (difference != null) {
+            PROBE_DIFFS.increment();
+            // Les trois premiers écarts en détail : assez pour chercher, sans noyer le log.
+            if (DIFFS_LOGGED.getAndIncrement() < 3) {
+                LauncherLog.err("[RENDERER] contrôle des quads natifs : ÉCART avec le Java — " + difference);
+            }
         }
-        if (boundsDiffer) {
-            PROBE_BOUNDS_DIFFS.increment();
-        }
-        if ((visibilityDiffers || boundsDiffer) && DIFF_LOGGED.compareAndSet(false, true)) {
-            LauncherLog.err("[RENDERER] contrôle du noyau natif : ÉCART avec le Java — visibilité "
-                + Long.toHexString(javaVisibility) + " (Java) / " + Long.toHexString(nativeVisibility) + " (natif), volume "
-                + (javaData == null ? "aucun" : Integer.toHexString(javaData[0])) + " (Java) / "
-                + (nativeData == null ? "aucun" : Integer.toHexString(nativeData[0])) + " (natif)");
-        }
-
-        PROBE_DONE.incrementAndGet();
     }
 
     /** Le bilan du contrôle, une fois : toutes les sections prévues sont passées (une tâche annulée n'en rend pas). */
     private static void logProbeSummary() {
-        int done = PROBE_DONE.get();
-        if (PROBE_TICKETS.get() < PROBE_SKIP + PROBE_COUNT || done == 0 || !SUMMARY_LOGGED.compareAndSet(false, true)) {
+        if (PROBE_TICKETS.get() < PROBE_SKIP + PROBE_COUNT || !SUMMARY_LOGGED.compareAndSet(false, true)) {
             return;
         }
         LauncherLog.renderer(1, String.format(Locale.ROOT,
-            "contrôle du noyau natif sur %d sections : forme Java %.1f µs, natif %.1f µs | écarts de visibilité %d, de volume %d | boîtes Java %d, natif %d",
-            done, PROBE_JAVA_NANOS.sum() / 1000.0 / done, PROBE_NATIVE_NANOS.sum() / 1000.0 / done,
-            PROBE_VISIBILITY_DIFFS.sum(), PROBE_BOUNDS_DIFFS.sum(), PROBE_JAVA_BOXES.sum(), PROBE_NATIVE_BOXES.sum()));
+            "contrôle des quads natifs : %d sections comparées (%d quads), %d avec écart | %d non comparées (repli vanilla)",
+            PROBE_SECTIONS.sum(), PROBE_QUADS.sum(), PROBE_DIFFS.sum(), PROBE_SKIPPED.sum()));
     }
 
     /** Pour la ligne de métriques : les sections maillées depuis l'appel précédent, ou {@code null} s'il n'y en a pas. */
-    public static String drain(boolean nativeShape) {
+    public static String drain(boolean nativeShape, boolean nativeQuads) {
         logProbeSummary();
         long sections = SECTIONS.sumThenReset();
         long taskNanos = TASK_NANOS.sumThenReset();
@@ -108,7 +99,8 @@ public final class MeshStats {
         if (sections == 0) {
             return null;
         }
-        return String.format(Locale.ROOT, "Maillage: %d sections, %.0f µs/section dont forme %.1f µs (%s)",
-            sections, taskNanos / 1000.0 / sections, shapeNanos / 1000.0 / sections, nativeShape ? "natif" : "Java");
+        return String.format(Locale.ROOT, "Maillage: %d sections, %.0f µs/section (quads %s) dont forme %.1f µs (%s)",
+            sections, taskNanos / 1000.0 / sections, nativeQuads ? "natifs" : "Java",
+            shapeNanos / 1000.0 / sections, nativeShape ? "natif" : "Java");
     }
 }

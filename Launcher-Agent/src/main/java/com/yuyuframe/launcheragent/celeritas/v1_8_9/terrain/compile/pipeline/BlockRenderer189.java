@@ -144,9 +144,91 @@ public final class BlockRenderer189 {
         }
     }
 
+    /**
+     * Le même bloc, pour le noyau natif : au lieu de calculer la lumière et
+     * d'écrire les sommets, on range une commande par quad à dessiner. Les
+     * trois questions posées au jeu (modèle, faces cachées, teinte) sont les
+     * mêmes que dans {@link #render}, dans le même ordre.
+     *
+     * @return faux si les quads de ce bloc ne passent pas par le noyau (passe
+     *         triée) : rien n'est rangé, à l'appelant d'appeler {@link #render}
+     */
+    public boolean emit(BlockState state, BlockPos pos, ChunkBuildBuffers buffers, QuadCommands commands) {
+        Block block = state.getBlock();
+        Material material = buffers.getRenderPassConfiguration().getMaterialForRenderType(block.getRenderLayerType());
+        int firstBucket = commands.firstBucket(material, buffers);
+        if (firstBucket < 0) {
+            return false;
+        }
+
+        Vec3i at = pos;
+        int x = at.getX();
+        int y = at.getY();
+        int z = at.getZ();
+
+        BlockQuadCache189.Model model = BlockQuadCache189.of(this.blockRenderManager.getModel(state, this.slice, pos));
+        boolean smooth = MinecraftClient.isAmbientOcclusionEnabled() && block.getLightLevel() == 0 && model.ambientOcclusion;
+
+        block.setBoundingBox(this.slice, pos);
+
+        // Le décalage des herbes et des fleurs se calcule dans le noyau : on ne lui dit que sa sorte.
+        Block.OffsetType offsetType = block.getOffsetType();
+        int offset = offsetType == Block.OffsetType.NONE ? 0 : offsetType == Block.OffsetType.XYZ ? 2 : 1;
+
+        int base = (x & 15) | (y & 15) << 4 | (z & 15) << 8
+            | (smooth ? QuadCommands.SMOOTH : 0)
+            | offset << QuadCommands.OFFSET_SHIFT
+            | (material.bits() & 0xFF) << QuadCommands.MATERIAL_SHIFT;
+
+        this.tintLayer = Integer.MIN_VALUE;
+
+        for (int face = 0; face < 6; face++) {
+            CachedQuad[] quads = model.byFace[face];
+            if (quads.length == 0) {
+                continue;
+            }
+            ModelQuadFacing facing = BlockQuadCache189.FACINGS[face];
+            this.neighbour.setPosition(x + facing.getStepX(), y + facing.getStepY(), z + facing.getStepZ());
+            // Nom Yarn trompeur : vrai = la face doit être dessinée.
+            if (!block.isSideInvisible(this.slice, this.neighbour, BlockQuadCache189.DIRECTIONS[face])) {
+                continue;
+            }
+            int packed = base | facing.ordinal() << QuadCommands.CULL_SHIFT;
+            for (int i = 0; i < quads.length; i++) {
+                CachedQuad quad = quads[i];
+                commands.add(quad.nativeAddress,
+                    packed | (firstBucket + quad.getNormalFace().ordinal()) << QuadCommands.BUCKET_SHIFT,
+                    this.tintOf(quad, block, pos));
+            }
+        }
+
+        CachedQuad[] inner = model.inner;
+        int packed = base | ModelQuadFacing.UNASSIGNED.ordinal() << QuadCommands.CULL_SHIFT;
+        for (int i = 0; i < inner.length; i++) {
+            CachedQuad quad = inner[i];
+            commands.add(quad.nativeAddress,
+                packed | (firstBucket + quad.getNormalFace().ordinal()) << QuadCommands.BUCKET_SHIFT,
+                this.tintOf(quad, block, pos));
+        }
+        return true;
+    }
+
     /** La dernière teinte demandée au bloc, et pour quelle couche : la plupart des quads d'un bloc partagent la leur. */
     private int tintLayer;
     private int tint;
+
+    /** −1 : pas de teinte. Sinon la couleur du bloc ici, en rouge-vert-bleu, rangée comme le moteur l'attend. */
+    private int tintOf(CachedQuad quad, Block block, BlockPos pos) {
+        if (!quad.hasColor()) {
+            return -1;
+        }
+        if (quad.getColorIndex() != this.tintLayer) {
+            int rgb = block.getBlockColor(this.slice, pos, quad.getColorIndex());
+            this.tint = 0xFF000000 | (rgb & 0xFF) << 16 | (rgb & 0xFF00) | (rgb >> 16 & 0xFF);
+            this.tintLayer = quad.getColorIndex();
+        }
+        return this.tint;
+    }
 
     private void renderQuad(CachedQuad quad, Block block, BlockPos pos, int x, int y, int z,
                             float originX, float originY, float originZ,
@@ -155,16 +237,7 @@ public final class BlockRenderer189 {
         QuadLightData light = this.light;
         lighter.calculate(quad, x, y, z, light, cullFace, quad.getLightFace(), quad.hasShade(), false);
 
-        // −1 : pas de teinte. Sinon la couleur du bloc ici, en rouge-vert-bleu, rangée comme le moteur l'attend.
-        int tint = -1;
-        if (quad.hasColor()) {
-            if (quad.getColorIndex() != this.tintLayer) {
-                int rgb = block.getBlockColor(this.slice, pos, quad.getColorIndex());
-                this.tint = 0xFF000000 | (rgb & 0xFF) << 16 | (rgb & 0xFF00) | (rgb >> 16 & 0xFF);
-                this.tintLayer = quad.getColorIndex();
-            }
-            tint = this.tint;
-        }
+        int tint = this.tintOf(quad, block, pos);
 
         ModelQuadOrientation orientation;
         if (face < 0) {

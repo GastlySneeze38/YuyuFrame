@@ -14,6 +14,11 @@ import com.yuyuframe.launcheragent.celeritas.v1_8_9.terrain.compile.light.LightC
 import com.yuyuframe.launcheragent.celeritas.v1_8_9.terrain.compile.pipeline.BlockRenderer189;
 import com.yuyuframe.launcheragent.celeritas.v1_8_9.world.WorldSlice189;
 
+import com.yuyuframe.launcheragent.celeritas.v1_8_9.nativecore.NativeMesh;
+import com.yuyuframe.launcheragent.celeritas.v1_8_9.terrain.compile.pipeline.QuadCommands;
+
+import java.lang.foreign.Arena;
+import java.lang.foreign.MemorySegment;
 import java.nio.IntBuffer;
 
 /**
@@ -42,6 +47,22 @@ public class PrimitiveChunkBuildContext extends ChunkBuildContext {
         this.slice = new WorldSlice189(world);
         this.lightCache = new LightCache189(this.slice);
         this.blockRenderer = new BlockRenderer189(this.slice, this.lightCache);
+        this.nativeWorkspace = NativeMesh.available() ? NativeMesh.allocateWorkspace() : null;
+    }
+
+    /** Les quads de la section en cours que le noyau natif écrira. */
+    public final QuadCommands quadCommands = new QuadCommands();
+    /** La mémoire de travail du noyau natif pour ce fil, ou {@code null} sans noyau. */
+    public final MemorySegment nativeWorkspace;
+
+    private MemorySegment probeScratch;
+
+    /** Pour le contrôle du noyau : de la mémoire où il écrit à côté des vrais tampons. */
+    public MemorySegment probeScratch(long bytes) {
+        if (this.probeScratch == null || this.probeScratch.byteSize() < bytes) {
+            this.probeScratch = Arena.ofAuto().allocate(Math.max(bytes, 256 * 1024), 8);
+        }
+        return this.probeScratch;
     }
 
     private final ChunkVertexEncoder.Vertex[] vertices = ChunkVertexEncoder.Vertex.uninitializedQuad();

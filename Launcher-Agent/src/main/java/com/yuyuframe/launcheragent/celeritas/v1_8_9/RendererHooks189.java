@@ -216,7 +216,8 @@ public final class RendererHooks189 {
         LauncherLog.renderer(1, "métriques : " + Math.round(frames / seconds) + " fps | "
             + renderer.getChunksDebugString() + " | " + String.join(" | ", renderer.getDebugStrings()));
         String mesh = com.yuyuframe.launcheragent.celeritas.v1_8_9.debug.MeshStats.drain(
-            com.yuyuframe.launcheragent.celeritas.v1_8_9.nativecore.NativeMesh.available());
+            com.yuyuframe.launcheragent.celeritas.v1_8_9.nativecore.NativeMesh.available(),
+            com.yuyuframe.launcheragent.celeritas.v1_8_9.nativecore.NativeMesh.quadsAvailable());
         if (mesh != null) {
             LauncherLog.renderer(1, mesh);
         }
