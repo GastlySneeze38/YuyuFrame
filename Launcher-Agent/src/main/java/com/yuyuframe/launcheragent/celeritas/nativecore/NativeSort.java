@@ -1,0 +1,247 @@
+package com.yuyuframe.launcheragent.celeritas.nativecore;
+
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
+import com.yuyuframe.launcheragent.celeritas.chunk.sorting.PartitionTree;
+import com.yuyuframe.launcheragent.celeritas.chunk.sorting.SortState;
+import com.yuyuframe.launcheragent.celeritas.chunk.sorting.TranslucentSorter;
+
+import java.lang.foreign.Arena;
+import java.lang.foreign.FunctionDescriptor;
+import java.lang.foreign.Linker;
+import java.lang.foreign.MemorySegment;
+import java.lang.foreign.SymbolLookup;
+import java.lang.foreign.ValueLayout;
+import java.lang.invoke.MethodHandle;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.Locale;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+
+/**
+ * Le tri du translucide fait par le noyau natif ({@code content_core.dll},
+ * fonctions {@code yf_sort_*}, contrat dans {@code content-core/src/sort/bridge.rs})
+ * — notre code, pas celui de Celeritas. C'est un port de
+ * {@code chunk/sorting} ({@code TranslucentSorter}, {@code PartitionTree}),
+ * qui reste là comme repli et comme référence.
+ *
+ * <p>Le noyau ne garde rien : un arbre de découpe sort « à plat » dans un
+ * tableau d'entiers que {@link PartitionTree} garde et retend à chaque
+ * relecture.
+ *
+ * <p>Tout échec au chargement laisse {@link #available()} à faux : le tri
+ * Java sert alors, avec le même résultat.
+ */
+public final class NativeSort {
+
+    /** Même valeur que {@code ABI_VERSION} dans sort/bridge.rs. */
+    private static final int ABI_VERSION = 1;
+
+    /** {@code -Dyuyuframe.renderer.nativeSort=false} garde le tri Java (pour comparer). */
+    private static final String PROPERTY = "yuyuframe.renderer.nativeSort";
+
+    private static final int HEADER = 6;
+    private static final int KIND_STATIC = 1;
+    private static final int KIND_TREE = 2;
+    private static final int KIND_DYNAMIC = 3;
+
+    private static MethodHandle take;
+    private static MethodHandle treeOrder;
+    private static MethodHandle distanceOrder;
+
+    private static final MethodHandle ANALYZE = load();
+
+    /** L'en-tête d'une analyse, hors du tas Java : l'analyse peut durer, elle n'est pas appelée en « critical ». */
+    private static final ThreadLocal<MemorySegment> HEADER_SEGMENT =
+        ThreadLocal.withInitial(() -> Arena.ofAuto().allocate(ValueLayout.JAVA_INT, HEADER));
+
+    private NativeSort() {
+    }
+
+    public static boolean available() {
+        return ANALYZE != null;
+    }
+
+    private static MethodHandle load() {
+        if (!Boolean.parseBoolean(System.getProperty(PROPERTY, "true"))) {
+            LauncherLog.renderer(2, "Tri natif du translucide désactivé (" + PROPERTY + "=false)");
+            return null;
+        }
+        String appData = System.getenv("APPDATA");
+        if (appData == null) {
+            return null;
+        }
+        Path dll = Path.of(appData, "YuyuFrame", "agent", "content_core.dll");
+        if (!Files.isRegularFile(dll)) {
+            return null;
+        }
+        try {
+            SymbolLookup lib = SymbolLookup.libraryLookup(dll, Arena.global());
+            Linker linker = Linker.nativeLinker();
+
+            MethodHandle abi = linker.downcallHandle(lib.find("yf_sort_abi").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT));
+            int version = (int) abi.invokeExact();
+            if (version != ABI_VERSION) {
+                LauncherLog.warn("[RENDERER] Tri natif du translucide indisponible : content_core.dll annonce la version "
+                    + version + " du contrat, " + ABI_VERSION + " attendue — tri Java gardé");
+                return null;
+            }
+
+            // Pas « critical » : sur une grosse section, l'analyse peut prendre des
+            // millisecondes, et un appel critical retient le ramasse-miettes tout ce temps.
+            MethodHandle analyze = linker.downcallHandle(lib.find("yf_sort_analyze").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT,
+                    ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+            // Les trois autres sont courts et lisent ou écrivent des tableaux Java.
+            take = linker.downcallHandle(lib.find("yf_sort_take").orElseThrow(),
+                FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS),
+                Linker.Option.critical(true));
+            treeOrder = linker.downcallHandle(lib.find("yf_sort_tree_order").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT,
+                    ValueLayout.JAVA_FLOAT, ValueLayout.JAVA_FLOAT, ValueLayout.JAVA_FLOAT,
+                    ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT),
+                Linker.Option.critical(true));
+            distanceOrder = linker.downcallHandle(lib.find("yf_sort_distance_order").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT,
+                    ValueLayout.JAVA_FLOAT, ValueLayout.JAVA_FLOAT, ValueLayout.JAVA_FLOAT,
+                    ValueLayout.ADDRESS, ValueLayout.JAVA_INT),
+                Linker.Option.critical(true));
+
+            LauncherLog.renderer(2, "Tri natif du translucide chargé");
+            return analyze;
+        } catch (Throwable error) {
+            LauncherLog.err("[RENDERER] Tri natif du translucide indisponible — tri Java gardé", error);
+            return null;
+        }
+    }
+
+    /**
+     * Analyse les quads translucides d'une section et choisit leur tri.
+     *
+     * @param vertices  l'adresse des sommets, quatre par quad, la position en trois flottants au début de chacun
+     * @param stride    octets d'un sommet au suivant
+     * @return l'état de tri, ou {@code null} si le noyau a échoué (à l'appelant de trier en Java)
+     */
+    public static SortState analyze(long vertices, int quadCount, int stride) {
+        try {
+            MemorySegment header = HEADER_SEGMENT.get();
+            int kind = (int) ANALYZE.invokeExact(MemorySegment.ofAddress(vertices), quadCount, stride, header);
+            if (kind < 0) {
+                return null;
+            }
+            int[] ints = new int[header.getAtIndex(ValueLayout.JAVA_INT, 1)];
+            float[] floats = new float[header.getAtIndex(ValueLayout.JAVA_INT, 2)];
+            take.invokeExact(ints.length == 0 ? MemorySegment.NULL : MemorySegment.ofArray(ints),
+                floats.length == 0 ? MemorySegment.NULL : MemorySegment.ofArray(floats));
+
+            switch (kind) {
+                case KIND_STATIC:
+                    return new SortState.Static(ints);
+                case KIND_TREE:
+                    float[][] cutPlanes = new float[3][];
+                    int from = 0;
+                    for (int axis = 0; axis < 3; axis++) {
+                        int count = header.getAtIndex(ValueLayout.JAVA_INT, 3 + axis);
+                        cutPlanes[axis] = Arrays.copyOfRange(floats, from, from + count);
+                        from += count;
+                    }
+                    return PartitionTree.fromNative(ints, quadCount, cutPlanes);
+                case KIND_DYNAMIC:
+                    return new SortState.Dynamic(floats);
+                default:
+                    return SortState.NONE;
+            }
+        } catch (Throwable error) {
+            LauncherLog.err("[RENDERER] exception à l'analyse native du translucide", error);
+            return null;
+        }
+    }
+
+    /**
+     * Relit un arbre pour une position de caméra et écrit l'ordre de dessin à l'adresse donnée.
+     *
+     * @param elements 6 = deux triangles par quad, 4 = le quad tel quel
+     * @return vrai si exactement {@code quadCount} quads ont été écrits
+     */
+    public static boolean treeOrder(int[] tree, float camX, float camY, float camZ, long out, int quadCount, int elements) {
+        try {
+            return (int) treeOrder.invokeExact(MemorySegment.ofArray(tree), tree.length, camX, camY, camZ,
+                MemorySegment.ofAddress(out), quadCount, elements) == quadCount;
+        } catch (Throwable error) {
+            return false;
+        }
+    }
+
+    /** Comme {@link #treeOrder(int[], float, float, float, long, int, int)}, mais rend les numéros des quads. */
+    public static int[] treeOrder(int[] tree, float camX, float camY, float camZ, int quadCount) {
+        int[] order = new int[quadCount];
+        try {
+            int written = (int) treeOrder.invokeExact(MemorySegment.ofArray(tree), tree.length, camX, camY, camZ,
+                MemorySegment.ofArray(order), quadCount, 1);
+            return written == quadCount ? order : null;
+        } catch (Throwable error) {
+            return null;
+        }
+    }
+
+    /** Trie des quads par distance à la caméra, le plus loin d'abord, et écrit l'ordre de dessin à l'adresse donnée. */
+    public static boolean distanceOrder(float[] centers, float camX, float camY, float camZ, long out, int elements) {
+        try {
+            return (int) distanceOrder.invokeExact(MemorySegment.ofArray(centers), centers.length / 3, camX, camY, camZ,
+                MemorySegment.ofAddress(out), elements) == 0;
+        } catch (Throwable error) {
+            return false;
+        }
+    }
+
+    // ── Contrôle provisoire ──────────────────────────────────────────────────
+    //
+    // Sur les premières sections qui ont du translucide, le tri est fait des
+    // deux façons et comparé : même genre de tri, et même ordre de dessin
+    // depuis deux positions de caméra. Une ligne de bilan, puis plus rien.
+
+    private static final int PROBE_COUNT = 300;
+    private static final AtomicInteger PROBE_DONE = new AtomicInteger();
+    private static final AtomicInteger PROBE_DIFFS = new AtomicInteger();
+    private static final AtomicBoolean PROBE_SUMMARY = new AtomicBoolean();
+    private static final int[] PROBE_KINDS = new int[4];
+
+    /** Vrai tant que le contrôle dure : les tampons relèvent alors leurs quads pour le tri Java aussi. */
+    public static boolean probing() {
+        return ANALYZE != null && PROBE_DONE.get() < PROBE_COUNT;
+    }
+
+    public static void probe(SortState java, SortState nativeState, int quadCount) {
+        String difference = null;
+        if (java.debugIndex() != nativeState.debugIndex()) {
+            difference = "genre " + SortState.DEBUG_NAMES[java.debugIndex()] + " en Java, "
+                + SortState.DEBUG_NAMES[nativeState.debugIndex()] + " en natif";
+        } else {
+            float[][] cameras = { { 8.0F, 8.0F, 8.0F }, { -21.5F, 40.25F, 3.0F } };
+            for (float[] camera : cameras) {
+                int[] expected = TranslucentSorter.order(java, camera[0], camera[1], camera[2]);
+                int[] actual = TranslucentSorter.order(nativeState, camera[0], camera[1], camera[2]);
+                if (!Arrays.equals(expected, actual)) {
+                    difference = "ordre différent (" + SortState.DEBUG_NAMES[java.debugIndex()] + ") depuis "
+                        + Arrays.toString(camera);
+                    break;
+                }
+            }
+        }
+        synchronized (PROBE_KINDS) {
+            PROBE_KINDS[nativeState.debugIndex()]++;
+        }
+        if (difference != null && PROBE_DIFFS.getAndIncrement() < 3) {
+            LauncherLog.err("[RENDERER] contrôle du tri natif : ÉCART avec le Java — " + difference + ", " + quadCount + " quads");
+        }
+        if (PROBE_DONE.incrementAndGet() >= PROBE_COUNT && PROBE_SUMMARY.compareAndSet(false, true)) {
+            synchronized (PROBE_KINDS) {
+                LauncherLog.renderer(1, String.format(Locale.ROOT,
+                    "contrôle du tri natif : %d sections comparées, %d avec écart | rien à trier %d, ordre fixe %d, arbre %d, par distance %d",
+                    PROBE_DONE.get(), PROBE_DIFFS.get(), PROBE_KINDS[0], PROBE_KINDS[1], PROBE_KINDS[2], PROBE_KINDS[3]));
+            }
+        }
+    }
+}

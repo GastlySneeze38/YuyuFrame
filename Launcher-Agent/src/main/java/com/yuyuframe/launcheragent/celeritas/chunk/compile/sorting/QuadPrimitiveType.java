@@ -1,6 +1,7 @@
 package com.yuyuframe.launcheragent.celeritas.chunk.compile.sorting;
 
 import com.yuyuframe.launcheragent.celeritas.chunk.sorting.PartitionTree;
+import com.yuyuframe.launcheragent.celeritas.nativecore.NativeSort;
 import com.yuyuframe.launcheragent.celeritas.chunk.sorting.SortState;
 import com.yuyuframe.launcheragent.celeritas.chunk.sorting.TranslucentSorter;
 import org.jetbrains.annotations.Nullable;
@@ -107,12 +108,24 @@ public final class QuadPrimitiveType implements ChunkPrimitiveType {
                 throw new IllegalStateException(String.format("Mismatched SortState (%d) vs given quad count (%d)", tree.quadCount(), quadCount));
             }
 
+            // YuyuFrame : un arbre venu du noyau natif écrit lui-même les indices.
+            if (tree.writeOrder(x, y, z, LWJGL.memAddress(indexBuffer), this.getIndexBufferElementsPerPrimitive())) {
+                return;
+            }
+
             var sink = new BufferSink(LWJGL.memAddress(indexBuffer));
             tree.order(x, y, z, sink);
 
             if (sink.primitiveIndex != quadCount) {
                 throw new IllegalStateException(String.format("Partition tree wrote %d of %d quads", sink.primitiveIndex, quadCount));
             }
+            return;
+        }
+
+        // YuyuFrame : le tri par distance, refait à chaque déplacement, passe par le noyau natif.
+        if (chunkData instanceof SortState.Dynamic dynamic && NativeSort.available() && quadCount == dynamic.quadCount()
+                && indexBuffer.capacity() == getIndexBufferSize(quadCount)
+                && NativeSort.distanceOrder(dynamic.centers(), x, y, z, LWJGL.memAddress(indexBuffer), this.getIndexBufferElementsPerPrimitive())) {
             return;
         }
 

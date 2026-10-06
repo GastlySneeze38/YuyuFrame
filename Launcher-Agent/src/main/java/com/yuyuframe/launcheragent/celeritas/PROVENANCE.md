@@ -205,7 +205,14 @@ DLL manque et de référence pour le contrôle.
 
 | `fluid.rs` (eau et lave) | **vanilla 1.8.9**, relevé dans le bytecode du jeu : `FluidRenderer.render` (`bge`) et `AbstractFluidBlock` (`ahv`) ; `QuadUtil.calculateNormal` / `findNormalFace` pour le tampon de chaque quad | code de Mojang, refait d'après son comportement |
 
+| `content-core/src/sort/` (tri du translucide : analyse, ordre fixe, arbre de découpe, tri par distance), appelé par `nativecore/NativeSort` | `chunk/sorting/{TranslucentQuadRecorder,QuadSet,TranslucentSorter,PartitionTree}`, `util/sorting/MergeSort` | celle du moteur |
+
 Écarts avec le Java :
+- **tri du translucide** : aucun attendu (même genre de tri, même ordre). Un
+  arbre construit par le noyau est gardé « à plat » dans un tableau d'entiers
+  par `PartitionTree` (`fromNative`, `writeOrder`), que le noyau relit à chaque
+  déplacement de caméra ; les quads ne sont plus relevés au fil de l'eau, le
+  noyau relit leurs positions dans le tampon de sommets ;
 - **boîtes occultantes** : à volume égal, deux boîtes peuvent être choisies
   dans un autre ordre (le Java dépend de l'ordre d'une table de hachage) ;
 - **quads** : aucun, le résultat doit être identique à l'octet près. Passent

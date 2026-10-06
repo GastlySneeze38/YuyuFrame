@@ -4,6 +4,8 @@ import com.yuyuframe.launcheragent.celeritas.chunk.terrain.material.Material;
 import com.yuyuframe.launcheragent.celeritas.chunk.vertex.format.ChunkVertexEncoder;
 import com.yuyuframe.launcheragent.celeritas.chunk.sorting.SortState;
 import com.yuyuframe.launcheragent.celeritas.chunk.sorting.TranslucentQuadRecorder;
+import com.yuyuframe.launcheragent.celeritas.chunk.vertex.format.impl.VanillaLikeChunkVertex;
+import com.yuyuframe.launcheragent.celeritas.nativecore.NativeSort;
 import org.jetbrains.annotations.Nullable;
 import static com.yuyuframe.launcheragent.celeritas.gl.binding.LWJGLServiceProvider.LWJGL;
 import java.nio.ByteBuffer;
@@ -46,10 +48,11 @@ public class ChunkMeshBufferBuilder {
 
         long ptr = LWJGL.memAddress(this.buffer, vertexStart);
 
-        if (this.analyzer != null) {
+        if (this.analyzer != null && this.capturesForJavaSort()) {
             for (ChunkVertexEncoder.Vertex vertex : vertices) {
                 this.analyzer.capture(vertex);
             }
+            this.capturedQuads += vertices.length / 4;
         }
 
         for (ChunkVertexEncoder.Vertex vertex : vertices) {
@@ -85,9 +88,14 @@ public class ChunkMeshBufferBuilder {
      * la position en trois flottants au début du sommet.
      */
     public void captureReserved(int firstVertex, int vertexCount) {
-        if (this.analyzer == null) {
+        if (this.analyzer == null || !this.capturesForJavaSort()) {
             return;
         }
+        this.captureRange(firstVertex, vertexCount);
+    }
+
+    private void captureRange(int firstVertex, int vertexCount) {
+        this.capturedQuads += vertexCount / 4;
 
         var vertex = this.captureScratch;
         long ptr = LWJGL.memAddress(this.buffer, firstVertex * this.stride);
@@ -145,6 +153,7 @@ public class ChunkMeshBufferBuilder {
     public void start(int sectionIndex) {
         this.count = 0;
         this.sectionIndex = sectionIndex;
+        this.capturedQuads = 0;
         if(this.analyzer != null) {
             this.analyzer.clear();
         }
@@ -152,10 +161,53 @@ public class ChunkMeshBufferBuilder {
 
     @Nullable
     public SortState getSortState() {
-        return this.analyzer != null ? this.analyzer.getSortState() : null;
+        if (this.analyzer == null) {
+            return null;
+        }
+        if (!this.sortsNatively()) {
+            return this.analyzer.getSortState();
+        }
+
+        // YuyuFrame : le noyau natif relit les positions dans le tampon lui-même
+        // et choisit le tri. Le temps du contrôle (NativeSort.probing), le tri
+        // Java est fait aussi, sur les quads relevés au fil de l'eau, et comparé.
+        boolean captured = this.capturedQuads == this.count / 4 && this.count > 0;
+        SortState nativeState = this.count == 0 ? SortState.NONE
+                : NativeSort.analyze(LWJGL.memAddress(this.buffer, 0), this.count / 4, this.stride);
+
+        if (nativeState == null) {
+            // Le noyau a échoué : on relève tout le tampon et on trie en Java.
+            if (!captured) {
+                this.analyzer.clear();
+                this.capturedQuads = 0;
+                this.captureRange(0, this.count);
+            }
+            return this.analyzer.getSortState();
+        }
+        if (captured && NativeSort.probing()) {
+            NativeSort.probe(this.analyzer.getSortState(), nativeState, this.count / 4);
+        }
+        return nativeState;
     }
 
+    /** Sommets en flottants, la position en tête : le seul format que le tri natif sait relire. */
+    private boolean sortsNatively() {
+        return this.stride == VanillaLikeChunkVertex.STRIDE && NativeSort.available();
+    }
+
+    /** Vrai s'il faut relever les quads pour le tri Java : pas de tri natif, ou le temps de son contrôle. */
+    private boolean capturesForJavaSort() {
+        if (this.sortsNatively() && !NativeSort.probing()) {
+            return false;
+        }
+        return true;
+    }
+
+    /** Quads relevés pour le tri Java depuis {@link #start} : s'il en manque, le tri Java n'a pas tout vu. */
+    private int capturedQuads;
+
     public void resetSortState() {
+        this.capturedQuads = 0;
         if (this.analyzer != null) {
             this.analyzer.clear();
         }

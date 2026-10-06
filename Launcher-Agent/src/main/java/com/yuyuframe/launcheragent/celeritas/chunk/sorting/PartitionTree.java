@@ -4,6 +4,7 @@ import it.unimi.dsi.fastutil.floats.FloatArrayList;
 import it.unimi.dsi.fastutil.floats.FloatArrays;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import it.unimi.dsi.fastutil.ints.IntArrays;
+import com.yuyuframe.launcheragent.celeritas.nativecore.NativeSort;
 import com.yuyuframe.launcheragent.celeritas.util.sorting.MergeSort;
 import org.jetbrains.annotations.Nullable;
 
@@ -19,6 +20,38 @@ public final class PartitionTree implements SortState.Resortable {
         this.root = root;
         this.quadCount = quadCount;
         this.cutPlanes = cutPlanes;
+        this.flat = null;
+    }
+
+    /**
+     * YuyuFrame : l'arbre tel que le noyau natif le rend, « à plat » dans un
+     * tableau d'entiers (format dans {@code content-core/src/sort/tree.rs}),
+     * ou {@code null} pour un arbre construit ici. Un arbre à plat n'a pas de
+     * {@link #root} : c'est le noyau qui le relit.
+     */
+    private final int[] flat;
+
+    private PartitionTree(int[] flat, int quadCount, float[][] cutPlanes) {
+        this.root = null;
+        this.quadCount = quadCount;
+        this.cutPlanes = cutPlanes;
+        this.flat = flat;
+    }
+
+    /** YuyuFrame : un arbre construit par le noyau natif ({@code NativeSort.analyze}). */
+    public static PartitionTree fromNative(int[] flat, int quadCount, float[][] cutPlanes) {
+        return new PartitionTree(flat, quadCount, cutPlanes);
+    }
+
+    /**
+     * YuyuFrame : écrit l'ordre de dessin directement à l'adresse donnée, si
+     * l'arbre vient du noyau natif. Faux sinon, ou si le noyau a échoué : à
+     * l'appelant de passer par {@link #order(float, float, float, Sink)}.
+     *
+     * @param elements entiers par quad dans le tampon d'indices (6 ou 4)
+     */
+    public boolean writeOrder(float camX, float camY, float camZ, long out, int elements) {
+        return this.flat != null && NativeSort.treeOrder(this.flat, camX, camY, camZ, out, this.quadCount, elements);
     }
 
     static final int STATIC_LEAF_QUADS = 256;
@@ -353,6 +386,14 @@ public final class PartitionTree implements SortState.Resortable {
 
     /** The draw order for the camera position, streamed so the caller can write it out without an array in between */
     public void order(float camX, float camY, float camZ, Sink sink) {
+        if (this.flat != null) {
+            int[] order = NativeSort.treeOrder(this.flat, camX, camY, camZ, this.quadCount);
+            if (order == null) {
+                throw new IllegalStateException("Native partition tree could not be read");
+            }
+            sink.accept(order);
+            return;
+        }
         write(root, camX, camY, camZ, sink);
     }
 
