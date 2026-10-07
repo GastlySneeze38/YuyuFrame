@@ -501,6 +501,15 @@ export default function App() {
     return () => clearInterval(timer)
   }, [yuyuSignedIn])
 
+  // Comptes Minecraft connus du serveur. L'envoi fait à la connexion ne
+  // suffit pas : une session ouverte avant que la liste n'existe ne repasse
+  // jamais par là, et il est sauté tant que l'e-mail n'est pas confirmé. On
+  // le refait donc à chaque démarrage et dès que la confirmation tombe.
+  useEffect(() => {
+    if (isConsoleWindow || !yuyuSignedIn || emailVerificationRequired) return
+    api.yuyu.syncMinecraftAccounts().catch(() => {})
+  }, [yuyuSignedIn, emailVerificationRequired])
+
   // Ctrl+Maj+M → atelier des modales. Une fenêtre Tauri n'a pas de barre
   // d'adresse : sans raccourci, une route de développement est inatteignable.
   // Compilé hors de la version publiée en même temps que la route.

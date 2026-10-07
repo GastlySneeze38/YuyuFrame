@@ -132,6 +132,18 @@ pub async fn launch_game(
         return Err("Un essai de compatibilité tourne déjà sur cette instance".to_string());
     }
 
+    // Preuve de propriété du compte Minecraft auprès du serveur YuyuFrame :
+    // en tâche de fond, le jeu ne l'attend pas et se lance même si elle échoue.
+    {
+        let state = state.inner().clone();
+        let session = session.clone();
+        tokio::spawn(async move {
+            if let Err(e) = crate::account::yuyu::profile::prove_minecraft_account(&state, &session).await {
+                tracing::debug!("compte Minecraft non prouvé : {e}");
+            }
+        });
+    }
+
     // Propriétaire de la ligne de session de jeu ouverte plus bas — les
     // statistiques sont par compte YuyuFrame, 0 quand personne n'est connecté.
     let yuyu_user_id = {
