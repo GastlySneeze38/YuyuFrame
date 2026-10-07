@@ -225,8 +225,10 @@ pub(crate) async fn read_json(resp: reqwest::Response) -> ApiResult<Value> {
 }
 
 /// Jeton d'accès utilisable : celui en mémoire s'il a encore de la marge,
-/// sinon un neuf.
-async fn valid_access_token(state: &SharedState) -> ApiResult<String> {
+/// sinon un neuf. Hors de ce module, un seul appelant : `play::presence`, qui
+/// le passe au jeu — tout le reste appelle le serveur par `get`/`post`/`put`
+/// et ne voit jamais de jeton.
+pub(crate) async fn valid_access_token(state: &SharedState) -> ApiResult<String> {
     let session = state.read().await.yuyu_session.clone().ok_or_else(ApiError::not_signed_in)?;
     if session.access_expires_at - REFRESH_MARGIN_SECS > now() {
         return Ok(session.access_token);

@@ -12,4 +12,5 @@ mod layout;
 mod mesh;
 mod modrinth;
 mod mouse;
+mod presence;
 mod sort;

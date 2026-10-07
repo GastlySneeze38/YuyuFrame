@@ -86,6 +86,59 @@ pub fn spawn(state: SharedState, session: MinecraftSession) -> JoinHandle<()> {
     })
 }
 
+/// Posée dans l'environnement du jeu : dit à `content_core.dll` que son
+/// entrée standard est bien ce canal, et pas la console d'un lancement à la main.
+pub const TOKEN_CHANNEL_ENV: &str = "YUYU_PRESENCE_STDIN";
+/// Début de chaque ligne écrite au jeu. Le même dans
+/// `content-core/src/presence/token.rs`.
+const TOKEN_LINE_PREFIX: &str = "yf-presence-token ";
+/// Le jeton d'accès vit 15 minutes et le launcher le renouvelle une minute
+/// avant sa fin : regarder plus souvent que cette minute garantit que le jeu
+/// reçoit le suivant avant que le sien n'expire.
+const TOKEN_CHECK_EVERY: Duration = Duration::from_secs(20);
+
+/// Donne au jeu de quoi demander lui-même quels joueurs croisés utilisent
+/// YuyuFrame (`POST /v1/presence/lookup`, appelé par `content_core.dll`) : le
+/// jeton d'accès courant, réécrit à chaque renouvellement.
+///
+/// Le canal est l'entrée standard du jeu — un tube que seul ce processus
+/// enfant reçoit. Rien sur le disque, rien sur la ligne de commande ni dans
+/// l'environnement, donc rien dans un rapport de plantage. Le jeton de
+/// rafraîchissement, lui, ne quitte jamais le launcher : sans le launcher, le
+/// jeu garde au plus un jeton de 15 minutes.
+///
+/// S'arrête avec la partie (`stop`), ou dès que le tube ne se laisse plus
+/// écrire. Sans compte YuyuFrame, rien n'est envoyé.
+pub fn feed_tokens(state: SharedState, mut stdin: tokio::process::ChildStdin, stop: std::sync::Arc<std::sync::atomic::AtomicBool>) {
+    use tokio::io::AsyncWriteExt;
+    tokio::spawn(async move {
+        let mut sent = String::new();
+        while !stop.load(std::sync::atomic::Ordering::Relaxed) {
+            if signed_in(&state).await {
+                match api::valid_access_token(&state).await {
+                    Ok(token) if token != sent => {
+                        let line = format!("{TOKEN_LINE_PREFIX}{token}\n");
+                        // Borné : si personne ne lit en face (DLL absente), le
+                        // tube finit par se remplir et l'écriture attendrait sans fin.
+                        let written = tokio::time::timeout(Duration::from_secs(5), async {
+                            stdin.write_all(line.as_bytes()).await?;
+                            stdin.flush().await
+                        })
+                        .await;
+                        if !matches!(written, Ok(Ok(()))) {
+                            return;
+                        }
+                        sent = token;
+                    }
+                    Ok(_) => {}
+                    Err(e) => tracing::debug!("jeton de présence indisponible : {}", e.message),
+                }
+            }
+            tokio::time::sleep(TOKEN_CHECK_EVERY).await;
+        }
+    });
+}
+
 /// Réglage « apparaître comme joueur YuyuFrame » (Paramètres → Confidentialité).
 #[tauri::command]
 pub async fn presence_get_visible(state: tauri::State<'_, SharedState>) -> Result<bool, String> {

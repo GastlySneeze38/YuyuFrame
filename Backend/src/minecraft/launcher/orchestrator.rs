@@ -702,6 +702,11 @@ pub async fn download_and_launch(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .stdin(Stdio::null());
+    // Canal du jeton de présence (voir `play::presence::feed_tokens`) : une
+    // vraie partie seulement — un essai de compatibilité ne rejoint aucun serveur.
+    if probe.is_none() {
+        java_cmd.stdin(Stdio::piped()).env(crate::play::presence::TOKEN_CHANNEL_ENV, "1");
+    }
     if cancelled(&cancel) {
         return Err(anyhow!(LAUNCH_CANCELLED_MSG));
     }
@@ -709,6 +714,12 @@ pub async fn download_and_launch(
     // Jeton masqué : cette ligne contient --accessToken en clair.
     tracing::info!("[MC launch] {} {}", java, redact_secrets(&args.join(" ")));
     let mut child = java_cmd.spawn()?;
+
+    if let Some(stdin) = child.stdin.take() {
+        use tauri::Manager;
+        let state = app.state::<crate::state::SharedState>().inner().clone();
+        crate::play::presence::feed_tokens(state, stdin, stop_flag.clone());
+    }
 
     // Essai de compatibilité : la fenêtre du jeu ne doit jamais se montrer.
     // Posté dès le spawn, donc bien avant que GLFW ne la crée — voir

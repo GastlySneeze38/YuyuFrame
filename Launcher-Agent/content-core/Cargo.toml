@@ -21,6 +21,9 @@ ureq = { version = "2", features = ["json"] }
 # ImageIO (Java) ne le décode PAS nativement — c'était le vrai motif de cet ajout.
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp", "ico", "tiff"] }
 taffy = { version = "0.14.0", features = ["serde"] }
+# SHA-256 des empreintes de présence (src/presence/fingerprint.rs). Déjà dans
+# l'arbre de dépendances par ureq (rustls) — même version, rien de plus à compiler.
+ring = "0.17"
 
 # Souris brute (src/mouse/windows.rs) : liaisons vers l'API Windows, sans code
 # autour. Déjà dans l'arbre de dépendances par ureq — même version.
