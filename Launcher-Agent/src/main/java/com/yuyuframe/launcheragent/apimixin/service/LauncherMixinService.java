@@ -524,6 +524,12 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
         new RefmapEntry(M189 + "hud/HudExtractTabListMixin189",
             "net/minecraft/client/gui/hud/PlayerListHud", "render",
             "(ILnet/minecraft/scoreboard/Scoreboard;Lnet/minecraft/scoreboard/ScoreboardObjective;)V", null),
+        new RefmapEntry(M189 + "hud/PlayerListStyleMixin189",
+            "net/minecraft/client/gui/hud/PlayerListHud", "render",
+            "(ILnet/minecraft/scoreboard/Scoreboard;Lnet/minecraft/scoreboard/ScoreboardObjective;)V", null),
+        new RefmapEntry(M189 + "hud/PlayerListStyleMixin189",
+            "net/minecraft/client/gui/hud/PlayerListHud", "getPlayerName",
+            "(Lnet/minecraft/client/network/PlayerListEntry;)Ljava/lang/String;", null),
 
         new RefmapEntry(M189 + "render/ItemDecorationsExtractMixin189",
             "net/minecraft/client/render/item/ItemRenderer", "renderGuiItemOverlay",

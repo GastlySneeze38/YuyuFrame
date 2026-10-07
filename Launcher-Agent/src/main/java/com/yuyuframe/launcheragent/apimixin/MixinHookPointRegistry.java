@@ -869,6 +869,9 @@ public final class MixinHookPointRegistry {
         gate("1.8.9", "v1_8_9.hud.HudExtractOverlayMessageMixin189", HookPoint.HUD_EXTRACT_OVERLAY_MESSAGE);
         gate("1.8.9", "v1_8_9.hud.HudExtractTitleMixin189", HookPoint.HUD_EXTRACT_TITLE);
         gate("1.8.9", "v1_8_9.hud.HudExtractTabListMixin189", HookPoint.HUD_EXTRACT_TAB_LIST);
+        // Liste Tab aux couleurs du module « Joueur » : sans effet tant qu'aucun
+        // joueur n'est à styliser, donc toujours tissé comme les étiquettes.
+        always("1.8.9", "v1_8_9.hud.PlayerListStyleMixin189");
 
         // ── Rendu / monde / frame ──────────────────────────────────────────
         gate("1.8.9", "v1_8_9.render.ItemDecorationsExtractMixin189", HookPoint.ITEM_DECORATIONS_EXTRACT);

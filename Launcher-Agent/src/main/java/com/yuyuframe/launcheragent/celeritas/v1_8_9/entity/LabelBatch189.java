@@ -3,6 +3,7 @@ package com.yuyuframe.launcheragent.celeritas.v1_8_9.entity;
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.yuyuframe.launcheragent.apimixin.mapping.YarnNamed;
 import com.yuyuframe.launcheragent.apimixin.v1_8_9.text.TextBatch189;
+import com.yuyuframe.launcheragent.runtime.presence.PlayerStyle;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.render.entity.EntityRenderDispatcher;
 import net.minecraft.command.CommandSource;
@@ -235,6 +236,7 @@ public final class LabelBatch189 {
         tickDelta = delta;
         axesReady = false;
         backgroundVertices = 0;
+        DECOR.count = 0;
         for (int i = 0; i < TEXTURES.size(); i++) {
             TEXTURES.get(i).count = 0;
         }
@@ -248,6 +250,14 @@ public final class LabelBatch189 {
      * @return vrai si l'étiquette est prise en charge : vanilla ne doit alors rien dessiner
      */
     public static boolean defer(Object entityObject, String text, double x, double y, double z, int maxDistance) {
+        return defer(entityObject, text, x, y, z, maxDistance, false);
+    }
+
+    /**
+     * @param styled joueur YuyuFrame : son étiquette prend le fond, le logo et
+     *               les couleurs du module « Joueur » (voir {@link PlayerStyle})
+     */
+    public static boolean defer(Object entityObject, String text, double x, double y, double z, int maxDistance, boolean styled) {
         if (!deferring || hasUnsupportedStyle(text)) {
             return false;
         }
@@ -291,10 +301,32 @@ public final class LabelBatch189 {
         short lightV = (short) (light / 65536);
 
         int halfWidth = geometry.width / 2;
-        background(originX, originY, originZ, -halfWidth - 1, -1 + offsetY);
-        background(originX, originY, originZ, -halfWidth - 1, 8 + offsetY);
-        background(originX, originY, originZ, halfWidth + 1, 8 + offsetY);
-        background(originX, originY, originZ, halfWidth + 1, -1 + offsetY);
+        // Étiquette stylisée : le logo passe devant le pseudo, et l'ensemble
+        // reste centré sur le joueur — le texte est donc décalé d'un demi-logo.
+        float lead = styled && PlayerStyle.logo ? PlayerStyle.LOGO_WIDTH + PlayerStyle.LOGO_GAP : 0.0F;
+        float shift = lead / 2.0F;
+        float left = -halfWidth - 1 - shift;
+        float right = halfWidth + 1 + shift;
+        float now = 0.0F;
+        if (styled) {
+            now = PlayerStyle.time();
+            DECOR.at(originX, originY, originZ, offsetY);
+            if (PlayerStyle.logo) {
+                PlayerStyle.logo(DECOR, left + 1.0F, now);
+            }
+            // Pleine lumière : un pseudo coloré qui s'assombrit la nuit perd tout son intérêt.
+            lightU = (short) (FULL_BRIGHT % 65536);
+            lightV = (short) (FULL_BRIGHT / 65536);
+        }
+        if (styled && PlayerStyle.plate != PlayerStyle.PLATE_VANILLA) {
+            // Plus haute que le fond de vanilla : la place ne manque pas au-dessus d'une tête.
+            PlayerStyle.plate(DECOR, left - 1.0F, right + 1.0F, -2.0F, 10.0F, now);
+        } else {
+            background(originX, originY, originZ, left, -1 + offsetY);
+            background(originX, originY, originZ, left, 8 + offsetY);
+            background(originX, originY, originZ, right, 8 + offsetY);
+            background(originX, originY, originZ, right, -1 + offsetY);
+        }
 
         for (int r = 0; r < geometry.runs.size(); r++) {
             GlyphRun run = geometry.runs.get(r);
@@ -309,12 +341,17 @@ public final class LabelBatch189 {
             int from = 0;
             for (int q = 0; q < run.quads; q++) {
                 int rgb = run.rgb[q];
+                if (styled && PlayerStyle.recolors(rgb)) {
+                    // La place de la lettre dans le pseudo, de 0 à gauche à 1 à droite.
+                    float t = geometry.width > 0 ? (source[from] + halfWidth) / geometry.width : 0.0F;
+                    rgb = PlayerStyle.textColor(t, now);
+                }
                 // En mémoire : rouge, vert, bleu, alpha.
                 int abgr = (rgb & 0xFF) << 16 | (rgb & 0xFF00) | (rgb >> 16 & 0xFF);
                 int dim = DIM_ALPHA << 24 | abgr;
                 int full = FULL_ALPHA << 24 | abgr;
                 for (int v = 0; v < 4; v++) {
-                    float labelX = source[from];
+                    float labelX = source[from] + shift;
                     float labelY = source[from + 1] + offsetY;
                     MemoryUtil.memPutFloat(at, originX + labelX * axisXx + labelY * axisYx);
                     MemoryUtil.memPutFloat(at + 4L, originY + labelX * axisXy + labelY * axisYy);
@@ -336,7 +373,61 @@ public final class LabelBatch189 {
         return true;
     }
 
-    private static void background(float originX, float originY, float originZ, int labelX, int labelY) {
+    // ── Décor des étiquettes stylisées ───────────────────────────────────────
+
+    /**
+     * Fond, liserés et logo des étiquettes des joueurs YuyuFrame : des
+     * quadrilatères sans texture, une couleur par sommet. Chaque sommet a deux
+     * opacités, une par passe — derrière un mur, puis en vue — comme le texte.
+     */
+    private static final class Decor implements PlayerStyle.Sink {
+        ByteBuffer vertices = BufferUtils.createByteBuffer(512 * 12);
+        ByteBuffer hiddenColors = BufferUtils.createByteBuffer(512 * 4);
+        ByteBuffer visibleColors = BufferUtils.createByteBuffer(512 * 4);
+        int count;
+        int vertexBuffer, hiddenBuffer, visibleBuffer;
+        private float originX, originY, originZ;
+        private int offsetY;
+
+        void at(float x, float y, float z, int offset) {
+            this.originX = x;
+            this.originY = y;
+            this.originZ = z;
+            this.offsetY = offset;
+        }
+
+        @Override
+        public void vertex(float labelX, float labelY, int rgb, int hidden, int visible) {
+            if ((this.count + 1) * 12 > this.vertices.capacity()) {
+                int capacity = this.vertices.capacity() / 12 * 2;
+                this.vertices = TextureBatch.grow(this.vertices, this.count * 12, capacity * 12);
+                this.hiddenColors = TextureBatch.grow(this.hiddenColors, this.count * 4, capacity * 4);
+                this.visibleColors = TextureBatch.grow(this.visibleColors, this.count * 4, capacity * 4);
+            }
+            float y = labelY + this.offsetY;
+            int at = this.count * 12;
+            this.vertices.putFloat(at, this.originX + labelX * axisXx + y * axisYx);
+            this.vertices.putFloat(at + 4, this.originY + labelX * axisXy + y * axisYy);
+            this.vertices.putFloat(at + 8, this.originZ + labelX * axisXz + y * axisYz);
+            // En mémoire : rouge, vert, bleu, alpha.
+            int abgr = (rgb & 0xFF) << 16 | (rgb & 0xFF00) | (rgb >> 16 & 0xFF);
+            this.hiddenColors.putInt(this.count * 4, (hidden & 0xFF) << 24 | abgr);
+            this.visibleColors.putInt(this.count * 4, (visible & 0xFF) << 24 | abgr);
+            this.count++;
+        }
+    }
+
+    private static final Decor DECOR = new Decor();
+
+    private static void drawDecor(boolean visible) {
+        GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, DECOR.vertexBuffer);
+        GL11.glVertexPointer(3, GL11.GL_FLOAT, 12, 0L);
+        GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, visible ? DECOR.visibleBuffer : DECOR.hiddenBuffer);
+        GL11.glColorPointer(4, GL11.GL_UNSIGNED_BYTE, 4, 0L);
+        GL11.glDrawArrays(GL11.GL_QUADS, 0, DECOR.count);
+    }
+
+    private static void background(float originX, float originY, float originZ, float labelX, float labelY) {
         if (backgroundVertices * 3 + 3 > backgrounds.capacity()) {
             FloatBuffer grown = BufferUtils.createFloatBuffer(backgrounds.capacity() * 2);
             backgrounds.position(0).limit(backgroundVertices * 3);
@@ -437,7 +528,7 @@ public final class LabelBatch189 {
     /** Dessine tout ce qui a été noté, avec les états de vanilla posés une seule fois. */
     public static void end() {
         deferring = false;
-        if (backgroundVertices == 0) {
+        if (backgroundVertices == 0 && DECOR.count == 0) {
             return;
         }
 
@@ -467,6 +558,42 @@ public final class LabelBatch189 {
         backgrounds.limit(backgrounds.capacity());
         GL11.glVertexPointer(3, GL11.GL_FLOAT, 12, 0L);
         GL11.glDrawArrays(GL11.GL_QUADS, 0, backgroundVertices);
+
+        // Le décor des étiquettes stylisées, tant que la texture est coupée et
+        // avant que le texte n'active ses tableaux de coordonnées : d'abord ce
+        // qui se voit derrière un mur, puis ce qui se voit en vue. La profondeur
+        // n'est pas écrite (voir depthMask plus haut), seulement testée.
+        if (DECOR.count > 0) {
+            if (DECOR.vertexBuffer == 0) {
+                DECOR.vertexBuffer = GL15.glGenBuffers();
+                DECOR.hiddenBuffer = GL15.glGenBuffers();
+                DECOR.visibleBuffer = GL15.glGenBuffers();
+            }
+            sendBuffer(DECOR.vertexBuffer, DECOR.vertices, DECOR.count * 12);
+            sendBuffer(DECOR.hiddenBuffer, DECOR.hiddenColors, DECOR.count * 4);
+            sendBuffer(DECOR.visibleBuffer, DECOR.visibleColors, DECOR.count * 4);
+
+            // Lus puis rétablis tels quels : ces deux états ne passent pas par
+            // GlStateManager ici, son cache doit rester juste.
+            int shadeModel = GL11.glGetInteger(GL11.GL_SHADE_MODEL);
+            boolean culling = GL11.glIsEnabled(GL11.GL_CULL_FACE);
+            GL11.glShadeModel(GL11.GL_SMOOTH);
+            GL11.glDisable(GL11.GL_CULL_FACE);
+            // Pleine lumière : sans tableau de coordonnées, la carte de lumière
+            // prendrait celle de la dernière entité dessinée.
+            GL13.glMultiTexCoord2f(GL13.GL_TEXTURE1, 240.0F, 240.0F);
+            GL11.glEnableClientState(GL11.GL_COLOR_ARRAY);
+            drawDecor(false);
+            GlStateManager.enableDepthTest();
+            drawDecor(true);
+            GlStateManager.disableDepthTest();
+            GL11.glDisableClientState(GL11.GL_COLOR_ARRAY);
+            GL11.glShadeModel(shadeModel);
+            if (culling) {
+                GL11.glEnable(GL11.GL_CULL_FACE);
+            }
+            DECOR.count = 0;
+        }
         GlStateManager.enableTexture();
 
         // Les sommets du texte servent aux deux passes : on les envoie une seule
