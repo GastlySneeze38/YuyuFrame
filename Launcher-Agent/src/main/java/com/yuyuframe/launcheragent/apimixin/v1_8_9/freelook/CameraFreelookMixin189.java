@@ -43,6 +43,8 @@ public abstract class CameraFreelookMixin189 {
     private void la$shiftRotation(float tickDelta, CallbackInfo ci) {
         la$saved = null;
         la$shifted = null;
+        FreelookOffset189.yaw = 0F;
+        FreelookOffset189.pitch = 0F;
         try {
             Object player = AccessorRegistry.get(AccessPoint.CLIENT_PLAYER, null);
             if (!(player instanceof EntityRotationAccessor189)) return;
@@ -61,6 +63,8 @@ public abstract class CameraFreelookMixin189 {
             entity.la$setPitch(pitch + dPitch);
             entity.la$setPrevYaw(la$saved[2] + dYaw);
             entity.la$setPrevPitch(la$saved[3] + dPitch);
+            FreelookOffset189.yaw = dYaw;
+            FreelookOffset189.pitch = dPitch;
         } catch (Throwable t) {
             LauncherLog.err("[CameraFreelookMixin189] décalage : " + t);
         }
