@@ -236,7 +236,8 @@ public final class LabelBatch189 {
         tickDelta = delta;
         axesReady = false;
         backgroundVertices = 0;
-        DECOR.count = 0;
+        PANELS.count = 0;
+        DETAILS.count = 0;
         for (int i = 0; i < TEXTURES.size(); i++) {
             TEXTURES.get(i).count = 0;
         }
@@ -380,52 +381,99 @@ public final class LabelBatch189 {
      * quadrilatères sans texture, une couleur par sommet. Chaque sommet a deux
      * opacités, une par passe — derrière un mur, puis en vue — comme le texte.
      */
-    private static final class Decor implements PlayerStyle.Sink {
+    private static final class Decor {
         ByteBuffer vertices = BufferUtils.createByteBuffer(512 * 12);
         ByteBuffer hiddenColors = BufferUtils.createByteBuffer(512 * 4);
         ByteBuffer visibleColors = BufferUtils.createByteBuffer(512 * 4);
         int count;
         int vertexBuffer, hiddenBuffer, visibleBuffer;
-        private float originX, originY, originZ;
-        private int offsetY;
 
-        void at(float x, float y, float z, int offset) {
-            this.originX = x;
-            this.originY = y;
-            this.originZ = z;
-            this.offsetY = offset;
-        }
-
-        @Override
-        public void vertex(float labelX, float labelY, int rgb, int hidden, int visible) {
+        void put(float x, float y, float z, int rgb, int hidden, int visible) {
             if ((this.count + 1) * 12 > this.vertices.capacity()) {
                 int capacity = this.vertices.capacity() / 12 * 2;
                 this.vertices = TextureBatch.grow(this.vertices, this.count * 12, capacity * 12);
                 this.hiddenColors = TextureBatch.grow(this.hiddenColors, this.count * 4, capacity * 4);
                 this.visibleColors = TextureBatch.grow(this.visibleColors, this.count * 4, capacity * 4);
             }
-            float y = labelY + this.offsetY;
             int at = this.count * 12;
-            this.vertices.putFloat(at, this.originX + labelX * axisXx + y * axisYx);
-            this.vertices.putFloat(at + 4, this.originY + labelX * axisXy + y * axisYy);
-            this.vertices.putFloat(at + 8, this.originZ + labelX * axisXz + y * axisYz);
+            this.vertices.putFloat(at, x);
+            this.vertices.putFloat(at + 4, y);
+            this.vertices.putFloat(at + 8, z);
             // En mémoire : rouge, vert, bleu, alpha.
             int abgr = (rgb & 0xFF) << 16 | (rgb & 0xFF00) | (rgb >> 16 & 0xFF);
             this.hiddenColors.putInt(this.count * 4, (hidden & 0xFF) << 24 | abgr);
             this.visibleColors.putInt(this.count * 4, (visible & 0xFF) << 24 | abgr);
             this.count++;
         }
+
+        void send() {
+            if (this.count == 0) {
+                return;
+            }
+            if (this.vertexBuffer == 0) {
+                this.vertexBuffer = GL15.glGenBuffers();
+                this.hiddenBuffer = GL15.glGenBuffers();
+                this.visibleBuffer = GL15.glGenBuffers();
+            }
+            sendBuffer(this.vertexBuffer, this.vertices, this.count * 12);
+            sendBuffer(this.hiddenBuffer, this.hiddenColors, this.count * 4);
+            sendBuffer(this.visibleBuffer, this.visibleColors, this.count * 4);
+        }
+
+        void draw(boolean visible) {
+            if (this.count == 0) {
+                return;
+            }
+            GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, this.vertexBuffer);
+            GL11.glVertexPointer(3, GL11.GL_FLOAT, 12, 0L);
+            GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, visible ? this.visibleBuffer : this.hiddenBuffer);
+            GL11.glColorPointer(4, GL11.GL_UNSIGNED_BYTE, 4, 0L);
+            GL11.glDrawArrays(GL11.GL_QUADS, 0, this.count);
+        }
     }
 
-    private static final Decor DECOR = new Decor();
+    /**
+     * Le panneau plein de chaque étiquette stylisée. En vue il est opaque et
+     * ÉCRIT sa profondeur : ce qui est derrière lui — le pseudo d'un autre
+     * joueur, une vitre, de l'eau, tous dessinés plus tard — ne passe plus
+     * devant, et deux étiquettes qui se chevauchent se cachent dans le bon
+     * ordre, quel que soit celui du dessin.
+     */
+    private static final Decor PANELS = new Decor();
+    /** Ce qui est posé sur le panneau : liserés, reflets, logo. Testé en profondeur, jamais écrit. */
+    private static final Decor DETAILS = new Decor();
 
-    private static void drawDecor(boolean visible) {
-        GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, DECOR.vertexBuffer);
-        GL11.glVertexPointer(3, GL11.GL_FLOAT, 12, 0L);
-        GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, visible ? DECOR.visibleBuffer : DECOR.hiddenBuffer);
-        GL11.glColorPointer(4, GL11.GL_UNSIGNED_BYTE, 4, 0L);
-        GL11.glDrawArrays(GL11.GL_QUADS, 0, DECOR.count);
+    /** Place dans le monde la géométrie de {@link PlayerStyle} et l'aiguille vers le bon lot. */
+    private static final class DecorSink implements PlayerStyle.Sink {
+        private float originX, originY, originZ;
+        private int offsetY;
+        private Decor target = DETAILS;
+
+        void at(float x, float y, float z, int offset) {
+            this.originX = x;
+            this.originY = y;
+            this.originZ = z;
+            this.offsetY = offset;
+            this.target = DETAILS;
+        }
+
+        @Override
+        public void opaque(boolean on) {
+            this.target = on ? PANELS : DETAILS;
+        }
+
+        @Override
+        public void vertex(float labelX, float labelY, int rgb, int hidden, int visible) {
+            float y = labelY + this.offsetY;
+            this.target.put(
+                this.originX + labelX * axisXx + y * axisYx,
+                this.originY + labelX * axisXy + y * axisYy,
+                this.originZ + labelX * axisXz + y * axisYz,
+                rgb, hidden, visible);
+        }
     }
+
+    private static final DecorSink DECOR = new DecorSink();
 
     private static void background(float originX, float originY, float originZ, float labelX, float labelY) {
         if (backgroundVertices * 3 + 3 > backgrounds.capacity()) {
@@ -528,7 +576,8 @@ public final class LabelBatch189 {
     /** Dessine tout ce qui a été noté, avec les états de vanilla posés une seule fois. */
     public static void end() {
         deferring = false;
-        if (backgroundVertices == 0 && DECOR.count == 0) {
+        boolean decor = PANELS.count > 0 || DETAILS.count > 0;
+        if (backgroundVertices == 0 && !decor) {
             return;
         }
 
@@ -559,40 +608,28 @@ public final class LabelBatch189 {
         GL11.glVertexPointer(3, GL11.GL_FLOAT, 12, 0L);
         GL11.glDrawArrays(GL11.GL_QUADS, 0, backgroundVertices);
 
-        // Le décor des étiquettes stylisées, tant que la texture est coupée et
-        // avant que le texte n'active ses tableaux de coordonnées : d'abord ce
-        // qui se voit derrière un mur, puis ce qui se voit en vue. La profondeur
-        // n'est pas écrite (voir depthMask plus haut), seulement testée.
-        if (DECOR.count > 0) {
-            if (DECOR.vertexBuffer == 0) {
-                DECOR.vertexBuffer = GL15.glGenBuffers();
-                DECOR.hiddenBuffer = GL15.glGenBuffers();
-                DECOR.visibleBuffer = GL15.glGenBuffers();
-            }
-            sendBuffer(DECOR.vertexBuffer, DECOR.vertices, DECOR.count * 12);
-            sendBuffer(DECOR.hiddenBuffer, DECOR.hiddenColors, DECOR.count * 4);
-            sendBuffer(DECOR.visibleBuffer, DECOR.visibleColors, DECOR.count * 4);
-
-            // Lus puis rétablis tels quels : ces deux états ne passent pas par
-            // GlStateManager ici, son cache doit rester juste.
-            int shadeModel = GL11.glGetInteger(GL11.GL_SHADE_MODEL);
-            boolean culling = GL11.glIsEnabled(GL11.GL_CULL_FACE);
+        // Le décor des étiquettes stylisées, première passe : ce qui reste
+        // visible derrière un mur — une ombre du panneau, le logo et les liserés
+        // à peine. Tant que la texture est coupée et avant que le texte n'active
+        // ses tableaux de coordonnées.
+        // Lus ici, rétablis à la fin : ces deux états ne passent pas par
+        // GlStateManager, son cache doit rester juste.
+        int shadeModel = 0;
+        boolean culling = false;
+        if (decor) {
+            PANELS.send();
+            DETAILS.send();
+            shadeModel = GL11.glGetInteger(GL11.GL_SHADE_MODEL);
+            culling = GL11.glIsEnabled(GL11.GL_CULL_FACE);
             GL11.glShadeModel(GL11.GL_SMOOTH);
             GL11.glDisable(GL11.GL_CULL_FACE);
             // Pleine lumière : sans tableau de coordonnées, la carte de lumière
             // prendrait celle de la dernière entité dessinée.
             GL13.glMultiTexCoord2f(GL13.GL_TEXTURE1, 240.0F, 240.0F);
             GL11.glEnableClientState(GL11.GL_COLOR_ARRAY);
-            drawDecor(false);
-            GlStateManager.enableDepthTest();
-            drawDecor(true);
-            GlStateManager.disableDepthTest();
+            PANELS.draw(false);
+            DETAILS.draw(false);
             GL11.glDisableClientState(GL11.GL_COLOR_ARRAY);
-            GL11.glShadeModel(shadeModel);
-            if (culling) {
-                GL11.glEnable(GL11.GL_CULL_FACE);
-            }
-            DECOR.count = 0;
         }
         GlStateManager.enableTexture();
 
@@ -611,6 +648,51 @@ public final class LabelBatch189 {
 
         GlStateManager.enableDepthTest();
         GlStateManager.depthMask(true);
+
+        // Le décor, seconde passe : ce qui est en vue. Entre les deux passes du
+        // texte, pour que le pseudo d'un joueur placé derrière un panneau soit
+        // caché par lui (sa passe « à travers les murs » est déjà dessinée,
+        // dessous).
+        if (decor) {
+            GL13.glClientActiveTexture(GL13.GL_TEXTURE1);
+            GL11.glDisableClientState(GL11.GL_TEXTURE_COORD_ARRAY);
+            GL13.glClientActiveTexture(GL13.GL_TEXTURE0);
+            GL11.glDisableClientState(GL11.GL_TEXTURE_COORD_ARRAY);
+            GlStateManager.disableTexture();
+            GL13.glMultiTexCoord2f(GL13.GL_TEXTURE1, 240.0F, 240.0F);
+
+            // Les panneaux : opaques, profondeur écrite, repoussés d'un cheveu
+            // pour que leur propre texte et leur propre décor, posés dans le
+            // même plan, passent devant sans scintiller. Décalage lu puis
+            // rétabli : vanilla le garde en cache et ne le reposerait pas.
+            boolean offset = GL11.glIsEnabled(GL11.GL_POLYGON_OFFSET_FILL);
+            float offsetFactor = GL11.glGetFloat(GL11.GL_POLYGON_OFFSET_FACTOR);
+            float offsetUnits = GL11.glGetFloat(GL11.GL_POLYGON_OFFSET_UNITS);
+            GL11.glEnable(GL11.GL_POLYGON_OFFSET_FILL);
+            GL11.glPolygonOffset(1.0F, 4.0F);
+            PANELS.draw(true);
+            GL11.glPolygonOffset(offsetFactor, offsetUnits);
+            if (!offset) {
+                GL11.glDisable(GL11.GL_POLYGON_OFFSET_FILL);
+            }
+
+            // Ce qui est posé dessus : caché par ce qui est devant, sans rien cacher lui-même.
+            GlStateManager.depthMask(false);
+            DETAILS.draw(true);
+            GlStateManager.depthMask(true);
+
+            GlStateManager.enableTexture();
+            GL11.glEnableClientState(GL11.GL_TEXTURE_COORD_ARRAY);
+            GL13.glClientActiveTexture(GL13.GL_TEXTURE1);
+            GL11.glEnableClientState(GL11.GL_TEXTURE_COORD_ARRAY);
+            GL13.glClientActiveTexture(GL13.GL_TEXTURE0);
+            GL11.glShadeModel(shadeModel);
+            if (culling) {
+                GL11.glEnable(GL11.GL_CULL_FACE);
+            }
+            PANELS.count = 0;
+            DETAILS.count = 0;
+        }
 
         // Le texte normal, caché par ce qui est devant lui.
         drawText(true);

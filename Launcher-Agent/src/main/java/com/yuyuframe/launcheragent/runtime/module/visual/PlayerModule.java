@@ -71,7 +71,7 @@ public final class PlayerModule extends LauncherModule {
         // pas, et offrir de l'allumer d'ici. La liste est refaite quand il
         // change d'état (voir rendererChanged), donc ces deux lignes s'en vont seules.
         if (!rendererOn()) {
-            s.info("renderer-warning", "Renderer de terrain éteint",
+            s.warning("renderer-warning", "Renderer de terrain éteint",
                 "Sans lui, seule la liste Tab est stylisée : l'étiquette au-dessus de la tête garde son aspect d'origine.",
                 "Étiquette");
             if (RendererSwitch.available()) {

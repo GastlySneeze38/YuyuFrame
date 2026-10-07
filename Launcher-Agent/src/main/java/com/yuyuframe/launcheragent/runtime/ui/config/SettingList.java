@@ -172,6 +172,11 @@ public final class SettingList {
         return add(new Setting.Info(id, title, text, category));
     }
 
+    /** Le même bloc de texte, en jaune : un avertissement. */
+    public SettingList warning(String id, String title, String text, String category) {
+        return add(new Setting.Info(id, title, text, category, true));
+    }
+
     /** Donnée persistée que le module édite dans son PROPRE écran — voir {@link Setting.Opaque}. */
     public SettingList opaque(String id, Supplier<String> get, Consumer<String> set) {
         return add(new Setting.Opaque(id, get, set));

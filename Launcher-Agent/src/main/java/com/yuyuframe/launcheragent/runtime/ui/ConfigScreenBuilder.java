@@ -500,7 +500,7 @@ public final class ConfigScreenBuilder {
             return buttonRow(rows, x, w, cursor, label, () -> { a2.run.run(); commit.run(); });
         }
         if (setting instanceof Setting.Info) {
-            return infoRow(rows, x, w, cursor, label, tooltip);
+            return infoRow(rows, x, w, cursor, label, tooltip, ((Setting.Info) setting).warning);
         }
         if (setting instanceof Setting.Opaque) {
             // Persisté mais volontairement invisible ici — le module l'édite
@@ -601,11 +601,15 @@ public final class ConfigScreenBuilder {
      * défilante estompe un widget entier dès que son bord dépasse, donc un
      * bloc haut disparaîtrait d'un coup en défilant.
      */
-    private static float infoRow(List<UiWidget> rows, float x, float w, float cursor, String title, String text) {
+    /** Jaune d'avertissement : le titre vif, le paragraphe un ton en dessous. */
+    private static final UiColor WARNING_TITLE = new UiColor(255, 204, 64, 255);
+    private static final UiColor WARNING_TEXT = new UiColor(232, 196, 110, 255);
+
+    private static float infoRow(List<UiWidget> rows, float x, float w, float cursor, String title, String text, boolean warning) {
         float pad = UiTheme.scaled(12f);
         List<UiTextSpan> spans = new ArrayList<>(2);
-        if (title != null && !title.isEmpty()) spans.add(UiTextSpan.bold(title + "\n", UiTheme.TEXT_PRIMARY));
-        if (text != null && !text.isEmpty()) spans.add(UiTextSpan.plain(text, UiTheme.TEXT_SECONDARY));
+        if (title != null && !title.isEmpty()) spans.add(UiTextSpan.bold(title + "\n", warning ? WARNING_TITLE : UiTheme.TEXT_PRIMARY));
+        if (text != null && !text.isEmpty()) spans.add(UiTextSpan.plain(text, warning ? WARNING_TEXT : UiTheme.TEXT_SECONDARY));
         UiRichText.Layout layout = UiRichText.layout(spans, w - 2f * pad, LABEL_SCALE);
         float height = layout.height + 2f * pad;
         float rowY = cursor - height;

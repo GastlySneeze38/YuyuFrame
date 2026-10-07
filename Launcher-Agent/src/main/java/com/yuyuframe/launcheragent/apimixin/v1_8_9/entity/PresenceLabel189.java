@@ -23,12 +23,24 @@ public final class PresenceLabel189 {
     private PresenceLabel189() {
     }
 
-    /** L'entité dont on dessine l'étiquette est-elle un joueur à styliser ? */
-    public static boolean styled(Object entity) {
-        if (!PlayerStyle.active || !(entity instanceof PlayerEntity)) {
+    /**
+     * L'étiquette qu'on dessine est-elle le PSEUDO d'un joueur à styliser ?
+     *
+     * <p>Un joueur peut avoir deux étiquettes : son pseudo et, juste dessous,
+     * la ligne de score que le serveur affiche sous les noms (les points de
+     * vie, le plus souvent). Les deux passent par la même méthode de vanilla,
+     * avec la même entité : c'est le texte qui les distingue, la ligne de
+     * score ne contenant pas le pseudo. Elle garde l'aspect de vanilla.
+     */
+    public static boolean styled(Object entity, String text) {
+        if (!PlayerStyle.active || text == null || !(entity instanceof PlayerEntity)) {
             return false;
         }
-        return styled(((PlayerEntity) entity).getGameProfile());
+        GameProfile profile = ((PlayerEntity) entity).getGameProfile();
+        if (profile == null || profile.getName() == null || !text.contains(profile.getName())) {
+            return false;
+        }
+        return styled(profile);
     }
 
     /** La ligne de la liste Tab est-elle celle d'un joueur à styliser ? */

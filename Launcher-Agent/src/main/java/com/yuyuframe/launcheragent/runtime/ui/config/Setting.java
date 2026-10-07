@@ -350,9 +350,17 @@ public abstract class Setting {
      * <p>{@link #name} = le titre, {@link #description} = le paragraphe.
      */
     public static final class Info extends Setting {
+        /** Un avertissement, écrit en jaune : quelque chose ne marchera pas tant qu'on n'y a pas remédié. */
+        public final boolean warning;
+
         Info(String id, String title, String text, String cat) {
+            this(id, title, text, cat, false);
+        }
+
+        Info(String id, String title, String text, String cat, boolean warning) {
             super(id, title, text, cat, null);
             this.persistent = false;
+            this.warning = warning;
         }
 
         @Override public String serialize() { return null; }

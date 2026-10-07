@@ -28,6 +28,6 @@ public abstract class EntityLabelBatchMixin189 {
         // Le premier test garde LabelBatch189 (et JOML) hors de portée quand le moteur est indisponible.
         // Les joueurs YuyuFrame prennent le style du module « Joueur » : seulement sur ce chemin, celui
         // des étiquettes regroupées — une étiquette laissée à vanilla garde son aspect d'origine.
-        if (RendererSwitch.active() && LabelBatch189.defer(entity, text, x, y, z, maxDistance, PresenceLabel189.styled(entity))) ci.cancel();
+        if (RendererSwitch.active() && LabelBatch189.defer(entity, text, x, y, z, maxDistance, PresenceLabel189.styled(entity, text))) ci.cancel();
     }
 }
