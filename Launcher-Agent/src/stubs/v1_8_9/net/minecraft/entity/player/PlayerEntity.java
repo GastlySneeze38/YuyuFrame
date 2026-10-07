@@ -16,6 +16,11 @@ public class PlayerEntity extends LivingEntity {
     protected PlayerEntity() {
     }
 
+    /** Le profil du joueur : son UUID et son pseudo réels ({@code wn.cd()}). */
+    public com.mojang.authlib.GameProfile getGameProfile() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
     public HungerManager getHungerManager() {
         throw new UnsupportedOperationException("stub compile-only");
     }

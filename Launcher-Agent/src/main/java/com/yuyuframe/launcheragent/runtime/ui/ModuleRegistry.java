@@ -19,6 +19,7 @@ import com.yuyuframe.launcheragent.runtime.module.gameplay.MumbleLinkModule;
 import com.yuyuframe.launcheragent.runtime.module.visual.NoDarknessModule;
 import com.yuyuframe.launcheragent.runtime.module.visual.NoFogModule;
 import com.yuyuframe.launcheragent.runtime.module.visual.NoPumpkinOverlayModule;
+import com.yuyuframe.launcheragent.runtime.module.visual.YuyuPlayersModule;
 import com.yuyuframe.launcheragent.runtime.module.optimization.OptimizationModule;
 import com.yuyuframe.launcheragent.runtime.module.hud.PingModule;
 import com.yuyuframe.launcheragent.runtime.module.hud.PotionEffectsModule;
@@ -170,6 +171,9 @@ public final class ModuleRegistry {
         // l'utilisateur : l'effet de secousse caméra à la prise de dégâts est
         // natif en vanilla depuis ~1.13 — carte redondante sinon.
         if (IS_1_8_9) safeRegister(() -> new HurtCamModule());
+        // Reconnaître les autres joueurs YuyuFrame : seule la 1.8.9 sait
+        // marquer leur étiquette pour l'instant (voir sa javadoc).
+        if (IS_1_8_9) safeRegister(() -> new YuyuPlayersModule());
         if (IS_1_8_9) safeRegister(() -> new ToggleSprintModule());
         if (IS_1_8_9) safeRegister(() -> new ToggleSneakModule());
         // Animations 1.7 : UN module depuis le 2026-09-16 (voir sa javadoc),
@@ -237,7 +241,7 @@ public final class ModuleRegistry {
         // groupedFavorites()).
         List<LauncherModule> comfortMembers = nonNull(get("fov"), get("hurt-cam"), get("toggle-sprint"), get("toggle-sneak"),
             get("saturation"), get("no-darkness"), get("no-fog"),
-            get("no-pumpkin-overlay"), get("clear-vision"), get("fullbright"));
+            get("no-pumpkin-overlay"), get("clear-vision"), get("fullbright"), get("yuyu-players"));
         if (!comfortMembers.isEmpty()) {
             ModuleGroup comfortGroup = new ModuleGroup("comfort", "Confort visuel",
                 "FOV, Hurt Cam, Sprint/Sneak, Saturation, Ténèbres, Brouillard, Citrouille, Vision claire, Fullbright",

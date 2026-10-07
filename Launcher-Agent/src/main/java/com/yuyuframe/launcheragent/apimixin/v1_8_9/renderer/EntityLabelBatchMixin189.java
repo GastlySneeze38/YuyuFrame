@@ -1,5 +1,6 @@
 package com.yuyuframe.launcheragent.apimixin.v1_8_9.renderer;
 
+import com.yuyuframe.launcheragent.apimixin.v1_8_9.entity.PresenceLabel189;
 import com.yuyuframe.launcheragent.celeritas.RendererSwitch;
 import com.yuyuframe.launcheragent.celeritas.v1_8_9.entity.LabelBatch189;
 import org.spongepowered.asm.mixin.Mixin;
@@ -25,6 +26,8 @@ public abstract class EntityLabelBatchMixin189 {
     private void la$deferLabel(@Coerce Object entity, String text, double x, double y, double z, int maxDistance,
                                CallbackInfo ci) {
         // Le premier test garde LabelBatch189 (et JOML) hors de portée quand le moteur est indisponible.
-        if (RendererSwitch.active() && LabelBatch189.defer(entity, text, x, y, z, maxDistance)) ci.cancel();
+        // Marque provisoire des joueurs YuyuFrame (pseudo en noir) : seulement sur ce chemin, celui
+        // des étiquettes regroupées — une étiquette laissée à vanilla garde son texte d'origine.
+        if (RendererSwitch.active() && LabelBatch189.defer(entity, PresenceLabel189.decorate(entity, text), x, y, z, maxDistance)) ci.cancel();
     }
 }
