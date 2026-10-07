@@ -47,14 +47,28 @@ public final class OptimizationModule extends LauncherModule {
 
     /**
      * Renderer de terrain repris de Celeritas ({@code launcheragent/celeritas}).
-     * Éteint par défaut tant qu'il n'est pas validé en jeu.
+     * Allumé par défaut depuis le 2026-10-07 (validé en jeu, noyau natif
+     * compris) ; un joueur qui l'avait éteint garde son choix.
      */
-    private boolean terrainRenderer = false;
+    private boolean terrainRenderer = true;
+
+    /**
+     * Allume le renderer de terrain, module compris — pour le bouton d'un
+     * autre module qui en dépend (voir {@code PlayerModule}).
+     */
+    public void enableTerrainRenderer() {
+        terrainRenderer = true;
+        if (isEnabled()) {
+            apply();
+        } else {
+            setEnabled(true);
+        }
+    }
 
     @Override
     protected void settings(SettingList list) {
         list.info("renderer-info", RENDERER_TITLE, RENDERER_TEXT, "Renderer");
-        list.toggle("terrain-renderer", "Renderer de terrain (expérimental)",
+        list.toggle("terrain-renderer", RENDERER_TITLE,
             "Remplace le rendu des chunks du jeu. Les chunks se rechargent à chaque changement de ce réglage.",
             "Renderer", null, () -> terrainRenderer, v -> terrainRenderer = v);
         list.info("mouse-info", MOUSE_TITLE, MOUSE_TEXT, "Souris");
@@ -89,6 +103,8 @@ public final class OptimizationModule extends LauncherModule {
         if (wantRenderer != RendererSwitch.wanted()) {
             RendererSwitch.setWanted(wantRenderer);
             ClientData.reloadTerrain();
+            // Le module « Joueur » affiche un avertissement tant que le renderer est éteint.
+            com.yuyuframe.launcheragent.runtime.module.visual.PlayerModule.rendererChanged();
         }
     }
 }

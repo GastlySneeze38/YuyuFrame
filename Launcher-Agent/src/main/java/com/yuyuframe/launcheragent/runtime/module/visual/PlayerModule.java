@@ -1,8 +1,11 @@
 package com.yuyuframe.launcheragent.runtime.module.visual;
 
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
+import com.yuyuframe.launcheragent.celeritas.RendererSwitch;
+import com.yuyuframe.launcheragent.runtime.module.optimization.OptimizationModule;
 import com.yuyuframe.launcheragent.runtime.presence.PlayerStyle;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
+import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
 
 /**
@@ -34,27 +37,57 @@ public final class PlayerModule extends LauncherModule {
     public boolean tab = true;
     public boolean preview;
 
+    /** Lu par {@link #rendererChanged()}, appelé depuis un autre module. */
+    private static volatile PlayerModule instance;
+
     public PlayerModule() {
-        super("player", "Joueur", "Stylise le pseudo des autres joueurs YuyuFrame : logo, fond de l'étiquette, couleurs, liste Tab",
+        super("player", "Joueur", "Logo, fond et couleurs du pseudo des joueurs YuyuFrame",
             "Pseudos des joueurs YuyuFrame", true);
         iconUrl = icons8("user");
+        instance = this;
         apply();
+    }
+
+    /**
+     * L'étiquette au-dessus de la tête n'est stylisée que par le dessin groupé
+     * du renderer de terrain ({@code LabelBatch189}) ; la liste Tab, elle, n'en
+     * dépend pas.
+     */
+    private static boolean rendererOn() {
+        return RendererSwitch.wanted() || RendererSwitch.active();
+    }
+
+    /** Le renderer vient d'être allumé ou éteint : l'avertissement doit apparaître ou disparaître. */
+    public static void rendererChanged() {
+        PlayerModule module = instance;
+        if (module != null) {
+            module.invalidateSettings();
+        }
     }
 
     @Override
     protected void settings(SettingList s) {
+        // Tant que le renderer est éteint : dire pourquoi l'étiquette ne change
+        // pas, et offrir de l'allumer d'ici. La liste est refaite quand il
+        // change d'état (voir rendererChanged), donc ces deux lignes s'en vont seules.
+        if (!rendererOn()) {
+            s.info("renderer-warning", "Renderer de terrain éteint",
+                "Sans lui, seule la liste Tab est stylisée : l'étiquette au-dessus de la tête garde son aspect d'origine.",
+                "Étiquette");
+            if (RendererSwitch.available()) {
+                s.action("renderer-enable", "Activer le renderer", "", "Étiquette", PlayerModule::enableRenderer);
+            }
+        }
         s.toggle("logo", "Logo YuyuFrame", "Affiche le logo devant le pseudo", "Étiquette",
             null, () -> logo, v -> { logo = v; apply(); });
-        s.dropdown("plate", "Fond de l'étiquette",
-            "\"Néon\" : panneau sombre aux liserés lumineux. \"Aurore\" : les deux couleurs ondulent. \"Verre\" : verre fumé et barres de couleur. \"Comète\" : une comète file sous le pseudo. \"Vanilla\" : le fond d'origine.",
+        s.dropdown("plate", "Fond de l'étiquette", "Le décor dessiné derrière le pseudo",
             "Étiquette", new String[]{ "Vanilla", "Néon", "Aurore", "Verre", "Comète" }, null,
             () -> plate, v -> { plate = v; apply(); });
         s.dropdown("textMode", "Couleur du pseudo",
-            "Sur beaucoup de serveurs la couleur d'un pseudo indique l'équipe ou le grade : par défaut, seules les lettres que le serveur a laissées blanches sont recolorées.",
-            "Étiquette", new String[]{ "Inchangée", "Si le serveur ne la fixe pas", "Toujours" }, null,
+            "Par défaut, une couleur d'équipe ou de grade posée par le serveur est gardée",
+            "Étiquette", new String[]{ "Inchangée", "Si non colorée", "Toujours" }, null,
             () -> textMode, v -> { textMode = v; apply(); });
-        s.dropdown("animation", "Animation",
-            "\"Respiration\" : la lumière monte et descend lentement. \"Vague\" : le dégradé glisse le long du pseudo. \"Arc-en-ciel\" : toutes les couleurs défilent.",
+        s.dropdown("animation", "Animation", "Fait vivre les couleurs du pseudo",
             "Étiquette", new String[]{ "Aucune", "Respiration", "Vague", "Arc-en-ciel" }, null,
             () -> animation, v -> { animation = v; apply(); });
         s.color("colorA", "Première couleur", "Couleurs", () -> colorA, v -> { colorA = v; apply(); });
@@ -62,8 +95,17 @@ public final class PlayerModule extends LauncherModule {
         s.toggle("tab", "Liste Tab", "Applique le même style dans la liste des joueurs", "Où",
             null, () -> tab, v -> { tab = v; apply(); });
         s.toggle("preview", "Aperçu sur tous les joueurs",
-            "Stylise tous les joueurs, pas seulement ceux de YuyuFrame : pour régler l'apparence sans attendre d'en croiser un",
+            "Pour régler l'apparence sans attendre de croiser un joueur YuyuFrame",
             "Où", null, () -> preview, v -> { preview = v; apply(); });
+    }
+
+    private static void enableRenderer() {
+        LauncherModule optimization = ModuleRegistry.get("optimization");
+        if (optimization instanceof OptimizationModule) {
+            ((OptimizationModule) optimization).enableTerrainRenderer();
+        }
+        // Au cas où la consigne n'aurait pas changé (renderer déjà demandé) : la liste est refaite quand même.
+        rendererChanged();
     }
 
     @Override
