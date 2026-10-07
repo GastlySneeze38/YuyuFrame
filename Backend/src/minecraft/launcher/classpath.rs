@@ -30,6 +30,84 @@ pub(super) fn dedup_classpath(entries: Vec<String>) -> Vec<String> {
     result
 }
 
+/// Classpath complet d'un lancement, dédupliqué.
+///
+/// R-3 (audit pipeline) : cet ORDRE est contractuel — `dedup_classpath`
+/// garde la PREMIÈRE occurrence de chaque `group/artifact`, donc les libs du
+/// loader (Fabric/Forge/...) DOIVENT précéder les libs vanilla pour que les
+/// premières masquent les secondes (le loader connaît la version de lib
+/// compatible avec ses mods, pas juste celle du manifeste Mojang). Une
+/// réorganisation innocente casserait Forge/Fabric silencieusement — le
+/// launcher démarrerait, mais avec les mauvaises versions de libs.
+///
+/// `lwjgl3_compat` (API LWJGL 2 de la 1.8.9 : Display, Keyboard…) : ces
+/// classes n'existent dans aucun autre jar, la position ne masque rien. Les
+/// jars des agents (asm…) passent avant les libs vanilla. Le jar client vient
+/// en dernier — voir `launched_client_jar` pour lequel c'est.
+pub(super) fn assemble_classpath(
+    loader_libs: Vec<String>,
+    lwjgl3_compat: Option<&Path>,
+    p2p_libs: Vec<String>,
+    agent_libs: Vec<String>,
+    vanilla_libs: Vec<String>,
+    client_jar: &Path,
+) -> Vec<String> {
+    let mut full = loader_libs;
+    if let Some(jar) = lwjgl3_compat {
+        full.push(jar.to_string_lossy().to_string());
+    }
+    full.extend(p2p_libs);
+    full.extend(agent_libs);
+    full.extend(vanilla_libs);
+    full.push(client_jar.to_string_lossy().to_string());
+    dedup_classpath(full)
+}
+
+/// Le jar client à mettre sur le classpath : celui de la version LANCÉE,
+/// `versions/<id>/<id>.jar`, comme le launcher officiel.
+///
+/// Pour une version vanilla c'est le jar téléchargé. Pour une version qui en
+/// hérite (Forge, NeoForge : `inheritsFrom`), le launcher officiel n'y met PAS
+/// le jar du parent mais une copie portant le nom de l'enfant — et ce nom
+/// compte : BootstrapLauncher (Forge 1.17+) transforme en module tout jar du
+/// classpath dont le nom ne figure pas dans `-DignoreList`, liste qui contient
+/// `${version_name}.jar`, soit `1.20.1-forge-47.4.10.jar`. Avec
+/// `versions/1.20.1/1.20.1.jar`, le jeu vanilla devenait un module `_1._20._1`
+/// exportant les mêmes paquets que le module `minecraft` de Forge :
+/// « Modules minecraft and _1._20._1 export package … » dès qu'un mod lisait
+/// les deux.
+pub(super) fn launched_client_jar(mc_dir: &Path, launched_id: &str) -> PathBuf {
+    mc_dir.join("versions").join(launched_id).join(format!("{launched_id}.jar"))
+}
+
+/// Pose `dest` (le jar client sous le nom de la version lancée) en copiant
+/// le jar vanilla, s'il n'y est pas déjà. La taille tient lieu de contrôle à
+/// chaque lancement, comme pour le jar vanilla lui-même (`file_matches`) ; le
+/// SHA1 est vérifié sur la copie avant qu'elle ne prenne sa place, donc un
+/// fichier présent à cet endroit a toujours été vérifié une fois.
+pub(super) async fn ensure_launched_client_jar(vanilla_jar: &Path, dest: &Path, size: u64, sha1: &str) -> Result<()> {
+    if dest == vanilla_jar || file_matches(dest, Some(size)).await {
+        return Ok(());
+    }
+    let bytes = tokio::fs::read(vanilla_jar).await.map_err(|e| anyhow!("Jar client illisible ({}) : {e}", vanilla_jar.display()))?;
+    let actual = {
+        use sha1::{Digest, Sha1};
+        format!("{:x}", Sha1::digest(&bytes))
+    };
+    if !actual.eq_ignore_ascii_case(sha1) {
+        return Err(anyhow!("Jar client corrompu ({}) : SHA1 {actual}, attendu {sha1}", vanilla_jar.display()));
+    }
+    if let Some(parent) = dest.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+    }
+    // Écrit à côté puis renommé : une copie interrompue ne laisse jamais un
+    // jar tronqué au nom définitif.
+    let tmp = dest.with_extension("jar.part");
+    tokio::fs::write(&tmp, &bytes).await?;
+    tokio::fs::rename(&tmp, dest).await?;
+    Ok(())
+}
+
 fn artifact_key(path: &str) -> String {
     let normalized = path.replace('\\', "/");
     let marker = "/libraries/";
@@ -244,7 +322,85 @@ pub async fn download_verified(
 
 #[cfg(test)]
 mod tests {
-    use super::dedup_classpath;
+    use super::{assemble_classpath, dedup_classpath, ensure_launched_client_jar, launched_client_jar};
+    use std::path::Path;
+
+    fn norm(p: &str) -> String {
+        p.replace('\\', "/")
+    }
+
+    /// Forge 1.20.1 : le jar client du classpath porte le nom de la version
+    /// Forge, celui que `-DignoreList` contient ; le jar vanilla n'y est pas.
+    #[test]
+    fn forge_moderne_met_le_jar_de_la_version_lancee() {
+        let mc = Path::new("mc");
+        let client = launched_client_jar(mc, "1.20.1-forge-47.4.10");
+        let cp: Vec<String> = assemble_classpath(
+            vec!["mc/libraries/cpw/mods/bootstraplauncher/1.1.2/bootstraplauncher-1.1.2.jar".into()],
+            None,
+            Vec::new(),
+            Vec::new(),
+            vec!["mc/libraries/com/mojang/brigadier/1.1.8/brigadier-1.1.8.jar".into()],
+            &client,
+        )
+        .iter()
+        .map(|p| norm(p))
+        .collect();
+
+        assert_eq!(cp.last().unwrap(), "mc/versions/1.20.1-forge-47.4.10/1.20.1-forge-47.4.10.jar");
+        assert!(!cp.iter().any(|p| p.ends_with("versions/1.20.1/1.20.1.jar")));
+        // Les libs du loader restent devant les libs vanilla.
+        assert!(cp[0].contains("bootstraplauncher"));
+    }
+
+    /// Sans loader (ou Fabric / Quilt, qui n'ont pas de version installée sur
+    /// le disque), la version lancée est la version du jeu : rien ne change.
+    #[test]
+    fn vanilla_garde_son_propre_jar() {
+        let client = launched_client_jar(Path::new("mc"), "1.20.1");
+        assert_eq!(norm(&client.to_string_lossy()), "mc/versions/1.20.1/1.20.1.jar");
+    }
+
+    /// L'ordre des autres entrées, dont dépendent les agents et la 1.8.9.
+    #[test]
+    fn ordre_du_classpath() {
+        let cp = assemble_classpath(
+            vec!["loader.jar".into()],
+            Some(Path::new("lwjgl2-compat.jar")),
+            vec!["p2p-asm.jar".into()],
+            vec!["agent-asm.jar".into()],
+            vec!["vanilla.jar".into()],
+            Path::new("client.jar"),
+        );
+        assert_eq!(cp, ["loader.jar", "lwjgl2-compat.jar", "p2p-asm.jar", "agent-asm.jar", "vanilla.jar", "client.jar"]);
+    }
+
+    #[tokio::test]
+    async fn le_jar_de_la_version_lancee_est_une_copie_verifiee() {
+        let dir = std::env::temp_dir().join(format!("yf-client-jar-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let vanilla = launched_client_jar(&dir, "1.20.1");
+        std::fs::create_dir_all(vanilla.parent().unwrap()).unwrap();
+        std::fs::write(&vanilla, b"abc").unwrap();
+        // SHA1 de « abc ».
+        let sha1 = "a9993e364706816aba3e25717850c26c9cd0d89d";
+        let child = launched_client_jar(&dir, "1.20.1-forge-47.4.10");
+
+        // Empreinte fausse : rien n'est posé au nom définitif.
+        assert!(ensure_launched_client_jar(&vanilla, &child, 3, "00").await.is_err());
+        assert!(!child.exists());
+
+        ensure_launched_client_jar(&vanilla, &child, 3, sha1).await.unwrap();
+        assert_eq!(std::fs::read(&child).unwrap(), b"abc");
+
+        // Déjà en place à la bonne taille : pas recopié (la source peut manquer).
+        std::fs::remove_file(&vanilla).unwrap();
+        ensure_launched_client_jar(&vanilla, &child, 3, sha1).await.unwrap();
+
+        // Version vanilla : source et destination sont le même fichier.
+        ensure_launched_client_jar(&child, &child, 3, sha1).await.unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     /// Verrouille le comportement documenté sur `dedup_classpath` (R-3, audit
     /// pipeline) : premier gagnant. Une lib loader (Forge) placée avant la

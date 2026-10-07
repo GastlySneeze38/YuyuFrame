@@ -38,6 +38,14 @@ pub(super) struct LoaderSetup {
     pub(super) classpath: Vec<String>,
     pub(super) extra_game_args: Vec<String>,
     pub(super) extra_jvm_args: Vec<String>,
+    /// Identifiant de la version réellement lancée quand ce n'est pas celle
+    /// du jeu : `1.20.1-forge-47.4.10`, le dossier de `versions/` que
+    /// l'installeur du loader a créé et qui hérite du jeu (`inheritsFrom`).
+    /// C'est lui que vaut `${version_name}` et qui nomme le jar client du
+    /// classpath (voir `classpath::launched_client_jar`). `None` : la version
+    /// du jeu — vanilla, et Fabric / Quilt, dont le profil vient du réseau et
+    /// n'installe aucune version sur le disque.
+    pub(super) version_id: Option<String>,
     /// Libs ou dépendances qui n'ont pas pu être installées — le jeu démarre
     /// quand même (best-effort), mais l'utilisateur doit en être informé
     /// plutôt que de découvrir un crash Java sans indice.
@@ -134,6 +142,7 @@ pub(super) async fn setup_fabric(
         classpath: fabric_cp,
         extra_game_args: extra_game,
         extra_jvm_args: extra_jvm,
+        version_id: None,
         warnings,
     })
 }
@@ -222,6 +231,7 @@ pub(super) async fn setup_quilt(
         classpath: quilt_cp,
         extra_game_args: extra_game,
         extra_jvm_args: extra_jvm,
+        version_id: None,
         warnings,
     })
 }
@@ -348,6 +358,7 @@ pub(super) async fn setup_forge(
         classpath: forge_cp,
         extra_game_args: extra_game,
         extra_jvm_args: extra_jvm,
+        version_id: Some(version_id),
         warnings,
     })
 }
@@ -458,6 +469,35 @@ pub(super) async fn setup_neoforge(
         classpath: neoforge_cp,
         extra_game_args: extra_game,
         extra_jvm_args: extra_jvm,
+        version_id: Some(version_id),
         warnings,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::substitute_forge_placeholders;
+    use std::path::Path;
+
+    /// `${version_name}` vaut la version LANCÉE (celle de Forge), pas celle
+    /// du jeu : c'est ce nom que BootstrapLauncher cherche parmi les jars du
+    /// classpath pour ne pas en faire un module.
+    #[test]
+    fn version_name_est_la_version_lancee() {
+        let args = substitute_forge_placeholders(
+            vec![
+                "-DignoreList=bootstraplauncher,securejarhandler,forge-,${version_name}.jar".to_string(),
+                "-DlibraryDirectory=${library_directory}".to_string(),
+                "-p".to_string(),
+                "${library_directory}/a.jar${classpath_separator}${library_directory}/b.jar".to_string(),
+            ],
+            "1.20.1-forge-47.4.10",
+            Path::new("libs"),
+        );
+        assert_eq!(args[0], "-DignoreList=bootstraplauncher,securejarhandler,forge-,1.20.1-forge-47.4.10.jar");
+        assert_eq!(args[1], "-DlibraryDirectory=libs");
+        let sep = if cfg!(target_os = "windows") { ";" } else { ":" };
+        assert_eq!(args[3], format!("libs/a.jar{sep}libs/b.jar"));
+        assert!(!args.iter().any(|a| a.contains("${")));
+    }
 }

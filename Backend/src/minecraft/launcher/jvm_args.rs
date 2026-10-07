@@ -257,6 +257,59 @@ pub(super) fn merge_jvm_args(generated: Vec<String>, extra_args: &str, args_mode
     out
 }
 
+/// Nom de la propriété d'un `-Dclé` ou `-Dclé=valeur`, sinon `None`.
+fn system_property(arg: &str) -> Option<&str> {
+    let rest = arg.strip_prefix("-D")?;
+    let key = rest.split('=').next().unwrap_or(rest);
+    (!key.is_empty()).then_some(key)
+}
+
+/// Ne garde qu'une occurrence de chaque propriété système (`-Dclé=valeur`)
+/// sur la ligne de commande complète, une fois réunis notre tuning, les
+/// drapeaux de l'utilisateur, ceux du manifeste Mojang, du loader et des
+/// agents. À appeler AVANT `-cp` : au-delà ce sont les arguments du jeu.
+///
+/// Qui gagne : la valeur tapée par l'utilisateur (« Configuration JVM ») s'il
+/// a défini la propriété — `merge_jvm_args` le garantissait déjà face à notre
+/// tuning, mais les `-D` du JSON du loader arrivent après et l'écrasaient,
+/// la JVM retenant la dernière occurrence. Sinon la dernière occurrence,
+/// c'est-à-dire exactement ce que la JVM aurait retenu : pour tout ce que
+/// l'utilisateur n'a pas touché, rien ne change que le bruit en moins.
+///
+/// La propriété reste à la place de sa première occurrence ; l'ordre n'a pas
+/// de sens pour un `-D`. Les autres drapeaux (`-XX`, `-p <chemin>`,
+/// `--add-opens …`) ne sont ni déplacés ni dédupliqués.
+pub(super) fn dedup_system_properties(args: Vec<String>, user_extra_args: &str) -> Vec<String> {
+    let mut winner: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    for arg in &args {
+        if let Some(key) = system_property(arg) {
+            winner.insert(key.to_string(), arg.clone());
+        }
+    }
+    for arg in parse_user_jvm_args(user_extra_args) {
+        if let Some(key) = system_property(&arg) {
+            // Seulement si le drapeau est bien sur la ligne : en mode
+            // « remplacer » comme en mode « ajouter » il y est, mais on ne
+            // réintroduit jamais ici un drapeau que la fusion aurait écarté.
+            if winner.contains_key(key) {
+                winner.insert(key.to_string(), arg);
+            }
+        }
+    }
+    let mut out = Vec::with_capacity(args.len());
+    for arg in args {
+        match system_property(&arg).map(str::to_string) {
+            Some(key) => {
+                if let Some(kept) = winner.remove(&key) {
+                    out.push(kept);
+                }
+            }
+            None => out.push(arg),
+        }
+    }
+    out
+}
+
 /// P1-6 (audit launcher, Phase 6) : grille RAM/GC OpenJ9, alternative à
 /// `build_hotspot_jvm_args` pour le palier "~2 Go" de la grille jvm-config —
 /// OpenJ9 a une empreinte mémoire de base nettement plus faible que HotSpot,
@@ -990,5 +1043,54 @@ mod tests {
         let out = merge_jvm_args(generated(), "-Xmx4g", "replace");
         assert_eq!(out.iter().filter(|a| a.starts_with("-Xmx")).count(), 1);
         assert!(out.contains(&"-Xmx4g".to_string()));
+    }
+
+    // ── Propriétés système en double ─────────────────────────────────────────
+
+    fn line(args: &[&str]) -> Vec<String> {
+        args.iter().map(|a| a.to_string()).collect()
+    }
+
+    /// Le cas qui a motivé la fonction : l'utilisateur redéfinit une
+    /// propriété que le JSON de Forge pose aussi, plus loin sur la ligne.
+    #[test]
+    fn un_d_utilisateur_gagne_sur_celui_du_loader() {
+        let user = "-Dfml.earlyprogresswindow=false";
+        // Notre tuning + drapeaux utilisateur, puis ceux du loader.
+        let args = line(&[
+            "-Xmx4g",
+            "-Dfml.earlyprogresswindow=false",
+            "-DignoreList=a,b,1.20.1-forge-47.4.10.jar",
+            "-Dfml.earlyprogresswindow=true",
+            "-p",
+            "libs/a.jar",
+        ]);
+        let out = super::dedup_system_properties(args, user);
+        assert_eq!(out, line(&["-Xmx4g", "-Dfml.earlyprogresswindow=false", "-DignoreList=a,b,1.20.1-forge-47.4.10.jar", "-p", "libs/a.jar"]));
+    }
+
+    /// Sans intervention de l'utilisateur, c'est la dernière occurrence qui
+    /// reste — celle que la JVM aurait retenue de toute façon.
+    #[test]
+    fn sans_utilisateur_la_derniere_occurrence_reste() {
+        let out = super::dedup_system_properties(line(&["-Dos.name=Windows 10", "-XX:+UseG1GC", "-Dos.name=Windows 11", "-Dfoo"]), "");
+        assert_eq!(out, line(&["-Dos.name=Windows 11", "-XX:+UseG1GC", "-Dfoo"]));
+    }
+
+    /// Une propriété que l'utilisateur a tapée mais que la fusion a écartée
+    /// n'est pas réintroduite, et rien d'autre qu'un `-D` n'est dédupliqué
+    /// (`--add-opens` se répète légitimement).
+    #[test]
+    fn rien_d_autre_qu_un_d_n_est_touche() {
+        let args = line(&["--add-opens", "java.base/java.util=ALL-UNNAMED", "--add-opens", "java.base/java.lang=ALL-UNNAMED", "-Da=1"]);
+        let out = super::dedup_system_properties(args.clone(), "-Dabsent=1 -XX:+UseZGC");
+        assert_eq!(out, args);
+    }
+
+    /// `-Dfoo` et `-Dfoo=bar` désignent la même propriété, pas `-Dfoobar`.
+    #[test]
+    fn la_cle_s_arrete_au_signe_egal() {
+        let out = super::dedup_system_properties(line(&["-Dfoo", "-Dfoobar=1", "-Dfoo=bar"]), "");
+        assert_eq!(out, line(&["-Dfoo=bar", "-Dfoobar=1"]));
     }
 }

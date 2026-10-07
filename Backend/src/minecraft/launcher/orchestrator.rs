@@ -15,10 +15,10 @@ use crate::minecraft::versions::{fetch_version_list, AssetIndexFile, VersionDeta
 use super::agent_deploy::launcher_agent_dir;
 use super::agents::{setup_launcher_agent, setup_p2p, AgentSetup};
 use super::appcds::appcds_jvm_args;
-use super::classpath::{artifact_path, dedup_classpath, download_file, download_verified, extract_natives, file_matches, should_download_library};
+use super::classpath::{artifact_path, assemble_classpath, download_file, download_verified, ensure_launched_client_jar, extract_natives, file_matches, launched_client_jar, should_download_library};
 use super::java::{ensure_java, is_openj9, java_requirement, supports_shenandoah};
 use super::legacy_lwjgl3::{compat_jar as legacy_compat_jar, natives_dir_name, swap_libraries, uses_legacy_lwjgl3};
-use super::jvm_args::{build_game_args, build_jvm_args, ensure_gpu_preference, extract_mojang_jvm_args, needs_shenandoah_probe, parse_user_jvm_args, resolve_auto_vendor, GcEnv, JvmVendor};
+use super::jvm_args::{build_game_args, build_jvm_args, dedup_system_properties, ensure_gpu_preference, extract_mojang_jvm_args, needs_shenandoah_probe, parse_user_jvm_args, resolve_auto_vendor, GcEnv, JvmVendor};
 #[cfg(target_os = "windows")]
 use super::jvm_args::{timeBeginPeriod, timeEndPeriod};
 use super::loader_setup::{setup_fabric, setup_forge, setup_neoforge, setup_quilt, LoaderSetup};
@@ -488,6 +488,14 @@ pub async fn download_and_launch(
         loader_setup.extra_game_args,
         loader_setup.extra_jvm_args,
     );
+    // La version réellement lancée : celle du loader quand il en installe une
+    // qui hérite du jeu (Forge, NeoForge), sinon celle du jeu. Elle nomme le
+    // jar client du classpath et vaut `${version_name}`, comme dans le
+    // launcher officiel. Tout le reste (natives, Java requis, agents) reste
+    // attaché à la version du jeu.
+    let launched_id = loader_setup.version_id.as_deref().unwrap_or(version_id).to_string();
+    let launched_jar = launched_client_jar(&mc_dir, &launched_id);
+    ensure_launched_client_jar(&client_jar, &launched_jar, details.downloads.client.size, &details.downloads.client.sha1).await?;
     // Avertissements non-bloquants (lib Fabric/Forge ou dépendance de mod
     // manquante) — remontés à l'appelant même en cas de lancement réussi,
     // au lieu de rester silencieux dans les logs (voir play/launch.rs,
@@ -550,26 +558,16 @@ pub async fn download_and_launch(
 
     let classpath_sep = if cfg!(target_os = "windows") { ";" } else { ":" };
 
-    // R-3 (audit pipeline) : cet ORDRE est contractuel — `dedup_classpath`
-    // déduplique par `group/artifact` en conservant la PREMIÈRE occurrence
-    // (voir sa doc), donc les libs du loader (Fabric/Forge/...) DOIVENT
-    // précéder les libs vanilla pour que les premières masquent les secondes
-    // (comportement voulu : le loader connaît la version de lib compatible
-    // avec ses mods, pas juste celle du manifeste Mojang). Une réorganisation
-    // innocente de ces `extend` casserait Forge/Fabric silencieusement — le
-    // launcher démarrerait, mais avec les mauvaises versions de libs.
-    let mut full_classpath: Vec<String> = extra_classpath;
-    // API LWJGL 2 de la 1.8.9 (Display, Keyboard…) en tête : ces classes
-    // n'existent dans aucun autre jar, la position ne masque rien, mais on
-    // la veut indépendante de l'ordre des autres entrées.
-    if let Some(jar) = &lwjgl3_compat_jar {
-        full_classpath.push(jar.to_string_lossy().to_string());
-    }
-    full_classpath.extend(p2p_extra_cp); // asm-9.5.jar + asm-tree-9.5.jar avant tout le reste
-    full_classpath.extend(launcher_agent_extra_cp); // idem pour le LauncherAgent
-    full_classpath.extend(classpath); // libs vanilla — APRÈS les libs loader ci-dessus
-    full_classpath.push(client_jar.to_string_lossy().to_string());
-    let classpath_str = dedup_classpath(full_classpath).join(classpath_sep);
+    // L'ordre est contractuel (R-3) : voir `assemble_classpath`.
+    let classpath_str = assemble_classpath(
+        extra_classpath,
+        lwjgl3_compat_jar.as_deref(),
+        p2p_extra_cp,
+        launcher_agent_extra_cp,
+        classpath,
+        &launched_jar,
+    )
+    .join(classpath_sep);
 
     // P1-7 (audit launcher) : AppCDS — génère l'archive au premier lancement
     // de cette combinaison (version/loader/classpath/mods), la réutilise
@@ -630,8 +628,12 @@ pub async fn download_and_launch(
     args.extend(p2p_jvm_args);
     args.extend(launcher_agent_jvm_args);
     args.extend(appcds_args);
+    // Une seule occurrence de chaque `-Dclé`, et celle de l'utilisateur
+    // gagne : sans ça, un `-D` du JSON du loader, ajouté après les siens,
+    // écrasait ce qu'il avait tapé.
+    let mut args = dedup_system_properties(args, jvm_extra_args);
     args.extend(["-cp".to_string(), classpath_str, main_class]);
-    args.extend(build_game_args(&details, session, &mc_game_dir, &assets_dir, version_id));
+    args.extend(build_game_args(&details, session, &mc_game_dir, &assets_dir, &launched_id));
     args.extend(extra_game_args);
     // Après les arguments du manifeste et ceux du loader : le jeu lit la
     // dernière occurrence, donc ce que l'instance demande gagne sur un
