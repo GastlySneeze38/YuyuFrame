@@ -56,6 +56,8 @@ public final class PlayerStyle {
     public static volatile boolean tab = true;
     /** Styliser TOUS les joueurs : pour régler l'apparence sans avoir un second compte sous les yeux. */
     public static volatile boolean preview;
+    /** Dessiner aussi l'étiquette de son propre joueur, en vue extérieure ; faux quand le module est éteint. */
+    public static volatile boolean ownLabel;
 
     /** Largeur du logo et espace qui le sépare du pseudo, en pixels de police. */
     public static final float LOGO_WIDTH = 8.5F;

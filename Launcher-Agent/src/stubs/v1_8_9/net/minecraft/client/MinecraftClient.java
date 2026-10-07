@@ -60,6 +60,11 @@ public class MinecraftClient {
         throw new UnsupportedOperationException("stub compile-only");
     }
 
+    /** {@code ave.v()} — faux quand l'interface est masquée (F1). */
+    public static boolean isHudEnabled() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
     public void setScreen(Screen screen) {
         throw new UnsupportedOperationException("stub compile-only");
     }

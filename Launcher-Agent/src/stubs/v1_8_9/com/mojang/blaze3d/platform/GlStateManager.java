@@ -53,6 +53,21 @@ public final class GlStateManager {
         throw new UnsupportedOperationException("stub compile-only");
     }
 
+    /** {@code bfl.d(I)} — GL_LINEAR, GL_EXP ou GL_EXP2. */
+    public static void fogMode(int mode) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    /** {@code bfl.b(F)} */
+    public static void fogStart(float start) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    /** {@code bfl.c(F)} */
+    public static void fogEnd(float end) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
     /** {@code bfl.w()} */
     public static void enableTexture() {
         throw new UnsupportedOperationException("stub compile-only");

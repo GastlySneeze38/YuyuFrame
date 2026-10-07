@@ -842,7 +842,11 @@ public final class MixinHookPointRegistry {
         always("1.8.9", "v1_8_9.renderer.ParticleCullMixin189");
         always("1.8.9", "v1_8_9.renderer.WorldRendererSkyMixin189");
         // Étiquettes de nom : notées pendant le dessin des entités, dessinées ensemble à la fin.
-        always("1.8.9", "v1_8_9.renderer.EntityLabelBatchMixin189");        // Modèles d'objets : géométrie enregistrée une fois, rejouée ensuite.
+        always("1.8.9", "v1_8_9.renderer.EntityLabelBatchMixin189");
+        // « Mon pseudo » du module Joueur : l'étiquette de son propre joueur, sauf sur la poupée de l'inventaire.
+        always("1.8.9", "v1_8_9.entity.OwnLabelMixin189");
+        always("1.8.9", "v1_8_9.entity.InventoryDollMixin189");
+        // Modèles d'objets : géométrie enregistrée une fois, rejouée ensuite.
         always("1.8.9", "v1_8_9.item.ItemModelCacheMixin189");
         // Texte regroupé : un envoi par chaîne au lieu de dix appels par caractère.
         always("1.8.9", "v1_8_9.text.TextRendererBatchMixin189");
@@ -850,6 +854,12 @@ public final class MixinHookPointRegistry {
         // ── HUD ────────────────────────────────────────────────────────────
         gate("1.8.9", "v1_8_9.hud.HudExtractCrosshairMixin189", HookPoint.HUD_EXTRACT_CROSSHAIR);
         gate("1.8.9", "v1_8_9.hud.HudExtractTextureOverlayMixin189", HookPoint.HUD_EXTRACT_TEXTURE_OVERLAY);
+        // Le voile bleu sous l'eau : même point d'accroche, autre classe du jeu.
+        gate("1.8.9", "v1_8_9.hud.UnderwaterOverlayMixin189", HookPoint.HUD_EXTRACT_TEXTURE_OVERLAY);
+        // Brouillard : un seul mixin sert les quatre points FOG_SETUP_* de cette
+        // version (cécité, eau, lave, distance), donc toujours tissé — il ne
+        // fait rien tant qu'aucun module ne demande de le repousser.
+        always("1.8.9", "v1_8_9.level.FogSetupMixin189");
         gate("1.8.9", "v1_8_9.hud.HudExtractCameraOverlayMixin189", HookPoint.HUD_EXTRACT_CAMERA_OVERLAY);
         gate("1.8.9", "v1_8_9.hud.HudExtractSpectatorHotbarMixin189", HookPoint.HUD_EXTRACT_HOTBAR);
         gate("1.8.9", "v1_8_9.hud.HudExtractItemHotbarMixin189", HookPoint.HUD_EXTRACT_ITEM_HOTBAR);

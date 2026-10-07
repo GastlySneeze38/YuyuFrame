@@ -25,6 +25,11 @@ public class Entity implements net.minecraft.command.CommandSource {
 
     public double z;
 
+    /** {@code pk.a(arm)} — les yeux de l'entité sont-ils dans cette matière (eau, lave) ? */
+    public boolean isSubmergedIn(net.minecraft.block.material.Material material) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
     /** {@code pk.p} — position au tick précédent. */
     public double prevX;
 

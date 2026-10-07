@@ -36,6 +36,7 @@ public final class PlayerModule extends LauncherModule {
     public UiColor colorB = new UiColor(40, 224, 255, 255);
     public boolean tab = true;
     public boolean preview;
+    public boolean ownName;
 
     /** Lu par {@link #rendererChanged()}, appelé depuis un autre module. */
     private static volatile PlayerModule instance;
@@ -94,6 +95,8 @@ public final class PlayerModule extends LauncherModule {
         s.color("colorB", "Seconde couleur", "Couleurs", () -> colorB, v -> { colorB = v; apply(); });
         s.toggle("tab", "Liste Tab", "Applique le même style dans la liste des joueurs", "Où",
             null, () -> tab, v -> { tab = v; apply(); });
+        s.toggle("ownName", "Mon pseudo", "Affiche votre pseudo au-dessus de votre tête en vue extérieure",
+            "Où", null, () -> ownName, v -> { ownName = v; apply(); });
         s.toggle("preview", "Aperçu sur tous les joueurs",
             "Pour régler l'apparence sans attendre de croiser un joueur YuyuFrame",
             "Où", null, () -> preview, v -> { preview = v; apply(); });
@@ -124,6 +127,7 @@ public final class PlayerModule extends LauncherModule {
         PlayerStyle.colorB = rgb(colorB);
         PlayerStyle.tab = tab;
         PlayerStyle.preview = preview;
+        PlayerStyle.ownLabel = ownName && isEnabled();
         PlayerStyle.active = isEnabled();
     }
 

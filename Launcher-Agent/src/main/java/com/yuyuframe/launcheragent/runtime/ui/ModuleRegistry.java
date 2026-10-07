@@ -145,7 +145,9 @@ public final class ModuleRegistry {
         // Chacun dégrade proprement (no-op) sur les brackets où sa mécanique
         // sous-jacente n'existe pas encore (Ténèbres = 1.19+, voir leurs javadoc).
         safeRegister(() -> new SaturationModule());
-        safeRegister(() -> new NoDarknessModule());
+        // L'effet Ténèbres n'existe qu'à partir de la 1.19 : sur 1.8.9 la carte
+        // ne réglerait rien, donc elle n'y apparaît pas.
+        if (!IS_1_8_9) safeRegister(() -> new NoDarknessModule());
         safeRegister(() -> new NoFogModule());
         // 26.1.2/1.21.11 pour l'instant (voir IS_26_1/IS_1_21_11 plus haut +
         // javadoc de ces modules) — implémentés via des mixins qui n'existent
@@ -153,7 +155,10 @@ public final class ModuleRegistry {
         if (IS_26_1 || IS_1_21_11) {
             safeRegister(() -> new NoPumpkinOverlayModule());
         }
-        if (IS_26_1 || IS_1_21_11) {
+        // 1.8.9 depuis le 2026-10-07 : eau et lave (brouillard par
+        // FogPush189, voile bleu par UnderwaterOverlayMixin189) ; la neige
+        // poudreuse n'y existe pas, son réglage n'y est pas proposé.
+        if (IS_26_1 || IS_1_21_11 || IS_1_8_9) {
             safeRegister(() -> new ClearVisionModule());
         }
         // ShulkerPreviewModule SUPPRIMÉ le 2026-08-31 (décision utilisateur :

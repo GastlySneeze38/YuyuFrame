@@ -46,16 +46,24 @@ public final class ClearVisionModule extends LauncherModule {
             () -> clearWater, v -> clearWater = v);
         s.toggle("clearLava", "Lave", "Retire le brouillard teinté dans la lave.", "Réglages", null,
             () -> clearLava, v -> clearLava = v);
-        s.toggle("clearPowderSnow", "Neige poudreuse",
-            "Retire le brouillard teinté ET le givre à l'écran dans la neige poudreuse.", "Réglages", null,
-            () -> clearPowderSnow, v -> clearPowderSnow = v);
+        // La neige poudreuse est arrivée en 1.17 : rien à régler sur 1.8.9.
+        if (!IS_1_8_9) {
+            s.toggle("clearPowderSnow", "Neige poudreuse",
+                "Retire le brouillard teinté ET le givre à l'écran dans la neige poudreuse.", "Réglages", null,
+                () -> clearPowderSnow, v -> clearPowderSnow = v);
+        }
     }
+
+    private static final boolean IS_1_8_9 = "1.8.9".equals(System.getProperty("launcheragent.mcVersion", ""));
 
     public ClearVisionModule() {
         // Nom raccourci (était "Vision claire (eau/lave/neige)") — retour
         // utilisateur : débordait de la sous-sidebar du groupe "Confort
         // visuel" ; le détail reste dans la description.
-        super("clear-vision", "Vision claire", "Retire le brouillard teinté et le givre de l'eau, la lave et la neige poudreuse", false,
+        // 1.8.9 : pas de neige poudreuse, donc pas de givre non plus.
+        super("clear-vision", "Vision claire",
+            IS_1_8_9 ? "Retire le brouillard teinté et le voile de l'eau et de la lave"
+                : "Retire le brouillard teinté et le givre de l'eau, la lave et la neige poudreuse", false,
             HookPoint.FOG_SETUP_WATER, HookPoint.FOG_SETUP_LAVA, HookPoint.FOG_SETUP_POWDERED_SNOW,
             HookPoint.HUD_EXTRACT_TEXTURE_OVERLAY);
         // 26.1.2 — voir apimixin/v26_1_2/fog/ (brouillard) et
@@ -64,6 +72,15 @@ public final class ClearVisionModule extends LauncherModule {
         VanillaHookRegistry.register(HookPoint.FOG_SETUP_LAVA, ctx -> pushFogFarIf(clearLava, ctx));
         VanillaHookRegistry.register(HookPoint.FOG_SETUP_POWDERED_SNOW, ctx -> pushFogFarIf(clearPowderSnow, ctx));
         VanillaHookRegistry.register(HookPoint.HUD_EXTRACT_TEXTURE_OVERLAY, this::cancelPowderSnowOverlay);
+        // 1.8.9 : le voile bleu plaqué sur l'écran sous l'eau, dessiné à part
+        // du brouillard (voir UnderwaterOverlayMixin189).
+        VanillaHookRegistry.register(HookPoint.HUD_EXTRACT_TEXTURE_OVERLAY, this::cancelUnderwaterOverlay);
+    }
+
+    /** {@code ctx} = chemin de texture ({@code String}) — voir {@link HookPoint#HUD_EXTRACT_TEXTURE_OVERLAY}. */
+    private boolean cancelUnderwaterOverlay(Object ctx) {
+        if (!isEnabled() || !clearWater || !(ctx instanceof String)) return false;
+        return ((String) ctx).contains("underwater");
     }
 
     /** {@code true} = « repousse le brouillard » ; l'écriture est faite par le mixin (voir {@code FogOverride}). */
