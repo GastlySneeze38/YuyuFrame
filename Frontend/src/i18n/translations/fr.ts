@@ -728,6 +728,8 @@ export const fr = {
       title: 'Confidentialité',
       analyticsLabel: "Statistiques d'utilisation anonymes",
       analyticsDesc: 'Envoie des événements anonymes (PostHog) pour nous aider à identifier les bugs et prioriser les fonctionnalités — aucune donnée liée à ton compte ou tes fichiers',
+      presenceLabel: 'Apparaître comme joueur YuyuFrame',
+      presenceDesc: 'En jeu, les autres joueurs YuyuFrame peuvent te reconnaître. Compte Microsoft seulement ; nous ne gardons aucun historique, ni où tu joues',
     },
     langue: {
       title: 'Langue',

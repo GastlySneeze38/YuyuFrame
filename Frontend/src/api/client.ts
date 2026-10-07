@@ -713,6 +713,12 @@ export const api = {
     setDisabled: (disabled: boolean) => invoke<void>('analytics_set_disabled', { disabled }),
   },
 
+  // Apparaître en jeu comme joueur YuyuFrame (Backend `play/presence.rs`).
+  presence: {
+    isVisible: () => invoke<boolean>('presence_get_visible'),
+    setVisible: (visible: boolean) => invoke<void>('presence_set_visible', { visible }),
+  },
+
   launch: {
     /** `useAgent` : jouer avec le client intégré ou sans lui (voir
      *  `agentStatus`). Omis = avec, comme avant l'arrivée du choix. */

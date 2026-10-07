@@ -132,18 +132,6 @@ pub async fn launch_game(
         return Err("Un essai de compatibilité tourne déjà sur cette instance".to_string());
     }
 
-    // Preuve de propriété du compte Minecraft auprès du serveur YuyuFrame :
-    // en tâche de fond, le jeu ne l'attend pas et se lance même si elle échoue.
-    {
-        let state = state.inner().clone();
-        let session = session.clone();
-        tokio::spawn(async move {
-            if let Err(e) = crate::account::yuyu::profile::prove_minecraft_account(&state, &session).await {
-                tracing::debug!("compte Minecraft non prouvé : {e}");
-            }
-        });
-    }
-
     // Propriétaire de la ligne de session de jeu ouverte plus bas — les
     // statistiques sont par compte YuyuFrame, 0 quand personne n'est connecté.
     let yuyu_user_id = {
@@ -297,7 +285,12 @@ pub async fn launch_game(
             .ok()
         };
 
-        match launcher::download_and_launch(
+        // Preuve de propriété du compte Minecraft puis signal « je suis en
+        // jeu », en tâche de fond : le jeu ne les attend pas et se lance même
+        // s'ils échouent. Coupé dès que la partie se termine.
+        let presence = super::presence::spawn(state_clone.clone(), session.clone());
+
+        let launched = launcher::download_and_launch(
             &instance.mc_version,
             Some(&instance.loader),
             &session,
@@ -325,8 +318,10 @@ pub async fn launch_game(
             // Pas de sonde : ceci est une vraie partie.
             None,
         )
-        .await
-        {
+        .await;
+        presence.abort();
+
+        match launched {
             Ok(warnings) if !warnings.is_empty() => {
                 // Lancement réussi mais avec des libs/dépendances manquantes
                 // (voir orchestrator::LoaderSetup) — le jeu peut planter ou

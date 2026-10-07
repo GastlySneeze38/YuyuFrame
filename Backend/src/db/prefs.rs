@@ -20,6 +20,9 @@ use rusqlite::{params, Connection};
 /// Appliquer `shared_options.txt` aux instances nouvellement créées.
 pub const SYNC_GAME_SETTINGS: &str = "sync_game_settings";
 
+/// Apparaître en jeu comme joueur YuyuFrame (`play::presence`). Absent = oui.
+pub const PRESENCE_VISIBLE: &str = "presence_visible";
+
 pub fn init(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS app_prefs (

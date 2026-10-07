@@ -118,6 +118,17 @@ export default function Settings() {
     api.analytics.setDisabled(next).catch(() => {})
   }
 
+  // Apparaître en jeu comme joueur YuyuFrame : oui tant qu'on n'a pas dit non.
+  const [presenceVisible, setPresenceVisible] = useState(true)
+  useEffect(() => {
+    api.presence.isVisible().then(setPresenceVisible).catch(() => {})
+  }, [])
+  const togglePresence = () => {
+    const next = !presenceVisible
+    setPresenceVisible(next)
+    api.presence.setVisible(next).catch(() => setPresenceVisible(!next))
+  }
+
   const [dataRoot, setDataRoot] = useState<string | null>(null)
   const [pendingParent, setPendingParent] = useState<string | null>(null)
   const [movingData, setMovingData] = useState(false)
@@ -714,6 +725,15 @@ export default function Settings() {
                   </p>
                 </div>
                 <Toggle checked={!analyticsDisabled} onChange={toggleAnalytics} />
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-white">{t('settings.confidentialite.presenceLabel')}</p>
+                  <p className="text-[11px] text-white/35 mt-0.5">
+                    {t('settings.confidentialite.presenceDesc')}
+                  </p>
+                </div>
+                <Toggle checked={presenceVisible} onChange={togglePresence} />
               </div>
             </div>
           </SCard>

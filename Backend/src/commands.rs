@@ -87,6 +87,8 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         crate::play::launch::cancel_launch,
         crate::play::launch::reload_agent,
         crate::play::launch::console_ready,
+        crate::play::presence::presence_get_visible,
+        crate::play::presence::presence_set_visible,
         crate::integrations::analytics::track_event,
         crate::integrations::analytics::analytics_get_disabled,
         crate::integrations::analytics::analytics_set_disabled,

@@ -730,6 +730,8 @@ export const it: TranslationSchema = {
       title: 'Privacy',
       analyticsLabel: 'Statistiche d’uso anonime',
       analyticsDesc: 'Invia eventi anonimi (PostHog) per aiutarci a individuare i bug e stabilire le priorità — nessun dato legato al tuo account o ai tuoi file',
+      presenceLabel: 'Apparire come giocatore YuyuFrame',
+      presenceDesc: 'In gioco, gli altri giocatori YuyuFrame possono riconoscerti. Solo account Microsoft; non conserviamo alcuna cronologia né sappiamo dove giochi',
     },
     langue: {
       title: 'Lingua',
