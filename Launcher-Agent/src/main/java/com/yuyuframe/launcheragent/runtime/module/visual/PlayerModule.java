@@ -48,6 +48,17 @@ public final class PlayerModule extends LauncherModule {
     /** Ce nametag prend le style YuyuFrame, ou garde l'aspect du jeu. */
     public boolean ownStyle = true;
 
+    /**
+     * Les versions récentes où le module existe. Elles n'en ont qu'une partie :
+     * le nametag et le logo en pixels, l'étiquette et la liste Tab gardant
+     * l'aspect de vanilla (choix de l'utilisateur, 2026-10-08). Les fonds, les
+     * couleurs et l'animation restent propres à la 1.8.9.
+     */
+    public static final java.util.Set<String> MODERN_VERSIONS = java.util.Set.of("26.1.2");
+
+    /** 1.8.9 : tous les réglages. Ailleurs, seulement ceux du logo et du nametag. */
+    private static final boolean FULL = "1.8.9".equals(System.getProperty("launcheragent.mcVersion", ""));
+
     /** Lu par {@link #rendererChanged()}, appelé depuis un autre module. */
     private static volatile PlayerModule instance;
 
@@ -86,7 +97,7 @@ public final class PlayerModule extends LauncherModule {
         // Tant que le renderer est éteint : dire pourquoi l'étiquette ne change
         // pas, et offrir de l'allumer d'ici. La liste est refaite quand il
         // change d'état (voir rendererChanged), donc ces deux lignes s'en vont seules.
-        if (!rendererOn()) {
+        if (FULL && !rendererOn()) {
             s.warning("renderer-warning", "Renderer de terrain éteint",
                 "Sans lui, seule la liste Tab est stylisée : l'étiquette au-dessus de la tête garde son aspect d'origine.",
                 "Étiquette");
@@ -96,6 +107,20 @@ public final class PlayerModule extends LauncherModule {
         }
         s.toggle("logo", "Logo YuyuFrame", "Affiche le logo devant le pseudo", "Étiquette",
             null, () -> logo, v -> { logo = v; apply(); });
+        if (FULL) {
+            legacySettings(s);
+        }
+        s.toggle("styleOthers", "Joueurs YuyuFrame", "Applique ce style aux joueurs YuyuFrame que vous croisez",
+            "Où", null, () -> styleOthers, v -> { styleOthers = v; apply(); });
+        s.toggle("tab", "Liste Tab", "Applique le même style dans la liste des joueurs", "Où",
+            null, () -> tab, v -> { tab = v; apply(); });
+        s.toggle("preview", "Aperçu sur tous les joueurs",
+            "Pour régler l'apparence sans attendre de croiser un joueur YuyuFrame",
+            "Où", null, () -> preview, v -> { preview = v; apply(); });
+    }
+
+    /** Ce que seule la 1.8.9 sait dessiner : le choix du logo, les fonds, les couleurs du pseudo. */
+    private void legacySettings(SettingList s) {
         s.dropdown("logoStyle", "Style du logo", "En pixels comme une texture du jeu, ou tracé à vos couleurs",
             "Étiquette", new String[]{ "Pixel", "Contours" }, null,
             () -> logoStyle, v -> { logoStyle = v; apply(); });
@@ -111,13 +136,6 @@ public final class PlayerModule extends LauncherModule {
             () -> animation, v -> { animation = v; apply(); });
         s.color("colorA", "Première couleur", "Couleurs", () -> colorA, v -> { colorA = v; apply(); });
         s.color("colorB", "Seconde couleur", "Couleurs", () -> colorB, v -> { colorB = v; apply(); });
-        s.toggle("styleOthers", "Joueurs YuyuFrame", "Applique ce style aux joueurs YuyuFrame que vous croisez",
-            "Où", null, () -> styleOthers, v -> { styleOthers = v; apply(); });
-        s.toggle("tab", "Liste Tab", "Applique le même style dans la liste des joueurs", "Où",
-            null, () -> tab, v -> { tab = v; apply(); });
-        s.toggle("preview", "Aperçu sur tous les joueurs",
-            "Pour régler l'apparence sans attendre de croiser un joueur YuyuFrame",
-            "Où", null, () -> preview, v -> { preview = v; apply(); });
     }
 
     private static void enableRenderer() {

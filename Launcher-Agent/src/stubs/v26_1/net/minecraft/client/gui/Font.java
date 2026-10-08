@@ -1,5 +1,10 @@
 package net.minecraft.client.gui;
 
-/** Stub compile-only (26.1+) — marqueur vide, juste assez pour typer un paramètre capturé (jamais lu) par les mixins de {@code apimixin/v26_1/hud/}. Voir {@code Gui.java} pour le pourquoi de ce genre de stub sur 26.1+. */
+import net.minecraft.network.chat.FormattedText;
+
+/** Stub compile-only (26.1+). {@code width} vérifiée javap sur le jar client 26.1.2. */
 public abstract class Font {
+
+    /** Largeur d'un texte mis en forme, en pixels de police. */
+    public int width(FormattedText text) { return 0; }
 }

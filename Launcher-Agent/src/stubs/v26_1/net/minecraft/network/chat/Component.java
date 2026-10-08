@@ -8,7 +8,7 @@ package net.minecraft.network.chat;
  * de {@code MutableComponent} pour le {@code NoSuchMethodError} que la
  * version précédente provoquait.
  */
-public interface Component {
+public interface Component extends FormattedText {
     static MutableComponent literal(String text) { return null; }
     static MutableComponent translatable(String key) { return null; }
     /** {@code getString()} — méthode par défaut PUBLIQUE (vérifiée javap), voir {@code ChatEnhancementsModule}. */

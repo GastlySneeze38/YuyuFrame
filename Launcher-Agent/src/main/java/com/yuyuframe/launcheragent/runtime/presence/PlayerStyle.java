@@ -413,11 +413,21 @@ public final class PlayerStyle {
         }
     }
 
-    /** Le logo en pixels : un rectangle par suite de pixels de même couleur, sur la hauteur d'une ligne. */
-    private static void pixelLogo(Sink s, float x) {
-        final float size = 8.0F / PIXEL_ROWS.length;
-        final float ox = x + (LOGO_WIDTH - 8.0F) / 2.0F;
-        final int hidden = 80, visible = 255;
+    /** Côté du logo en pixels, dans sa propre grille. */
+    public static final int PIXEL_GRID = 14;
+
+    /** Reçoit le logo en pixels rectangle par rectangle, dans sa grille de {@link #PIXEL_GRID} de côté. */
+    public interface RectSink {
+        /** Une suite de pixels de même couleur sur la ligne {@code row}, de la colonne {@code from} (comprise) à {@code to} (exclue). */
+        void rect(int from, int row, int to, int rgb);
+    }
+
+    /**
+     * Le logo en pixels, sans rien savoir de l'endroit où il sera dessiné :
+     * c'est par ici que passent les versions récentes du jeu, qui n'affichent
+     * que lui (étiquette et liste Tab gardent l'aspect de vanilla).
+     */
+    public static void pixelRects(RectSink sink) {
         for (int row = 0; row < PIXEL_ROWS.length; row++) {
             String line = PIXEL_ROWS[row];
             int start = 0;
@@ -428,12 +438,20 @@ public final class PlayerStyle {
                     end++;
                 }
                 if (c != '.') {
-                    int rgb = pixelColor(c);
-                    quad(s, ox + start * size, row * size, ox + end * size, (row + 1) * size, rgb, rgb, hidden, visible);
+                    sink.rect(start, row, end, pixelColor(c));
                 }
                 start = end;
             }
         }
+    }
+
+    /** Le logo en pixels : un rectangle par suite de pixels de même couleur, sur la hauteur d'une ligne. */
+    private static void pixelLogo(Sink s, float x) {
+        final float size = 8.0F / PIXEL_ROWS.length;
+        final float ox = x + (LOGO_WIDTH - 8.0F) / 2.0F;
+        final int hidden = 80, visible = 255;
+        pixelRects((from, row, to, rgb) ->
+            quad(s, ox + from * size, row * size, ox + to * size, (row + 1) * size, rgb, rgb, hidden, visible));
     }
 
     /** Échelle du dessin (grille de 10 sur 9,6) vers la hauteur d'une ligne. */

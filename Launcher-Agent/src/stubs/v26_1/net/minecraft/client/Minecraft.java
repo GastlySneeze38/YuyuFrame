@@ -41,6 +41,8 @@ import net.minecraft.client.sounds.SoundManager;
  */
 public abstract class Minecraft {
     public static Minecraft getInstance() { return null; }
+    /** Faux quand l'interface est masquée (F1) — statique, vérifiée javap (26.1.2). */
+    public static boolean renderNames() { return false; }
     public abstract void setScreen(Screen screen);
     public abstract RenderTarget getMainRenderTarget();
     public abstract ClientPacketListener getConnection();

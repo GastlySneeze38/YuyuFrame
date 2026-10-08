@@ -27,6 +27,12 @@ public abstract class GuiGraphicsExtractor {
     /** Hauteur de l'écran en pixels GUI. */
     public int guiHeight() { return 0; }
 
+    /** La pile de transformations 2D de l'interface (vérifiée javap, 26.1.2). */
+    public org.joml.Matrix3x2fStack pose() { return null; }
+
+    /** Texte mis en forme, avec ombre — la surcharge qu'emploie la liste Tab (vérifiée javap, 26.1.2). */
+    public void text(Font font, net.minecraft.network.chat.Component text, int x, int y, int color) {}
+
     /** Quad de couleur pleine, pipeline vanilla — {@code color} en ARGB. */
     public void fill(int x0, int y0, int x1, int y1, int color) {}
 

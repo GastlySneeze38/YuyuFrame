@@ -180,7 +180,11 @@ public final class ModuleRegistry {
         // l'étiquette, couleurs, liste Tab). Module à part entière, hors du
         // groupe Confort visuel — d'autres réglages du joueur y viendront.
         // Seule la 1.8.9 sait le dessiner pour l'instant (voir sa javadoc).
-        if (IS_1_8_9) safeRegister(() -> new PlayerModule());
+        // Versions récentes : logo seul, aspect de vanilla gardé. Une version
+        // s'ajoute ici quand ses mixins existent (apimixin/v26_1_2/player…).
+        if (IS_1_8_9 || PlayerModule.MODERN_VERSIONS.contains(System.getProperty("launcheragent.mcVersion", ""))) {
+            safeRegister(() -> new PlayerModule());
+        }
         if (IS_1_8_9) safeRegister(() -> new ToggleSprintModule());
         if (IS_1_8_9) safeRegister(() -> new ToggleSneakModule());
         // Animations 1.7 : UN module depuis le 2026-09-16 (voir sa javadoc),

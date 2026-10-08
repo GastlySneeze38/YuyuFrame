@@ -158,6 +158,15 @@ public final class MixinHookPointRegistry {
         // évite le retransform et le bug.
         always("26.1.2", "v26_1_2.freelook.CameraFreelookMixin261");
         always("26.1.2", "v26_1_2.freelook.MouseHandlerFreelookMixin261");
+        // Module « Joueur » : logo devant le pseudo des joueurs YuyuFrame
+        // (étiquette et liste Tab) et nametag de son propre joueur. Toujours
+        // tissés : ces classes du jeu sont chargées avant que le module ne
+        // s'enregistre, et chaque point d'entrée rend la main en un test.
+        always("26.1.2", "v26_1_2.player.AvatarNameMixin261");
+        always("26.1.2", "v26_1_2.player.NameTagLogoMixin261");
+        always("26.1.2", "v26_1_2.player.OwnNametagMixin261");
+        always("26.1.2", "v26_1_2.player.InventoryDollMixin261");
+        always("26.1.2", "v26_1_2.player.TabListLogoMixin261");
 
         // ── HUD (fabric-rendering-v1) ─────────────────────────────────────
         gate("26.1.2", "v26_1_2.hud.HudExtractCameraOverlayMixin261", HookPoint.HUD_EXTRACT_CAMERA_OVERLAY);
