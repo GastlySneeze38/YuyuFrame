@@ -1,5 +1,6 @@
 package com.yuyuframe.launcheragent.apimixin.v1_8_9.item;
 
+import com.mojang.blaze3d.platform.GlStateManager;
 import com.yuyuframe.launcheragent.apimixin.mapping.YarnNamed;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.render.model.BakedModel;
@@ -128,7 +129,7 @@ public final class ItemModelCache189 {
 
         int list = entry.find(color, tint);
         if (list != 0) {
-            GL11.glCallList(list);
+            replay(list);
             return true;
         }
         if (entry.count == MAX_VARIANTS) {
@@ -161,7 +162,21 @@ public final class ItemModelCache189 {
         entry.tints[entry.count] = recordingTint;
         entry.lists[entry.count] = list;
         entry.count++;
+        replay(list);
+    }
+
+    /**
+     * Rejoue un enregistrement. Il porte une couleur par sommet : après lui, la
+     * couleur courante d'OpenGL est celle du dernier sommet, pas celle que
+     * {@code GlStateManager} a en mémoire. Vanilla l'oublie après chaque dessin
+     * coloré ({@code BufferRenderer.draw}) ; rejouer court-circuite ce dessin,
+     * donc on le fait ici. Sans ça, le {@code color(1, 1, 1, 1)} suivant était
+     * sauté et ce qui venait après (le corps d'un joueur, la barre d'objets)
+     * prenait la couleur du dernier objet dessiné.
+     */
+    private static void replay(int list) {
         GL11.glCallList(list);
+        GlStateManager.clearColor();
     }
 
     /** Au rechargement des ressources : les modèles sont refaits, les listes ne valent plus rien. */

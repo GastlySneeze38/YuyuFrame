@@ -45,19 +45,28 @@ public final class PlayerStyle {
     public static final int TEXT_UNCHANGED = 0, TEXT_IF_UNCOLORED = 1, TEXT_ALWAYS = 2;
     public static final int ANIM_NONE = 0, ANIM_BREATH = 1, ANIM_WAVE = 2, ANIM_RAINBOW = 3;
 
-    /** Faux tant que le module « Joueur » n'est pas enregistré ou qu'il est éteint. */
+    public static final int LOGO_PIXEL = 0, LOGO_OUTLINE = 1;
+
+    /** Faux tant que le module « Joueur » n'est pas enregistré, qu'il est éteint, ou que le style y est coupé. */
     public static volatile boolean active;
     public static volatile boolean logo = true;
-    public static volatile int plate = PLATE_NEON;
+    public static volatile int logoStyle = LOGO_PIXEL;
+    public static volatile int plate = PLATE_VANILLA;
     public static volatile int textMode = TEXT_IF_UNCOLORED;
-    public static volatile int animation = ANIM_BREATH;
-    public static volatile int colorA = 0xB43CFF;
-    public static volatile int colorB = 0x28E0FF;
+    public static volatile int animation = ANIM_NONE;
+    public static volatile int colorA = 0x7A20FF;
+    public static volatile int colorB = 0x0060FF;
     public static volatile boolean tab = true;
     /** Styliser TOUS les joueurs : pour régler l'apparence sans avoir un second compte sous les yeux. */
     public static volatile boolean preview;
-    /** Dessiner aussi l'étiquette de son propre joueur, en vue extérieure ; faux quand le module est éteint. */
+    /** « Nametag » : dessiner aussi l'étiquette de son propre joueur, en vue extérieure ; faux quand le module est éteint. */
     public static volatile boolean ownLabel;
+    /**
+     * Cette étiquette-là prend-elle le style YuyuFrame ? Réglage à part : on
+     * peut vouloir son nametag sans rien changer à son aspect. Ne dépend ni de
+     * {@link #active} ni de la reconnaissance par le serveur — c'est soi-même.
+     */
+    public static volatile boolean ownStyled;
 
     /** Largeur du logo et espace qui le sépare du pseudo, en pixels de police. */
     public static final float LOGO_WIDTH = 8.5F;
@@ -329,6 +338,24 @@ public final class PlayerStyle {
      * @param x bord gauche du logo ; il occupe {@link #LOGO_WIDTH} de large et la hauteur du texte
      */
     public static void logo(Sink s, float x, float time) {
+        // Sur le fond de vanilla, presque transparent, rien ne cache ce qui est
+        // derrière le logo : il doit le faire lui-même, comme un panneau. Sur
+        // nos fonds, le panneau s'en charge déjà.
+        boolean alone = plate == PLATE_VANILLA;
+        if (alone) {
+            s.opaque(true);
+        }
+        if (logoStyle == LOGO_PIXEL) {
+            pixelLogo(s, x);
+        } else {
+            outlineLogo(s, x, time);
+        }
+        if (alone) {
+            s.opaque(false);
+        }
+    }
+
+    private static void outlineLogo(Sink s, float x, float time) {
         float lift = 0.10F * (float) Math.sin(time * TWO_PI / 3.2F);
         // Chaque moitié garde la couleur du joueur tant qu'elle se détache du
         // fond ; sinon elle est tirée vers le blanc (ou le noir sur un fond
@@ -348,6 +375,65 @@ public final class PlayerStyle {
         // un élément à part et non comme un bout de trait manquant.
         quad(s, x - 0.55F * K, oy + 4.05F * K, x + 1.75F * K, oy + 4.95F * K, left, left, hidden, visible);
         quad(s, x + 8.25F * K, oy + 4.05F * K, x + 10.55F * K, oy + 4.95F * K, right, right, hidden, visible);
+    }
+
+    // Le logo en pixels (design/player-badge/yuyuframe-badge.png, 14 × 14),
+    // une lettre par pixel : trois tons de violet, trois de bleu, le centre
+    // plein et son ombre. Ses couleurs sont les siennes, pas celles du joueur :
+    // il est fait pour ressembler à une texture du jeu.
+    private static final String[] PIXEL_ROWS = {
+        "..LLLL..llll..",
+        ".LPPPP..CCCCC.",
+        "LPPPPP..CCCCCd",
+        "LPPSSSSssssCCd",
+        "LPPSFFFffffCCd",
+        "LPPSFFFffffCCd",
+        "...SFFFffff...",
+        "...SFFFffff...",
+        "LPPSFFFffffCCd",
+        "LPPSFFFffffCCd",
+        "LPPSFFFffffCCd",
+        "LPPPPP..CCCCCd",
+        ".DPPPP..CCCCd.",
+        "..DDDD..dddd..",
+    };
+
+    private static int pixelColor(char c) {
+        switch (c) {
+            case 'L': return 0xC9A0EC;
+            case 'P': return 0x9A52D6;
+            case 'D': return 0x6A30A2;
+            case 'l': return 0xA8DDF0;
+            case 'C': return 0x45B4DC;
+            case 'd': return 0x2B7DAE;
+            case 'S': return 0x362062;
+            case 'F': return 0x4C2C84;
+            case 's': return 0x184672;
+            default: return 0x215C98;
+        }
+    }
+
+    /** Le logo en pixels : un rectangle par suite de pixels de même couleur, sur la hauteur d'une ligne. */
+    private static void pixelLogo(Sink s, float x) {
+        final float size = 8.0F / PIXEL_ROWS.length;
+        final float ox = x + (LOGO_WIDTH - 8.0F) / 2.0F;
+        final int hidden = 80, visible = 255;
+        for (int row = 0; row < PIXEL_ROWS.length; row++) {
+            String line = PIXEL_ROWS[row];
+            int start = 0;
+            while (start < line.length()) {
+                char c = line.charAt(start);
+                int end = start + 1;
+                while (end < line.length() && line.charAt(end) == c) {
+                    end++;
+                }
+                if (c != '.') {
+                    int rgb = pixelColor(c);
+                    quad(s, ox + start * size, row * size, ox + end * size, (row + 1) * size, rgb, rgb, hidden, visible);
+                }
+                start = end;
+            }
+        }
     }
 
     /** Échelle du dessin (grille de 10 sur 9,6) vers la hauteur d'une ligne. */

@@ -5,6 +5,7 @@ import com.yuyuframe.launcheragent.apimixin.mapping.YarnNamed;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.presence.NativePresence;
 import com.yuyuframe.launcheragent.runtime.presence.PlayerStyle;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.PlayerListEntry;
 import net.minecraft.entity.player.PlayerEntity;
 
@@ -33,14 +34,19 @@ public final class PresenceLabel189 {
      * score ne contenant pas le pseudo. Elle garde l'aspect de vanilla.
      */
     public static boolean styled(Object entity, String text) {
-        if (!PlayerStyle.active || text == null || !(entity instanceof PlayerEntity)) {
+        if (text == null || !(entity instanceof PlayerEntity)) {
+            return false;
+        }
+        // Son propre nametag a son réglage à lui, sans question au serveur.
+        boolean self = entity == MinecraftClient.getInstance().player;
+        if (self ? !PlayerStyle.ownStyled : !PlayerStyle.active) {
             return false;
         }
         GameProfile profile = ((PlayerEntity) entity).getGameProfile();
         if (profile == null || profile.getName() == null || !text.contains(profile.getName())) {
             return false;
         }
-        return styled(profile);
+        return self || styled(profile);
     }
 
     /** La ligne de la liste Tab est-elle celle d'un joueur à styliser ? */

@@ -111,4 +111,9 @@ public final class GlStateManager {
     public static void color(float r, float g, float b, float a) {
         throw new UnsupportedOperationException("stub compile-only");
     }
+
+    /** {@code bfl.G()} — oublie la couleur mémorisée : le prochain {@code color} est envoyé quoi qu'il arrive. */
+    public static void clearColor() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
 }

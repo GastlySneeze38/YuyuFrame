@@ -21,6 +21,9 @@ public class GameOptions {
 
     public int perspective;
 
+    /** {@code avh.aC} — l'écran de débogage (F3) est affiché. */
+    public boolean debugEnabled;
+
     public KeyBinding forwardKey;
 
     public KeyBinding leftKey;

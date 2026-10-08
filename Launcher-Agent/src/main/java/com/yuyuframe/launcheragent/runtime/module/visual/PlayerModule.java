@@ -9,9 +9,11 @@ import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
 
 /**
- * « Joueur » : comment les autres joueurs YuyuFrame apparaissent à l'écran —
- * le logo devant leur pseudo, le fond de leur étiquette, la couleur de leurs
- * lettres, et la même chose dans la liste Tab.
+ * « Joueur » : deux choses indépendantes. Le <b>nametag</b> — son propre
+ * pseudo au-dessus de sa tête, avec ou sans style — et le <b>style</b> des
+ * joueurs YuyuFrame croisés : le logo devant leur pseudo, le fond de leur
+ * étiquette, la couleur de leurs lettres, et la même chose dans la liste Tab.
+ * L'un marche sans l'autre.
  *
  * <p>Le module ne dessine rien : il tient les réglages et les pose dans
  * {@link PlayerStyle}, que lisent l'étiquette au-dessus de la tête et la liste
@@ -28,22 +30,30 @@ import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
 public final class PlayerModule extends LauncherModule {
 
     public boolean logo = true;
-    public int plate = PlayerStyle.PLATE_NEON;
+    public int logoStyle = PlayerStyle.LOGO_PIXEL;
+    // Par défaut, l'aspect du jeu : fond de vanilla, pseudo sans animation, et
+    // le logo en pixels pour seule marque (choix de l'utilisateur, 2026-10-08).
+    public int plate = PlayerStyle.PLATE_VANILLA;
     public int textMode = PlayerStyle.TEXT_IF_UNCOLORED;
-    public int animation = PlayerStyle.ANIM_BREATH;
+    public int animation = PlayerStyle.ANIM_NONE;
     /** Le violet et le bleu du logo. */
-    public UiColor colorA = new UiColor(180, 60, 255, 255);
-    public UiColor colorB = new UiColor(40, 224, 255, 255);
+    public UiColor colorA = new UiColor(122, 32, 255, 255);
+    public UiColor colorB = new UiColor(0, 96, 255, 255);
     public boolean tab = true;
     public boolean preview;
-    public boolean ownName;
+    /** Le style s'applique aux joueurs YuyuFrame croisés ; coupé, le module peut ne servir qu'au nametag. */
+    public boolean styleOthers = true;
+    /** « Nametag » : son propre pseudo au-dessus de sa tête. */
+    public boolean ownName = true;
+    /** Ce nametag prend le style YuyuFrame, ou garde l'aspect du jeu. */
+    public boolean ownStyle = true;
 
     /** Lu par {@link #rendererChanged()}, appelé depuis un autre module. */
     private static volatile PlayerModule instance;
 
     public PlayerModule() {
-        super("player", "Joueur", "Logo, fond et couleurs du pseudo des joueurs YuyuFrame",
-            "Pseudos des joueurs YuyuFrame", true);
+        super("player", "Joueur", "Votre nametag, et le style du pseudo des joueurs YuyuFrame",
+            "Nametag et pseudos YuyuFrame", true);
         iconUrl = icons8("user");
         instance = this;
         apply();
@@ -68,6 +78,11 @@ public final class PlayerModule extends LauncherModule {
 
     @Override
     protected void settings(SettingList s) {
+        // Le nametag d'abord, à part : il ne dépend ni du style ni des autres joueurs.
+        s.toggle("ownName", "Nametag", "Affiche votre pseudo au-dessus de votre tête en vue extérieure",
+            "Nametag", null, () -> ownName, v -> { ownName = v; apply(); });
+        s.toggle("ownStyle", "Style YuyuFrame", "Sinon, votre nametag garde l'aspect du jeu",
+            "Nametag", null, () -> ownStyle, v -> { ownStyle = v; apply(); });
         // Tant que le renderer est éteint : dire pourquoi l'étiquette ne change
         // pas, et offrir de l'allumer d'ici. La liste est refaite quand il
         // change d'état (voir rendererChanged), donc ces deux lignes s'en vont seules.
@@ -81,6 +96,9 @@ public final class PlayerModule extends LauncherModule {
         }
         s.toggle("logo", "Logo YuyuFrame", "Affiche le logo devant le pseudo", "Étiquette",
             null, () -> logo, v -> { logo = v; apply(); });
+        s.dropdown("logoStyle", "Style du logo", "En pixels comme une texture du jeu, ou tracé à vos couleurs",
+            "Étiquette", new String[]{ "Pixel", "Contours" }, null,
+            () -> logoStyle, v -> { logoStyle = v; apply(); });
         s.dropdown("plate", "Fond de l'étiquette", "Le décor dessiné derrière le pseudo",
             "Étiquette", new String[]{ "Vanilla", "Néon", "Aurore", "Verre", "Comète" }, null,
             () -> plate, v -> { plate = v; apply(); });
@@ -93,10 +111,10 @@ public final class PlayerModule extends LauncherModule {
             () -> animation, v -> { animation = v; apply(); });
         s.color("colorA", "Première couleur", "Couleurs", () -> colorA, v -> { colorA = v; apply(); });
         s.color("colorB", "Seconde couleur", "Couleurs", () -> colorB, v -> { colorB = v; apply(); });
+        s.toggle("styleOthers", "Joueurs YuyuFrame", "Applique ce style aux joueurs YuyuFrame que vous croisez",
+            "Où", null, () -> styleOthers, v -> { styleOthers = v; apply(); });
         s.toggle("tab", "Liste Tab", "Applique le même style dans la liste des joueurs", "Où",
             null, () -> tab, v -> { tab = v; apply(); });
-        s.toggle("ownName", "Mon pseudo", "Affiche votre pseudo au-dessus de votre tête en vue extérieure",
-            "Où", null, () -> ownName, v -> { ownName = v; apply(); });
         s.toggle("preview", "Aperçu sur tous les joueurs",
             "Pour régler l'apparence sans attendre de croiser un joueur YuyuFrame",
             "Où", null, () -> preview, v -> { preview = v; apply(); });
@@ -127,8 +145,10 @@ public final class PlayerModule extends LauncherModule {
         PlayerStyle.colorB = rgb(colorB);
         PlayerStyle.tab = tab;
         PlayerStyle.preview = preview;
+        PlayerStyle.logoStyle = logoStyle;
         PlayerStyle.ownLabel = ownName && isEnabled();
-        PlayerStyle.active = isEnabled();
+        PlayerStyle.ownStyled = ownName && ownStyle && isEnabled();
+        PlayerStyle.active = styleOthers && isEnabled();
     }
 
     private static int rgb(UiColor c) {

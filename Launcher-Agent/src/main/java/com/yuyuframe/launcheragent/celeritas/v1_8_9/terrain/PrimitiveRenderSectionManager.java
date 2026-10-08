@@ -57,6 +57,13 @@ public class PrimitiveRenderSectionManager extends RenderSectionManager {
         this.snapshots = new SnapshotCache(world, renderDistance);
     }
 
+    /** Les temps de dessin par couche ne sont mesurés que lorsque l'écran F3, seul à les afficher, est ouvert. */
+    @Override
+    protected boolean isDebugInfoShown() {
+        net.minecraft.client.MinecraftClient client = net.minecraft.client.MinecraftClient.getInstance();
+        return client.options != null && client.options.debugEnabled;
+    }
+
     /** Une section a changé : sa copie figée ne vaut plus rien. */
     public void invalidateSnapshot(int sectionX, int sectionY, int sectionZ) {
         this.snapshots.invalidate(sectionX, sectionY, sectionZ);
