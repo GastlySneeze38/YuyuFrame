@@ -845,8 +845,7 @@ public final class MixinHookPointRegistry {
         always("1.8.9", "v1_8_9.renderer.EntityLabelBatchMixin189");
         // « Mon pseudo » du module Joueur : l'étiquette de son propre joueur, sauf sur la poupée de l'inventaire.
         always("1.8.9", "v1_8_9.entity.OwnLabelMixin189");
-        always("1.8.9", "v1_8_9.entity.InventoryDollMixin189");
-        // Étiquettes face à la caméra en vue de face et en freelook (défaut de vanilla).
+        always("1.8.9", "v1_8_9.entity.InventoryDollMixin189");        // Étiquettes face à la caméra en vue de face et en freelook (défaut de vanilla).
         always("1.8.9", "v1_8_9.entity.LabelFacingMixin189");
         // Raccourcis de la barre d'objets sur un bouton de souris, dans les inventaires.
         always("1.8.9", "v1_8_9.screen.HandledScreenInvoker189");

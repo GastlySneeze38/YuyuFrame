@@ -371,7 +371,28 @@ public final class LabelBatch189 {
             }
             batch.count += run.quads * 4;
         }
+        leaveVanillaState();
         return true;
+    }
+
+    /**
+     * L'état dans lequel vanilla sort du dessin d'une étiquette. Le dessin est
+     * remis à plus tard, pas ses effets de bord : l'entité suivante compte
+     * dessus sans le savoir. Vanilla ne repose en effet AUCUNE couleur avant de
+     * dessiner le corps d'une entité — il prend celle qu'a laissée l'entité
+     * d'avant, et entre deux joueurs c'était toujours le blanc de l'étiquette.
+     * Sans elle, le corps héritait de la couleur du dernier objet tenu en main
+     * (indéfinie après un dessin coloré) : teinté, ou effacé quand elle était
+     * transparente, alors que l'armure, qui pose la sienne, restait visible.
+     */
+    private static void leaveVanillaState() {
+        GlStateManager.enableDepthTest();
+        GlStateManager.depthMask(true);
+        GlStateManager.enableLighting();
+        GlStateManager.disableBlend();
+        GlStateManager.blendFuncSeparate(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA, GL11.GL_ONE, GL11.GL_ZERO);
+        GlStateManager.clearColor();
+        GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
     }
 
     // ── Décor des étiquettes stylisées ───────────────────────────────────────

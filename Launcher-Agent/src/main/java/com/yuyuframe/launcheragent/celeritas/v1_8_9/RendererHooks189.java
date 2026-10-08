@@ -534,6 +534,21 @@ public final class RendererHooks189 {
             counters.la$setHiddenEntityCount(counters.la$getHiddenEntityCount() + 1);
             // Un hologramme n'a que son nom à dessiner : on saute le reste du parcours de vanilla.
             if (!LabelBatch189.hologram(entity, camX, camY, camZ)) {
+                // Chaque entité part d'un état sûr. Vanilla ne repose ni la
+                // couleur ni l'écriture de profondeur avant le corps d'une
+                // entité : il compte sur ce qu'a laissé celle d'avant (voir
+                // LabelBatch189.leaveVanillaState). Or certaines couches sortent
+                // sans rétablir la profondeur — les yeux d'une araignée
+                // invisible ({@code depthMask(false)}, mesuré le 2026-10-08 :
+                // fusion 1/1 et écriture coupée au moment du corps). Le corps du
+                // joueur suivant était alors dessiné sans profondeur et
+                // recouvert par tout ce qui venait après, derrière lui, alors
+                // que son armure — dessinée après que vanilla a rétabli
+                // l'écriture — restait pleine. Notre ordre de parcours n'est
+                // pas celui de vanilla : on ne dépend plus de qui passe avant.
+                com.mojang.blaze3d.platform.GlStateManager.depthMask(true);
+                com.mojang.blaze3d.platform.GlStateManager.clearColor();
+                com.mojang.blaze3d.platform.GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
                 dispatcher.renderEntity(entity, tickDelta);
             }
         }
