@@ -5,11 +5,21 @@
 //! ENCORE, le temps que la nouvelle arrive — un joueur reconnu ne clignote
 //! pas à chaque rafraîchissement. Seuls les joueurs qu'on continue de
 //! demander sont redemandés : un joueur qu'on ne croise plus s'oublie seul.
+//!
+//! Deux sortes de joueurs, deux files, deux routes de l'API :
+//! - UUID version 4 : un compte Microsoft, sur un serveur de jeu qui vérifie
+//!   les comptes. Son empreinte ne dépend que de lui (`/presence/lookup`).
+//! - UUID version 3 : un joueur d'un serveur en mode hors ligne, où l'UUID
+//!   est dérivé du pseudo. Son empreinte porte l'adresse du serveur, sous les
+//!   formes qu'on en connaît, et ne vaut que tant qu'on y est
+//!   (`/presence/offline`, qui sert aussi à s'y annoncer soi-même). Sans
+//!   serveur connu — solo, ou réglage « Serveurs Microsoft uniquement » — ces
+//!   joueurs répondent « absent » sans que rien ne parte.
 
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
 
-use super::fingerprint::fingerprint;
+use super::fingerprint::{fingerprint, offline_fingerprint};
 
 /// Un joueur présent peut quitter le jeu : le serveur l'oublie 5 minutes
 /// après son dernier signal, on redemande au même rythme.
@@ -25,6 +35,19 @@ pub const MAX_BATCH: usize = 200;
 /// la marge pour ne jamais se faire refuser, un refus coûtant dix minutes.
 const HOURLY_BUDGET: u32 = 3000;
 const BUDGET_WINDOW: Duration = Duration::from_secs(3600);
+/// Les mêmes bornes pour les serveurs hors ligne (`MAX_OFFLINE_LOOKUP` et
+/// `OFFLINE_LOOKUPS_PER_HOUR` côté serveur, 1 000 et 20 000) : toute la liste
+/// des joueurs part d'un coup, chacun sous deux formes d'adresse au plus.
+pub const MAX_OFFLINE_BATCH: usize = 1000;
+const OFFLINE_HOURLY_BUDGET: u32 = 15_000;
+/// Cadence de sa propre annonce tant que le serveur n'a pas donné la sienne.
+const DEFAULT_RENEW: Duration = Duration::from_secs(120);
+/// Bornes de la cadence annoncée par le serveur : une valeur absurde ne doit
+/// ni marteler l'API ni faire disparaître le joueur.
+const MIN_RENEW_SECS: u64 = 30;
+const MAX_RENEW_SECS: u64 = 240;
+/// Formes de l'adresse d'un serveur : le nom tapé, l'adresse IP jointe.
+pub const MAX_SERVER_FORMS: usize = 2;
 /// Garde-fou : un serveur de jeu qui ferait défiler des milliers de faux
 /// profils ne doit pas faire gonfler la mémoire.
 const MAX_ENTRIES: usize = 4096;
@@ -38,24 +61,44 @@ pub enum Answer {
     Absent = 2,
 }
 
+/// Une question prête à partir : le joueur et l'une de ses empreintes. Un
+/// joueur d'un serveur hors ligne en a une par forme d'adresse, à la suite.
+pub type Asked = Vec<(PlayerKey, [u8; 32])>;
+
+/// L'adresse d'un serveur de jeu telle qu'elle entre dans une empreinte :
+/// « hôte:port » en minuscules. `None` pour ce qui n'en a pas la forme — on
+/// ne hache pas n'importe quoi, deux joueurs doivent tomber sur la même
+/// valeur.
+pub fn server_form(raw: &[u8]) -> Option<Vec<u8>> {
+    if raw.is_empty() || raw.len() > 255 {
+        return None;
+    }
+    if !raw.iter().all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'-' | b'_' | b':' | b'[' | b']')) {
+        return None;
+    }
+    Some(raw.to_ascii_lowercase())
+}
+
 /// L'identité d'un joueur vu en jeu : l'UUID et le pseudo de son PROFIL.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct PlayerKey {
     uuid: u128,
     name: [u8; 16],
     len: u8,
+    /// UUID version 3 : joueur d'un serveur en mode hors ligne.
+    offline: bool,
 }
 
 impl PlayerKey {
     /// `None` pour ce qui ne peut pas être un joueur YuyuFrame reconnu, et
     /// pour quoi on ne dépense donc aucune question :
-    /// - un UUID qui n'est pas en version 4 — compte hors ligne (version 3,
-    ///   dérivé du pseudo, partagé par tous les homonymes), faux joueur d'un
-    ///   serveur (PNJ, lignes de mise en page de la liste Tab) ;
+    /// - un UUID qui n'est ni en version 4 (compte Microsoft) ni en version 3
+    ///   (dérivé du pseudo par un serveur hors ligne) — faux joueur d'un
+    ///   serveur : PNJ, lignes de mise en page de la liste Tab ;
     /// - un pseudo qui n'a pas la forme d'un pseudo Minecraft.
     pub fn new(uuid: u128, name: &[u8]) -> Option<Self> {
         let version = (uuid >> 76) & 0xf;
-        if version != 4 || name.is_empty() || name.len() > 16 {
+        if !(version == 3 || version == 4) || name.is_empty() || name.len() > 16 {
             return None;
         }
         if !name.iter().all(|c| c.is_ascii_alphanumeric() || *c == b'_') {
@@ -65,16 +108,24 @@ impl PlayerKey {
         for (dst, src) in lower.iter_mut().zip(name) {
             *dst = src.to_ascii_lowercase();
         }
-        Some(Self { uuid, name: lower, len: name.len() as u8 })
+        Some(Self { uuid, name: lower, len: name.len() as u8, offline: version == 3 })
     }
 
-    fn fingerprint(&self) -> [u8; 32] {
-        fingerprint(self.uuid, &self.name[..self.len as usize])
+    #[cfg(test)]
+    fn is_offline(&self) -> bool {
+        self.offline
+    }
+
+    fn name(&self) -> &[u8] {
+        &self.name[..self.len as usize]
     }
 }
 
 struct Entry {
-    fingerprint: [u8; 32],
+    /// Une empreinte pour un compte Microsoft ; pour un joueur hors ligne,
+    /// une par forme de l'adresse du serveur.
+    prints: [[u8; 32]; MAX_SERVER_FORMS],
+    forms: u8,
     answer: Answer,
     /// Quand la réponse a été reçue ; `None` tant qu'il n'y en a pas.
     checked_at: Option<Instant>,
@@ -84,21 +135,89 @@ struct Entry {
     asked_at: Instant,
 }
 
+/// Ce qui part en une requête vers `/presence/offline` : sa propre annonce
+/// (vide si elle n'est pas due, ou si le joueur ne veut pas apparaître) et
+/// les joueurs de la liste à demander.
+pub struct OfflineRound {
+    pub own: Vec<[u8; 32]>,
+    pub batch: Asked,
+    /// Le serveur de jeu pour lequel ce tour a été préparé : une réponse
+    /// arrivée après un changement de serveur ne vaut plus rien.
+    epoch: u64,
+}
+
 pub struct Directory {
     entries: HashMap<PlayerKey, Entry>,
     queue: VecDeque<PlayerKey>,
+    offline_queue: VecDeque<PlayerKey>,
     window_start: Instant,
     spent: u32,
+    offline_spent: u32,
+    /// Les formes de l'adresse du serveur de jeu courant ; vide hors d'un
+    /// serveur, ou quand les serveurs hors ligne sont refusés par réglage.
+    server: Vec<Vec<u8>>,
+    /// Notre propre joueur sur ce serveur, s'il y est hors ligne.
+    own: Option<PlayerKey>,
+    epoch: u64,
+    next_announce: Instant,
+    renew: Duration,
 }
 
 impl Directory {
     pub fn new(now: Instant) -> Self {
-        Self { entries: HashMap::new(), queue: VecDeque::new(), window_start: now, spent: 0 }
+        Self {
+            entries: HashMap::new(),
+            queue: VecDeque::new(),
+            offline_queue: VecDeque::new(),
+            window_start: now,
+            spent: 0,
+            offline_spent: 0,
+            server: Vec::new(),
+            own: None,
+            epoch: 0,
+            next_announce: now,
+            renew: DEFAULT_RENEW,
+        }
+    }
+
+    /// Où l'on joue et sous quelle identité. Appelé souvent avec les mêmes
+    /// valeurs : seul un changement a un effet. Changer de serveur oublie les
+    /// joueurs hors ligne — leur empreinte portait l'ancien.
+    pub fn set_context(&mut self, server: Vec<Vec<u8>>, own: Option<PlayerKey>, now: Instant) {
+        let own = own.filter(|key| key.offline);
+        if server != self.server {
+            self.server = server;
+            self.epoch += 1;
+            self.entries.retain(|key, _| !key.offline);
+            self.offline_queue.clear();
+            self.next_announce = now;
+        }
+        if own != self.own {
+            self.own = own;
+            self.next_announce = now;
+        }
+    }
+
+    fn prints(&self, key: &PlayerKey) -> ([[u8; 32]; MAX_SERVER_FORMS], u8) {
+        let mut prints = [[0u8; 32]; MAX_SERVER_FORMS];
+        if !key.offline {
+            prints[0] = fingerprint(key.uuid, key.name());
+            return (prints, 1);
+        }
+        let mut forms = 0;
+        for (slot, server) in prints.iter_mut().zip(&self.server) {
+            *slot = offline_fingerprint(server, key.uuid, key.name());
+            forms += 1;
+        }
+        (prints, forms)
     }
 
     /// La question de Java. Ne bloque jamais : rend ce qu'on sait, et met le
     /// joueur en file si la réponse manque ou a vieilli.
     pub fn query(&mut self, key: PlayerKey, now: Instant) -> Answer {
+        if key.offline && self.server.is_empty() {
+            return Answer::Absent;
+        }
         if let Some(entry) = self.entries.get_mut(&key) {
             entry.asked_at = now;
             let stale = match (entry.checked_at, entry.answer) {
@@ -108,56 +227,153 @@ impl Directory {
             };
             if stale && !entry.queued {
                 entry.queued = true;
-                self.queue.push_back(key);
+                if key.offline {
+                    self.offline_queue.push_back(key);
+                } else {
+                    self.queue.push_back(key);
+                }
             }
             return entry.answer;
         }
         if self.entries.len() >= MAX_ENTRIES {
             return Answer::Unknown;
         }
-        self.entries.insert(key, Entry { fingerprint: key.fingerprint(), answer: Answer::Unknown, checked_at: None, queued: true, asked_at: now });
-        self.queue.push_back(key);
+        let (prints, forms) = self.prints(&key);
+        self.entries.insert(key, Entry { prints, forms, answer: Answer::Unknown, checked_at: None, queued: true, asked_at: now });
+        if key.offline {
+            self.offline_queue.push_back(key);
+        } else {
+            self.queue.push_back(key);
+        }
         Answer::Unknown
     }
 
-    /// Le prochain paquet à envoyer, dans la limite du budget de l'heure.
-    pub fn take_batch(&mut self, now: Instant) -> Vec<(PlayerKey, [u8; 32])> {
+    /// Rouvre les budgets quand l'heure est passée.
+    fn roll(&mut self, now: Instant) {
         if now.duration_since(self.window_start) >= BUDGET_WINDOW {
             self.window_start = now;
             self.spent = 0;
+            self.offline_spent = 0;
         }
+    }
+
+    /// Le prochain paquet de comptes Microsoft à demander, dans la limite du
+    /// budget de l'heure.
+    pub fn take_batch(&mut self, now: Instant) -> Asked {
+        self.roll(now);
         let allowed = (HOURLY_BUDGET.saturating_sub(self.spent) as usize).min(MAX_BATCH);
         let mut batch = Vec::new();
         while batch.len() < allowed {
             let Some(key) = self.queue.pop_front() else { break };
             // Oublié entre-temps : rien à demander.
             if let Some(entry) = self.entries.get(&key) {
-                batch.push((key, entry.fingerprint));
+                batch.push((key, entry.prints[0]));
             }
         }
         self.spent += batch.len() as u32;
         batch
     }
 
-    /// Les réponses du serveur, dans l'ordre du paquet.
+    /// Le prochain tour vers `/presence/offline`, ou `None` s'il n'y a rien à
+    /// dire : notre annonce quand elle est due (`may_announce` : le joueur
+    /// veut bien apparaître), et les joueurs hors ligne en attente — toutes
+    /// leurs formes ensemble, jamais un joueur coupé entre deux requêtes.
+    pub fn take_offline(&mut self, now: Instant, may_announce: bool) -> Option<OfflineRound> {
+        if self.server.is_empty() {
+            return None;
+        }
+        self.roll(now);
+        let mut own = Vec::new();
+        if may_announce && now >= self.next_announce {
+            if let Some(key) = self.own {
+                own = self.server.iter().map(|server| offline_fingerprint(server, key.uuid, key.name())).collect();
+                self.next_announce = now + self.renew;
+            }
+        }
+        let allowed = (OFFLINE_HOURLY_BUDGET.saturating_sub(self.offline_spent) as usize).min(MAX_OFFLINE_BATCH);
+        let mut batch = Vec::new();
+        while batch.len() + self.server.len() <= allowed {
+            let Some(key) = self.offline_queue.pop_front() else { break };
+            if let Some(entry) = self.entries.get(&key) {
+                for print in &entry.prints[..entry.forms as usize] {
+                    batch.push((key, *print));
+                }
+            }
+        }
+        self.offline_spent += batch.len() as u32;
+        if own.is_empty() && batch.is_empty() {
+            return None;
+        }
+        Some(OfflineRound { own, batch, epoch: self.epoch })
+    }
+
+    /// Les réponses du serveur, dans l'ordre du paquet. Un joueur demandé
+    /// sous plusieurs formes est présent dès que l'une d'elles l'est.
     pub fn apply(&mut self, batch: &[(PlayerKey, [u8; 32])], present: &[bool], now: Instant) {
-        for ((key, _), is_present) in batch.iter().zip(present) {
-            if let Some(entry) = self.entries.get_mut(key) {
-                entry.answer = if *is_present { Answer::Present } else { Answer::Absent };
+        let mut i = 0;
+        while i < batch.len() {
+            let key = batch[i].0;
+            let mut found = false;
+            let mut j = i;
+            while j < batch.len() && batch[j].0 == key {
+                found |= present.get(j).copied().unwrap_or(false);
+                j += 1;
+            }
+            if let Some(entry) = self.entries.get_mut(&key) {
+                entry.answer = if found { Answer::Present } else { Answer::Absent };
                 entry.checked_at = Some(now);
                 entry.queued = false;
             }
+            i = j;
+        }
+    }
+
+    /// Les réponses d'un tour hors ligne, et la cadence d'annonce demandée
+    /// par le serveur. Ignorées si l'on a changé de serveur de jeu entre-temps.
+    pub fn apply_offline(&mut self, round: &OfflineRound, present: &[bool], renew_in: Option<u64>, now: Instant) {
+        if round.epoch != self.epoch {
+            return;
+        }
+        self.apply(&round.batch, present, now);
+        if let Some(secs) = renew_in {
+            self.renew = Duration::from_secs(secs.clamp(MIN_RENEW_SECS, MAX_RENEW_SECS));
+        }
+        if !round.own.is_empty() {
+            self.next_announce = now + self.renew;
         }
     }
 
     /// La requête a échoué : le paquet repart en tête de file. Le budget
     /// dépensé n'est pas rendu — le serveur a pu compter ces questions.
-    pub fn give_back(&mut self, batch: Vec<(PlayerKey, [u8; 32])>) {
+    pub fn give_back(&mut self, batch: Asked) {
+        let mut last = None;
         for (key, _) in batch.into_iter().rev() {
-            if self.entries.contains_key(&key) {
+            // Un joueur demandé sous plusieurs formes ne revient qu'une fois.
+            if last == Some(key) {
+                continue;
+            }
+            last = Some(key);
+            if !self.entries.contains_key(&key) {
+                continue;
+            }
+            if key.offline {
+                self.offline_queue.push_front(key);
+            } else {
                 self.queue.push_front(key);
             }
         }
+    }
+
+    /// Le tour hors ligne a échoué : ses questions repartent en file, et
+    /// notre annonce, si elle en était, est à refaire.
+    pub fn give_back_offline(&mut self, round: OfflineRound, now: Instant) {
+        if round.epoch != self.epoch {
+            return;
+        }
+        if !round.own.is_empty() {
+            self.next_announce = now;
+        }
+        self.give_back(round.batch);
     }
 
     /// Oublie les joueurs qu'on ne croise plus.
@@ -182,19 +398,43 @@ mod tests {
         (n << 80) | (4u128 << 76) | n
     }
 
+    /// UUID version 3, comme en donne un serveur hors ligne.
+    fn offline(n: u128) -> u128 {
+        (n << 80) | (3u128 << 76) | n
+    }
+
     fn key(n: u128, name: &str) -> PlayerKey {
         PlayerKey::new(online(n), name.as_bytes()).unwrap()
     }
 
+    fn offline_key(n: u128, name: &str) -> PlayerKey {
+        PlayerKey::new(offline(n), name.as_bytes()).unwrap()
+    }
+
+    fn two_forms() -> Vec<Vec<u8>> {
+        vec![b"play.example.fr:25565".to_vec(), b"203.0.113.7:25565".to_vec()]
+    }
+
     #[test]
-    fn seuls_les_comptes_microsoft_au_pseudo_valide_sont_demandes() {
-        assert!(PlayerKey::new(online(1), b"Steve").is_some());
-        // UUID hors ligne de « Steve » (version 3) et UUID de PNJ (version 2).
-        assert!(PlayerKey::new(0x5627dd98e6be3c21b8a8e92344183641, b"Steve").is_none());
+    fn seuls_les_vrais_joueurs_au_pseudo_valide_sont_demandes() {
+        assert!(!PlayerKey::new(online(1), b"Steve").unwrap().is_offline());
+        // UUID hors ligne de « Steve » (version 3) : demandé, par l'autre route.
+        assert!(PlayerKey::new(0x5627dd98e6be3c21b8a8e92344183641, b"Steve").unwrap().is_offline());
+        // UUID de PNJ (version 2) : jamais.
         assert!(PlayerKey::new(0x5627dd98e6be2c21b8a8e92344183641, b"Steve").is_none());
         assert!(PlayerKey::new(online(1), b"").is_none());
         assert!(PlayerKey::new(online(1), b"beaucouptroplongpseudo").is_none());
         assert!(PlayerKey::new(online(1), "§aSteve".as_bytes()).is_none());
+    }
+
+    #[test]
+    fn une_adresse_de_serveur_a_une_forme_stricte() {
+        assert_eq!(server_form(b"Play.Example.FR:25565"), Some(b"play.example.fr:25565".to_vec()));
+        assert_eq!(server_form(b"[2001:db8::1]:25565"), Some(b"[2001:db8::1]:25565".to_vec()));
+        assert_eq!(server_form(b""), None);
+        assert_eq!(server_form(b"play example.fr:25565"), None);
+        assert_eq!(server_form("jeu.exémple.fr:25565".as_bytes()), None);
+        assert_eq!(server_form(&[b'a'; 256]), None);
     }
 
     #[test]
@@ -284,5 +524,123 @@ mod tests {
         assert_eq!(dir.counts().0, 1);
         // La file peut encore nommer l'oublié : il est sauté.
         assert_eq!(dir.take_batch(later).len(), 1);
+    }
+
+    #[test]
+    fn sans_serveur_connu_un_joueur_hors_ligne_n_est_jamais_demande() {
+        let now = Instant::now();
+        let mut dir = Directory::new(now);
+        assert_eq!(dir.query(offline_key(1, "Steve"), now), Answer::Absent);
+        assert_eq!(dir.counts().0, 0);
+        assert!(dir.take_offline(now, true).is_none());
+        assert!(dir.take_batch(now).is_empty());
+    }
+
+    #[test]
+    fn hors_ligne_l_annonce_et_la_liste_partent_ensemble() {
+        let now = Instant::now();
+        let mut dir = Directory::new(now);
+        dir.set_context(two_forms(), Some(offline_key(9, "Moi")), now);
+        assert_eq!(dir.query(offline_key(1, "Steve"), now), Answer::Unknown);
+        assert_eq!(dir.query(offline_key(2, "Alex"), now), Answer::Unknown);
+        // Un compte Microsoft croisé sur le même serveur garde sa route.
+        dir.query(key(3, "Premium"), now);
+
+        let round = dir.take_offline(now, true).unwrap();
+        assert_eq!(round.own, vec![
+            offline_fingerprint(b"play.example.fr:25565", offline(9), b"moi"),
+            offline_fingerprint(b"203.0.113.7:25565", offline(9), b"moi"),
+        ]);
+        // Deux joueurs, deux formes chacun, à la suite.
+        assert_eq!(round.batch.len(), 4);
+        assert_eq!(round.batch[0].1, offline_fingerprint(b"play.example.fr:25565", offline(1), b"steve"));
+        assert_eq!(round.batch[1].1, offline_fingerprint(b"203.0.113.7:25565", offline(1), b"steve"));
+        assert_eq!(dir.take_batch(now).len(), 1);
+
+        // Steve n'est connu que par l'adresse IP : cela suffit.
+        dir.apply_offline(&round, &[false, true, false, false], Some(120), now);
+        assert_eq!(dir.query(offline_key(1, "Steve"), now), Answer::Present);
+        assert_eq!(dir.query(offline_key(2, "Alex"), now), Answer::Absent);
+        assert!(dir.take_offline(now, true).is_none(), "rien à dire avant la prochaine annonce");
+    }
+
+    #[test]
+    fn l_annonce_suit_la_cadence_du_serveur_et_le_choix_du_joueur() {
+        let now = Instant::now();
+        let mut dir = Directory::new(now);
+        dir.set_context(two_forms(), Some(offline_key(9, "Moi")), now);
+        // Le joueur ne veut pas apparaître : on demande, on ne s'annonce pas.
+        assert!(dir.take_offline(now, false).is_none());
+        dir.query(offline_key(1, "Steve"), now);
+        let round = dir.take_offline(now, false).unwrap();
+        assert!(round.own.is_empty());
+        dir.apply_offline(&round, &[false, false], None, now);
+
+        // Il change d'avis : l'annonce part au tour suivant, puis à la cadence donnée.
+        let round = dir.take_offline(now, true).unwrap();
+        assert_eq!(round.own.len(), 2);
+        dir.apply_offline(&round, &[], Some(60), now);
+        assert!(dir.take_offline(now + Duration::from_secs(59), true).is_none());
+        assert_eq!(dir.take_offline(now + Duration::from_secs(60), true).unwrap().own.len(), 2);
+
+        // Un compte Microsoft (UUID version 4) n'a rien à annoncer ici : son launcher s'en charge.
+        dir.set_context(two_forms(), Some(key(9, "Moi")), now);
+        assert!(dir.take_offline(now + Duration::from_secs(600), true).is_none());
+    }
+
+    #[test]
+    fn changer_de_serveur_oublie_les_joueurs_hors_ligne() {
+        let now = Instant::now();
+        let mut dir = Directory::new(now);
+        dir.set_context(two_forms(), None, now);
+        dir.query(offline_key(1, "Steve"), now);
+        dir.query(key(2, "Premium"), now);
+        let round = dir.take_offline(now, true).unwrap();
+
+        dir.set_context(vec![b"autre.example.fr:25565".to_vec()], None, now);
+        assert_eq!(dir.counts().0, 1, "le compte Microsoft reste, il ne dépend pas du serveur");
+        // Le même pseudo sur le nouveau serveur est une autre question…
+        assert_eq!(dir.query(offline_key(1, "Steve"), now), Answer::Unknown);
+        // …et la réponse de l'ancien serveur, arrivée en retard, ne le concerne pas.
+        dir.apply_offline(&round, &[true, true], None, now);
+        assert_eq!(dir.query(offline_key(1, "Steve"), now), Answer::Unknown);
+        let fresh = dir.take_offline(now, true).unwrap();
+        assert_eq!(fresh.batch, vec![(offline_key(1, "Steve"), offline_fingerprint(b"autre.example.fr:25565", offline(1), b"steve"))]);
+
+        // Le même contexte renvoyé chaque seconde ne remet rien à zéro.
+        dir.set_context(vec![b"autre.example.fr:25565".to_vec()], None, now);
+        assert_eq!(dir.counts().0, 2);
+    }
+
+    #[test]
+    fn un_tour_hors_ligne_en_echec_est_a_refaire() {
+        let now = Instant::now();
+        let mut dir = Directory::new(now);
+        dir.set_context(two_forms(), Some(offline_key(9, "Moi")), now);
+        dir.query(offline_key(1, "Steve"), now);
+        let round = dir.take_offline(now, true).unwrap();
+        assert!(dir.take_offline(now, true).is_none());
+
+        dir.give_back_offline(round, now);
+        let again = dir.take_offline(now, true).unwrap();
+        assert_eq!(again.own.len(), 2, "l'annonce repart aussi");
+        assert_eq!(again.batch.len(), 2, "le joueur revient une fois, sous ses deux formes");
+    }
+
+    #[test]
+    fn un_joueur_hors_ligne_n_est_jamais_coupe_entre_deux_requetes() {
+        let now = Instant::now();
+        let mut dir = Directory::new(now);
+        dir.set_context(two_forms(), None, now);
+        for n in 0..(MAX_OFFLINE_BATCH as u128 / 2 + 10) {
+            dir.query(offline_key(n + 1, "Joueur"), now);
+        }
+        assert_eq!(dir.take_offline(now, true).unwrap().batch.len(), MAX_OFFLINE_BATCH);
+        assert_eq!(dir.take_offline(now, true).unwrap().batch.len(), 20);
+
+        dir.offline_spent = OFFLINE_HOURLY_BUDGET - 1;
+        dir.query(offline_key(99_999, "Tardif"), now);
+        assert!(dir.take_offline(now, true).is_none(), "il reste une empreinte de budget, il en faut deux");
+        assert_eq!(dir.take_offline(now + BUDGET_WINDOW, true).unwrap().batch.len(), 2);
     }
 }

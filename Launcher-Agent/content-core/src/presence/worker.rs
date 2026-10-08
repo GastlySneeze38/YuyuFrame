@@ -1,4 +1,5 @@
-//! Le thread qui vide la file des questions. Il est seul à toucher au réseau,
+//! Le thread qui vide les files de questions — et qui, sur un serveur de jeu
+//! en mode hors ligne, annonce notre joueur dans la même requête. Il est seul à toucher au réseau,
 //! et ne tient jamais le verrou de l'annuaire pendant une requête : le fil du
 //! jeu, qui pose ses questions sous ce même verrou, n'attend jamais le réseau.
 
@@ -55,15 +56,50 @@ pub fn start(client: Client, tokens: Arc<TokenStore>) -> Option<Arc<Shared>> {
     Some(shared)
 }
 
+/// Ce que la boucle retient d'un tour à l'autre.
+struct Pace {
+    wait: Duration,
+    backoff: Duration,
+    /// Le jeton que le serveur vient de refuser : inutile de le représenter.
+    refused: Option<Arc<str>>,
+}
+
+impl Pace {
+    fn succeeded(&mut self, shared: &Shared) {
+        shared.state.store(STATE_RUNNING, Ordering::Relaxed);
+        self.backoff = BACKOFF_START;
+        self.refused = None;
+    }
+
+    fn failed(&mut self, shared: &Shared, failure: Failure, token: &Arc<str>) {
+        match failure {
+            Failure::Refused => {
+                shared.state.store(STATE_REFUSED, Ordering::Relaxed);
+                self.refused = Some(token.clone());
+            }
+            Failure::RateLimited => {
+                shared.state.store(STATE_RATE_LIMITED, Ordering::Relaxed);
+                self.wait = RATE_LIMIT_PAUSE;
+            }
+            Failure::Unavailable | Failure::Unsupported => {
+                shared.state.store(STATE_RETRYING, Ordering::Relaxed);
+                self.wait = self.backoff;
+                self.backoff = (self.backoff * 2).min(BACKOFF_MAX);
+            }
+        }
+    }
+}
+
 fn run(shared: &Shared, client: &Client, tokens: &TokenStore) {
-    let mut wait = TICK;
-    let mut backoff = BACKOFF_START;
+    let mut pace = Pace { wait: TICK, backoff: BACKOFF_START, refused: None };
     let mut last_sweep = Instant::now();
-    // Le jeton que le serveur vient de refuser : inutile de le représenter.
-    let mut refused: Option<Arc<str>> = None;
+    // L'API ne connaît pas la route des serveurs hors ligne (plus ancienne que
+    // le jeu) : on n'y revient pas de la partie, et la route des comptes
+    // Microsoft continue comme avant.
+    let mut offline_supported = true;
     loop {
-        std::thread::sleep(wait);
-        wait = TICK;
+        std::thread::sleep(pace.wait);
+        pace.wait = TICK;
 
         let now = Instant::now();
         if now.duration_since(last_sweep) >= SWEEP_EVERY {
@@ -71,44 +107,49 @@ fn run(shared: &Shared, client: &Client, tokens: &TokenStore) {
             last_sweep = now;
         }
 
-        // Pas de jeton utilisable : on ne sort rien de la file, les questions
+        // Pas de jeton utilisable : on ne sort rien des files, les questions
         // y attendent sans entamer le budget de l'heure.
         let Some(token) = tokens.get() else {
             shared.state.store(STATE_NO_TOKEN, Ordering::Relaxed);
             continue;
         };
-        if refused.as_deref() == Some(&*token) {
+        if pace.refused.as_deref() == Some(&*token) {
             continue;
         }
 
+        // Les comptes Microsoft croisés.
         let batch = shared.directory().take_batch(now);
-        if batch.is_empty() {
-            continue;
+        if !batch.is_empty() {
+            let fingerprints: Vec<[u8; 32]> = batch.iter().map(|(_, f)| *f).collect();
+            match client.lookup(&token, &fingerprints) {
+                Ok(present) => {
+                    shared.directory().apply(&batch, &present, Instant::now());
+                    pace.succeeded(shared);
+                }
+                Err(failure) => {
+                    shared.directory().give_back(batch);
+                    pace.failed(shared, failure, &token);
+                    continue;
+                }
+            }
         }
 
-        let fingerprints: Vec<[u8; 32]> = batch.iter().map(|(_, f)| *f).collect();
-        match client.lookup(&token, &fingerprints) {
-            Ok(present) => {
-                shared.directory().apply(&batch, &present, Instant::now());
-                shared.state.store(STATE_RUNNING, Ordering::Relaxed);
-                backoff = BACKOFF_START;
-                refused = None;
+        // Le serveur de jeu hors ligne où l'on est : notre annonce quand elle
+        // est due, et les joueurs de sa liste, dans la même requête.
+        if !offline_supported {
+            continue;
+        }
+        let Some(round) = shared.directory().take_offline(now, tokens.visible()) else { continue };
+        let players: Vec<[u8; 32]> = round.batch.iter().map(|(_, f)| *f).collect();
+        match client.sync_offline(&token, &round.own, &players) {
+            Ok((present, renew_in)) => {
+                shared.directory().apply_offline(&round, &present, renew_in, Instant::now());
+                pace.succeeded(shared);
             }
-            Err(Failure::Refused) => {
-                shared.directory().give_back(batch);
-                shared.state.store(STATE_REFUSED, Ordering::Relaxed);
-                refused = Some(token);
-            }
-            Err(Failure::RateLimited) => {
-                shared.directory().give_back(batch);
-                shared.state.store(STATE_RATE_LIMITED, Ordering::Relaxed);
-                wait = RATE_LIMIT_PAUSE;
-            }
-            Err(Failure::Unavailable) => {
-                shared.directory().give_back(batch);
-                shared.state.store(STATE_RETRYING, Ordering::Relaxed);
-                wait = backoff;
-                backoff = (backoff * 2).min(BACKOFF_MAX);
+            Err(Failure::Unsupported) => offline_supported = false,
+            Err(failure) => {
+                shared.directory().give_back_offline(round, Instant::now());
+                pace.failed(shared, failure, &token);
             }
         }
     }

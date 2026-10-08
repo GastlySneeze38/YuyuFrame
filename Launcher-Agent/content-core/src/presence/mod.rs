@@ -10,6 +10,13 @@
 //! Ce qui part chez nous n'est jamais un UUID ni un pseudo, mais leur
 //! empreinte commune (`fingerprint.rs`), la même que calcule le serveur.
 //!
+//! Serveurs de jeu en mode hors ligne (2026-10-08) : l'UUID y est dérivé du
+//! pseudo, donc l'empreinte porte aussi l'adresse du serveur, et c'est le jeu
+//! — seul à savoir où il est — qui s'y annonce, dans la même requête que sa
+//! liste de joueurs (`POST /v1/presence/offline`). Java donne l'adresse et
+//! notre profil par `yf_presence_context` ; sans adresse (solo, ou réglage
+//! « Serveurs Microsoft uniquement »), rien de tout cela ne part.
+//!
 //! Ces questions partent avec le jeton d'accès du compte, que le launcher
 //! envoie sur l'entrée standard du jeu à chaque renouvellement (`token.rs`) :
 //! il est lu ICI et ne passe ni par la ligne de commande, ni par

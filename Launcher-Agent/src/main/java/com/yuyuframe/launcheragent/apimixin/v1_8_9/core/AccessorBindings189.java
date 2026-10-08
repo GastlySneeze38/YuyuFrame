@@ -259,6 +259,13 @@ public final class AccessorBindings189 {
         AccessorRegistry.bind(AccessPoint.CLIENT_RESOURCE_MANAGER, (r, a) -> { MinecraftClient c = mc(r); return c == null ? null : c.getResourceManager(); });
         // Getter STATIQUE public sur cette version : aucun accessor.
         AccessorRegistry.bind(AccessPoint.CLIENT_FPS, (r, a) -> Integer.valueOf(MinecraftClient.getCurrentFps()));
+        AccessorRegistry.bind(AccessPoint.CLIENT_PLAYER_PROFILE, (r, a) -> {
+            Object p = player(r);
+            if (!(p instanceof PlayerEntity)) return null;
+            // getGameProfile est déclarée par PlayerEntity : appelée sur ce type, pour le traducteur de noms.
+            com.mojang.authlib.GameProfile profile = ((PlayerEntity) p).getGameProfile();
+            return profile == null ? null : new Object[]{ profile.getId(), profile.getName() };
+        });
         AccessorRegistry.bind(AccessPoint.CLIENT_USERNAME, (r, a) -> {
             MinecraftClient c = mc(r);
             Session s = c == null ? null : c.getSession();

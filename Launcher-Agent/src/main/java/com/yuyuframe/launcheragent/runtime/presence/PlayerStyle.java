@@ -74,6 +74,13 @@ public final class PlayerStyle {
      * YuyuFrame ») qui ne concerne que ce que voient les autres.
      */
     public static volatile boolean enabled;
+    /**
+     * « Serveurs Microsoft uniquement » : ne reconnaître les joueurs YuyuFrame,
+     * et n'être reconnu, que sur les serveurs de jeu qui vérifient les comptes.
+     * Vrai, rien n'est échangé à propos d'un serveur en mode hors ligne — voir
+     * {@link PresenceContext}. Vaut même module éteint.
+     */
+    public static volatile boolean onlineOnly;
 
     /** Largeur du logo et espace qui le sépare du pseudo, en pixels de police. */
     public static final float LOGO_WIDTH = 8.5F;

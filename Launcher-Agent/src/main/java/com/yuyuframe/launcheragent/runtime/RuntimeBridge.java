@@ -72,6 +72,9 @@ public final class RuntimeBridge implements AgentBridge {
         } catch (Throwable t) {
             LauncherLog.err("[RuntimeBridge] ModuleRegistry.tickAll() a levé: " + t);
         }
+        // Hors des modules : être reconnu par les autres joueurs ne dépend pas
+        // de ce que l'on affiche chez soi (module Joueur allumé ou non).
+        com.yuyuframe.launcheragent.runtime.presence.PresenceContext.tick();
     }
 
     @Override

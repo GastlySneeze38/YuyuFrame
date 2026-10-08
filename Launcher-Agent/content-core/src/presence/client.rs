@@ -1,4 +1,6 @@
-//! L'appel à LauncherAPI, et rien d'autre : `POST /v1/presence/lookup`.
+//! Les appels à LauncherAPI, et rien d'autre : `POST /v1/presence/lookup`
+//! (comptes Microsoft) et `POST /v1/presence/offline` (serveurs de jeu en
+//! mode hors ligne : s'annoncer et demander sa liste d'un seul coup).
 
 use std::time::Duration;
 
@@ -16,10 +18,14 @@ pub enum Failure {
     RateLimited,
     /// Réseau, serveur en panne, réponse illisible : à retenter plus tard.
     Unavailable,
+    /// La route n'existe pas sur ce serveur (API plus ancienne que le jeu) :
+    /// inutile d'insister pendant cette partie.
+    Unsupported,
 }
 
 pub struct Client {
     url: String,
+    offline_url: String,
     agent: ureq::Agent,
 }
 
@@ -42,25 +48,29 @@ impl Client {
         }
         Some(Self {
             url: format!("{base}/v1/presence/lookup"),
+            offline_url: format!("{base}/v1/presence/offline"),
             agent: ureq::AgentBuilder::new().timeout_connect(Duration::from_secs(5)).timeout(Duration::from_secs(10)).build(),
         })
     }
 
-    /// Une réponse par empreinte, dans l'ordre.
-    pub fn lookup(&self, token: &str, fingerprints: &[[u8; 32]]) -> Result<Vec<bool>, Failure> {
-        let body = serde_json::json!({ "fingerprints": fingerprints.iter().map(|f| hex(f)).collect::<Vec<_>>() });
+    fn post(&self, url: &str, token: &str, body: serde_json::Value) -> Result<serde_json::Value, Failure> {
         let response = self
             .agent
-            .post(&self.url)
+            .post(url)
             .set("Authorization", &format!("Bearer {token}"))
             .set("User-Agent", "YuyuFrame-LauncherAgent/0.1")
             .send_json(body)
             .map_err(|e| match e {
                 ureq::Error::Status(401 | 403, _) => Failure::Refused,
                 ureq::Error::Status(429, _) => Failure::RateLimited,
+                ureq::Error::Status(404 | 405, _) => Failure::Unsupported,
                 _ => Failure::Unavailable,
             })?;
-        let parsed: serde_json::Value = response.into_json().map_err(|_| Failure::Unavailable)?;
+        response.into_json().map_err(|_| Failure::Unavailable)
+    }
+
+    /// Les réponses d'un corps `{ "present": [...] }`, une par empreinte demandée.
+    fn present(parsed: &serde_json::Value, asked: usize) -> Result<Vec<bool>, Failure> {
         let present: Vec<bool> = parsed
             .get("present")
             .and_then(|p| p.as_array())
@@ -69,10 +79,30 @@ impl Client {
             .map(|v| v.as_bool().unwrap_or(false))
             .collect();
         // Une réponse d'une autre longueur ne se lit pas : on ne devine pas à qui va quoi.
-        if present.len() != fingerprints.len() {
+        if present.len() != asked {
             return Err(Failure::Unavailable);
         }
         Ok(present)
+    }
+
+    /// Une réponse par empreinte, dans l'ordre.
+    pub fn lookup(&self, token: &str, fingerprints: &[[u8; 32]]) -> Result<Vec<bool>, Failure> {
+        let body = serde_json::json!({ "fingerprints": fingerprints.iter().map(|f| hex(f)).collect::<Vec<_>>() });
+        let parsed = self.post(&self.url, token, body)?;
+        Self::present(&parsed, fingerprints.len())
+    }
+
+    /// Serveur de jeu hors ligne : annonce `own` (vide = ne pas s'annoncer)
+    /// et demande `players`. Rend une réponse par empreinte de `players`, et
+    /// la cadence d'annonce que le serveur attend, en secondes.
+    pub fn sync_offline(&self, token: &str, own: &[[u8; 32]], players: &[[u8; 32]]) -> Result<(Vec<bool>, Option<u64>), Failure> {
+        let body = serde_json::json!({
+            "own": own.iter().map(|f| hex(f)).collect::<Vec<_>>(),
+            "players": players.iter().map(|f| hex(f)).collect::<Vec<_>>(),
+        });
+        let parsed = self.post(&self.offline_url, token, body)?;
+        let present = Self::present(&parsed, players.len())?;
+        Ok((present, parsed.get("renew_in").and_then(|v| v.as_u64())))
     }
 }
 
@@ -87,6 +117,8 @@ mod tests {
         assert!(Client::new("http://127.0.0.1:3000").is_some());
         assert!(Client::new("http://api.yuyuframe.eu").is_none());
         assert!(Client::new("ftp://ailleurs").is_none());
-        assert_eq!(Client::new("https://api.yuyuframe.eu").unwrap().url, "https://api.yuyuframe.eu/v1/presence/lookup");
+        let client = Client::new("https://api.yuyuframe.eu").unwrap();
+        assert_eq!(client.url, "https://api.yuyuframe.eu/v1/presence/lookup");
+        assert_eq!(client.offline_url, "https://api.yuyuframe.eu/v1/presence/offline");
     }
 }

@@ -129,6 +129,8 @@
   "Contours": "Outline",
   "Joueurs YuyuFrame": "YuyuFrame players",
   "Applique ce style aux joueurs YuyuFrame que vous croisez": "Applies this style to the YuyuFrame players you meet",
+  "Serveurs Microsoft uniquement": "Microsoft servers only",
+  "Plus sûr : sur un serveur qui ne vérifie pas les comptes, un pseudo peut être usurpé, et une empreinte de l'adresse du serveur est envoyée pour vous y reconnaître": "Safer: on a server that does not verify accounts, a username can be impersonated, and a fingerprint of the server address is sent to recognise you there",
   "Votre nametag, et le style du pseudo des joueurs YuyuFrame": "Your nametag, and the name style of YuyuFrame players",
   "Nametag et pseudos YuyuFrame": "Nametag and YuyuFrame names",
   "Affiche votre pseudo au-dessus de votre tête en vue extérieure": "Shows your name above your head in third-person view",

@@ -4,8 +4,13 @@
 //! Une tâche par partie, coupée quand le jeu s'arrête. Elle prouve d'abord au
 //! serveur que le compte Minecraft est bien celui du joueur (voir
 //! `account::yuyu::profile::prove_minecraft_account`), puis renvoie le signal
-//! à la cadence que le serveur demande. Rien d'autre ne part : ni le serveur
-//! de jeu, ni l'instance, ni les joueurs croisés.
+//! à la cadence que le serveur demande. Rien d'autre ne part d'ici : ni le
+//! serveur de jeu, ni l'instance, ni les joueurs croisés.
+//!
+//! Sur un serveur de jeu en mode hors ligne, c'est le jeu qui s'annonce
+//! (`content_core.dll`, `POST /v1/presence/offline`) : lui seul sait où il
+//! joue. Le launcher lui passe pour cela le jeton et le réglage de visibilité
+//! (`feed_tokens`).
 //!
 //! Sans compte YuyuFrame ou avec un compte hors ligne, la tâche ne fait rien.
 //! Le réglage « apparaître comme joueur YuyuFrame » coupe le signal — pas la
@@ -92,6 +97,10 @@ pub const TOKEN_CHANNEL_ENV: &str = "YUYU_PRESENCE_STDIN";
 /// Début de chaque ligne écrite au jeu. Le même dans
 /// `content-core/src/presence/token.rs`.
 const TOKEN_LINE_PREFIX: &str = "yf-presence-token ";
+/// Le réglage « apparaître comme joueur YuyuFrame », sur le même tube
+/// (`VISIBLE_PREFIX` dans `token.rs`). Le jeu en a besoin : sur un serveur en
+/// mode hors ligne c'est lui qui s'annonce, lui seul sachant où il joue.
+const VISIBLE_LINE_PREFIX: &str = "yf-presence-visible ";
 /// Le jeton d'accès vit 15 minutes et le launcher le renouvelle une minute
 /// avant sa fin : regarder plus souvent que cette minute garantit que le jeu
 /// reçoit le suivant avant que le sien n'expire.
@@ -113,8 +122,24 @@ pub fn feed_tokens(state: SharedState, mut stdin: tokio::process::ChildStdin, st
     use tokio::io::AsyncWriteExt;
     tokio::spawn(async move {
         let mut sent = String::new();
+        let mut sent_visible: Option<bool> = None;
         while !stop.load(std::sync::atomic::Ordering::Relaxed) {
             if signed_in(&state).await {
+                // Le réglage d'abord, et à chaque changement : le jeu ne
+                // s'annonce pas tant qu'il ne l'a pas reçu.
+                let now_visible = visible(&state).await;
+                if sent_visible != Some(now_visible) {
+                    let line = format!("{VISIBLE_LINE_PREFIX}{}\n", now_visible as u8);
+                    let written = tokio::time::timeout(Duration::from_secs(5), async {
+                        stdin.write_all(line.as_bytes()).await?;
+                        stdin.flush().await
+                    })
+                    .await;
+                    if !matches!(written, Ok(Ok(()))) {
+                        return;
+                    }
+                    sent_visible = Some(now_visible);
+                }
                 match api::valid_access_token(&state).await {
                     Ok(token) if token != sent => {
                         let line = format!("{TOKEN_LINE_PREFIX}{token}\n");

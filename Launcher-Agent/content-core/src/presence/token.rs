@@ -10,7 +10,14 @@
 //! launcher fermé, il n'y a plus de ligne, le dernier jeton expire, et plus
 //! personne n'est reconnu jusqu'à la prochaine partie.
 
+//!
+//! Le même tube porte le réglage « Apparaître comme joueur YuyuFrame » du
+//! launcher (`yf-presence-visible 0|1`, réécrit quand il change). Le jeu en a
+//! besoin depuis qu'il s'annonce lui-même sur les serveurs en mode hors ligne
+//! (`worker.rs`) ; tant que le launcher n'a rien dit, il ne s'annonce pas.
+
 use std::io::BufRead;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 /// Posée par le launcher : sans elle, l'entrée standard n'est pas ce canal
@@ -19,12 +26,15 @@ use std::sync::{Arc, Mutex};
 const CHANNEL_ENV: &str = "YUYU_PRESENCE_STDIN";
 /// Début de chaque ligne du launcher (`TOKEN_LINE_PREFIX` de son côté).
 const LINE_PREFIX: &str = "yf-presence-token ";
+/// Début de la ligne du réglage de visibilité (`VISIBLE_LINE_PREFIX` côté launcher).
+const VISIBLE_PREFIX: &str = "yf-presence-visible ";
 /// Un jeton d'accès fait quelques centaines de caractères.
 const MAX_TOKEN_LEN: usize = 4096;
 
 #[derive(Default)]
 pub struct TokenStore {
     current: Mutex<Option<Arc<str>>>,
+    visible: AtomicBool,
 }
 
 impl TokenStore {
@@ -34,6 +44,20 @@ impl TokenStore {
 
     fn set(&self, token: &str) {
         *self.current.lock().unwrap_or_else(|p| p.into_inner()) = Some(token.into());
+    }
+
+    /// Le joueur veut-il apparaître aux autres ? Faux tant que le launcher ne l'a pas dit.
+    pub fn visible(&self) -> bool {
+        self.visible.load(Ordering::Relaxed)
+    }
+}
+
+/// Le réglage d'une ligne `yf-presence-visible`, ou `None` si ce n'en est pas une.
+fn parse_visible(line: &str) -> Option<bool> {
+    match line.trim_end_matches(['\r', '\n']).strip_prefix(VISIBLE_PREFIX)? {
+        "1" => Some(true),
+        "0" => Some(false),
+        _ => None,
     }
 }
 
@@ -62,6 +86,8 @@ pub fn start_reader(store: Arc<TokenStore>) -> bool {
                 let Ok(line) = line else { return };
                 if let Some(token) = parse_line(&line) {
                     store.set(token);
+                } else if let Some(visible) = parse_visible(&line) {
+                    store.visible.store(visible, Ordering::Relaxed);
                 }
             }
         })
@@ -82,6 +108,16 @@ mod tests {
         assert_eq!(parse_line("yf-presence-token aaa bbb"), None);
         assert_eq!(parse_line("yf-presence-token aaa\rX-Autre: 1"), None);
         assert_eq!(parse_line(&format!("yf-presence-token {}", "a".repeat(MAX_TOKEN_LEN + 1))), None);
+    }
+
+    #[test]
+    fn la_visibilite_ne_se_lit_que_sur_sa_ligne() {
+        assert_eq!(parse_visible("yf-presence-visible 1\n"), Some(true));
+        assert_eq!(parse_visible("yf-presence-visible 0\r\n"), Some(false));
+        assert_eq!(parse_visible("yf-presence-visible oui"), None);
+        assert_eq!(parse_visible("yf-presence-token aaa.bbb.ccc"), None);
+        // Sans un mot du launcher, le joueur ne s'annonce pas.
+        assert!(!TokenStore::default().visible());
     }
 
     #[test]

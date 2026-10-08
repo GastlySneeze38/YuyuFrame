@@ -129,6 +129,8 @@
   "Contours": "Контур",
   "Joueurs YuyuFrame": "Игроки YuyuFrame",
   "Applique ce style aux joueurs YuyuFrame que vous croisez": "Применяет этот стиль к встреченным игрокам YuyuFrame",
+  "Serveurs Microsoft uniquement": "Только серверы Microsoft",
+  "Plus sûr : sur un serveur qui ne vérifie pas les comptes, un pseudo peut être usurpé, et une empreinte de l'adresse du serveur est envoyée pour vous y reconnaître": "Безопаснее: на сервере, который не проверяет аккаунты, ник можно подделать, а для распознавания вас там отправляется отпечаток адреса сервера",
   "Votre nametag, et le style du pseudo des joueurs YuyuFrame": "Ваш неймтег и стиль ников игроков YuyuFrame",
   "Nametag et pseudos YuyuFrame": "Неймтег и ники YuyuFrame",
   "Affiche votre pseudo au-dessus de votre tête en vue extérieure": "Показывает ваш ник над головой в виде от третьего лица",

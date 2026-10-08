@@ -105,6 +105,17 @@ public enum AccessPoint {
      * réflexion — voir {@code MumbleLinkModule}, qui en était le dernier usage.
      */
     CLIENT_USERNAME,
+    /**
+     * Le PROFIL de notre joueur dans le monde courant, tel que le serveur l'a
+     * donné à la connexion — {@code Object[]{ java.util.UUID, String pseudo }},
+     * ou {@code null} hors d'un monde.
+     *
+     * <p>Ce n'est pas {@link #CLIENT_USERNAME} : sur un serveur en mode hors
+     * ligne, l'UUID que voient les autres joueurs est celui que le serveur a
+     * dérivé du pseudo, pas celui du compte. C'est ce profil-là qu'il faut
+     * pour être reconnu par eux (voir {@code runtime/presence/PresenceContext}).
+     */
+    CLIENT_PLAYER_PROFILE,
 
     // ── Options (net.minecraft.client.Options) ─────────────────────────────
     /** Poignée d'option du champ de vision — champ {@code fov}. */

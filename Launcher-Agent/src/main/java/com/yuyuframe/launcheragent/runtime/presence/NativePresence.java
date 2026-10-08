@@ -36,16 +36,21 @@ import java.util.UUID;
 public final class NativePresence {
 
     /** Même valeur que {@code ABI_VERSION} dans presence/bridge.rs. */
-    private static final int ABI_VERSION = 1;
+    private static final int ABI_VERSION = 2;
 
     /** On ne sait pas (encore) — ou pas de jeton : jeu lancé hors launcher, joueur sans compte. */
     public static final int UNKNOWN = 0;
     public static final int PRESENT = 1;
-    /** Aussi pour un compte hors ligne ou un faux joueur, qui ne sont jamais demandés. */
+    /**
+     * Aussi pour un faux joueur, jamais demandé — et pour un joueur d'un
+     * serveur en mode hors ligne tant que {@link #context} n'a pas donné
+     * l'adresse de ce serveur.
+     */
     public static final int ABSENT = 2;
 
     private static MethodHandle start;
     private static MethodHandle status;
+    private static MethodHandle context;
 
     private static final MethodHandle QUERY = load();
 
@@ -84,6 +89,10 @@ public final class NativePresence {
             // verrou pris côté natif n'est jamais tenu pendant une requête réseau.
             status = linker.downcallHandle(lib.find("yf_presence_status").orElseThrow(),
                 FunctionDescriptor.ofVoid(ValueLayout.ADDRESS),
+                Linker.Option.critical(true));
+            context = linker.downcallHandle(lib.find("yf_presence_context").orElseThrow(),
+                FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT,
+                    ValueLayout.JAVA_LONG, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.JAVA_INT),
                 Linker.Option.critical(true));
             return linker.downcallHandle(lib.find("yf_presence_query").orElseThrow(),
                 FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_LONG,
@@ -132,6 +141,40 @@ public final class NativePresence {
             LauncherLog.err("[PRESENCE] Question impossible", error);
             return UNKNOWN;
         }
+    }
+
+    /**
+     * Où l'on joue et sous quelle identité : ce qui permet de reconnaître les
+     * joueurs d'un serveur en mode hors ligne, et de s'y annoncer. À rappeler
+     * régulièrement ; le noyau ne réagit qu'à un changement.
+     *
+     * @param host l'adresse du serveur telle que le joueur l'a tapée,
+     *             « hôte:port » — ou {@code null}
+     * @param ip   l'adresse IP jointe, « ip:port » — ou {@code null}. Les deux
+     *             à {@code null} : pas de serveur, ou serveurs hors ligne
+     *             refusés par réglage — plus rien ne part pour eux
+     * @param id   l'UUID du profil de notre joueur sur ce serveur, ou {@code null}
+     * @param name son pseudo de profil, ou {@code null}
+     */
+    public static void context(String host, String ip, UUID id, String name) {
+        if (QUERY == null) {
+            return;
+        }
+        try {
+            byte[] hostBytes = ascii(host);
+            byte[] ipBytes = ascii(ip);
+            byte[] nameBytes = id == null ? new byte[0] : ascii(name);
+            long hi = id == null ? 0L : id.getMostSignificantBits();
+            long lo = id == null ? 0L : id.getLeastSignificantBits();
+            context.invokeExact(MemorySegment.ofArray(hostBytes), hostBytes.length, MemorySegment.ofArray(ipBytes), ipBytes.length,
+                hi, lo, MemorySegment.ofArray(nameBytes), nameBytes.length);
+        } catch (Throwable error) {
+            LauncherLog.err("[PRESENCE] Contexte du serveur non transmis", error);
+        }
+    }
+
+    private static byte[] ascii(String text) {
+        return text == null ? new byte[0] : text.getBytes(StandardCharsets.US_ASCII);
     }
 
     /**

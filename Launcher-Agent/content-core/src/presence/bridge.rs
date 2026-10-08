@@ -9,14 +9,16 @@ use std::sync::{Arc, OnceLock};
 use std::time::Instant;
 
 use super::client::Client;
-use super::directory::{Answer, PlayerKey};
+use super::directory::{server_form, Answer, PlayerKey, MAX_SERVER_FORMS};
 use super::token::{self, TokenStore};
 use super::worker::{self, Shared};
 
 /// Version du contrat. À incrémenter dès qu'une fonction change de signature
 /// ou de sens : Java refuse une DLL qui n'annonce pas la version qu'il attend
 /// (`NativePresence.ABI_VERSION`), au lieu de l'appeler de travers.
-const ABI_VERSION: u32 = 1;
+/// 2 (2026-10-08) : `yf_presence_context`, et un UUID version 3 n'est plus
+/// « absent » d'office.
+const ABI_VERSION: u32 = 2;
 
 /// `None` une fois pour toutes si le jeu n'a pas été lancé par le launcher :
 /// l'environnement du processus ne changera pas en cours de partie.
@@ -60,8 +62,9 @@ pub extern "C" fn yf_presence_start() -> i32 {
 /// (`UUID.getMostSignificantBits` / `getLeastSignificantBits`). `name` : son
 /// pseudo de profil en ASCII, jamais le texte affiché au-dessus de sa tête.
 ///
-/// Un compte hors ligne ou un faux joueur (UUID qui n'est pas en version 4)
-/// répond 2 sans rien demander.
+/// Un faux joueur (UUID ni en version 4 ni en version 3) répond 2 sans rien
+/// demander. Un UUID version 3 — joueur d'un serveur en mode hors ligne —
+/// aussi, tant que `yf_presence_context` n'a pas donné l'adresse du serveur.
 ///
 /// # Safety
 /// `name` doit pointer sur `name_len` octets lisibles.
@@ -75,6 +78,56 @@ pub unsafe extern "C" fn yf_presence_query(uuid_hi: i64, uuid_lo: i64, name: *co
     let uuid = ((uuid_hi as u64 as u128) << 64) | (uuid_lo as u64 as u128);
     let Some(key) = PlayerKey::new(uuid, name) else { return Answer::Absent as i32 };
     shared.directory().query(key, Instant::now()) as i32
+}
+
+/// Où l'on joue, et sous quelle identité : ce qui permet de reconnaître les
+/// joueurs d'un serveur en mode hors ligne, et de s'y annoncer. À rappeler
+/// régulièrement (une fois par seconde suffit) : seul un changement a un effet.
+///
+/// `host` / `ip` : les deux formes de l'adresse du serveur de jeu, « hôte:port »
+/// en ASCII — le nom tapé par le joueur, l'adresse IP jointe. L'une ou l'autre
+/// peut manquer (longueur 0). Les deux à 0 : pas de serveur (solo, menu), ou
+/// serveurs hors ligne refusés par réglage — plus rien ne part pour eux et
+/// les joueurs en UUID version 3 répondent « absent ».
+///
+/// `uuid_hi` / `uuid_lo` / `name` : le PROFIL de notre propre joueur tel que
+/// ce serveur le donne. Il n'est annoncé que s'il est en version 3 ; un
+/// compte Microsoft reconnu comme tel par le serveur est déjà annoncé par le
+/// launcher.
+///
+/// # Safety
+/// `host`, `ip` et `name` doivent pointer sur autant d'octets lisibles que
+/// leur longueur l'annonce (ou être nuls avec une longueur de 0).
+#[no_mangle]
+pub unsafe extern "C" fn yf_presence_context(
+    host: *const u8,
+    host_len: i32,
+    ip: *const u8,
+    ip_len: i32,
+    uuid_hi: i64,
+    uuid_lo: i64,
+    name: *const u8,
+    name_len: i32,
+) {
+    let Some(shared) = shared() else { return };
+    let bytes = |ptr: *const u8, len: i32| -> &[u8] {
+        if ptr.is_null() || len <= 0 {
+            &[]
+        } else {
+            std::slice::from_raw_parts(ptr, len as usize)
+        }
+    };
+    let mut server: Vec<Vec<u8>> = Vec::with_capacity(MAX_SERVER_FORMS);
+    for raw in [bytes(host, host_len), bytes(ip, ip_len)] {
+        if let Some(form) = server_form(raw) {
+            if !server.contains(&form) {
+                server.push(form);
+            }
+        }
+    }
+    let uuid = ((uuid_hi as u64 as u128) << 64) | (uuid_lo as u64 as u128);
+    let own = PlayerKey::new(uuid, bytes(name, name_len));
+    shared.directory().set_context(server, own, Instant::now());
 }
 
 /// État, pour le journal de l'agent : écrit 4 entiers dans `out` —
@@ -114,6 +167,9 @@ mod tests {
         let name = b"Steve";
         assert_eq!(unsafe { yf_presence_query(0, 0, name.as_ptr(), name.len() as i32) }, 0);
         assert_eq!(unsafe { yf_presence_query(0, 0, std::ptr::null(), 5) }, 0);
+        let host = b"play.example.fr:25565";
+        unsafe { yf_presence_context(host.as_ptr(), host.len() as i32, std::ptr::null(), 0, 0, 0, name.as_ptr(), name.len() as i32) };
+        unsafe { yf_presence_context(std::ptr::null(), 7, std::ptr::null(), -1, 0, 0, std::ptr::null(), 3) };
         let mut out = [-1i32; 4];
         unsafe { yf_presence_status(out.as_mut_ptr()) };
         assert_eq!(out, [0, 0, 0, 0]);

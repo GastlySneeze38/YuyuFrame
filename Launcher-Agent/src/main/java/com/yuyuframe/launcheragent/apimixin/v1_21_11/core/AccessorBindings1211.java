@@ -206,6 +206,13 @@ public final class AccessorBindings1211 {
         // n'est pas tissé (plutôt que de rendre un 0 faux) — AccessorRegistry
         // attrape, journalise une fois, et l'appelant reçoit son repli.
         AccessorRegistry.bind(AccessPoint.CLIENT_FPS, (r, a) -> Integer.valueOf(MinecraftClientAccessor1211.la$fps()));
+        AccessorRegistry.bind(AccessPoint.CLIENT_PLAYER_PROFILE, (r, a) -> {
+            Object p = player(r);
+            if (!(p instanceof PlayerEntity)) return null;
+            // getGameProfile est déclarée par PlayerEntity : appelée sur ce type, pour le traducteur de noms.
+            com.mojang.authlib.GameProfile profile = ((PlayerEntity) p).getGameProfile();
+            return profile == null ? null : new Object[]{ profile.id(), profile.name() };
+        });
         AccessorRegistry.bind(AccessPoint.CLIENT_USERNAME, (r, a) -> {
             MinecraftClient c = mc(r);
             Session s = c == null ? null : c.getSession();

@@ -113,6 +113,12 @@ public final class AccessorBindings262 {
         // tissé (plutôt que de renvoyer un 0 faux) — AccessorRegistry.invoke()
         // attrape, journalise une fois, et l'appelant reçoit son repli.
         AccessorRegistry.bind(AccessPoint.CLIENT_FPS, (r, a) -> MinecraftAccessor262.la$fps());
+        AccessorRegistry.bind(AccessPoint.CLIENT_PLAYER_PROFILE, (r, a) -> {
+            Object p = player(r);
+            if (!(p instanceof net.minecraft.world.entity.player.Player)) return null;
+            com.mojang.authlib.GameProfile profile = ((net.minecraft.world.entity.player.Player) p).getGameProfile();
+            return profile == null ? null : new Object[]{ profile.id(), profile.name() };
+        });
         AccessorRegistry.bind(AccessPoint.CLIENT_USERNAME, (r, a) -> {
             MinecraftAccessor262 m = mc(r);
             net.minecraft.client.User u = m == null ? null : m.la$user();

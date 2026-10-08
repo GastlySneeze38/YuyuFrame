@@ -23,9 +23,10 @@ import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
  *
  * <p>Il ne règle QUE ce que ce joueur voit. Apparaître soi-même comme joueur
  * YuyuFrame aux yeux des autres se décide dans le launcher (Paramètres →
- * Confidentialité).
- *
- * <p>1.8.9 seulement pour l'instant.
+ * Confidentialité). Une exception, parce qu'elle touche aux deux sens à la
+ * fois : « Serveurs Microsoft uniquement » ({@link #onlineOnly}), qui écarte
+ * les serveurs de jeu en mode hors ligne — on n'y reconnaît plus personne et
+ * l'on ne s'y annonce plus.
  */
 public final class PlayerModule extends LauncherModule {
 
@@ -47,6 +48,13 @@ public final class PlayerModule extends LauncherModule {
     public boolean ownName = true;
     /** Ce nametag prend le style YuyuFrame, ou garde l'aspect du jeu. */
     public boolean ownStyle = true;
+    /**
+     * Ne reconnaître les joueurs YuyuFrame — et n'être reconnu — que sur les
+     * serveurs qui vérifient les comptes Microsoft. Par défaut, les serveurs
+     * en mode hors ligne comptent aussi : le pseudo n'y est pas prouvé, et une
+     * empreinte de l'adresse du serveur est envoyée pour départager les homonymes.
+     */
+    public boolean onlineOnly;
 
     /**
      * Les versions récentes où le module existe. Elles n'en ont qu'une partie :
@@ -112,6 +120,9 @@ public final class PlayerModule extends LauncherModule {
         }
         s.toggle("styleOthers", "Joueurs YuyuFrame", "Applique ce style aux joueurs YuyuFrame que vous croisez",
             "Où", null, () -> styleOthers, v -> { styleOthers = v; apply(); });
+        s.toggle("onlineOnly", "Serveurs Microsoft uniquement",
+            "Plus sûr : sur un serveur qui ne vérifie pas les comptes, un pseudo peut être usurpé, et une empreinte de l'adresse du serveur est envoyée pour vous y reconnaître",
+            "Où", null, () -> onlineOnly, v -> { onlineOnly = v; apply(); });
         s.toggle("tab", "Liste Tab", "Applique le même style dans la liste des joueurs", "Où",
             null, () -> tab, v -> { tab = v; apply(); });
         s.toggle("preview", "Aperçu sur tous les joueurs",
@@ -168,6 +179,8 @@ public final class PlayerModule extends LauncherModule {
         PlayerStyle.ownStyled = ownName && ownStyle && isEnabled();
         PlayerStyle.enabled = isEnabled();
         PlayerStyle.active = styleOthers && isEnabled();
+        // Vaut même module éteint : c'est aussi ce qui décide si l'on s'annonce sur un serveur hors ligne.
+        PlayerStyle.onlineOnly = onlineOnly;
     }
 
     private static int rgb(UiColor c) {
