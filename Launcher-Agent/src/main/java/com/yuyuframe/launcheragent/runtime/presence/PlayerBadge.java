@@ -154,37 +154,6 @@ public final class PlayerBadge {
     public static void tabEnds() {
         inTab = false;
         TAB_NAMES.clear();
-        if (!tabReported && tabLines > 0) {
-            tabReported = true;
-            com.yuyuframe.launcheragent.base.log.LauncherLog.agent(2, "[PRESENCE] liste Tab de ce serveur : "
-                + tabLines + " lignes, " + tabAccounts + " avec un UUID de compte Microsoft (version 4), "
-                + (tabOwnFound ? "la nôtre porte bien l'UUID de notre compte"
-                    : "AUCUNE ne porte l'UUID de notre compte — le serveur refait la liste avec ses propres profils"));
-        }
-        tabLines = 0;
-        tabAccounts = 0;
-        tabOwnFound = false;
-    }
-
-    // Provisoire : de quoi dire, une fois par partie, si la liste Tab du serveur porte les vrais profils des
-    // joueurs. Certains serveurs la refont avec des profils à eux (pour la trier), et ces lignes-là ne peuvent
-    // pas être reconnues : ni l'UUID ni le pseudo ne sont ceux du compte.
-    private static boolean tabReported;
-    private static int tabLines, tabAccounts;
-    private static boolean tabOwnFound;
-
-    /** Une ligne de la liste vient d'être lue. */
-    public static void tabLine(UUID id, boolean own) {
-        if (tabReported) {
-            return;
-        }
-        tabLines++;
-        if (id != null && id.version() == 4) {
-            tabAccounts++;
-        }
-        if (own) {
-            tabOwnFound = true;
-        }
     }
 
     /** Hors du dessin de la liste, les pseudos ne sont pas touchés : la même méthode du jeu sert ailleurs. */

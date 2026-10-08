@@ -88,38 +88,7 @@ public final class PlayerStyle {
         if (!active || id == null || name == null) {
             return false;
         }
-        if (preview) {
-            return true;
-        }
-        boolean present = NativePresence.query(id, name) == NativePresence.PRESENT;
-        logStatusChange();
-        return present;
-    }
-
-    private static long nextStatusCheck;
-    private static int lastState = -1, lastCached = -1, lastPresent = -1;
-
-    /**
-     * Provisoire : une ligne dans le journal de l'agent quand l'état du noyau
-     * change (jeton reçu ou non, joueurs en mémoire, joueurs reconnus). Permet
-     * de vérifier la chaîne même seul sur un serveur, sur toutes les versions.
-     * Au plus une lecture par seconde.
-     */
-    private static void logStatusChange() {
-        long now = System.currentTimeMillis();
-        if (now < nextStatusCheck) {
-            return;
-        }
-        nextStatusCheck = now + 1000;
-        int[] s = NativePresence.status();
-        if (s[0] != lastState || s[1] != lastCached || s[2] != lastPresent) {
-            lastState = s[0];
-            lastCached = s[1];
-            lastPresent = s[2];
-            com.yuyuframe.launcheragent.base.log.LauncherLog.agent(2, "[PRESENCE] état=" + s[0]
-                + " (1 en marche, 2 nouvel essai, 3 quota, 4 jeton refusé, 5 pas de jeton)"
-                + " — joueurs en mémoire=" + s[1] + ", reconnus YuyuFrame=" + s[2] + ", en attente=" + s[3]);
-        }
+        return preview || NativePresence.query(id, name) == NativePresence.PRESENT;
     }
 
     private static final long START = System.nanoTime();

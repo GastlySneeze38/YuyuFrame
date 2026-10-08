@@ -212,7 +212,6 @@ public final class PlayerBadge262 {
             return null;
         }
         boolean own = isOwn(profile);
-        PlayerBadge.tabLine(profile.id(), own);
         if (!PlayerBadge.marksTab(profile.id(), profile.name(), own)) {
             return null;
         }
