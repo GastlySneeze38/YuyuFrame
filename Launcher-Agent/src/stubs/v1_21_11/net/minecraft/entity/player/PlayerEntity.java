@@ -39,4 +39,9 @@ public class PlayerEntity extends LivingEntity {
     public boolean canConsume(boolean ignoreHunger) {
         throw new UnsupportedOperationException("stub compile-only");
     }
+
+    /** Déclarée sur {@code PlayerEntity} (yarn-1.21.11-mergedv2, {@code method_7334}). */
+    public com.mojang.authlib.GameProfile getGameProfile() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
 }

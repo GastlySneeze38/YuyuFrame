@@ -316,6 +316,27 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
         RefmapEntry.invoker("com/yuyuframe/launcheragent/apimixin/v1_21_11/freelook/EntityInvoker1211",
             "net/minecraft/entity/Entity", "changeLookDirection", "(DD)V"),
 
+        // ── apimixin 1.21.11 : module « Joueur » (logo devant le pseudo, nametag) ──
+        new RefmapEntry("com/yuyuframe/launcheragent/apimixin/v1_21_11/player/PlayerLabelMixin1211",
+            "net/minecraft/client/render/entity/PlayerEntityRenderer", "updateRenderState",
+            "(Lnet/minecraft/entity/PlayerLikeEntity;Lnet/minecraft/client/render/entity/state/PlayerEntityRenderState;F)V", null),
+        new RefmapEntry("com/yuyuframe/launcheragent/apimixin/v1_21_11/player/PlayerLabelMixin1211",
+            "net/minecraft/client/render/entity/PlayerEntityRenderer", "renderLabelIfPresent",
+            "(Lnet/minecraft/client/render/entity/state/PlayerEntityRenderState;Lnet/minecraft/client/util/math/MatrixStack;"
+            + "Lnet/minecraft/client/render/command/OrderedRenderCommandQueue;Lnet/minecraft/client/render/state/CameraRenderState;)V", null),
+        new RefmapEntry("com/yuyuframe/launcheragent/apimixin/v1_21_11/player/OwnNametagMixin1211",
+            "net/minecraft/client/render/entity/LivingEntityRenderer", "hasLabel",
+            "(Lnet/minecraft/entity/LivingEntity;D)Z", null),
+        new RefmapEntry("com/yuyuframe/launcheragent/apimixin/v1_21_11/player/InventoryDollMixin1211",
+            "net/minecraft/client/gui/screen/ingame/InventoryScreen", "drawEntity",
+            "(Lnet/minecraft/entity/LivingEntity;)Lnet/minecraft/client/render/entity/state/EntityRenderState;", null),
+        new RefmapEntry("com/yuyuframe/launcheragent/apimixin/v1_21_11/player/TabListLogoMixin1211",
+            "net/minecraft/client/gui/hud/PlayerListHud", "render",
+            "(Lnet/minecraft/client/gui/DrawContext;ILnet/minecraft/scoreboard/Scoreboard;Lnet/minecraft/scoreboard/ScoreboardObjective;)V", null),
+        new RefmapEntry("com/yuyuframe/launcheragent/apimixin/v1_21_11/player/TabListLogoMixin1211",
+            "net/minecraft/client/gui/hud/PlayerListHud", "getPlayerName",
+            "(Lnet/minecraft/client/network/PlayerListEntry;)Lnet/minecraft/text/Text;", null),
+
         // ── apimixin 1.21.11, lot 4 : reste du catalogue 26.1.2 ────────────
         // HUD (InGameHud) — sélecteurs seulement ; les cibles @At(INVOKE) des
         // quatre @WrapOperation de renderMainHud passent par REFMAP_REMAP.

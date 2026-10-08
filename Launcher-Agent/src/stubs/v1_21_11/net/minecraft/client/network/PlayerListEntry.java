@@ -12,4 +12,9 @@ public class PlayerListEntry {
     public int getLatency() {
         throw new UnsupportedOperationException("stub compile-only");
     }
+
+    /** Le profil du joueur de cette ligne ({@code hiq.a()}). */
+    public com.mojang.authlib.GameProfile getProfile() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
 }

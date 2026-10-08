@@ -13,6 +13,16 @@ public interface VertexConsumer {
 
     VertexConsumer vertex(float x, float y, float z);
 
+    /** Sommet placé par une transformation du monde ({@code fzp.a(Lfzm$a;FFF)Lfzp;}), méthode par défaut en jeu. */
+    default VertexConsumer vertex(net.minecraft.client.util.math.MatrixStack.Entry entry, float x, float y, float z) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    /** Lumière empaquetée ({@code fzp.c(I)Lfzp;}), méthode par défaut en jeu. */
+    default VertexConsumer light(int packedLight) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
     /** Couleur empaquetée ARGB. */
     VertexConsumer color(int argb);
 

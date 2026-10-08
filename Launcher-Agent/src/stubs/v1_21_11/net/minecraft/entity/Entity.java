@@ -25,6 +25,11 @@ public class Entity {
     protected Entity() {
     }
 
+    /** Déclarée sur {@code Entity} (yarn-1.21.11-mergedv2, {@code method_5767}). */
+    public boolean isInvisible() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
     public double getX() {
         throw new UnsupportedOperationException("stub compile-only");
     }

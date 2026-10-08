@@ -39,6 +39,8 @@ import net.minecraft.client.sounds.SoundManager;
  */
 public abstract class Minecraft {
     public static Minecraft getInstance() { return null; }
+    /** Faux quand l'interface est masquée (F1) — statique. */
+    public static boolean renderNames() { return false; }
     // 26.2 : setScreen et le champ screen sont passés dans le nouveau Gui
     // (voir apimixin/v26_3/core/GuiAccessor263), et getMainRenderTarget
     // n'existe plus — la cible principale est GameRenderer.mainRenderTarget

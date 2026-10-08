@@ -9,4 +9,9 @@ public class TextRenderer {
 
     private TextRenderer() {
     }
+
+    /** Largeur d'un texte mis en forme, en pixels de police ({@code gio.a(Lyn;)I}). */
+    public int getWidth(net.minecraft.text.StringVisitable text) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
 }

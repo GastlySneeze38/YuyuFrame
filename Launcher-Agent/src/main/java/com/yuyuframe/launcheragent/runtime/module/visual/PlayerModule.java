@@ -54,7 +54,7 @@ public final class PlayerModule extends LauncherModule {
      * l'aspect de vanilla (choix de l'utilisateur, 2026-10-08). Les fonds, les
      * couleurs et l'animation restent propres à la 1.8.9.
      */
-    public static final java.util.Set<String> MODERN_VERSIONS = java.util.Set.of("26.1.2");
+    public static final java.util.Set<String> MODERN_VERSIONS = java.util.Set.of("1.21.11", "26.1", "26.1.1", "26.1.2", "26.2", "26.3");
 
     /** 1.8.9 : tous les réglages. Ailleurs, seulement ceux du logo et du nametag. */
     private static final boolean FULL = "1.8.9".equals(System.getProperty("launcheragent.mcVersion", ""));

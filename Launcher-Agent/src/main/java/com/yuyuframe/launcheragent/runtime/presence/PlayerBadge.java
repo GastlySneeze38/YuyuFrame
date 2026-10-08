@@ -77,9 +77,10 @@ public final class PlayerBadge {
     }
 
     /**
-     * Cette entité est-elle notre joueur, vu de l'extérieur, nametag demandé ?
-     * Les conditions propres au jeu (interface masquée, invisibilité) restent
-     * à l'appelant, qui a les types.
+     * Cette entité est-elle notre joueur, vu de l'extérieur, interface
+     * affichée, nametag demandé ? L'invisibilité reste à l'appelant, qui a les
+     * types. L'interface masquée (F1) passe par le point d'accès commun : le
+     * jeu a changé sa façon de le dire entre 26.1 et 26.2.
      */
     public static boolean ownNametag(Object entity) {
         if (!PlayerStyle.ownLabel || dolls > 0 || entity == null) {
@@ -88,7 +89,10 @@ public final class PlayerBadge {
         if (entity != AccessorRegistry.get(AccessPoint.CLIENT_PLAYER)) {
             return false;
         }
-        return !"first_person".equals(AccessorRegistry.get(AccessPoint.OPTIONS_PERSPECTIVE));
+        if ("first_person".equals(AccessorRegistry.get(AccessPoint.OPTIONS_PERSPECTIVE))) {
+            return false;
+        }
+        return !Boolean.TRUE.equals(AccessorRegistry.get(AccessPoint.OPTIONS_HIDE_GUI));
     }
 
     // ── Étiquette : de la copie de l'état à son dessin ───────────────────────

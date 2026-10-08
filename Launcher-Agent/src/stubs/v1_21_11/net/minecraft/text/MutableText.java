@@ -28,6 +28,11 @@ public class MutableText implements Text {
         throw new UnsupportedOperationException("stub compile-only");
     }
 
+    /** Remplace le style de ce texte ({@code yw.b(Lzf;)Lyw;}). */
+    public MutableText setStyle(Style style) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
     /** Teinte ce texte — {@code withColor} des deux côtés. */
     public MutableText withColor(int rgb) {
         throw new UnsupportedOperationException("stub compile-only");

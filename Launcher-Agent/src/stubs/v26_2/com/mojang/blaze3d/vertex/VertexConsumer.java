@@ -24,6 +24,12 @@ public interface VertexConsumer {
 
     VertexConsumer addVertex(float x, float y, float z);
 
+    /** Sommet placé par une transformation du monde — méthode par défaut en jeu. */
+    default VertexConsumer addVertex(PoseStack.Pose pose, float x, float y, float z) { return this; }
+
+    /** Lumière empaquetée (bloc et ciel) — méthode par défaut en jeu. */
+    default VertexConsumer setLight(int packedLight) { return this; }
+
     /** Couleur ARGB empaquetée. */
     VertexConsumer setColor(int argb);
 

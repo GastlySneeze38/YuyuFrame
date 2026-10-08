@@ -192,8 +192,8 @@ public final class PlayerBadge261 {
 
     /** En tête de {@code LivingEntityRenderer.shouldShowName} : vrai = l'étiquette de notre joueur doit s'afficher. */
     public static boolean ownNametag(Object entity) {
-        // Les deux conditions que vanilla garde pour toute étiquette : interface affichée (F1), entité visible.
-        return PlayerBadge.ownNametag(entity) && Minecraft.renderNames() && !((Entity) entity).isInvisible();
+        // La condition que vanilla garde pour toute étiquette : l'entité est visible.
+        return PlayerBadge.ownNametag(entity) && !((Entity) entity).isInvisible();
     }
 
     // ── Liste Tab ────────────────────────────────────────────────────────────

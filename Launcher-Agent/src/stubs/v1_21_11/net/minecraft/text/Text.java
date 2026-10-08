@@ -19,7 +19,7 @@ package net.minecraft.text;
  * {@code RemapCheck} vérifie l'issue sur le jar réellement exécuté : l'appel
  * final vise bien {@code yh.getString()}, qui existe.
  */
-public interface Text {
+public interface Text extends StringVisitable {
 
     String getString();
 

@@ -2,4 +2,7 @@ package net.minecraft.world.entity;
 
 /** Stub compile-only (26.1+) — marqueur vide, juste assez pour typer un paramètre capturé (jamais lu). Voir {@code net.minecraft.client.gui.Gui} pour le pourquoi de ce genre de stub sur 26.1+. */
 public abstract class Entity {
+
+    /** Pour le nametag du module « Joueur » — déclarée sur {@code Entity} en jeu. */
+    public boolean isInvisible() { return false; }
 }

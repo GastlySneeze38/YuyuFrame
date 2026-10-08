@@ -32,4 +32,7 @@ public final class GameProfile {
      * silencieusement : le pseudo transmis à Mumble était toujours nul.
      */
     public String name() { return null; }
+
+    /** L'UUID du compte — même record. */
+    public java.util.UUID id() { return null; }
 }

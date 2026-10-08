@@ -274,6 +274,12 @@ public final class MixinHookPointRegistry {
         // ── Freelook : volontairement non gaté (voir 26.1.2) ───────────────
         always("26.1", "v26_1_0.freelook.CameraFreelookMixin2610");
         always("26.1", "v26_1_0.freelook.MouseHandlerFreelookMixin2610");
+        // Module « Joueur » — voir le bloc 26.1.2.
+        always("26.1", "v26_1_0.player.AvatarNameMixin2610");
+        always("26.1", "v26_1_0.player.NameTagLogoMixin2610");
+        always("26.1", "v26_1_0.player.OwnNametagMixin2610");
+        always("26.1", "v26_1_0.player.InventoryDollMixin2610");
+        always("26.1", "v26_1_0.player.TabListLogoMixin2610");
 
         // ── HUD (fabric-rendering-v1) ─────────────────────────────────────
         gate("26.1", "v26_1_0.hud.HudExtractCameraOverlayMixin2610", HookPoint.HUD_EXTRACT_CAMERA_OVERLAY);
@@ -378,6 +384,12 @@ public final class MixinHookPointRegistry {
         // ── Freelook : volontairement non gaté (voir 26.1.2) ───────────────
         always("26.1.1", "v26_1_1.freelook.CameraFreelookMixin2611");
         always("26.1.1", "v26_1_1.freelook.MouseHandlerFreelookMixin2611");
+        // Module « Joueur » — voir le bloc 26.1.2.
+        always("26.1.1", "v26_1_1.player.AvatarNameMixin2611");
+        always("26.1.1", "v26_1_1.player.NameTagLogoMixin2611");
+        always("26.1.1", "v26_1_1.player.OwnNametagMixin2611");
+        always("26.1.1", "v26_1_1.player.InventoryDollMixin2611");
+        always("26.1.1", "v26_1_1.player.TabListLogoMixin2611");
 
         // ── HUD (fabric-rendering-v1) ─────────────────────────────────────
         gate("26.1.1", "v26_1_1.hud.HudExtractCameraOverlayMixin2611", HookPoint.HUD_EXTRACT_CAMERA_OVERLAY);
@@ -490,6 +502,12 @@ public final class MixinHookPointRegistry {
         // ── Freelook : volontairement non gaté (voir 26.1.2) ───────────────
         always("26.2", "v26_2.freelook.CameraFreelookMixin262");
         always("26.2", "v26_2.freelook.MouseHandlerFreelookMixin262");
+        // Module « Joueur » — voir le bloc 26.1.2.
+        always("26.2", "v26_2.player.AvatarNameMixin262");
+        always("26.2", "v26_2.player.NameTagLogoMixin262");
+        always("26.2", "v26_2.player.OwnNametagMixin262");
+        always("26.2", "v26_2.player.InventoryDollMixin262");
+        always("26.2", "v26_2.player.TabListLogoMixin262");
 
         // ── HUD (fabric-rendering-v1) ─────────────────────────────────────
         gate("26.2", "v26_2.hud.HudExtractCameraOverlayMixin262", HookPoint.HUD_EXTRACT_CAMERA_OVERLAY);
@@ -608,6 +626,12 @@ public final class MixinHookPointRegistry {
         // ── Freelook : volontairement non gaté (voir 26.1.2) ───────────────
         always("26.3", "v26_3.freelook.CameraFreelookMixin263");
         always("26.3", "v26_3.freelook.MouseHandlerFreelookMixin263");
+        // Module « Joueur » — voir le bloc 26.1.2.
+        always("26.3", "v26_3.player.AvatarNameMixin263");
+        always("26.3", "v26_3.player.NameTagLogoMixin263");
+        always("26.3", "v26_3.player.OwnNametagMixin263");
+        always("26.3", "v26_3.player.InventoryDollMixin263");
+        always("26.3", "v26_3.player.TabListLogoMixin263");
 
         // ── HUD (fabric-rendering-v1) ─────────────────────────────────────
         gate("26.3", "v26_3.hud.HudExtractCameraOverlayMixin263", HookPoint.HUD_EXTRACT_CAMERA_OVERLAY);
@@ -703,6 +727,12 @@ public final class MixinHookPointRegistry {
         always("1.21.11", "v1_21_11.freelook.CameraFreelookMixin1211");
         always("1.21.11", "v1_21_11.freelook.EntityInvoker1211");
         always("1.21.11", "v1_21_11.freelook.MouseHandlerFreelookMixin1211");
+        // Module « Joueur » — voir le bloc 26.1.2. Ici les deux temps de
+        // l'étiquette sont sur la même classe, donc dans un seul mixin.
+        always("1.21.11", "v1_21_11.player.PlayerLabelMixin1211");
+        always("1.21.11", "v1_21_11.player.OwnNametagMixin1211");
+        always("1.21.11", "v1_21_11.player.InventoryDollMixin1211");
+        always("1.21.11", "v1_21_11.player.TabListLogoMixin1211");
 
         // ── HUD ────────────────────────────────────────────────────────────
         gate("1.21.11", "v1_21_11.hud.HudExtractCrosshairMixin1211", HookPoint.HUD_EXTRACT_CROSSHAIR);

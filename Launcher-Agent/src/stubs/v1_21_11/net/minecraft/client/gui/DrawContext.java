@@ -41,6 +41,16 @@ public class DrawContext {
         throw new UnsupportedOperationException("stub compile-only");
     }
 
+    /** Rectangle de couleur pleine, {@code color} en ARGB ({@code gir.a(IIIII)V}). */
+    public void fill(int x1, int y1, int x2, int y2, int color) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    /** Texte mis en forme, avec ombre — la surcharge qu'emploie la liste Tab ({@code gir.b(Lgio;Lyh;III)V}). */
+    public void drawTextWithShadow(TextRenderer textRenderer, net.minecraft.text.Text text, int x, int y, int color) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
     public int getScaledWindowWidth() {
         throw new UnsupportedOperationException("stub compile-only");
     }
