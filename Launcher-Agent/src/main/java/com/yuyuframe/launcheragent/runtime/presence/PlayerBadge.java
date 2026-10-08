@@ -3,10 +3,8 @@ package com.yuyuframe.launcheragent.runtime.presence;
 import com.yuyuframe.launcheragent.apimixin.AccessPoint;
 import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
 
-import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.WeakHashMap;
 
@@ -31,11 +29,19 @@ public final class PlayerBadge {
     private PlayerBadge() {
     }
 
-    /** Deux espaces, soit 8 pixels dans la police du jeu : le logo (7) et un pixel d'écart. */
-    public static final String LEAD = "  ";
+    /**
+     * Trois espaces, soit 12 pixels dans la police du jeu : une demi-espace
+     * ({@link #INSET}), le logo ({@link #SIZE}), une demi-espace. Réglé avec
+     * l'utilisateur le 2026-10-08 : une espace entière de chaque côté
+     * détachait trop le logo du grade et du pseudo.
+     */
+    public static final String LEAD = "   ";
 
-    /** Côté du logo, en pixels de police : la hauteur d'une majuscule. */
-    public static final float SIZE = 7.0F;
+    /** Côté du logo, en pixels de police : la hauteur d'une ligne. */
+    public static final float SIZE = 8.0F;
+
+    /** L'écart laissé de chaque côté du logo dans sa réserve : la moitié d'une espace. */
+    public static final float INSET = 2.0F;
 
     // ── Qui marquer ──────────────────────────────────────────────────────────
 
@@ -47,9 +53,12 @@ public final class PlayerBadge {
         return self ? PlayerStyle.ownStyled : PlayerStyle.applies(id, name);
     }
 
-    /** Sa ligne de la liste Tab prend-elle le logo ? */
-    public static boolean marksTab(UUID id, String name) {
-        return PlayerStyle.logo && PlayerStyle.tab && PlayerStyle.applies(id, name);
+    /** Sa ligne de la liste Tab prend-elle le logo ? {@code self} : c'est notre propre ligne, marquée sans question au serveur. */
+    public static boolean marksTab(UUID id, String name, boolean self) {
+        if (!PlayerStyle.logo || !PlayerStyle.tab) {
+            return false;
+        }
+        return self ? PlayerStyle.enabled : PlayerStyle.applies(id, name);
     }
 
     // ── Nametag : son propre pseudo ──────────────────────────────────────────
@@ -84,11 +93,28 @@ public final class PlayerBadge {
 
     // ── Étiquette : de la copie de l'état à son dessin ───────────────────────
 
-    /** État d'entité → le pseudo qu'on y a posé. Clés faibles : un état abandonné par le jeu s'en va seul. */
-    private static final Map<Object, Object> MARKED = new WeakHashMap<>();
+    /**
+     * Le texte qu'on a posé, et où y commence la place du logo. Le logo se met
+     * juste devant le PSEUDO, pas en tête du texte : beaucoup de serveurs
+     * placent avant lui un grade — souvent un caractère que leur pack de
+     * ressources remplace par une image.
+     */
+    private static final class Mark {
+        final Object name;
+        final float lead;
 
-    public static void mark(Object state, Object paddedName) {
-        MARKED.put(state, paddedName);
+        Mark(Object name, float lead) {
+            this.name = name;
+            this.lead = lead;
+        }
+    }
+
+    /** État d'entité → ce qu'on y a posé. Clés faibles : un état abandonné par le jeu s'en va seul. */
+    private static final Map<Object, Mark> MARKED = new WeakHashMap<>();
+
+    /** @param lead largeur, en pixels de police, de ce qui précède la place du logo dans {@code paddedName} */
+    public static void mark(Object state, Object paddedName, float lead) {
+        MARKED.put(state, new Mark(paddedName, lead));
     }
 
     public static void unmark(Object state) {
@@ -97,16 +123,24 @@ public final class PlayerBadge {
         }
     }
 
-    /** Vrai si le pseudo que porte cet état est bien celui qu'on y a posé (un autre code a pu le remplacer depuis). */
-    public static boolean isMarked(Object state, Object currentName) {
-        return currentName != null && !MARKED.isEmpty() && MARKED.get(state) == currentName;
+    /**
+     * Où commence la place du logo dans le pseudo que porte cet état, ou une
+     * valeur négative si ce pseudo n'est pas (ou plus) celui qu'on y a posé —
+     * un autre code a pu le remplacer depuis.
+     */
+    public static float markedLead(Object state, Object currentName) {
+        if (currentName == null || MARKED.isEmpty()) {
+            return -1.0F;
+        }
+        Mark mark = MARKED.get(state);
+        return mark != null && mark.name == currentName ? mark.lead : -1.0F;
     }
 
     // ── Liste Tab ────────────────────────────────────────────────────────────
 
     private static boolean inTab;
-    /** Les pseudos rendus avec la place du logo pendant le dessin en cours, reconnus par identité. */
-    private static final Set<Object> TAB_NAMES = Collections.newSetFromMap(new IdentityHashMap<>());
+    /** Les pseudos rendus avec la place du logo pendant le dessin en cours, reconnus par identité → où y commence cette place. */
+    private static final Map<Object, Float> TAB_NAMES = new IdentityHashMap<>();
 
     public static void tabBegins() {
         inTab = true;
@@ -116,6 +150,37 @@ public final class PlayerBadge {
     public static void tabEnds() {
         inTab = false;
         TAB_NAMES.clear();
+        if (!tabReported && tabLines > 0) {
+            tabReported = true;
+            com.yuyuframe.launcheragent.base.log.LauncherLog.agent(2, "[PRESENCE] liste Tab de ce serveur : "
+                + tabLines + " lignes, " + tabAccounts + " avec un UUID de compte Microsoft (version 4), "
+                + (tabOwnFound ? "la nôtre porte bien l'UUID de notre compte"
+                    : "AUCUNE ne porte l'UUID de notre compte — le serveur refait la liste avec ses propres profils"));
+        }
+        tabLines = 0;
+        tabAccounts = 0;
+        tabOwnFound = false;
+    }
+
+    // Provisoire : de quoi dire, une fois par partie, si la liste Tab du serveur porte les vrais profils des
+    // joueurs. Certains serveurs la refont avec des profils à eux (pour la trier), et ces lignes-là ne peuvent
+    // pas être reconnues : ni l'UUID ni le pseudo ne sont ceux du compte.
+    private static boolean tabReported;
+    private static int tabLines, tabAccounts;
+    private static boolean tabOwnFound;
+
+    /** Une ligne de la liste vient d'être lue. */
+    public static void tabLine(UUID id, boolean own) {
+        if (tabReported) {
+            return;
+        }
+        tabLines++;
+        if (id != null && id.version() == 4) {
+            tabAccounts++;
+        }
+        if (own) {
+            tabOwnFound = true;
+        }
     }
 
     /** Hors du dessin de la liste, les pseudos ne sont pas touchés : la même méthode du jeu sert ailleurs. */
@@ -123,11 +188,13 @@ public final class PlayerBadge {
         return inTab;
     }
 
-    public static void tabMark(Object paddedName) {
-        TAB_NAMES.add(paddedName);
+    public static void tabMark(Object paddedName, float lead) {
+        TAB_NAMES.put(paddedName, lead);
     }
 
-    public static boolean tabMarked(Object name) {
-        return name != null && TAB_NAMES.contains(name);
+    /** Où commence la place du logo dans ce pseudo de la liste, ou une valeur négative s'il n'est pas marqué. */
+    public static float tabLead(Object name) {
+        Float lead = name == null ? null : TAB_NAMES.get(name);
+        return lead == null ? -1.0F : lead;
     }
 }

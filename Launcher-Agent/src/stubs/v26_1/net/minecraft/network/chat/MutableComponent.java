@@ -22,6 +22,9 @@ public final class MutableComponent implements Component {
     /** Ajoute un composant à la suite — descripteur vérifié sur le jar 26.1.2 : {@code (Lnet/minecraft/network/chat/Component;)Lnet/minecraft/network/chat/MutableComponent;}. */
     public MutableComponent append(Component sibling) { return null; }
 
+    /** Remplace le style du composant (vérifié javap, 26.1.2). */
+    public MutableComponent setStyle(Style style) { return null; }
+
     /**
      * Teinte le composant (RGB 24 bits). Préféré à {@code withStyle(ChatFormatting)}
      * — même résultat visuel ici, mais SANS avoir à stuber l'énumération

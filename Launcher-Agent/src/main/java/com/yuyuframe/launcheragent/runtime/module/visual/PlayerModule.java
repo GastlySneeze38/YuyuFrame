@@ -166,6 +166,7 @@ public final class PlayerModule extends LauncherModule {
         PlayerStyle.logoStyle = logoStyle;
         PlayerStyle.ownLabel = ownName && isEnabled();
         PlayerStyle.ownStyled = ownName && ownStyle && isEnabled();
+        PlayerStyle.enabled = isEnabled();
         PlayerStyle.active = styleOthers && isEnabled();
     }
 

@@ -15,10 +15,14 @@ import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.Style;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix3x2fStack;
+
+import java.util.Optional;
 
 /**
  * Le module « Joueur » sur 26.1.2 : le logo en pixels devant le pseudo des
@@ -56,9 +60,78 @@ public final class PlayerBadge261 {
             PlayerBadge.unmark(state);
             return;
         }
-        Component padded = Component.literal(PlayerBadge.LEAD).append(name);
-        state.nameTag = padded;
-        PlayerBadge.mark(state, padded);
+        Padded padded = pad(name, profile.name());
+        state.nameTag = padded.text;
+        PlayerBadge.mark(state, padded.text, padded.lead);
+    }
+
+    /** Un pseudo avec la place du logo, et la largeur de ce qui la précède. */
+    private static final class Padded {
+        Component text;
+        float lead;
+    }
+
+    /**
+     * Met la place du logo juste devant le pseudo du joueur dans le texte
+     * affiché. Ce texte est souvent « grade + pseudo », le grade étant un
+     * caractère que le pack de ressources du serveur dessine en image : le logo
+     * doit venir après lui, collé au pseudo.
+     *
+     * <p>Le texte est refait morceau par morceau, chacun gardant son style
+     * (couleur, police du pack…) ; le morceau qui contient le début du pseudo
+     * est coupé en deux autour de la réserve. Quand le pseudo n'y figure pas
+     * (joueur renommé par le serveur) ou qu'il est déjà en tête, la réserve va
+     * simplement devant tout.
+     */
+    private static Padded pad(Component name, String profileName) {
+        Padded result = new Padded();
+        String full = name.getString();
+        int at = profileName == null || profileName.isEmpty() ? -1 : full.indexOf(profileName);
+        if (at <= 0) {
+            result.text = Component.literal(PlayerBadge.LEAD).append(name);
+            result.lead = PlayerBadge.INSET;
+            return result;
+        }
+        // Les espaces que le serveur a mises entre le grade et le pseudo sont
+        // retirées : leur nombre et leur largeur varient d'un serveur à
+        // l'autre. L'écart autour du logo est celui de la réserve, le même
+        // partout — une demi-espace de chaque côté (réglé avec l'utilisateur,
+        // 2026-10-08).
+        int cutAt = at;
+        while (cutAt > 0 && full.charAt(cutAt - 1) == ' ') {
+            cutAt--;
+        }
+        final int cut = cutAt;
+        MutableComponent rebuilt = Component.literal("");
+        MutableComponent before = Component.literal("");
+        int[] seen = { 0 };
+        boolean[] placed = { false };
+        name.visit((style, text) -> {
+            int start = seen[0];
+            int end = start + text.length();
+            seen[0] = end;
+            if (placed[0]) {
+                rebuilt.append(Component.literal(text).setStyle(style));
+                return Optional.empty();
+            }
+            // Ce que ce morceau porte avant la coupe : gardé tel quel.
+            if (start < cut) {
+                String head = text.substring(0, Math.min(end, cut) - start);
+                rebuilt.append(Component.literal(head).setStyle(style));
+                before.append(Component.literal(head).setStyle(style));
+            }
+            // Le morceau où commence le pseudo : la réserve, puis la suite. La réserve garde le style par
+            // défaut — dans la police d'un pack, une espace peut ne rien mesurer.
+            if (at < end) {
+                rebuilt.append(Component.literal(PlayerBadge.LEAD));
+                rebuilt.append(Component.literal(text.substring(at - start)).setStyle(style));
+                placed[0] = true;
+            }
+            return Optional.empty();
+        }, Style.EMPTY);
+        result.text = rebuilt;
+        result.lead = Minecraft.getInstance().font.width(before) + PlayerBadge.INSET;
+        return result;
     }
 
     /**
@@ -73,12 +146,13 @@ public final class PlayerBadge261 {
         EntityRenderState state = (EntityRenderState) stateObject;
         Component name = state.nameTag;
         Vec3 at = state.nameTagAttachment;
-        if (at == null || !PlayerBadge.isMarked(state, name)) {
+        float lead = at == null ? -1.0F : PlayerBadge.markedLead(state, name);
+        if (lead < 0.0F) {
             return;
         }
         PoseStack pose = (PoseStack) poseObject;
         SubmitNodeCollector collector = (SubmitNodeCollector) collectorObject;
-        float left = -Minecraft.getInstance().font.width(name) / 2.0F;
+        float left = -Minecraft.getInstance().font.width(name) / 2.0F + lead;
 
         pose.pushPose();
         // La ligne de score, quand il y en a une, prend la place du pseudo et le pousse d'une ligne vers le haut.
@@ -134,22 +208,38 @@ public final class PlayerBadge261 {
             return null;
         }
         GameProfile profile = ((PlayerInfo) infoObject).getProfile();
-        if (profile == null || !PlayerBadge.marksTab(profile.id(), profile.name())) {
+        if (profile == null) {
             return null;
         }
-        Component padded = Component.literal(PlayerBadge.LEAD).append(name);
-        PlayerBadge.tabMark(padded);
-        return padded;
+        boolean own = isOwn(profile);
+        PlayerBadge.tabLine(profile.id(), own);
+        if (!PlayerBadge.marksTab(profile.id(), profile.name(), own)) {
+            return null;
+        }
+        Padded padded = pad(name, profile.name());
+        PlayerBadge.tabMark(padded.text, padded.lead);
+        return padded.text;
+    }
+
+    /** Ce profil est-il celui de notre propre joueur ? */
+    private static boolean isOwn(GameProfile profile) {
+        Object player = AccessorRegistry.get(AccessPoint.CLIENT_PLAYER);
+        if (!(player instanceof Player) || profile.id() == null) {
+            return false;
+        }
+        GameProfile own = ((Player) player).getGameProfile();
+        return own != null && profile.id().equals(own.id());
     }
 
     /** Juste après que vanilla a dessiné un pseudo de la liste : le logo, dans la place réservée. */
     public static void tabLogo(GuiGraphicsExtractor graphics, Component name, int x, int y) {
-        if (!PlayerBadge.tabMarked(name)) {
+        float lead = PlayerBadge.tabLead(name);
+        if (lead < 0.0F) {
             return;
         }
         Matrix3x2fStack pose = graphics.pose();
         pose.pushMatrix();
-        pose.translate(x, y);
+        pose.translate(x + lead, y);
         float cell = PlayerBadge.SIZE / PlayerStyle.PIXEL_GRID;
         pose.scale(cell, cell);
         PlayerStyle.pixelRects((from, row, to, rgb) -> graphics.fill(from, row, to, row + 1, 0xFF000000 | rgb));
