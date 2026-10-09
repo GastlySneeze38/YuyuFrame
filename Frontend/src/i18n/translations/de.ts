@@ -113,6 +113,7 @@ export const de: TranslationSchema = {
     ignoreUpdatesDesc: 'Schlägt für diesen Mod keine Aktualisierung mehr vor, solange es aktiv ist',
     updatesIgnored: 'Fixiert',
     conflictsTitle: '{{count}} Unverträglichkeit(en) zwischen deinen Mods gefunden',
+    conflictsRunTest: 'Kompatibilität testen',
     conflictBreaks: ' erklärt sich als unverträglich mit {{target}} {{version}}.',
     conflictDepends: ' erwartet {{target}} in {{expected}}, installiert ist aber {{version}}.',
     filtersToggle: 'Filter',

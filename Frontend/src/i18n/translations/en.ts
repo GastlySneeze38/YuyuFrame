@@ -113,6 +113,7 @@ export const en: TranslationSchema = {
     ignoreUpdatesDesc: 'No longer suggests an update for this mod while enabled',
     updatesIgnored: 'Pinned',
     conflictsTitle: '{{count}} incompatibility(ies) found between your mods',
+    conflictsRunTest: 'Test compatibility',
     conflictBreaks: ' declares it is incompatible with {{target}} {{version}}.',
     conflictDepends: ' expects {{target}} in {{expected}}, but the installed version is {{version}}.',
     filtersToggle: 'Filters',

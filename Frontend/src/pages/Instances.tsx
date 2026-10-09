@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
 import type { Instance } from '@/types'
@@ -20,6 +20,7 @@ import { useT } from '@/i18n'
 export default function Instances() {
   const t = useT()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const {
     versions, setVersions,
     instances, setInstances, addInstance, updateInstance, removeInstance,
@@ -75,17 +76,29 @@ export default function Instances() {
       // la fenêtre de création, pas par une alerte sur un écran qui marche.
       api.versions.list().then(setVersions).catch(() => {})
     }
-
-    // `?settings=<id>&tab=java` ouvre directement les paramètres sur un
-    // onglet. Sert à ce qu'un écran qui constate un problème puisse envoyer
-    // là où il se règle, au lieu de décrire le chemin à suivre.
-    const params = new URLSearchParams(window.location.search)
-    const target = params.get('settings')
-    if (target) {
-      setSettingsTargetId(target)
-      setSettingsTab(params.get('tab') ?? undefined)
-    }
   }, [])
+
+  // `?settings=<id>&tab=java` ouvre directement les paramètres sur un onglet.
+  // Sert à ce qu'un écran qui constate un problème puisse envoyer là où il se
+  // règle, au lieu de décrire le chemin à suivre.
+  //
+  // Lu par le routeur et non dans `window.location.search` : le launcher
+  // tourne sous `HashRouter`, où toute l'adresse — paramètres compris — vit
+  // après le `#`. `window.location.search` y est toujours vide, et les
+  // boutons qui menaient ici ouvraient la liste sans la modale.
+  //
+  // À chaque changement d'adresse et pas seulement au montage : l'écran des
+  // mods est affiché DANS cette page, donc son bandeau d'incompatibilités y
+  // mène sans qu'elle soit remontée. Les paramètres sont retirés une fois
+  // lus, pour que le même lien puisse resservir après fermeture de la modale
+  // et qu'un retour en arrière ne la rouvre pas.
+  useEffect(() => {
+    const target = searchParams.get('settings')
+    if (!target) return
+    setSettingsTargetId(target)
+    setSettingsTab(searchParams.get('tab') ?? undefined)
+    setSearchParams({}, { replace: true })
+  }, [searchParams, setSearchParams])
 
   const releaseVersions = versions
     .filter((v) => v.version_type === 'release')

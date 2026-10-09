@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { SNAP, press } from '@/lib/motion'
 import { displayName } from './modUtils'
 import type { ModConflict } from '@/api/client'
@@ -14,12 +15,16 @@ import { useT } from '@/i18n'
  * après un écran noir et un journal à lire. Les montrer ici, c'est les
  * montrer pendant qu'on peut encore agir.
  *
- * Le bandeau ne propose rien de lui-même : corriger un conflit veut dire
+ * Le bandeau ne corrige rien de lui-même : régler un conflit veut dire
  * changer de version ou retirer un mod, et c'est un arbitrage qui appartient
- * à la personne, pas au launcher.
+ * à la personne, pas au launcher. Il mène en revanche à l'essai de
+ * compatibilité de l'instance (`CompatTab`), qui est l'endroit où ces
+ * arbitrages se proposent : ce que les mods déclarent n'est qu'un indice,
+ * l'essai dit ce que le loader refuse réellement, et avec quels gestes.
  */
-export function ConflictBanner({ conflicts }: { conflicts: ModConflict[] }) {
+export function ConflictBanner({ conflicts, instanceId }: { conflicts: ModConflict[]; instanceId: string }) {
   const t = useT()
+  const navigate = useNavigate()
   const [open, setOpen] = useState(false)
 
   if (conflicts.length === 0) return null
@@ -31,10 +36,13 @@ export function ConflictBanner({ conflicts }: { conflicts: ModConflict[] }) {
       transition={SNAP}
       className="mb-3 rounded-xl border border-warning/35 bg-warning/[0.07] px-3.5 py-2.5"
     >
+      {/* Deux boutons côte à côte, pas l'un dans l'autre : le titre déplie la
+          liste, le second mène à l'essai. */}
+      <div className="flex items-center gap-2.5">
       <motion.button
         {...press}
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2.5 text-left"
+        className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" className="h-4 w-4 flex-none text-warning">
           <path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z" />
@@ -51,6 +59,16 @@ export function ConflictBanner({ conflicts }: { conflicts: ModConflict[] }) {
           <path d="M8 5v14l11-7z" />
         </motion.svg>
       </motion.button>
+      <motion.button
+        {...press}
+        // Même adresse que la modale de plantage pour Java : elle ouvre les
+        // paramètres de l'instance sur l'onglet demandé (voir `Instances.tsx`).
+        onClick={() => navigate(`/instances?settings=${encodeURIComponent(instanceId)}&tab=compat`)}
+        className="flex-none rounded-lg border border-warning/40 bg-warning/10 px-2.5 py-1 text-[11px] font-semibold text-warning transition-colors hover:bg-warning/20"
+      >
+        {t('mods.conflictsRunTest')}
+      </motion.button>
+      </div>
 
       <AnimatePresence initial={false}>
         {open && (

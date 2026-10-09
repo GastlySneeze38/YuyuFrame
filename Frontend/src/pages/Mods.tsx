@@ -1295,7 +1295,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
           />
         )}
 
-        {tab === 'installed' && <ConflictBanner conflicts={conflicts} />}
+        {tab === 'installed' && <ConflictBanner conflicts={conflicts} instanceId={instanceId} />}
 
         {tab === 'installed' ? (
           <InstalledTab

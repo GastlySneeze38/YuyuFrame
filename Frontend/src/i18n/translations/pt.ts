@@ -114,6 +114,7 @@ export const pt: TranslationSchema = {
     ignoreUpdatesDesc: 'Enquanto ativado, não sugere mais atualização para este mod',
     updatesIgnored: 'Fixado',
     conflictsTitle: '{{count}} incompatibilidade(s) encontrada(s) entre seus mods',
+    conflictsRunTest: 'Testar a compatibilidade',
     conflictBreaks: ' declara ser incompatível com {{target}} {{version}}.',
     conflictDepends: ' espera {{target}} em {{expected}}, mas a versão instalada é {{version}}.',
     filtersToggle: 'Filtros',

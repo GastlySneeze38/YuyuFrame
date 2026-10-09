@@ -111,6 +111,7 @@ export const fr = {
     ignoreUpdatesDesc: "Ne propose plus de mise à jour pour ce mod tant que c'est activé",
     updatesIgnored: 'Figé',
     conflictsTitle: '{{count}} incompatibilité(s) détectée(s) entre tes mods',
+    conflictsRunTest: 'Tester la compatibilité',
     conflictBreaks: ' déclare être incompatible avec {{target}} {{version}}.',
     conflictDepends: ' attend {{target}} en {{expected}}, mais la version installée est {{version}}.',
     filtersToggle: 'Filtres',

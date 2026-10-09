@@ -113,6 +113,7 @@ export const ru: TranslationSchema = {
     ignoreUpdatesDesc: 'Пока включено, обновления для этого мода не предлагаются',
     updatesIgnored: 'Закреплён',
     conflictsTitle: 'Найдено несовместимостей между вашими модами: {{count}}',
+    conflictsRunTest: 'Проверить совместимость',
     conflictBreaks: ' объявляет себя несовместимым с {{target}} {{version}}.',
     conflictDepends: ' ожидает {{target}} в {{expected}}, но установлена версия {{version}}.',
     filtersToggle: 'Фильтры',

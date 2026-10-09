@@ -113,6 +113,7 @@ export const pl: TranslationSchema = {
     ignoreUpdatesDesc: 'Dopóki jest włączone, nie proponuje aktualizacji tego moda',
     updatesIgnored: 'Przypięty',
     conflictsTitle: 'Znaleziono niezgodności między twoimi modami: {{count}}',
+    conflictsRunTest: 'Sprawdź zgodność',
     conflictBreaks: ' deklaruje niezgodność z {{target}} {{version}}.',
     conflictDepends: ' oczekuje {{target}} w {{expected}}, ale zainstalowana wersja to {{version}}.',
     filtersToggle: 'Filtry',

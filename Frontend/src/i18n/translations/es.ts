@@ -113,6 +113,7 @@ export const es: TranslationSchema = {
     ignoreUpdatesDesc: 'Deja de proponer actualizaciones para este mod mientras esté activado',
     updatesIgnored: 'Fijado',
     conflictsTitle: '{{count}} incompatibilidad(es) detectada(s) entre tus mods',
+    conflictsRunTest: 'Probar la compatibilidad',
     conflictBreaks: ' declara ser incompatible con {{target}} {{version}}.',
     conflictDepends: ' espera {{target}} en {{expected}}, pero la versión instalada es {{version}}.',
     filtersToggle: 'Filtros',
