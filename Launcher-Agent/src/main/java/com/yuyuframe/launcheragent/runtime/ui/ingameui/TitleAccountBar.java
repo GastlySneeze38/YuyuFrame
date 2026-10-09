@@ -94,11 +94,18 @@ public final class TitleAccountBar {
         if (vw <= 0 || vh <= 0) {
             return;
         }
-        float margin = UiTheme.scaled(14f);
-        float cardH = UiTheme.scaled(54f);
-        float gap = UiTheme.scaled(8f);
+        // La barre suit la fenêtre : pleine taille à 1280×720, plus petite
+        // dans une petite fenêtre (où elle mordait sur le logo du jeu). Au-delà
+        // elle ne grandit presque plus — un quart de ce que gagne la fenêtre,
+        // 15 % au plus : en plein écran elle devenait énorme (retour
+        // utilisateur, 2026-10-10).
+        float ratio = Math.min(vw / 1280f, vh / 720f);
+        fit = ratio <= 1f ? Math.max(0.6f, ratio) : Math.min(1.15f, 1f + (ratio - 1f) * 0.25f);
+        float margin = px(14f);
+        float cardH = px(54f);
+        float gap = px(8f);
         boolean accounts = GameAccounts.available();
-        float cardW = accounts ? UiTheme.scaled(232f) : 0f;
+        float cardW = accounts ? px(232f) : 0f;
         float cardX = margin, cardY = vh - margin - cardH;
         float gearX = accounts ? cardX + cardW + gap : margin;
         double mx = input.mouseX, my = input.mouseY;
@@ -124,11 +131,11 @@ public final class TitleAccountBar {
             cardHover.setTarget(overCard ? 1f : 0f);
             drawCard(renderer, cardX, cardY, cardW, cardH, switching, vw, vh);
 
-            float panelTop = cardY - UiTheme.scaled(6f);
-            float rowH = UiTheme.scaled(40f);
+            float panelTop = cardY - px(6f);
+            float rowH = px(40f);
             List<String> message = expanded ? messageLines(renderer, cardW) : new ArrayList<>();
-            float lineH = UiTheme.scaled(12f);
-            float messageH = message.isEmpty() ? 0f : message.size() * lineH + UiTheme.scaled(12f);
+            float lineH = px(12f);
+            float messageH = message.isEmpty() ? 0f : message.size() * lineH + px(12f);
             float panelBottom = panelTop - GameAccounts.accounts().size() * rowH - messageH;
             if (expanded) {
                 drawPanel(renderer, cardX, panelBottom, cardW, panelTop, rowH, message, lineH, mx, my, vw, vh);
@@ -166,6 +173,14 @@ public final class TitleAccountBar {
         }
     }
 
+    /** Rapport de la fenêtre à la taille de référence, recalculé à chaque image. */
+    private static float fit = 1f;
+
+    /** Une longueur de la barre : le réglage « Taille de l'interface », puis la taille de la fenêtre. */
+    private static float px(float value) {
+        return UiTheme.scaled(value) * fit;
+    }
+
     private static boolean inside(double mx, double my, float x, float y, float w, float h) {
         return mx >= x && mx <= x + w && my >= y && my <= y + h;
     }
@@ -174,33 +189,38 @@ public final class TitleAccountBar {
 
     private static void drawCard(UiRenderer renderer, float x, float y, float w, float h, boolean switching, int vw, int vh) {
         float hover = cardHover.get();
-        renderer.drawShadow(x, y, x + w, y + h, UiTheme.RADIUS_MD, UiTheme.scaled(12f), 0f, new UiColor(0, 0, 0, 110), vw, vh);
+        renderer.drawShadow(x, y, x + w, y + h, UiTheme.RADIUS_MD, px(12f), 0f, new UiColor(0, 0, 0, 110), vw, vh);
         UiColor bg = UiColor.lerp(UiTheme.PANEL_BG.withAlpha(0.86f), UiTheme.PANEL_BG_ALT.withAlpha(0.94f), hover);
         renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_MD, expanded ? UiTheme.PANEL_BG_ALT.withAlpha(0.96f) : bg, vw, vh);
         // Liseré d'accent à gauche, comme l'entrée active de la navigation du menu.
-        float edge = UiTheme.scaled(3f);
-        renderer.drawGradientRect(x, y + UiTheme.scaled(10f), x + edge, y + h - UiTheme.scaled(10f), edge / 2f,
+        float edge = px(3f);
+        renderer.drawGradientRect(x, y + px(10f), x + edge, y + h - px(10f), edge / 2f,
             UiTheme.ACCENT, UiTheme.accentLight(), vw, vh);
 
-        float pad = UiTheme.scaled(9f);
+        float pad = px(9f);
         float avatar = h - pad * 2f;
         GameAccounts.Account current = currentAccount();
         String name = ClientData.username();
         drawAvatar(renderer, current == null ? null : current.uuid, name, x + pad + edge, y + pad, avatar, vw, vh);
 
-        float textX = x + pad + edge + avatar + UiTheme.scaled(10f);
-        String arrow = expanded ? "^" : "v";
-        float arrowScale = UiTheme.scaled(0.4f);
-        float arrowW = renderer.textWidth(arrow, arrowScale);
+        float textX = x + pad + edge + avatar + px(10f);
+        // Un vrai chevron, pas la lettre « v » : même famille d'icônes que l'engrenage d'à côté.
+        float arrowW = px(13f);
         float textMax = x + w - textX - arrowW - pad * 2f;
-        float nameScale = UiTheme.scaled(0.5f);
+        float nameScale = px(0.5f);
         String title = switching ? Lang.tr("Changement de compte...") : name.isEmpty() ? Lang.tr("Compte") : name;
-        renderer.drawText(UiFont.BOLD, fit(renderer, UiFont.BOLD, title, textMax, nameScale), textX, y + h / 2f + UiTheme.scaled(1f),
+        renderer.drawText(UiFont.BOLD, fit(renderer, UiFont.BOLD, title, textMax, nameScale), textX, y + h / 2f + px(1f),
             UiTheme.TEXT_PRIMARY, nameScale, vw, vh);
         String sub = current == null ? Lang.tr("Compte Minecraft")
             : current.offline ? Lang.tr("Compte hors ligne") : Lang.tr("Compte Microsoft");
-        renderer.drawText(sub, textX, y + h / 2f - UiTheme.scaled(13f), UiTheme.TEXT_MUTED, UiTheme.scaled(0.34f), vw, vh);
-        renderer.drawText(arrow, x + w - arrowW - pad, y + h / 2f - UiTheme.scaled(4f), UiTheme.TEXT_SECONDARY, arrowScale, vw, vh);
+        renderer.drawText(sub, textX, y + h / 2f - px(13f), UiTheme.TEXT_MUTED, px(0.34f), vw, vh);
+        String chevron = expanded ? CHEVRON_UP : CHEVRON_DOWN;
+        BufferedImage arrow = UiRemoteImage.get(chevron);
+        if (arrow != null) {
+            // Blanc dans l'image : l'opacité lui donne le ton du texte secondaire, plus franc au survol.
+            renderer.drawIcon(chevron, arrow, x + w - arrowW - pad - px(3f), y + (h - arrowW) / 2f, arrowW, arrowW,
+                0.6f + 0.4f * hover, vw, vh);
+        }
     }
 
     private static GameAccounts.Account currentAccount() {
@@ -218,7 +238,7 @@ public final class TitleAccountBar {
      * l'initiale du pseudo tient sa place.
      */
     private static void drawAvatar(UiRenderer renderer, String uuid, String name, float x, float y, float size, int vw, int vh) {
-        float radius = UiTheme.scaled(4f);
+        float radius = px(4f);
         BufferedImage head = null;
         String url = null;
         if (uuid != null && !uuid.isEmpty()) {
@@ -231,7 +251,7 @@ public final class TitleAccountBar {
         }
         renderer.drawRoundedRect(x, y, x + size, y + size, radius, UiTheme.ACCENT_DIM, vw, vh);
         String initial = name == null || name.isEmpty() ? "?" : name.substring(0, 1).toUpperCase();
-        float scale = size / UiTheme.scaled(38f) * UiTheme.scaled(0.56f);
+        float scale = size / px(38f) * px(0.56f);
         float tw = renderer.textWidth(UiFont.BOLD, initial, scale);
         renderer.drawText(UiFont.BOLD, initial, x + (size - tw) / 2f, y + size / 2f - size * 0.14f, UiTheme.TEXT_PRIMARY, scale, vw, vh);
     }
@@ -248,8 +268,8 @@ public final class TitleAccountBar {
         if (message == null) {
             return lines;
         }
-        float scale = UiTheme.scaled(0.36f);
-        float max = width - UiTheme.scaled(24f);
+        float scale = px(0.36f);
+        float max = width - px(24f);
         StringBuilder line = new StringBuilder();
         for (String word : Lang.tr(message).split(" ")) {
             String candidate = line.length() == 0 ? word : line + " " + word;
@@ -268,12 +288,12 @@ public final class TitleAccountBar {
 
     private static void drawPanel(UiRenderer renderer, float x, float bottom, float w, float top, float rowH,
                                   List<String> message, float lineH, double mx, double my, int vw, int vh) {
-        renderer.drawShadow(x, bottom, x + w, top, UiTheme.RADIUS_MD, UiTheme.scaled(12f), 0f, new UiColor(0, 0, 0, 110), vw, vh);
+        renderer.drawShadow(x, bottom, x + w, top, UiTheme.RADIUS_MD, px(12f), 0f, new UiColor(0, 0, 0, 110), vw, vh);
         renderer.drawRoundedRect(x, bottom, x + w, top, UiTheme.RADIUS_MD, UiTheme.PANEL_BG.withAlpha(0.95f), vw, vh);
 
         List<GameAccounts.Account> list = GameAccounts.accounts();
-        float pad = UiTheme.scaled(7f);
-        float inset = UiTheme.scaled(3f);
+        float pad = px(7f);
+        float inset = px(3f);
         for (int i = 0; i < list.size(); i++) {
             GameAccounts.Account account = list.get(i);
             float rowTop = top - i * rowH;
@@ -286,24 +306,24 @@ public final class TitleAccountBar {
             }
             float avatar = rowH - pad * 2f;
             drawAvatar(renderer, account.uuid, account.name, x + pad + inset, rowBottom + pad, avatar, vw, vh);
-            float textX = x + pad + inset + avatar + UiTheme.scaled(9f);
+            float textX = x + pad + inset + avatar + px(9f);
             // « hors ligne » à droite, en petit : ce compte ne rejoint pas les serveurs qui vérifient les comptes.
             String tag = account.offline ? Lang.tr("hors ligne") : "";
-            float tagScale = UiTheme.scaled(0.34f);
+            float tagScale = px(0.34f);
             float tagW = tag.isEmpty() ? 0f : renderer.textWidth(tag, tagScale);
-            float nameScale = UiTheme.scaled(0.42f);
+            float nameScale = px(0.42f);
             renderer.drawText(fit(renderer, UiFont.REGULAR, account.name, x + w - textX - tagW - pad * 2f, nameScale), textX,
-                rowBottom + rowH / 2f - UiTheme.scaled(4f), UiTheme.TEXT_PRIMARY, nameScale, vw, vh);
+                rowBottom + rowH / 2f - px(4f), UiTheme.TEXT_PRIMARY, nameScale, vw, vh);
             if (!tag.isEmpty()) {
-                renderer.drawText(tag, x + w - tagW - pad - inset, rowBottom + rowH / 2f - UiTheme.scaled(4f), UiTheme.TEXT_MUTED, tagScale, vw, vh);
+                renderer.drawText(tag, x + w - tagW - pad - inset, rowBottom + rowH / 2f - px(4f), UiTheme.TEXT_MUTED, tagScale, vw, vh);
             }
         }
 
-        float lineTop = top - list.size() * rowH - UiTheme.scaled(6f);
+        float lineTop = top - list.size() * rowH - px(6f);
         UiColor color = GameAccounts.error() != null ? UiTheme.DANGER : UiTheme.TEXT_MUTED;
         for (int i = 0; i < message.size(); i++) {
-            renderer.drawText(message.get(i), x + UiTheme.scaled(12f), lineTop - (i + 1) * lineH + UiTheme.scaled(2f), color,
-                UiTheme.scaled(0.36f), vw, vh);
+            renderer.drawText(message.get(i), x + px(12f), lineTop - (i + 1) * lineH + px(2f), color,
+                px(0.36f), vw, vh);
         }
     }
 
@@ -322,10 +342,12 @@ public final class TitleAccountBar {
     // ── Le bouton du menu YuyuFrame ──────────────────────────────────────────
 
     private static final String GEAR_ICON = LauncherModule.icons8("settings");
+    private static final String CHEVRON_DOWN = LauncherModule.icons8("expand-arrow");
+    private static final String CHEVRON_UP = LauncherModule.icons8("collapse-arrow");
 
     private static void drawGear(UiRenderer renderer, float x, float y, float size, int vw, int vh) {
         float hover = gearHover.get();
-        renderer.drawShadow(x, y, x + size, y + size, UiTheme.RADIUS_MD, UiTheme.scaled(12f), 0f, new UiColor(0, 0, 0, 110), vw, vh);
+        renderer.drawShadow(x, y, x + size, y + size, UiTheme.RADIUS_MD, px(12f), 0f, new UiColor(0, 0, 0, 110), vw, vh);
         UiColor bg = UiColor.lerp(UiTheme.PANEL_BG.withAlpha(0.86f), UiTheme.ACCENT.withAlpha(0.55f), hover);
         renderer.drawRoundedRect(x, y, x + size, y + size, UiTheme.RADIUS_MD, bg, vw, vh);
         BufferedImage icon = UiRemoteImage.get(GEAR_ICON);
@@ -338,8 +360,8 @@ public final class TitleAccountBar {
         }
         // L'icône n'est pas (encore) arrivée : le bouton dit ce qu'il ouvre.
         String label = Lang.tr("Menu");
-        float scale = UiTheme.scaled(0.36f);
+        float scale = px(0.36f);
         float tw = renderer.textWidth(label, scale);
-        renderer.drawText(label, x + (size - tw) / 2f, y + size / 2f - UiTheme.scaled(4f), UiTheme.TEXT_PRIMARY, scale, vw, vh);
+        renderer.drawText(label, x + (size - tw) / 2f, y + size / 2f - px(4f), UiTheme.TEXT_PRIMARY, scale, vw, vh);
     }
 }
