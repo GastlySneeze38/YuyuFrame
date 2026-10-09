@@ -54,7 +54,15 @@ public final class CoordsModule extends SingleHudModule {
                 // zéro réflexion. Ce bloc résolvait auparavant le joueur
                 // lui-même (accès direct + repli réflexif multi-bracket) ;
                 // cette résolution n'existe plus qu'à un seul endroit.
-                if (PlayerData.inGame()) {
+                if (!PlayerData.inGame() && PlayerData.previewing()) {
+                    // Éditeur de HUD ouvert hors d'un monde : une position d'exemple, pour voir l'élément plein.
+                    double[] pos = PlayerData.position();
+                    xLine = "X: " + (int) Math.floor(pos[0]);
+                    yLine = "Y: " + (int) Math.floor(pos[1]);
+                    zLine = "Z: " + (int) Math.floor(pos[2]);
+                    facing = facingLetter(PlayerData.yaw());
+                    biome = com.yuyuframe.launcheragent.runtime.i18n.Lang.tr("Plaines");
+                } else if (PlayerData.inGame()) {
                     double[] pos = PlayerData.position();
                     double px = pos[0], py = pos[1], pz = pos[2];
                     xLine = "X: " + (int) Math.floor(px);

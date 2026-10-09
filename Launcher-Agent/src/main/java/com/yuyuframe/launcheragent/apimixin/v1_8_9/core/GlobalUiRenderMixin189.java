@@ -111,6 +111,8 @@ public abstract class GlobalUiRenderMixin189 {
         if (!(currentScreen instanceof UiDrawable)) {
             // Écran vanilla ouvert : seuls les éléments HUD persistants restent.
             agent.renderHud(renderer, currentScreen, inputPoller.fbWidth, inputPoller.fbHeight);
+            // Et ce que l'agent pose sur cet écran-là (barre de compte de l'écran-titre).
+            agent.renderScreenOverlay(renderer, inputPoller, currentScreen);
             return;
         }
 

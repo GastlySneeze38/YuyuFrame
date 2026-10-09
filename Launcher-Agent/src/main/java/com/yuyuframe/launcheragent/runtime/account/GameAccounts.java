@@ -26,7 +26,8 @@ import java.util.UUID;
  *
  * <p>Changer n'a de sens que hors d'un monde : une fois connecté à un
  * serveur, l'identité est liée à la connexion. C'est à l'appelant de ne pas
- * le proposer en jeu (voir {@code AccountSwitcher}).
+ * le proposer en jeu : la liste vit sur l'écran-titre (voir
+ * {@code runtime.ui.ingameui.TitleAccountBar}).
  */
 public final class GameAccounts {
 

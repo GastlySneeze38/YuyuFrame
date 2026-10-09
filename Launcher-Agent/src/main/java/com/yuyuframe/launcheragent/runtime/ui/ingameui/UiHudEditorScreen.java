@@ -77,7 +77,15 @@ public class UiHudEditorScreen extends UiScreenBase {
         // EDITOR_OVERLAY/javadoc de classe) : c'est le seul écran où voir le
         // jeu net EST la fonction. Seul le bouton "Retour" est en verre.
         UiRenderer.get(getClass().getClassLoader()).beginGlassFrame(GLASS_PASSES, screenWidth, screenHeight);
-        super.uiDraw(mouseX, mouseY);
+        // Le temps de dessiner les boîtes, les éléments sans rien de réel à
+        // montrer (pas d'armure, aucun effet, pas de joueur depuis
+        // l'écran-titre) affichent un exemple : on règle un HUD plein.
+        com.yuyuframe.launcheragent.apigraphic.hud.HudPreview.set(true);
+        try {
+            super.uiDraw(mouseX, mouseY);
+        } finally {
+            com.yuyuframe.launcheragent.apigraphic.hud.HudPreview.set(false);
+        }
         try {
             UiRenderer renderer = UiRenderer.get(getClass().getClassLoader());
 

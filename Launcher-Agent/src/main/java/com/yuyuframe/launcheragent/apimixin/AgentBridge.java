@@ -73,6 +73,17 @@ public interface AgentBridge {
      */
     void renderHud(Object uiRenderer, Object currentScreen, int fbWidth, int fbHeight);
 
+    /**
+     * Ce que l'agent dessine PAR-DESSUS un écran du jeu qui n'est pas à lui —
+     * aujourd'hui la barre de compte de l'écran-titre. Appelé à chaque image
+     * où un tel écran est ouvert, après son dessin ; l'agent décide lui-même
+     * s'il a quelque chose à y poser.
+     *
+     * @param inputPoller le {@code UiInputPoller} du hub (souris, taille de la
+     *                    fenêtre) — passé en {@code Object} comme le renderer
+     */
+    default void renderScreenOverlay(Object uiRenderer, Object inputPoller, Object currentScreen) {}
+
     /** Écran principal de l'agent, à ouvrir sur la touche dédiée — {@code null} si indisponible. */
     Object mainMenuScreen();
 

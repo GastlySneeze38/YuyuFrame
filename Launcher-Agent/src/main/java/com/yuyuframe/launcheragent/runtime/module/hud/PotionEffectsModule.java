@@ -206,6 +206,8 @@ public final class PotionEffectsModule extends SingleHudModule {
         // deux chaînes par effet.
         private List<EffectRow> cachedRows;
         private long cachedAtMs;
+        /** Le cache a-t-il été rempli pendant l'aperçu de l'éditeur de HUD ? */
+        private boolean cachedForPreview;
 
         /**
          * Période de rafraîchissement des lignes — 50 ms, soit un TICK de jeu.
@@ -227,7 +229,11 @@ public final class PotionEffectsModule extends SingleHudModule {
             // Premier appel du cycle HUD de ce frame — c'est ICI qu'on
             // rafraîchit ; draw() réutilise.
             long now = System.currentTimeMillis();
-            if (cachedRows == null || now - cachedAtMs >= ROWS_REFRESH_MS) {
+            // L'aperçu de l'éditeur de HUD (effets d'exemple) ne doit ni attendre
+            // un tick pour apparaître, ni rester à l'écran un tick après.
+            boolean preview = PlayerData.previewing();
+            if (cachedRows == null || preview != cachedForPreview || now - cachedAtMs >= ROWS_REFRESH_MS) {
+                cachedForPreview = preview;
                 cachedRows = computeRows();
                 cachedAtMs = now;
             }

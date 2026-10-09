@@ -127,13 +127,6 @@ public class UiMainMenuScreen extends UiScreenBase {
 
     private final Object lastScreen;
     private UiTextField searchField;
-    /**
-     * La liste déroulante des comptes Minecraft, en haut de la barre latérale.
-     * Même instance d'une reconstruction à l'autre, comme le champ de
-     * recherche : elle garde son état (dépliée ou non). {@code null} quand le
-     * jeu n'a pas de launcher à qui demander les comptes.
-     */
-    private com.yuyuframe.launcheragent.runtime.ui.ingameui.component.AccountSwitcher accountSwitcher;
     /** Grille de cartes mods — SÉPARÉE de {@code widgets} (voir UiScrollContainer/ConfigScreenBuilder pour le même motif) : permet de scroller quand le nombre de mods dépasse la hauteur visible, ce que {@code widgets} seul ne permet pas (pas de clipping/offset). */
     private UiScrollContainer modScroll;
     private int lastLayoutWidth = -1, lastLayoutHeight = -1;
@@ -340,12 +333,6 @@ public class UiMainMenuScreen extends UiScreenBase {
             TaffyStyle.px(UiTheme.scaled(104f) - navH), TaffyStyle.px(MARGIN),
             TaffyStyle.px(MARGIN), TaffyStyle.px(MARGIN) };
         TaffyNode sidebar = new TaffyNode("sidebar", sidebarStyle);
-        // Le compte Minecraft d'abord, sous le logo : c'est le coin haut-gauche
-        // de l'écran. Seulement quand le jeu a un launcher à qui parler.
-        boolean accountsAvailable = com.yuyuframe.launcheragent.runtime.account.GameAccounts.available();
-        if (accountsAvailable) {
-            sidebar.child(navNode("nav.account", navH));
-        }
         sidebar.child(navNode("nav.home", navH));
         sidebar.child(navNode("nav.settings", navH));
         // Cale élastique — c'est ELLE qui épingle "Modifier le HUD" en bas,
@@ -426,12 +413,6 @@ public class UiMainMenuScreen extends UiScreenBase {
             layout.apply("close", closeButton);
             layout.apply("search", searchField);
             layout.apply("layoutbtn", layoutButton);
-            if (accountsAvailable) {
-                if (accountSwitcher == null) {
-                    accountSwitcher = new com.yuyuframe.launcheragent.runtime.ui.ingameui.component.AccountSwitcher();
-                }
-                layout.apply("nav.account", accountSwitcher);
-            }
             contentX = vp.x;
             contentW = vp.w;
             viewportBottom = vp.y;
@@ -461,12 +442,6 @@ public class UiMainMenuScreen extends UiScreenBase {
         widgets.add(closeButton);
         widgets.add(searchField);
         widgets.add(layoutButton);
-        // EN DERNIER : son panneau déplié se dessine par-dessus les entrées de
-        // navigation qu'il recouvre (voir AccountSwitcher). Absent du repli
-        // sans Taffy — sans content_core.dll il n'y a pas de canal non plus.
-        if (accountsAvailable && layout != null && vp != null && accountSwitcher != null) {
-            widgets.add(accountSwitcher);
-        }
 
         // Chaque entrée est SOIT un LauncherModule (carte + toggle propre,
         // comme avant), SOIT un ModuleGroup (carte seule, pas de toggle —

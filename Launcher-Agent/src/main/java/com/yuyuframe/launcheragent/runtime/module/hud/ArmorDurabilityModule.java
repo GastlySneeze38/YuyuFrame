@@ -260,6 +260,8 @@ public final class ArmorDurabilityModule extends SingleHudModule {
         // réutilisent la MÊME valeur au lieu de recalculer.
         private ItemInfo[] cachedStacks;
         private long cachedStacksAtMs;
+        /** Le cache a-t-il été rempli pendant l'aperçu de l'éditeur de HUD ? */
+        private boolean cachedForPreview;
         /** Un tick de jeu — voir naturalSize(). */
         private static final long STACKS_REFRESH_MS = 50L;
 
@@ -361,9 +363,13 @@ public final class ArmorDurabilityModule extends SingleHudModule {
             // en allouant un tableau et, plus loin, une chaîne et une couleur
             // par emplacement à chaque fois.
             long now = System.currentTimeMillis();
-            if (cachedStacks == null || now - cachedStacksAtMs >= STACKS_REFRESH_MS) {
+            // L'aperçu de l'éditeur de HUD (armure d'exemple) ne doit ni attendre
+            // un tick pour apparaître, ni rester à l'écran un tick après.
+            boolean preview = PlayerData.previewing();
+            if (cachedStacks == null || preview != cachedForPreview || now - cachedStacksAtMs >= STACKS_REFRESH_MS) {
                 cachedStacks = computeStacks();
                 cachedStacksAtMs = now;
+                cachedForPreview = preview;
             }
 
             // Largeur = icône + espace + texte le plus large parmi les 5

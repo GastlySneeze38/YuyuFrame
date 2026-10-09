@@ -73,7 +73,11 @@ public abstract class GlobalUiPresentMixin1211 {
                 return;
             }
 
-            if (!(currentScreen instanceof UiDrawable)) return;
+            if (!(currentScreen instanceof UiDrawable)) {
+                // Écran du jeu : l'agent peut y poser quelque chose (barre de compte de l'écran-titre).
+                agent.renderScreenOverlay(renderer, inputPoller, currentScreen);
+                return;
+            }
 
             UiDrawable ui = (UiDrawable) currentScreen;
             ui.uiPollInput(inputPoller);

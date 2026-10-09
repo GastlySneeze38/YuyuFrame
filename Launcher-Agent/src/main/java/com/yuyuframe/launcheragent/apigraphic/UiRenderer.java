@@ -598,7 +598,32 @@ public final class UiRenderer {
      *
      * @param passes étages de flou {@code [1,5]} — 4 = "verre dépoli" franc, 2 = voile léger.
      */
+    /**
+     * Un décor à poser derrière tout le reste de la frame, AVANT que le flou
+     * du verre ne soit calculé — pour qu'il en fasse partie quand c'est
+     * possible. Sert au « faux monde » des écrans du client ouverts hors d'un
+     * monde ; c'est à celui qui s'inscrit de décider quand il a quelque chose
+     * à dessiner.
+     */
+    public interface FrameBackdrop {
+        void draw(UiRenderer renderer, int vpWidth, int vpHeight);
+    }
+
+    public static volatile FrameBackdrop frameBackdrop;
+    private static boolean backdropErrorLogged;
+
     public void beginGlassFrame(int passes, int vpWidth, int vpHeight) {
+        FrameBackdrop backdrop = frameBackdrop;
+        if (backdrop != null) {
+            try {
+                backdrop.draw(this, vpWidth, vpHeight);
+            } catch (Throwable error) {
+                if (!backdropErrorLogged) {
+                    backdropErrorLogged = true;
+                    com.yuyuframe.launcheragent.base.log.LauncherLog.err("[UiRenderer] décor de fond impossible", error);
+                }
+            }
+        }
         // Voie vanilla : la chaîne est calculée TOUT DE SUITE et non mise en
         // file — sinon elle arriverait après la soumission de la GUI, et les
         // panneaux échantillonneraient le flou de la frame précédente.
@@ -795,6 +820,14 @@ public final class UiRenderer {
      */
     public void drawVanillaItemIcon(Object itemStack, float x, float y, float size, int vpWidth, int vpHeight, boolean withDurabilityBar) {
         if (itemStack == null) return;
+        // Objet d'exemple de l'éditeur de HUD : pas une pile du jeu, la texture de l'objet.
+        if (itemStack instanceof com.yuyuframe.launcheragent.apigraphic.hud.HudSampleIcon) {
+            com.yuyuframe.launcheragent.apigraphic.hud.HudSampleIcon sample =
+                (com.yuyuframe.launcheragent.apigraphic.hud.HudSampleIcon) itemStack;
+            java.awt.image.BufferedImage image = sample.image();
+            if (image != null) drawIcon(sample.key, image, x, y, size, size, vpWidth, vpHeight);
+            return;
+        }
         backend().vanillaItemIcon(itemStack, x, y, size, withDurabilityBar, vpWidth, vpHeight);
     }
 

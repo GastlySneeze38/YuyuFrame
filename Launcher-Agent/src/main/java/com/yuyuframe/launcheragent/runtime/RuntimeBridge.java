@@ -41,6 +41,8 @@ public final class RuntimeBridge implements AgentBridge {
     public void bootstrap() {
         ModuleRegistry.all();
         GlobalUiSettings.INSTANCE.onConfigChanged();
+        // Le paysage posé derrière les écrans du client ouverts hors d'un monde.
+        com.yuyuframe.launcheragent.runtime.ui.ingameui.WorldBackdrop.install();
 
         // Phase 4.5 — le commentaire d'origine du mixin reste valable : ceci
         // DOIT être touché depuis le classloader du jeu, jamais depuis
@@ -122,5 +124,17 @@ public final class RuntimeBridge implements AgentBridge {
     @Override
     public void signalReady(String eventProperty) {
         ReadyEventSignal.signalOnce(eventProperty);
+        // Appelé à chaque initialisation de l'écran-titre : c'est le moment où l'on apprend à le reconnaître.
+        com.yuyuframe.launcheragent.runtime.ui.ingameui.TitleAccountBar.titleScreenSeen();
+    }
+
+    @Override
+    public void renderScreenOverlay(Object uiRenderer, Object inputPoller, Object currentScreen) {
+        if (!(uiRenderer instanceof UiRenderer)
+            || !(inputPoller instanceof com.yuyuframe.launcheragent.apigraphic.platform.UiInputPoller)) {
+            return;
+        }
+        com.yuyuframe.launcheragent.runtime.ui.ingameui.TitleAccountBar.render((UiRenderer) uiRenderer,
+            (com.yuyuframe.launcheragent.apigraphic.platform.UiInputPoller) inputPoller, currentScreen);
     }
 }

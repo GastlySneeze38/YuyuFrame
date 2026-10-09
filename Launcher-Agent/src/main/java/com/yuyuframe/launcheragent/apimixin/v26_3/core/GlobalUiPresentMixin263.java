@@ -110,7 +110,11 @@ public abstract class GlobalUiPresentMixin263 {
             // Écran vanilla/mod ouvert : plus rien à dessiner ici depuis la
             // suppression de l'aperçu shulker (2026-08-31) — le HUD, lui, part
             // de la passe GUI, pas d'ici.
-            if (!(currentScreen instanceof UiDrawable)) return;
+            if (!(currentScreen instanceof UiDrawable)) {
+                // Écran du jeu : l'agent peut y poser quelque chose (barre de compte de l'écran-titre).
+                agent.renderScreenOverlay(renderer, inputPoller, currentScreen);
+                return;
+            }
 
             UiDrawable ui = (UiDrawable) currentScreen;
             ui.uiPollInput(inputPoller);

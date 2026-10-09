@@ -73,7 +73,18 @@ public final class PlayerData {
      */
     public static double[] position() {
         Object v = AccessorRegistry.get(AccessPoint.PLAYER_POSITION, null);
-        return v instanceof double[] ? (double[]) v : new double[]{ 0, 0, 0 };
+        if (v instanceof double[]) return (double[]) v;
+        return previewing() ? HudSamples.POSITION.clone() : new double[]{ 0, 0, 0 };
+    }
+
+    /**
+     * L'éditeur de HUD dessine-t-il ses boîtes ? Les lecteurs ci-dessous
+     * rendent alors un EXEMPLE là où ils n'ont rien de réel — voir
+     * {@code apigraphic.hud.HudPreview} et {@link HudSamples}. Ce qui existe
+     * vraiment n'est jamais remplacé.
+     */
+    public static boolean previewing() {
+        return com.yuyuframe.launcheragent.apigraphic.hud.HudPreview.active();
     }
 
     /**
@@ -91,6 +102,7 @@ public final class PlayerData {
      * hiérarchie. Même piège pour le champ {@code world}/{@code level}.
      */
     public static float yaw() {
+        if (previewing() && !inGame()) return HudSamples.YAW;
         return AccessorRegistry.getFloat(AccessPoint.PLAYER_YAW, null, 0f);
     }
 
@@ -131,7 +143,8 @@ public final class PlayerData {
      * affiché à la place serait faux.
      */
     public static int ping() {
-        return AccessorRegistry.getInt(AccessPoint.PLAYER_PING, null, -1);
+        int ping = AccessorRegistry.getInt(AccessPoint.PLAYER_PING, null, -1);
+        return ping < 0 && previewing() ? HudSamples.PING : ping;
     }
 
     /**
@@ -145,9 +158,10 @@ public final class PlayerData {
     @SuppressWarnings("unchecked")
     public static java.util.List<PlayerEffect> activeEffects() {
         Object v = AccessorRegistry.get(AccessPoint.PLAYER_ACTIVE_EFFECTS, null);
-        return v instanceof java.util.List
+        java.util.List<PlayerEffect> effects = v instanceof java.util.List
             ? (java.util.List<PlayerEffect>) v
             : java.util.Collections.emptyList();
+        return effects.isEmpty() && previewing() ? HudSamples.effects() : effects;
     }
 
     /**
@@ -162,11 +176,22 @@ public final class PlayerData {
         Object v = AccessorRegistry.get(AccessPoint.PLAYER_EQUIPMENT, null);
         if (v instanceof ItemInfo[]) {
             ItemInfo[] slots = (ItemInfo[]) v;
-            if (slots.length == EQUIPMENT_SLOTS) return slots;
+            if (slots.length == EQUIPMENT_SLOTS) {
+                // Rien sur soi pendant qu'on règle le HUD : une armure d'exemple, pour voir l'élément plein.
+                return previewing() && allEmpty(slots) ? HudSamples.equipment() : slots;
+            }
         }
+        if (previewing()) return HudSamples.equipment();
         ItemInfo[] empty = new ItemInfo[EQUIPMENT_SLOTS];
         java.util.Arrays.fill(empty, ItemInfo.EMPTY);
         return empty;
+    }
+
+    private static boolean allEmpty(ItemInfo[] slots) {
+        for (ItemInfo slot : slots) {
+            if (slot != null && !slot.empty) return false;
+        }
+        return true;
     }
 
     /** Nombre de cases rendues par {@link #equipment()} — voir {@link AccessPoint#PLAYER_EQUIPMENT} pour leur ordre. */
