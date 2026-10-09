@@ -344,6 +344,52 @@ fn extract_prefixed_dir(bytes: &[u8], prefix_name: &str, dir: &std::path::Path) 
     Ok(())
 }
 
+/// Les mods que l'archive livre elle-même, dans `<dossier>/mods/`.
+///
+/// Un pack ne se contente pas de pointer vers Modrinth ou CurseForge : il
+/// embarque aussi des jars qu'aucune plateforme n'héberge — builds maison,
+/// mods modifiés pour le pack. Ils sont copiés avec le reste des `overrides`,
+/// et font partie du pack au même titre que les autres. Les oublier ici les
+/// faisait apparaître parmi les mods « ajoutés à la main », d'où un pack
+/// installé à l'instant qui montrait déjà du contenu supplémentaire.
+///
+/// Seulement les jars posés directement dans `mods/` : un sous-dossier n'est
+/// pas lu par les loaders, et l'écran des mods ne le liste pas non plus.
+fn bundled_mod_names(bytes: &[u8], overrides: &[&str]) -> Vec<String> {
+    let Ok(mut archive) = zip::ZipArchive::new(std::io::Cursor::new(bytes)) else { return Vec::new() };
+    let prefixes: Vec<String> = overrides.iter().map(|o| format!("{}/mods/", o.trim_matches('/'))).collect();
+    let mut names = Vec::new();
+    for i in 0..archive.len() {
+        let Ok(entry) = archive.by_index_raw(i) else { continue };
+        let name = entry.name();
+        let Some(file) = prefixes.iter().find_map(|p| name.strip_prefix(p.as_str())) else { continue };
+        if file.is_empty() || file.contains('/') || !is_jar_file(file) || names.iter().any(|n| n == file) {
+            continue;
+        }
+        names.push(file.to_string());
+    }
+    names
+}
+
+/// Tous les mods d'un `.mrpack` : ceux que son index fait télécharger, puis
+/// ceux qu'il livre dans ses `overrides`. C'est la liste écrite dans
+/// `modpack.json`, et celle annoncée à l'écran avant l'installation — une
+/// seule fonction pour que les deux ne puissent pas diverger.
+fn mrpack_mod_files(bytes: &[u8], index: &ModrinthIndex) -> Vec<String> {
+    let mut files: Vec<String> = index
+        .files
+        .iter()
+        .filter(|f| f.path.starts_with("mods/"))
+        .filter_map(|f| f.path.rsplit('/').next().map(str::to_string))
+        .collect();
+    for name in bundled_mod_names(bytes, &["overrides", "client-overrides"]) {
+        if !files.contains(&name) {
+            files.push(name);
+        }
+    }
+    files
+}
+
 /// Annonce, avant le premier téléchargement, les mods que le pack va poser.
 ///
 /// `modpack.json` n'est écrit qu'à la toute fin — c'est lui qui dit au reste
@@ -405,6 +451,8 @@ async fn install_curseforge_pack(
     let mut failed_files: Vec<String> = Vec::new();
     let total = manifest.files.len();
 
+    // Livrés dans l'archive elle-même : ils font partie du pack eux aussi.
+    let bundled = bundled_mod_names(&bytes, &[manifest.overrides.as_str()]);
     emit_plan(
         app,
         instance_id,
@@ -413,6 +461,7 @@ async fn install_curseforge_pack(
             .iter()
             .filter_map(|f| by_file_id.get(&f.file_id))
             .filter_map(|m| std::path::Path::new(&m.file_name).file_name().map(|n| n.to_string_lossy().to_string()))
+            .chain(bundled.iter().cloned())
             .collect(),
     );
 
@@ -488,6 +537,12 @@ async fn install_curseforge_pack(
     tokio::task::spawn_blocking(move || extract_prefixed_dir(&bytes_clone, &overrides_name, &dir_clone))
         .await
         .map_err(|e| e.to_string())??;
+
+    for name in bundled {
+        if !mod_files.contains(&name) {
+            mod_files.push(name);
+        }
+    }
 
     let meta = ModpackMeta {
         project_id,
@@ -663,12 +718,7 @@ fn extract_into_instance(bytes: &[u8], dir: &std::path::Path) -> Result<Vec<Stri
     }
 
     let index = read_index(bytes)?;
-    Ok(index
-        .files
-        .iter()
-        .filter(|f| f.path.starts_with("mods/"))
-        .filter_map(|f| f.path.rsplit('/').next().map(|s| s.to_string()))
-        .collect())
+    Ok(mrpack_mod_files(bytes, &index))
 }
 
 #[tauri::command]
@@ -929,16 +979,7 @@ async fn install_pack(
     // La même liste que celle écrite dans `modpack.json` à la fin (voir
     // `extract_into_instance`) : ce que l'écran regroupe pendant
     // l'installation est ce qui restera regroupé après.
-    emit_plan(
-        app,
-        instance_id,
-        index
-            .files
-            .iter()
-            .filter(|f| f.path.starts_with("mods/"))
-            .filter_map(|f| f.path.rsplit('/').next().map(str::to_string))
-            .collect(),
-    );
+    emit_plan(app, instance_id, mrpack_mod_files(&bytes, &index));
     for (i, file) in index.files.iter().enumerate() {
         let _ = app.emit("modpack_install_progress", serde_json::json!({
             "current": i,
@@ -1119,4 +1160,81 @@ pub async fn modpack_get_meta(instance_id: String) -> Result<Option<ModpackMeta>
     }
     let json = tokio::fs::read_to_string(&path).await.map_err(|e| e.to_string())?;
     serde_json::from_str(&json).map(Some).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    /// Une archive de pack en mémoire : des entrées vides suffisent, seuls
+    /// les noms comptent ici.
+    fn archive(entries: &[(&str, &str)]) -> Vec<u8> {
+        let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        for (name, content) in entries {
+            zip.start_file(*name, zip::write::SimpleFileOptions::default()).unwrap();
+            zip.write_all(content.as_bytes()).unwrap();
+        }
+        zip.finish().unwrap().into_inner()
+    }
+
+    const INDEX: &str = r#"{
+        "name": "Pack", "versionId": "1.0",
+        "files": [
+            { "path": "mods/sodium.jar", "downloads": ["https://cdn.modrinth.com/a"] },
+            { "path": "mods/lithium.jar", "downloads": ["https://cdn.modrinth.com/b"] },
+            { "path": "resourcepacks/faithful.zip", "downloads": ["https://cdn.modrinth.com/c"] }
+        ]
+    }"#;
+
+    /// Le cas qui faisait apparaître du « contenu supplémentaire » sur un
+    /// pack tout juste installé : des jars livrés dans l'archive elle-même.
+    #[test]
+    fn les_mods_livres_dans_les_overrides_font_partie_du_pack() {
+        let bytes = archive(&[
+            ("modrinth.index.json", INDEX),
+            ("overrides/mods/ardabrowser-1.0.0.jar", ""),
+            ("overrides/mods/create-fabric-custom.jar.disabled", ""),
+            ("client-overrides/mods/fabricskyboxes-custom.jar", ""),
+            ("overrides/config/sodium-options.json", ""),
+        ]);
+        let index = read_index(&bytes).unwrap();
+        assert_eq!(
+            mrpack_mod_files(&bytes, &index),
+            vec![
+                "sodium.jar",
+                "lithium.jar",
+                "ardabrowser-1.0.0.jar",
+                "create-fabric-custom.jar.disabled",
+                "fabricskyboxes-custom.jar",
+            ]
+        );
+    }
+
+    #[test]
+    fn seuls_les_jars_poses_directement_dans_mods_comptent() {
+        let bytes = archive(&[
+            ("overrides/mods/vrai.jar", ""),
+            // Un sous-dossier n'est pas lu par les loaders.
+            ("overrides/mods/sous-dossier/ignore.jar", ""),
+            ("overrides/mods/notes.txt", ""),
+            ("overrides/mods/", ""),
+            // Ni un `mods/` ailleurs que dans les overrides demandés.
+            ("autre/mods/ailleurs.jar", ""),
+            ("overrides/resourcepacks/pack.jar", ""),
+        ]);
+        assert_eq!(bundled_mod_names(&bytes, &["overrides", "client-overrides"]), vec!["vrai.jar"]);
+        // CurseForge nomme son dossier comme il veut, parfois avec un `/`.
+        assert_eq!(bundled_mod_names(&bytes, &["autre/"]), vec!["ailleurs.jar"]);
+    }
+
+    /// Un mod à la fois dans l'index et dans les overrides n'est listé qu'une
+    /// fois, et une archive illisible ne fait rien échouer.
+    #[test]
+    fn pas_de_doublon_ni_d_echec_sur_une_archive_illisible() {
+        let bytes = archive(&[("modrinth.index.json", INDEX), ("overrides/mods/sodium.jar", "")]);
+        let index = read_index(&bytes).unwrap();
+        assert_eq!(mrpack_mod_files(&bytes, &index), vec!["sodium.jar", "lithium.jar"]);
+        assert!(bundled_mod_names(b"pas un zip", &["overrides"]).is_empty());
+    }
 }

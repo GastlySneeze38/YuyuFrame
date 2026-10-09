@@ -1412,10 +1412,11 @@ export function ModsContent({ instance }: { instance: Instance }) {
           <InstalledTab
             mods={mods}
             modpackMeta={modpackMeta}
-            // Pendant l'installation, le contenu du pack est déplié d'office :
-            // c'est là qu'on voit les mods se ranger un à un. Le réglage de la
-            // personne reprend la main dès que c'est fini.
-            showPackContent={showPackContent || packInstallingHere}
+            // Le contenu du pack reste replié pendant l'installation, comme le
+            // reste du temps : le déplier d'office remplissait l'écran de mods
+            // au moment précis où l'on attend de les voir disparaître sous la
+            // bannière. La progression se lit sur celle-ci.
+            showPackContent={showPackContent}
             loading={loadingMods}
             error={modsError}
             isPlugin={isPlugin}
