@@ -231,6 +231,13 @@ export default function App() {
   // "EN JEU..." restait bloqué jusqu'à un F5 complet qui réinitialise le store.
   useTauriEvent<{ running: boolean; instance_id: string }>('game_state', onGameState)
 
+  // Le compte Minecraft a été changé depuis le jeu (liste déroulante du client
+  // intégré) : c'est le même geste que sur l'écran Comptes, l'interface suit.
+  useTauriEvent<{ mc_username: string; mc_uuid: string; is_offline: boolean }>(
+    'mc_account_changed',
+    (account) => setUser(account.mc_username, account.mc_uuid, account.is_offline),
+  )
+
   // Le jeu s'est fermé tout seul. Le rapport est déjà écrit sur le disque
   // (voir minecraft::crash) : la modale ne fait que demander quoi en faire.
   //

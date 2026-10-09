@@ -7,6 +7,7 @@
 //!
 //! Le moteur lui-même (JVM, loaders, classpath) est dans `crate::minecraft`.
 
+pub mod game_link;
 pub mod launch;
 pub mod presence;
 pub mod recovery;

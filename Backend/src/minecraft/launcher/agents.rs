@@ -187,7 +187,6 @@ pub(super) async fn setup_launcher_agent(
     app: &tauri::AppHandle,
     console_label: &str,
     progress_floor: &ProgressFloor,
-    ready_event_name: Option<&str>,
 ) -> AgentSetup {
     if !enabled {
         log_to_console(app, console_label, "[LauncherAgent] désactivé pour ce lancement (choix de l'utilisateur)", "out");
@@ -373,13 +372,6 @@ pub(super) async fn setup_launcher_agent(
         None => {}
     }
 
-    // readyEvent=... — Named Event Win32 (voir ready_event.rs) signalé par le
-    // hook TitleScreen.init() de l'agent (ReadyEventSignal.java, JNA) une fois
-    // le menu principal atteint. Absent (None) sur non-Windows ou si la
-    // création de l'event a échoué — le fallback stdout+fichier suffit alors.
-    if let Some(name) = ready_event_name {
-        agent_arg.push_str(&format!(",readyEvent={}", name));
-    }
     log_to_console(app, console_label, &format!("[LauncherAgent] Mixin : {}", mixin_arg), "out");
     log_to_console(app, console_label, &format!("[LauncherAgent] Agent : {}", agent_arg), "out");
 

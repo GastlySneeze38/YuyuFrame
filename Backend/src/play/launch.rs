@@ -288,7 +288,8 @@ pub async fn launch_game(
         // Preuve de propriété du compte Minecraft puis signal « je suis en
         // jeu », en tâche de fond : le jeu ne les attend pas et se lance même
         // s'ils échouent. Coupé dès que la partie se termine.
-        let presence = super::presence::spawn(state_clone.clone(), session.clone());
+        // Le compte de la partie est suivi : il peut changer en jeu (voir `game_link`).
+        let presence = super::presence::spawn(state_clone.clone(), super::game_link::track(&instance_id, session.clone()));
 
         let launched = launcher::download_and_launch(
             &instance.mc_version,
@@ -320,6 +321,7 @@ pub async fn launch_game(
         )
         .await;
         presence.abort();
+        super::game_link::untrack(&instance_id);
 
         match launched {
             Ok(warnings) if !warnings.is_empty() => {

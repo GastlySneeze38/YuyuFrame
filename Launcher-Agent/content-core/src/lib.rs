@@ -9,6 +9,7 @@ pub use modrinth::{download_file, get_latest_file, get_project, get_versions, se
 
 mod image;
 mod layout;
+mod link;
 mod mesh;
 mod modrinth;
 mod mouse;

@@ -9,8 +9,10 @@
 //!
 //! Sur un serveur de jeu en mode hors ligne, c'est le jeu qui s'annonce
 //! (`content_core.dll`, `POST /v1/presence/offline`) : lui seul sait où il
-//! joue. Le launcher lui passe pour cela le jeton et le réglage de visibilité
-//! (`feed_tokens`).
+//! joue. Il demande pour cela le jeton du compte et le réglage de visibilité
+//! au launcher, par le canal du jeu (`game_link`, question `token`). Le jeton
+//! de rafraîchissement, lui, ne quitte jamais le launcher : launcher fermé,
+//! le jeu garde au plus un jeton de 15 minutes.
 //!
 //! Sans compte YuyuFrame ou avec un compte hors ligne, la tâche ne fait rien.
 //! Le réglage « apparaître comme joueur YuyuFrame » coupe le signal — pas la
@@ -37,36 +39,39 @@ const DEFAULT_RENEW: Duration = Duration::from_secs(120);
 const MIN_RENEW_SECS: u64 = 30;
 const MAX_RENEW_SECS: u64 = 240;
 
-async fn visible(state: &SharedState) -> bool {
+pub(super) async fn visible(state: &SharedState) -> bool {
     let s = state.read().await;
     let conn = s.db.lock().await;
     prefs::get_bool(&conn, prefs::PRESENCE_VISIBLE, true)
 }
 
-async fn signed_in(state: &SharedState) -> bool {
+pub(super) async fn signed_in(state: &SharedState) -> bool {
     state.read().await.yuyu_session.is_some()
 }
 
 /// Lance le signal pour la partie qui démarre. À couper (`abort`) à sa fin.
-pub fn spawn(state: SharedState, session: MinecraftSession) -> JoinHandle<()> {
+///
+/// `account` : le compte Minecraft de la partie, qui peut changer en cours de
+/// route (liste déroulante du client intégré, voir `game_link`). Le signal le
+/// suit : nouveau compte, nouvelle preuve, et l'ancien s'efface de lui-même
+/// côté serveur faute de signal.
+pub fn spawn(state: SharedState, mut account: tokio::sync::watch::Receiver<MinecraftSession>) -> JoinHandle<()> {
     tokio::spawn(async move {
-        // Un compte hors ligne n'est pas reconnu en jeu : rien à prouver, rien à annoncer.
-        if session.refresh_token.is_none() {
-            return;
-        }
-        let mut proven = match prove_minecraft_account(&state, &session).await {
-            Ok(()) => true,
-            Err(e) => {
-                tracing::debug!("compte Minecraft non prouvé : {e}");
-                false
-            }
-        };
+        let mut session = account.borrow_and_update().clone();
+        let mut proven = false;
         let mut renew = DEFAULT_RENEW;
         loop {
             // Relus à chaque tour : le réglage et la connexion peuvent changer en cours de partie.
-            if signed_in(&state).await && visible(&state).await {
+            // Un compte hors ligne n'est pas reconnu par cette route : rien à prouver, rien à annoncer.
+            if session.refresh_token.is_some() && signed_in(&state).await && visible(&state).await {
                 if !proven {
-                    proven = prove_minecraft_account(&state, &session).await.is_ok();
+                    proven = match prove_minecraft_account(&state, &session).await {
+                        Ok(()) => true,
+                        Err(e) => {
+                            tracing::debug!("compte Minecraft non prouvé : {e}");
+                            false
+                        }
+                    };
                 }
                 if proven {
                     match api::put(&state, "/presence", json!({ "uuid": session.uuid })).await {
@@ -86,82 +91,19 @@ pub fn spawn(state: SharedState, session: MinecraftSession) -> JoinHandle<()> {
                     }
                 }
             }
-            tokio::time::sleep(renew).await;
-        }
-    })
-}
-
-/// Posée dans l'environnement du jeu : dit à `content_core.dll` que son
-/// entrée standard est bien ce canal, et pas la console d'un lancement à la main.
-pub const TOKEN_CHANNEL_ENV: &str = "YUYU_PRESENCE_STDIN";
-/// Début de chaque ligne écrite au jeu. Le même dans
-/// `content-core/src/presence/token.rs`.
-const TOKEN_LINE_PREFIX: &str = "yf-presence-token ";
-/// Le réglage « apparaître comme joueur YuyuFrame », sur le même tube
-/// (`VISIBLE_PREFIX` dans `token.rs`). Le jeu en a besoin : sur un serveur en
-/// mode hors ligne c'est lui qui s'annonce, lui seul sachant où il joue.
-const VISIBLE_LINE_PREFIX: &str = "yf-presence-visible ";
-/// Le jeton d'accès vit 15 minutes et le launcher le renouvelle une minute
-/// avant sa fin : regarder plus souvent que cette minute garantit que le jeu
-/// reçoit le suivant avant que le sien n'expire.
-const TOKEN_CHECK_EVERY: Duration = Duration::from_secs(20);
-
-/// Donne au jeu de quoi demander lui-même quels joueurs croisés utilisent
-/// YuyuFrame (`POST /v1/presence/lookup`, appelé par `content_core.dll`) : le
-/// jeton d'accès courant, réécrit à chaque renouvellement.
-///
-/// Le canal est l'entrée standard du jeu — un tube que seul ce processus
-/// enfant reçoit. Rien sur le disque, rien sur la ligne de commande ni dans
-/// l'environnement, donc rien dans un rapport de plantage. Le jeton de
-/// rafraîchissement, lui, ne quitte jamais le launcher : sans le launcher, le
-/// jeu garde au plus un jeton de 15 minutes.
-///
-/// S'arrête avec la partie (`stop`), ou dès que le tube ne se laisse plus
-/// écrire. Sans compte YuyuFrame, rien n'est envoyé.
-pub fn feed_tokens(state: SharedState, mut stdin: tokio::process::ChildStdin, stop: std::sync::Arc<std::sync::atomic::AtomicBool>) {
-    use tokio::io::AsyncWriteExt;
-    tokio::spawn(async move {
-        let mut sent = String::new();
-        let mut sent_visible: Option<bool> = None;
-        while !stop.load(std::sync::atomic::Ordering::Relaxed) {
-            if signed_in(&state).await {
-                // Le réglage d'abord, et à chaque changement : le jeu ne
-                // s'annonce pas tant qu'il ne l'a pas reçu.
-                let now_visible = visible(&state).await;
-                if sent_visible != Some(now_visible) {
-                    let line = format!("{VISIBLE_LINE_PREFIX}{}\n", now_visible as u8);
-                    let written = tokio::time::timeout(Duration::from_secs(5), async {
-                        stdin.write_all(line.as_bytes()).await?;
-                        stdin.flush().await
-                    })
-                    .await;
-                    if !matches!(written, Ok(Ok(()))) {
+            // Le compte a changé en jeu : on repart tout de suite avec le nouveau.
+            tokio::select! {
+                _ = tokio::time::sleep(renew) => {}
+                changed = account.changed() => {
+                    if changed.is_err() {
                         return;
                     }
-                    sent_visible = Some(now_visible);
-                }
-                match api::valid_access_token(&state).await {
-                    Ok(token) if token != sent => {
-                        let line = format!("{TOKEN_LINE_PREFIX}{token}\n");
-                        // Borné : si personne ne lit en face (DLL absente), le
-                        // tube finit par se remplir et l'écriture attendrait sans fin.
-                        let written = tokio::time::timeout(Duration::from_secs(5), async {
-                            stdin.write_all(line.as_bytes()).await?;
-                            stdin.flush().await
-                        })
-                        .await;
-                        if !matches!(written, Ok(Ok(()))) {
-                            return;
-                        }
-                        sent = token;
-                    }
-                    Ok(_) => {}
-                    Err(e) => tracing::debug!("jeton de présence indisponible : {}", e.message),
+                    session = account.borrow_and_update().clone();
+                    proven = false;
                 }
             }
-            tokio::time::sleep(TOKEN_CHECK_EVERY).await;
         }
-    });
+    })
 }
 
 /// Réglage « apparaître comme joueur YuyuFrame » (Paramètres → Confidentialité).

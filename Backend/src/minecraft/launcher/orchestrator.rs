@@ -23,7 +23,6 @@ use super::jvm_args::{build_game_args, build_jvm_args, dedup_system_properties, 
 use super::jvm_args::{timeBeginPeriod, timeEndPeriod};
 use super::loader_setup::{setup_fabric, setup_forge, setup_neoforge, setup_quilt, LoaderSetup};
 use super::progress::{log_to_console, redact_secrets, spawn_game_output_pump, set_progress, set_progress_monotonic, watch_agent_log_for_ready, ProgressFloor};
-use super::ready_event::{create_ready_event, wait_for_ready_event};
 use super::servers::build_server_connect_args;
 
 /// Message d'erreur sentinelle renvoyé par `download_and_launch` quand l'arrêt
@@ -517,13 +516,7 @@ pub async fn download_and_launch(
     // Resource packs Modrinth in-game (voir docs/LauncherAgent/index.md). Agent
     // totalement indépendant du p2p-agent — actif que P2P soit activé ou non.
     //
-    // Named Event Win32 (voir ready_event.rs) : canal principal pour
-    // game_ready, en plus du fallback stdout+fichier déjà en place — créé ICI
-    // (avant le spawn de la JVM) pour que son nom soit inclus dans l'argument
-    // -javaagent, mais attendu seulement après le spawn (plus bas).
-    let ready_event = create_ready_event(instance_id);
-    let ready_event_name = ready_event.as_ref().map(|(name, _)| name.clone());
-    let launcher_agent = setup_launcher_agent(version_id, loader, java_major, use_agent, &client, &app, &console_label, &progress_floor, ready_event_name.as_deref()).await;
+    let launcher_agent = setup_launcher_agent(version_id, loader, java_major, use_agent, &client, &app, &console_label, &progress_floor).await;
     let (launcher_agent_jvm_args, launcher_agent_extra_cp) = (launcher_agent.jvm_args, launcher_agent.extra_classpath);
 
     // L'interface a besoin de savoir si l'agent tourne pour ce lancement :
@@ -665,13 +658,12 @@ pub async fn download_and_launch(
 
     let stop_flag = Arc::new(AtomicBool::new(false));
     let stop_flag_ready = stop_flag.clone();
-    let stop_flag_event = stop_flag.clone();
-    // Partagé entre les trois canaux de détection de game_ready (event +
-    // stdout + fichier, voir plus bas) — le premier qui voit le signal gagne.
+    // Partagé entre les trois canaux de détection de game_ready (canal du jeu
+    // + stdout + fichier, voir plus bas) — le premier qui voit le signal gagne.
     let ready_sent = Arc::new(AtomicBool::new(false));
     let ready_sent_stdout = ready_sent.clone();
     let ready_sent_file = ready_sent.clone();
-    let ready_sent_event = ready_sent.clone();
+    let ready_sent_link = ready_sent.clone();
 
     // Boîte noire du lancement (voir minecraft::crash) : tout ce qu'on
     // redemanderait après un plantage est capturé MAINTENANT, pendant que le
@@ -702,10 +694,13 @@ pub async fn download_and_launch(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .stdin(Stdio::null());
-    // Canal du jeton de présence (voir `play::presence::feed_tokens`) : une
-    // vraie partie seulement — un essai de compatibilité ne rejoint aucun serveur.
-    if probe.is_none() {
-        java_cmd.stdin(Stdio::piped()).env(crate::play::presence::TOKEN_CHANNEL_ENV, "1");
+    // Canal du jeu (voir `play::game_link`) : « prêt », jeton du compte
+    // YuyuFrame, changement de compte Minecraft. Créé AVANT le spawn pour que
+    // son nom soit dans l'environnement du jeu, servi après. Une vraie partie
+    // seulement — un essai de compatibilité ne rejoint aucun serveur.
+    let game_link = if probe.is_none() { crate::play::game_link::open() } else { None };
+    if let Some(link) = &game_link {
+        java_cmd.env(crate::play::game_link::PIPE_ENV, link.name());
     }
     if cancelled(&cancel) {
         return Err(anyhow!(LAUNCH_CANCELLED_MSG));
@@ -715,11 +710,16 @@ pub async fn download_and_launch(
     tracing::info!("[MC launch] {} {}", java, redact_secrets(&args.join(" ")));
     let mut child = java_cmd.spawn()?;
 
-    if let Some(stdin) = child.stdin.take() {
+    let game_link = game_link.map(|link| {
         use tauri::Manager;
-        let state = app.state::<crate::state::SharedState>().inner().clone();
-        crate::play::presence::feed_tokens(state, stdin, stop_flag.clone());
-    }
+        link.serve(child.id(), crate::play::game_link::Context {
+            state: app.state::<crate::state::SharedState>().inner().clone(),
+            app: app.clone(),
+            instance_id: instance_id.to_string(),
+            ready_sent: ready_sent_link,
+            launch_start,
+        })
+    });
 
     // Essai de compatibilité : la fenêtre du jeu ne doit jamais se montrer.
     // Posté dès le spawn, donc bien avant que GLFW ne la crée — voir
@@ -823,17 +823,9 @@ pub async fn download_and_launch(
     let agent_log_path = launcher_agent_dir().join("logs").join("launcher-agent.log");
     tokio::spawn(watch_agent_log_for_ready(agent_log_path, stop_flag_ready, ready_sent_file, app.clone(), instance_id.to_string(), launch_start));
 
-    // Canal principal game_ready : Named Event Win32 (voir ready_event.rs) —
-    // créé plus haut, avant le spawn, pour que son nom soit dans l'argument
-    // -javaagent. `None` sur non-Windows ou si CreateEventW a échoué (le
-    // fallback stdout+fichier ci-dessus suffit alors).
-    match ready_event {
-        Some((_, handle)) => {
-            tracing::info!("[ReadyEvent] spawn de wait_for_ready_event (handle={:#x})", handle);
-            tokio::spawn(wait_for_ready_event(handle, stop_flag_event, ready_sent_event, app.clone(), instance_id.to_string(), launch_start));
-        }
-        None => tracing::info!("[ReadyEvent] pas d'event créé — repli sur stdout/fichier uniquement pour ce lancement"),
-    }
+    // Canal principal game_ready : le canal du jeu, servi plus haut (question
+    // `ready`). Sans lui — hors Windows, tube non créé, DLL absente — le repli
+    // stdout+fichier ci-dessus suffit.
 
     let mut cancel_wait = cancel;
     let mut exit_code = None;
@@ -851,8 +843,11 @@ pub async fn download_and_launch(
         }
     };
 
-    // Arrête les surveillances restantes (événement « prêt », log de l'agent).
+    // Arrête les surveillances restantes (log de l'agent, canal du jeu).
     stop_flag.store(true, Ordering::Relaxed);
+    if let Some(link) = game_link {
+        link.abort();
+    }
 
     // Restaure la résolution du timer Windows
     #[cfg(target_os = "windows")]

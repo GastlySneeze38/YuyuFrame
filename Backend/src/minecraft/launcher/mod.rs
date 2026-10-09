@@ -10,7 +10,6 @@ mod loader_setup;
 mod mojang_rules;
 mod orchestrator;
 pub(crate) mod progress;
-mod ready_event;
 mod servers;
 
 // Le diagnostic d'installation (`instances::health::repair`) réutilise la

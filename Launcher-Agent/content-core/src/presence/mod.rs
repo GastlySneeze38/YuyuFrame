@@ -18,8 +18,8 @@
 //! « Serveurs Microsoft uniquement »), rien de tout cela ne part.
 //!
 //! Ces questions partent avec le jeton d'accès du compte, que le launcher
-//! envoie sur l'entrée standard du jeu à chaque renouvellement (`token.rs`) :
-//! il est lu ICI et ne passe ni par la ligne de commande, ni par
+//! donne par le canal du jeu (`crate::link`, rangé dans `token.rs`) : il
+//! reste ICI et ne passe ni par la ligne de commande, ni par
 //! l'environnement, ni par Java. Sans jeton — lancement hors launcher, joueur
 //! sans compte YuyuFrame, launcher fermé depuis plus d'un quart d'heure —
 //! tout répond « inconnu » et rien ne part.
@@ -31,5 +31,5 @@ mod bridge;
 mod client;
 mod directory;
 mod fingerprint;
-mod token;
+pub(crate) mod token;
 mod worker;

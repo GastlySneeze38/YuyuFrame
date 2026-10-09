@@ -10,7 +10,7 @@ use std::time::Instant;
 
 use super::client::Client;
 use super::directory::{server_form, Answer, PlayerKey, MAX_SERVER_FORMS};
-use super::token::{self, TokenStore};
+use super::token;
 use super::worker::{self, Shared};
 
 /// Version du contrat. À incrémenter dès qu'une fonction change de signature
@@ -27,15 +27,12 @@ static SHARED: OnceLock<Option<Arc<Shared>>> = OnceLock::new();
 fn shared() -> Option<&'static Arc<Shared>> {
     SHARED
         .get_or_init(|| {
-            if !token::channel_open() {
+            // Sans canal vers le launcher, aucun jeton n'arrivera jamais.
+            if !crate::link::available() {
                 return None;
             }
             let client = Client::from_env()?;
-            let tokens = Arc::new(TokenStore::default());
-            if !token::start_reader(tokens.clone()) {
-                return None;
-            }
-            worker::start(client, tokens)
+            worker::start(client, token::store())
         })
         .as_ref()
 }
