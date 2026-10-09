@@ -344,6 +344,22 @@ fn extract_prefixed_dir(bytes: &[u8], prefix_name: &str, dir: &std::path::Path) 
     Ok(())
 }
 
+/// Annonce, avant le premier téléchargement, les mods que le pack va poser.
+///
+/// `modpack.json` n'est écrit qu'à la toute fin — c'est lui qui dit au reste
+/// du launcher qu'un pack est installé, et un fichier écrit trop tôt
+/// décrirait un pack à moitié là si l'installation échouait. Mais l'écran des
+/// mods en a besoin tout de suite : sans cette liste, chaque mod du pack
+/// apparaissait en vrac parmi les mods ajoutés à la main pendant tout le
+/// téléchargement, pour n'être regroupé qu'à la dernière seconde.
+fn emit_plan(app: &tauri::AppHandle, instance_id: &str, mod_files: Vec<String>) {
+    use tauri::Emitter;
+    let _ = app.emit("modpack_install_plan", serde_json::json!({
+        "instance_id": instance_id,
+        "mod_files": mod_files,
+    }));
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn install_curseforge_pack(
     app: &tauri::AppHandle,
@@ -388,6 +404,17 @@ async fn install_curseforge_pack(
     let mut mod_files: Vec<String> = Vec::new();
     let mut failed_files: Vec<String> = Vec::new();
     let total = manifest.files.len();
+
+    emit_plan(
+        app,
+        instance_id,
+        manifest
+            .files
+            .iter()
+            .filter_map(|f| by_file_id.get(&f.file_id))
+            .filter_map(|m| std::path::Path::new(&m.file_name).file_name().map(|n| n.to_string_lossy().to_string()))
+            .collect(),
+    );
 
     for (i, f) in manifest.files.iter().enumerate() {
         let label = by_file_id.get(&f.file_id).map(|m| m.file_name.clone()).unwrap_or_default();
@@ -899,6 +926,19 @@ async fn install_pack(
     let mut backed_up: Vec<String> = Vec::new();
     let mut failed_files: Vec<String> = Vec::new();
     let total_files = index.files.len();
+    // La même liste que celle écrite dans `modpack.json` à la fin (voir
+    // `extract_into_instance`) : ce que l'écran regroupe pendant
+    // l'installation est ce qui restera regroupé après.
+    emit_plan(
+        app,
+        instance_id,
+        index
+            .files
+            .iter()
+            .filter(|f| f.path.starts_with("mods/"))
+            .filter_map(|f| f.path.rsplit('/').next().map(str::to_string))
+            .collect(),
+    );
     for (i, file) in index.files.iter().enumerate() {
         let _ = app.emit("modpack_install_progress", serde_json::json!({
             "current": i,

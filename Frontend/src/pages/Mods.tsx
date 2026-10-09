@@ -337,6 +337,9 @@ export function ModsContent({ instance }: { instance: Instance }) {
   const [packInstalling, setPackInstalling] = useState<string | null>(null)
   const [packInstallProgress, setPackInstallProgress] = useState<{ percent: number; label: string } | null>(null)
   const [packImportingFile, setPackImportingFile] = useState(false)
+  /** Un modpack est en cours d'installation et sa bannière provisoire est
+   *  affichée (voir `watchPackInstall`). */
+  const [packInstallingHere, setPackInstallingHere] = useState(false)
   const packDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // CurseForge — même principe que cfResults/cfSearching pour les mods (voir
@@ -372,7 +375,10 @@ export function ModsContent({ instance }: { instance: Instance }) {
   // vérifier. Best-effort : une erreur réseau laisse juste l'indicateur absent.
   useEffect(() => {
     setPackVersionUpdate(null)
-    if (!modpackMeta?.project_id) return
+    // Pendant une installation, la bannière est provisoire et ne porte pas
+    // encore de version : la comparer annoncerait « nouvelle version » sur le
+    // pack qu'on est justement en train de poser.
+    if (packInstallingHere || !modpackMeta?.project_id) return
     let cancelled = false
     resolveModpackFile(modpackMeta.project_id, mcVersion, loader).then((file) => {
       if (!cancelled && file && file.versionId !== modpackMeta.version_id) {
@@ -380,7 +386,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
       }
     }).catch(() => {})
     return () => { cancelled = true }
-  }, [modpackMeta?.project_id, modpackMeta?.version_id])
+  }, [modpackMeta?.project_id, modpackMeta?.version_id, packInstallingHere])
 
   const packFileSet = new Set((modpackMeta?.mod_files ?? []).map((f) => f.toLowerCase()))
   const isPackMod = (name: string) => packFileSet.has(baseFilename(name).toLowerCase())
@@ -428,14 +434,81 @@ export function ModsContent({ instance }: { instance: Instance }) {
     else commitPackSearch(packQuery, filters)
   }
 
+  /// Suit une installation de modpack depuis l'écran des mods installés.
+  ///
+  /// Avant, rien ne bougeait à l'écran pendant le téléchargement : on restait
+  /// sur la recherche, et les mods du pack n'étaient regroupés sous sa
+  /// bannière qu'à la toute fin, quand `modpack.json` était écrit. Désormais
+  /// l'écran bascule tout de suite sur les mods installés, avec une bannière
+  /// provisoire (`draft`) qui porte la barre de progression ; la liste des
+  /// mods du pack arrive par l'événement `modpack_install_plan`, émis par le
+  /// Rust avant le premier téléchargement, et les mods s'y rangent à mesure
+  /// qu'ils se posent.
+  ///
+  /// La bannière provisoire n'existe que dans cet écran : rien n'est écrit sur
+  /// le disque avant la fin, donc une installation qui échoue ne laisse pas
+  /// un pack fantôme derrière elle (`restore`).
+  const watchPackInstall = async (
+    draft: ModpackMeta,
+    onProgress: (progress: { percent: number; label: string }) => void,
+  ) => {
+    const previous = modpackMeta
+    // En remplacement d'un pack, ses mods restent regroupés le temps que la
+    // liste du nouveau arrive, au lieu de se répandre parmi les extras.
+    setModpackMeta({ ...draft, mod_files: previous?.mod_files ?? [] })
+    setPackInstallingHere(true)
+    setModpackMenuOpen(false)
+    setTab('installed')
+
+    const offPlan = await listen<{ instance_id: string; mod_files: string[] }>('modpack_install_plan', (e) => {
+      if (e.payload.instance_id !== instanceId) return
+      setModpackMeta((meta) => (meta ? { ...meta, mod_files: e.payload.mod_files } : meta))
+    })
+    // La liste des mods est relue pendant l'installation, mais pas à chaque
+    // fichier : un pack en pose plusieurs par seconde.
+    let lastReload = 0
+    const offProgress = await listen<ModpackInstallProgress>('modpack_install_progress', (e) => {
+      const { current, total, label } = e.payload
+      const percent = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0
+      onProgress({ percent, label: `${label} (${current}/${total})` })
+      const now = Date.now()
+      if (now - lastReload >= 2000) {
+        lastReload = now
+        api.mods.list(instanceId).then(setMods).catch(() => {})
+      }
+    })
+
+    return {
+      stop: () => {
+        offPlan()
+        offProgress()
+        setPackInstallingHere(false)
+      },
+      /// L'installation n'a pas abouti (ou n'a pas reconnu de pack) : on
+      /// revient à ce qui était affiché avant.
+      restore: () => setModpackMeta(previous),
+    }
+  }
+
   const handleInstallModpack = async (hit: ModpackHit) => {
     setPackInstalling(hit.project_id)
     setPackInstallProgress({ percent: 0, label: t('mods.downloadingModpack') })
-    const unlisten = await listen<ModpackInstallProgress>('modpack_install_progress', (e) => {
-      const { current, total, label } = e.payload
-      const percent = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0
-      setPackInstallProgress({ percent, label: `${label} (${current}/${total})` })
-    })
+    const watch = await watchPackInstall(
+      {
+        project_id: hit.project_id,
+        version_id: '',
+        name: hit.title,
+        author: hit.author,
+        summary: hit.description,
+        icon_url: hit.icon_url,
+        version_number: '',
+        downloads: hit.downloads,
+        date_modified: hit.date_modified,
+        categories: hit.categories,
+        mod_files: [],
+      },
+      setPackInstallProgress,
+    )
     try {
       const file = await resolveModpackFile(hit.project_id, mcVersion, loader)
       if (!file) throw new Error(t('mods.noMrpackAvailable'))
@@ -454,13 +527,16 @@ export function ModsContent({ instance }: { instance: Instance }) {
         categories: hit.categories,
       })
       setModpackMeta(meta)
-      setTab('installed')
       delete _modrinthCache[instanceId]
       await loadMods()
     } catch (e) {
+      watch.restore()
       showError(e)
+      // Ce qui a eu le temps de se poser reste sur le disque : la liste doit
+      // le montrer, même sans pack.
+      void loadMods()
     } finally {
-      unlisten()
+      watch.stop()
       setPackInstalling(null)
       setPackInstallProgress(null)
     }
@@ -469,11 +545,22 @@ export function ModsContent({ instance }: { instance: Instance }) {
   const handleInstallCfModpack = async (hit: CurseforgeModpackHit) => {
     setCfPackInstalling(hit.id)
     setCfPackInstallProgress({ percent: 0, label: t('mods.downloadingModpack') })
-    const unlisten = await listen<ModpackInstallProgress>('modpack_install_progress', (e) => {
-      const { current, total, label } = e.payload
-      const percent = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0
-      setCfPackInstallProgress({ percent, label: `${label} (${current}/${total})` })
-    })
+    const watch = await watchPackInstall(
+      {
+        project_id: String(hit.id),
+        version_id: '',
+        name: hit.name,
+        author: hit.author,
+        summary: hit.summary,
+        icon_url: hit.logoUrl,
+        version_number: '',
+        downloads: hit.downloadCount,
+        date_modified: hit.dateModified,
+        categories: [],
+        mod_files: [],
+      },
+      setCfPackInstallProgress,
+    )
     try {
       const file = await resolveCurseforgeModpackFile(hit.id, mcVersion)
       if (!file) throw new Error(t('mods.noMrpackAvailable'))
@@ -492,14 +579,15 @@ export function ModsContent({ instance }: { instance: Instance }) {
         categories: [],
       })
       setModpackMeta(meta)
-      setTab('installed')
       delete _modrinthCache[instanceId]
       delete _curseforgeCache[instanceId]
       await loadMods()
     } catch (e) {
+      watch.restore()
       showError(e)
+      void loadMods()
     } finally {
-      unlisten()
+      watch.stop()
       setCfPackInstalling(null)
       setCfPackInstallProgress(null)
     }
@@ -512,17 +600,29 @@ export function ModsContent({ instance }: { instance: Instance }) {
     const picked = await open({ filters: [{ name: 'Modpack', extensions: ['mrpack', 'zip'] }] })
     if (!picked || Array.isArray(picked)) return
 
-    // Bascule sur l'onglet modpack pour que la barre de progression ci-dessous
-    // soit visible — l'import peut être déclenché depuis n'importe quel onglet
-    // via la modal "Importer" (ImportChoiceModal), pas seulement depuis ici.
-    setTab('modpack')
+    // Même écran que pour un pack venu de la recherche : les mods installés,
+    // avec une bannière provisoire qui porte la progression. On ne connaît
+    // encore du pack que le nom de son fichier — le reste arrive avec le
+    // résultat.
     setPackImportingFile(true)
     setPackInstallProgress({ percent: 0, label: t('mods.installingModpack') })
-    const unlisten = await listen<ModpackInstallProgress>('modpack_install_progress', (e) => {
-      const { current, total, label } = e.payload
-      const percent = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0
-      setPackInstallProgress({ percent, label: `${label} (${current}/${total})` })
-    })
+    const fileName = picked.split(/[\\/]/).pop() ?? picked
+    const watch = await watchPackInstall(
+      {
+        project_id: '',
+        version_id: '',
+        name: fileName.replace(/\.(mrpack|zip)$/i, ''),
+        author: '',
+        summary: '',
+        icon_url: null,
+        version_number: '',
+        downloads: 0,
+        date_modified: null,
+        categories: [],
+        mod_files: [],
+      },
+      setPackInstallProgress,
+    )
     try {
       const result = await api.modpacks.installFromPath(instanceId, picked)
       delete _modrinthCache[instanceId]
@@ -531,15 +631,18 @@ export function ModsContent({ instance }: { instance: Instance }) {
         setModpackMeta(result.meta)
       } else {
         // Structure non reconnue (Modrinth/CurseForge) : pack "générique"
-        // extrait tel quel, pas de bannière modpack ni de projet à suivre.
+        // extrait tel quel, pas de bannière modpack ni de projet à suivre —
+        // la bannière provisoire s'efface.
+        watch.restore()
         setImportNotice(t('mods.genericPackImported', { count: result.imported }))
       }
-      setTab('installed')
       await loadMods()
     } catch (e) {
+      watch.restore()
       showError(e)
+      void loadMods()
     } finally {
-      unlisten()
+      watch.stop()
       setPackImportingFile(false)
       setPackInstallProgress(null)
     }
@@ -808,11 +911,10 @@ export function ModsContent({ instance }: { instance: Instance }) {
     setModpackMenuOpen(false)
     setUpdatingPackVersion(true)
     setPackInstallProgress({ percent: 0, label: t('mods.downloadingModpack') })
-    const unlisten = await listen<ModpackInstallProgress>('modpack_install_progress', (e) => {
-      const { current, total, label } = e.payload
-      const percent = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0
-      setPackInstallProgress({ percent, label: `${label} (${current}/${total})` })
-    })
+    const watch = await watchPackInstall(
+      { ...modpackMeta, version_id: packVersionUpdate.versionId, version_number: packVersionUpdate.versionNumber },
+      setPackInstallProgress,
+    )
     try {
       const meta = await api.modpacks.install({
         instanceId,
@@ -833,9 +935,11 @@ export function ModsContent({ instance }: { instance: Instance }) {
       delete _modrinthCache[instanceId]
       await loadMods()
     } catch (e) {
+      watch.restore()
       showError(e)
+      void loadMods()
     } finally {
-      unlisten()
+      watch.stop()
       setUpdatingPackVersion(false)
       setPackInstallProgress(null)
     }
@@ -1268,12 +1372,16 @@ export function ModsContent({ instance }: { instance: Instance }) {
           installProgress={packDetailHit.source === 'modrinth' ? packInstallProgress : cfPackInstallProgress}
           onClose={() => setPackDetailHit(null)}
           onInstall={async () => {
-            if (packDetailHit.source === 'modrinth') {
-              await handleInstallModpack(packDetailHit.hit)
-            } else {
-              await handleInstallCfModpack(packDetailHit.hit)
-            }
+            // La fenêtre se ferme tout de suite : la suite se regarde sur
+            // l'écran des mods installés, où la bannière du pack porte la
+            // progression. La garder ouverte la cacherait.
+            const chosen = packDetailHit
             setPackDetailHit(null)
+            if (chosen.source === 'modrinth') {
+              await handleInstallModpack(chosen.hit)
+            } else {
+              await handleInstallCfModpack(chosen.hit)
+            }
           }}
         />
       )}
@@ -1287,6 +1395,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
             showPackContent={showPackContent}
             packVersionUpdate={packVersionUpdate}
             updatingPackVersion={updatingPackVersion}
+            installProgress={packInstallingHere ? (packInstallProgress ?? cfPackInstallProgress) : null}
             onToggleMenu={() => setModpackMenuOpen((v) => !v)}
             onReplace={handleReplaceModpack}
             onRemove={handleRemoveModpack}
@@ -1295,13 +1404,18 @@ export function ModsContent({ instance }: { instance: Instance }) {
           />
         )}
 
-        {tab === 'installed' && <ConflictBanner conflicts={conflicts} instanceId={instanceId} />}
+        {/* Pas pendant une installation de pack : la liste est à moitié posée,
+            et une incompatibilité vue là peut disparaître au fichier suivant. */}
+        {tab === 'installed' && !packInstallingHere && <ConflictBanner conflicts={conflicts} instanceId={instanceId} />}
 
         {tab === 'installed' ? (
           <InstalledTab
             mods={mods}
             modpackMeta={modpackMeta}
-            showPackContent={showPackContent}
+            // Pendant l'installation, le contenu du pack est déplié d'office :
+            // c'est là qu'on voit les mods se ranger un à un. Le réglage de la
+            // personne reprend la main dès que c'est fini.
+            showPackContent={showPackContent || packInstallingHere}
             loading={loadingMods}
             error={modsError}
             isPlugin={isPlugin}
