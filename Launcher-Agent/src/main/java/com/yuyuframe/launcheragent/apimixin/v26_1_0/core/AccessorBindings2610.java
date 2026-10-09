@@ -115,6 +115,14 @@ public final class AccessorBindings2610 {
             com.mojang.authlib.GameProfile profile = ((net.minecraft.world.entity.player.Player) p).getGameProfile();
             return profile == null ? null : new Object[]{ profile.id(), profile.name() };
         });
+        AccessorRegistry.bind(AccessPoint.CLIENT_SET_ACCOUNT, (r, a) -> {
+            MinecraftAccessor2610 m = mc(r);
+            if (m == null || a.length < 4 || !(a[0] instanceof String) || !(a[1] instanceof java.util.UUID) || !(a[2] instanceof String)) {
+                return "Jeu indisponible";
+            }
+            return com.yuyuframe.launcheragent.apimixin.v26_1_0.account.AccountSwitch2610.apply(
+                m, (String) a[0], (java.util.UUID) a[1], (String) a[2], Boolean.TRUE.equals(a[3]));
+        });
         AccessorRegistry.bind(AccessPoint.CLIENT_USERNAME, (r, a) -> {
             MinecraftAccessor2610 m = mc(r);
             net.minecraft.client.User u = m == null ? null : m.la$user();

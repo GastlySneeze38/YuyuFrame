@@ -221,42 +221,107 @@ mod pipe {
         /// sur la poignée rendue pour un arrêt immédiat).
         pub fn serve(self, game_pid: Option<u32>, ctx: Context) -> tokio::task::JoinHandle<()> {
             tokio::spawn(async move {
-                let mut server = self.server;
-                // N'importe quel programme de la session peut tenter d'ouvrir
-                // le tube : seul le jeu est écouté.
-                loop {
-                    if let Err(e) = server.connect().await {
-                        tracing::warn!("canal du jeu : attente de connexion interrompue : {e}");
-                        return;
-                    }
-                    match (client_pid(&server), game_pid) {
-                        (Some(client), Some(game)) if client != game => {
-                            tracing::warn!("canal du jeu : connexion d'un autre processus ({client}) refusée");
-                            if server.disconnect().is_err() {
-                                return;
-                            }
-                        }
-                        _ => break,
-                    }
-                }
-                let (reader, mut writer) = tokio::io::split(&mut server);
-                let mut lines = BufReader::new(reader).lines();
-                loop {
-                    let question = match lines.next_line().await {
-                        Ok(Some(line)) => line,
-                        // Tube fermé : le jeu s'est arrêté.
-                        _ => return,
-                    };
-                    let mut reply = match question.len() <= MAX_QUESTION {
-                        true => answer(&ctx, &question).await,
-                        false => super::error("Question trop longue"),
-                    };
-                    reply.push('\n');
-                    if writer.write_all(reply.as_bytes()).await.is_err() || writer.flush().await.is_err() {
-                        return;
-                    }
-                }
+                let ctx = &ctx;
+                self.run(game_pid, |question| async move { answer(ctx, &question).await }).await;
             })
+        }
+
+        /// Le tube sans le protocole : attend le jeu, puis une réponse par
+        /// question jusqu'à ce qu'il raccroche.
+        async fn run<F, Fut>(self, game_pid: Option<u32>, respond: F)
+        where
+            F: Fn(String) -> Fut,
+            Fut: std::future::Future<Output = String>,
+        {
+            let mut server = self.server;
+            // N'importe quel programme de la session peut tenter d'ouvrir
+            // le tube : seul le jeu est écouté.
+            loop {
+                if let Err(e) = server.connect().await {
+                    tracing::warn!("canal du jeu : attente de connexion interrompue : {e}");
+                    return;
+                }
+                match (client_pid(&server), game_pid) {
+                    (Some(client), Some(game)) if client != game => {
+                        tracing::warn!("canal du jeu : connexion d'un autre processus ({client}) refusée");
+                        if server.disconnect().is_err() {
+                            return;
+                        }
+                    }
+                    _ => break,
+                }
+            }
+            let (reader, mut writer) = tokio::io::split(&mut server);
+            let mut lines = BufReader::new(reader).lines();
+            loop {
+                let question = match lines.next_line().await {
+                    Ok(Some(line)) => line,
+                    // Tube fermé : le jeu s'est arrêté.
+                    _ => return,
+                };
+                let mut reply = match question.len() <= MAX_QUESTION {
+                    true => respond(question).await,
+                    false => super::error("Question trop longue"),
+                };
+                reply.push('\n');
+                if writer.write_all(reply.as_bytes()).await.is_err() || writer.flush().await.is_err() {
+                    return;
+                }
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use std::io::{BufRead, BufReader, Write};
+
+        use super::*;
+
+        /// Le jeu, tel que `content_core.dll` s'y prend : un fichier ordinaire
+        /// ouvert en lecture-écriture, une ligne écrite, une ligne lue.
+        fn ask(pipe: &mut std::fs::File, question: &str) -> std::io::Result<String> {
+            pipe.write_all(format!("{question}\n").as_bytes())?;
+            let mut reply = String::new();
+            BufReader::new(pipe.try_clone()?).read_line(&mut reply)?;
+            Ok(reply.trim_end().to_string())
+        }
+
+        #[tokio::test(flavor = "multi_thread")]
+        async fn le_jeu_pose_ses_questions_et_recoit_ses_reponses() {
+            let link = open().expect("tube créé");
+            let name = link.name().to_string();
+            // Le « jeu » est ce processus-ci : son identifiant est celui qu'on attend.
+            let server = tokio::spawn(link.run(Some(std::process::id()), |question| async move { format!("echo\t{question}") }));
+            let replies = tokio::task::spawn_blocking(move || {
+                let mut pipe = std::fs::OpenOptions::new().read(true).write(true).open(&name).expect("tube ouvert");
+                let first = ask(&mut pipe, "accounts").unwrap();
+                let second = ask(&mut pipe, "switch\tabc").unwrap();
+                let long = ask(&mut pipe, &"x".repeat(MAX_QUESTION + 1)).unwrap();
+                (first, second, long)
+            })
+            .await
+            .unwrap();
+            assert_eq!(replies.0, "echo\taccounts");
+            assert_eq!(replies.1, "echo\tswitch\tabc");
+            assert_eq!(replies.2, "error\tQuestion trop longue");
+            // Le jeu a fermé le tube : le service s'arrête de lui-même.
+            server.await.unwrap();
+        }
+
+        #[tokio::test(flavor = "multi_thread")]
+        async fn un_autre_processus_est_renvoye() {
+            let link = open().expect("tube créé");
+            let name = link.name().to_string();
+            // On attend un jeu dont l'identifiant n'est pas le nôtre : notre connexion doit être refusée.
+            let server = tokio::spawn(link.run(Some(std::process::id().wrapping_add(1)), |q| async move { q }));
+            let refused = tokio::task::spawn_blocking(move || {
+                let mut pipe = std::fs::OpenOptions::new().read(true).write(true).open(&name).expect("tube ouvert");
+                ask(&mut pipe, "accounts")
+            })
+            .await
+            .unwrap();
+            assert!(!matches!(refused.as_deref(), Ok("accounts")), "aucune réponse pour un intrus");
+            server.abort();
         }
     }
 }

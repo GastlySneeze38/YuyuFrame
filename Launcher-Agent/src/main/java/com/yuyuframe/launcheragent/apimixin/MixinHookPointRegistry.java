@@ -846,6 +846,8 @@ public final class MixinHookPointRegistry {
         always("1.8.9", "v1_8_9.core.GlobalUiRenderMixin189");
         // Accessors des trois seuls champs privés que lit AccessorBindings189.
         always("1.8.9", "v1_8_9.core.HungerManagerAccessor189");
+        // Le compte du jeu, pour le changer en cours de route (CLIENT_SET_ACCOUNT).
+        always("1.8.9", "v1_8_9.core.MinecraftClientAccessor189");
         always("1.8.9", "v1_8_9.chat.ChatHudAccessor189");
         always("1.8.9", "v1_8_9.item.FoodItemAccessor189");
 

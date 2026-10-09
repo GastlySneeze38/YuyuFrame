@@ -266,6 +266,22 @@ public final class AccessorBindings189 {
             com.mojang.authlib.GameProfile profile = ((PlayerEntity) p).getGameProfile();
             return profile == null ? null : new Object[]{ profile.getId(), profile.getName() };
         });
+        AccessorRegistry.bind(AccessPoint.CLIENT_SET_ACCOUNT, (r, a) -> {
+            Object c = mc(r);
+            if (!(c instanceof MinecraftClientAccessor189) || a.length < 4 || !(a[0] instanceof String)
+                || !(a[1] instanceof java.util.UUID) || !(a[2] instanceof String)) {
+                return "Jeu indisponible";
+            }
+            try {
+                // Cette version écrit l'UUID sans tirets, et distingue un compte Mojang d'un compte « legacy » (hors ligne).
+                String id = a[1].toString().replace("-", "");
+                String kind = Boolean.TRUE.equals(a[3]) ? "legacy" : "mojang";
+                ((MinecraftClientAccessor189) c).la$setSession(new Session((String) a[0], id, (String) a[2], kind));
+                return null;
+            } catch (Throwable error) {
+                return String.valueOf(error);
+            }
+        });
         AccessorRegistry.bind(AccessPoint.CLIENT_USERNAME, (r, a) -> {
             MinecraftClient c = mc(r);
             Session s = c == null ? null : c.getSession();

@@ -116,6 +116,23 @@ public enum AccessPoint {
      * pour être reconnu par eux (voir {@code runtime/presence/PresenceContext}).
      */
     CLIENT_PLAYER_PROFILE,
+    /**
+     * Remplace le compte Minecraft du jeu en cours de route. Arguments :
+     * {@code String pseudo, java.util.UUID uuid, String jeton, Boolean horsLigne}.
+     * Rend {@code null} si c'est fait, sinon un message d'erreur lisible.
+     *
+     * <p>Ce n'est pas qu'un champ à changer. Sur les versions récentes, le
+     * jeu a fabriqué au démarrage, à partir du compte, d'autres objets qu'il
+     * faut refaire avec lui — sans quoi le compte a l'air changé et se fait
+     * refuser par les serveurs : le service du compte, les clés de signature
+     * du chat, et le profil (pseudo et skin en solo). En 1.8.9, la session
+     * suffit.
+     *
+     * <p>À n'appeler que HORS d'un monde : une fois connecté, l'identité est
+     * liée à la connexion. La liaison peut interroger le réseau (26.3) : pas
+     * sur le fil du jeu.
+     */
+    CLIENT_SET_ACCOUNT,
 
     // ── Options (net.minecraft.client.Options) ─────────────────────────────
     /** Poignée d'option du champ de vision — champ {@code fov}. */

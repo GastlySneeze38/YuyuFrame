@@ -24,4 +24,26 @@ public interface MinecraftClientAccessor1211 {
 
     @Accessor("currentFps")
     static int la$fps() { throw new AssertionError("MinecraftClientAccessor1211 non tissé"); }
+
+    // ── Changement de compte en jeu (voir AccountSwitch1211) ───────────────
+    // Quatre champs privés « final » que le jeu remplit une fois au démarrage,
+    // à partir du compte : @Mutable lève le « final » au tissage. Chacun a son
+    // entrée dans LauncherMixinService.REFMAP_ENTRIES ; aucun n'a d'homonyme
+    // de même type à la casse près dans le jar (javap : W, av, aI, J).
+
+    @org.spongepowered.asm.mixin.Mutable
+    @Accessor("session")
+    void la$setSession(net.minecraft.client.session.Session session);
+
+    @org.spongepowered.asm.mixin.Mutable
+    @Accessor("userApiService")
+    void la$setUserApiService(com.mojang.authlib.minecraft.UserApiService service);
+
+    @org.spongepowered.asm.mixin.Mutable
+    @Accessor("profileKeys")
+    void la$setProfileKeys(net.minecraft.client.session.ProfileKeys keys);
+
+    @org.spongepowered.asm.mixin.Mutable
+    @Accessor("gameProfileFuture")
+    void la$setGameProfileFuture(java.util.concurrent.CompletableFuture future);
 }

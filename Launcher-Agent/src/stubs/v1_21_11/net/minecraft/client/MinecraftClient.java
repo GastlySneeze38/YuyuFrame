@@ -38,7 +38,15 @@ public class MinecraftClient {
 
     public final Mouse mouse = null;
 
+    /** {@code field_1697}, public final en jeu — le dossier de l'instance, où le jeu garde les clés de chat. */
+    public final java.io.File runDirectory = null;
+
     private MinecraftClient() {
+    }
+
+    /** {@code method_73361} — les services de Mojang du jeu (service de session…). */
+    public net.minecraft.util.ApiServices getApiServices() {
+        throw new UnsupportedOperationException("stub compile-only");
     }
 
     public static MinecraftClient getInstance() {

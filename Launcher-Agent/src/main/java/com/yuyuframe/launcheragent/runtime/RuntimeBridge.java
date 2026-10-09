@@ -75,6 +75,8 @@ public final class RuntimeBridge implements AgentBridge {
         // Hors des modules : être reconnu par les autres joueurs ne dépend pas
         // de ce que l'on affiche chez soi (module Joueur allumé ou non).
         com.yuyuframe.launcheragent.runtime.presence.PresenceContext.tick();
+        // Réponses du launcher aux demandes de la liste déroulante des comptes.
+        com.yuyuframe.launcheragent.runtime.account.GameAccounts.tick();
     }
 
     @Override

@@ -123,4 +123,31 @@ public interface MinecraftAccessor262 {
      */
     @Accessor("gameRenderer")
     GameRenderer la$gameRenderer();
+
+    // ── Changement de compte en jeu (voir AccountSwitch262) ────────────────
+    // Quatre champs « final » que le jeu remplit une fois au démarrage, à
+    // partir du compte : @Mutable lève le « final » au tissage.
+
+    @org.spongepowered.asm.mixin.Mutable
+    @Accessor("user")
+    void la$setUser(net.minecraft.client.User user);
+
+    @org.spongepowered.asm.mixin.Mutable
+    @Accessor("userApiService")
+    void la$setUserApiService(com.mojang.authlib.minecraft.UserApiService service);
+
+    @org.spongepowered.asm.mixin.Mutable
+    @Accessor("profileKeyPairManager")
+    void la$setProfileKeyPairManager(net.minecraft.client.multiplayer.ProfileKeyPairManager manager);
+
+    /** Type brut : le paramètre de type ({@code ProfileResult}) change de paquet en 26.3, pas le descripteur du champ. */
+    @org.spongepowered.asm.mixin.Mutable
+    @Accessor("profileFuture")
+    void la$setProfileFuture(java.util.concurrent.CompletableFuture future);
+
+    @Accessor("gameDirectory")
+    java.io.File la$gameDirectory();
+
+    @Accessor("services")
+    net.minecraft.server.Services la$services();
 }

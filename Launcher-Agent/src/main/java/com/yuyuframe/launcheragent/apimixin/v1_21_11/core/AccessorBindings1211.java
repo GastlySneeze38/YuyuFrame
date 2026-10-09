@@ -213,6 +213,14 @@ public final class AccessorBindings1211 {
             com.mojang.authlib.GameProfile profile = ((PlayerEntity) p).getGameProfile();
             return profile == null ? null : new Object[]{ profile.id(), profile.name() };
         });
+        AccessorRegistry.bind(AccessPoint.CLIENT_SET_ACCOUNT, (r, a) -> {
+            MinecraftClient c = mc(r);
+            if (c == null || a.length < 4 || !(a[0] instanceof String) || !(a[1] instanceof java.util.UUID) || !(a[2] instanceof String)) {
+                return "Jeu indisponible";
+            }
+            return com.yuyuframe.launcheragent.apimixin.v1_21_11.account.AccountSwitch1211.apply(
+                c, (String) a[0], (java.util.UUID) a[1], (String) a[2], Boolean.TRUE.equals(a[3]));
+        });
         AccessorRegistry.bind(AccessPoint.CLIENT_USERNAME, (r, a) -> {
             MinecraftClient c = mc(r);
             Session s = c == null ? null : c.getSession();

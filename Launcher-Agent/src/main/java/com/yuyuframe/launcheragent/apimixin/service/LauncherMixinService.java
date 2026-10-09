@@ -245,6 +245,16 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
         // typé (AccessorBindings1211).
         RefmapEntry.field("com/yuyuframe/launcheragent/apimixin/v1_21_11/core/MinecraftClientAccessor1211",
             "net/minecraft/client/MinecraftClient", "currentFps"),
+        // Changement de compte en jeu : les quatre champs que le jeu remplit
+        // au démarrage à partir du compte (voir AccountSwitch1211).
+        RefmapEntry.field("com/yuyuframe/launcheragent/apimixin/v1_21_11/core/MinecraftClientAccessor1211",
+            "net/minecraft/client/MinecraftClient", "session"),
+        RefmapEntry.field("com/yuyuframe/launcheragent/apimixin/v1_21_11/core/MinecraftClientAccessor1211",
+            "net/minecraft/client/MinecraftClient", "userApiService"),
+        RefmapEntry.field("com/yuyuframe/launcheragent/apimixin/v1_21_11/core/MinecraftClientAccessor1211",
+            "net/minecraft/client/MinecraftClient", "profileKeys"),
+        RefmapEntry.field("com/yuyuframe/launcheragent/apimixin/v1_21_11/core/MinecraftClientAccessor1211",
+            "net/minecraft/client/MinecraftClient", "gameProfileFuture"),
         RefmapEntry.field("com/yuyuframe/launcheragent/apimixin/v1_21_11/core/HungerManagerAccessor1211",
             "net/minecraft/entity/player/HungerManager", "exhaustion"),
         // Troisième champ privé : l'historique du chat. addMessage() et
@@ -623,6 +633,9 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
         // reste passe par du code typé (AccessorBindings189).
         RefmapEntry.field(M189 + "core/HungerManagerAccessor189",
             "net/minecraft/entity/player/HungerManager", "exhaustion"),
+        // Le compte du jeu, pour le changer en cours de route.
+        RefmapEntry.field(M189 + "core/MinecraftClientAccessor189",
+            "net/minecraft/client/MinecraftClient", "session"),
         RefmapEntry.field(M189 + "chat/ChatHudAccessor189",
             "net/minecraft/client/gui/hud/ChatHud", "messages"),
         RefmapEntry.field(M189 + "item/FoodItemAccessor189",

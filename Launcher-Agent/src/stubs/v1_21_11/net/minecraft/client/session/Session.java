@@ -11,7 +11,9 @@ package net.minecraft.client.session;
  */
 public class Session {
 
-    private Session() {
+    /** Signature relevée dans les mappings ({@code class_320.<init>}) — sert au changement de compte en jeu. */
+    public Session(String username, java.util.UUID uuid, String accessToken,
+                   java.util.Optional<String> xuid, java.util.Optional<String> clientId) {
     }
 
     /** Pendant de {@code User.getName()} en 26.1.2 — sert {@code CLIENT_USERNAME}. */
