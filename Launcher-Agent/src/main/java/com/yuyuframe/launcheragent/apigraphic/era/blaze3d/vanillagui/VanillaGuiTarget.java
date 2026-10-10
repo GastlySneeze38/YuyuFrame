@@ -208,7 +208,7 @@ public final class VanillaGuiTarget {
      * @return {@code true} si la chaîne est prête — sinon l'appelant doit
      *         retomber sur un fond plein.
      */
-    public static boolean beginGlassFrame(int passes, int vpWidth, int vpHeight) {
+    public static boolean beginGlassFrame(int passes, int vpWidth, int vpHeight, float[][] regions) {
         if (context == null) return false;
         // Pas de composite de verre sur cette version : ne pas payer la chaîne
         // de flou (plusieurs passes plein écran) pour un résultat jamais dessiné.
@@ -220,12 +220,15 @@ public final class VanillaGuiTarget {
         // L'ancien garde (HudPanelRenderer) déduisait « nouvelle frame » de la
         // TAILLE de la file Blaze3D. Il ne tient plus ici : le HUD n'alimente
         // plus cette file, elle reste vide, et le garde laissait tout passer.
-        if (glassChainDone) return true;
-        glassChainDone = Blaze3DBlur.renderChainNow(passes, vpWidth, vpHeight);
+        // Une chaîne par zones (le HUD) ne vaut pas pour qui demande tout
+        // l'écran ensuite dans la même passe : celui-là la refait en entier.
+        if (glassChainDone && (regions != null || !glassChainRegional)) return true;
+        glassChainDone = Blaze3DBlur.renderChainNow(passes, vpWidth, vpHeight, regions);
+        glassChainRegional = regions != null;
         return glassChainDone;
     }
 
-    private static boolean glassChainDone;
+    private static boolean glassChainDone, glassChainRegional;
 
     /**
      * Panneau de verre, rayons dans l'ordre du MOTEUR (bas-gauche, bas-droit,

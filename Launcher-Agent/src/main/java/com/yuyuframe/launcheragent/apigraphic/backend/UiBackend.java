@@ -94,7 +94,19 @@ public interface UiBackend {
     default boolean glassAvailable() { return false; }
 
     /** Ouvre la chaîne de flou partagée de la frame. */
-    default boolean beginGlassFrame(int passes, int vpWidth, int vpHeight) { return false; }
+    default boolean beginGlassFrame(int passes, int vpWidth, int vpHeight) {
+        return beginGlassFrame(passes, vpWidth, vpHeight, null);
+    }
+
+    /**
+     * Ouvre la chaîne de flou de la frame.
+     *
+     * @param regions {@code null} = tout l'écran. Sinon les seuls rectangles
+     *        {@code {x1, y1, x2, y2}} (pixels de fenêtre, y vers le haut) où
+     *        des panneaux de verre seront posés : le flou n'est calculé que là,
+     *        et à chaque image. Un panneau posé AILLEURS lirait du vide.
+     */
+    default boolean beginGlassFrame(int passes, int vpWidth, int vpHeight, float[][] regions) { return false; }
 
     /**
      * Panneau de verre.

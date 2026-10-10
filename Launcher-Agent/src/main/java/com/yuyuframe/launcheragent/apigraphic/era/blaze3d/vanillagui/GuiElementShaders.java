@@ -244,6 +244,15 @@ public final class GuiElementShaders {
      */
     public static final float GLASS_TINT_STRENGTH = 0.35f;
 
+    /**
+     * Combien de fois la texture floutée est plus petite que la fenêtre, par
+     * côté. Doit valoir {@code 2^(Blaze3DBlur.COMPOSITE_LEVEL + 1)} — le quart
+     * d'écran, donc 4 ; {@code Blaze3DBlur} le vérifie à son chargement.
+     * L'arrondi des tailles de niveaux laisse un écart de quelques pixels au
+     * plus sur toute la largeur de l'écran, invisible sur une image floue.
+     */
+    public static final int GLASS_BLUR_DOWNSCALE = 4;
+
     public static final String GLASS_VERTEX =
         "#version 330\n" +
         "layout(std140) uniform DynamicTransforms {\n" +
@@ -288,10 +297,16 @@ public final class GuiElementShaders {
         "flat in vec4 radii;\n" +
         "out vec4 fragColor;\n" +
         "void main() {\n" +
-        // Coordonnée d'échantillonnage déduite du fragment : gl_FragCoord est
-        // en pixels de fenêtre, textureSize donne la taille de la texture
-        // floutée. Pas d'attribut ni d'uniforme à ajouter pour ça.
-        "    vec2 uv = gl_FragCoord.xy / vec2(textureSize(Sampler0, 0));\n" +
+        // Coordonnée d'échantillonnage déduite du fragment, sans attribut ni
+        // uniforme : gl_FragCoord est en pixels de FENÊTRE, et la texture
+        // floutée couvre toute la fenêtre à une fraction de sa résolution.
+        //
+        // BUG CORRIGÉ (2026-10-10, « souvent un flou sur du noir ») : la
+        // division se faisait par la taille de la texture SEULE. Or cette
+        // texture est le quart d'écran : la coordonnée valait donc quatre fois
+        // trop, et tout panneau hors du seizième bas-gauche de l'écran lisait
+        // hors de l'image — le bord étiré, pas ce qu'il y a derrière lui.
+        "    vec2 uv = gl_FragCoord.xy / (vec2(textureSize(Sampler0, 0)) * " + GLASS_BLUR_DOWNSCALE + ".0);\n" +
         "    vec3 blurred = texture(Sampler0, uv).rgb;\n" +
         "    float radius = (localPos.y < 0.0)\n" +
         "        ? ((localPos.x < 0.0) ? radii.x : radii.y)\n" +

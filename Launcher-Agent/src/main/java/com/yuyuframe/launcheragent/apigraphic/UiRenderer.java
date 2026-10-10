@@ -612,6 +612,16 @@ public final class UiRenderer {
     public static volatile FrameBackdrop frameBackdrop;
     private static boolean backdropErrorLogged;
 
+    /**
+     * La chaîne de flou des panneaux de HUD, limitée aux rectangles donnés
+     * ({@code {x1, y1, x2, y2}}, pixels de fenêtre) et recalculée à chaque
+     * image — voir {@code UiBackend.beginGlassFrame}. Pas de faux monde ici :
+     * il n'habille que le fond de NOS écrans.
+     */
+    public void beginGlassFrame(int passes, int vpWidth, int vpHeight, float[][] regions) {
+        backend().beginGlassFrame(passes, vpWidth, vpHeight, regions);
+    }
+
     public void beginGlassFrame(int passes, int vpWidth, int vpHeight) {
         FrameBackdrop backdrop = frameBackdrop;
         if (backdrop != null) {

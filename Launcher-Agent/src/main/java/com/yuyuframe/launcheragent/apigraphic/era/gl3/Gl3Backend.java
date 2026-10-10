@@ -188,8 +188,8 @@ public final class Gl3Backend implements UiBackend {
     }
 
     @Override
-    public boolean beginGlassFrame(int passes, int vpWidth, int vpHeight) {
-        return blur != null && blur.beginFrame(passes, vpWidth, vpHeight);
+    public boolean beginGlassFrame(int passes, int vpWidth, int vpHeight, float[][] regions) {
+        return blur != null && blur.beginFrame(passes, vpWidth, vpHeight, regions);
     }
 
     /**

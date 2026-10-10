@@ -45,7 +45,21 @@ public final class HudRenderer {
         // Une seule chaîne de flou pour TOUS les panneaux de cette frame (sans
         // effet si l'option "Fond flouté (HUD)" est désactivée) — voir
         // HudPanelRenderer#ensureGlassChain.
-        HudPanelRenderer.ensureGlassChain(renderer, vpWidth, vpHeight);
+        // Avec le verre, les rectangles des panneaux sont relevés AVANT : le
+        // flou n'est calculé que derrière eux. Leur taille est donc remesurée
+        // ici, et pas une seconde fois dans la boucle de dessin.
+        boolean glass = HudPanelRenderer.usesGlass(renderer);
+        if (glass) {
+            java.util.List<float[]> regions = new java.util.ArrayList<>();
+            for (HudElement element : HudRegistry.elements()) {
+                if (!globalShow && !element.showWhenScreenOpen) continue;
+                element.refreshSize();
+                float x = element.screenX(vpWidth), y = element.screenY(vpHeight);
+                regions.add(new float[]{ x, y, x + element.w, y + element.h });
+            }
+            if (regions.isEmpty()) glass = false;
+            else HudPanelRenderer.ensureGlassChain(renderer, vpWidth, vpHeight, regions.toArray(new float[0][]));
+        }
         // Tout le texte du HUD en UNE passe par police au lieu d'une par
         // chaîne — voir UiRenderer.beginTextBatch. L'ordre Z convient ici : le
         // texte se retrouve au-dessus de TOUS les fonds de panneaux, ce qui est
@@ -58,7 +72,7 @@ public final class HudRenderer {
             // (FPS/Ping) doit être remesuré à CHAQUE frame, pas une seule fois
             // à la construction — sinon la boîte reste figée sur le texte de
             // repli initial pendant que le vrai texte affiché change de largeur.
-            element.refreshSize();
+            if (!glass) element.refreshSize();
             float x = element.screenX(vpWidth);
             float y = element.screenY(vpHeight);
             HudPanelRenderer.draw(renderer, element, x, y, element.w, element.h, vpWidth, vpHeight);

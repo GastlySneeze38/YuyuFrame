@@ -262,6 +262,37 @@ public final class Blaze3DBlur {
      * <p>Remettre à {@code 0} restaure exactement le rendu d'avant.
      */
     private static final int COMPOSITE_LEVEL = 1;
+
+    static {
+        // Le composite de la voie « état de GUI vanilla » retrouve la taille de
+        // la fenêtre à partir de celle de cette texture : les deux constantes
+        // doivent bouger ensemble, sinon ses panneaux lisent à côté.
+        int downscale = 1 << (COMPOSITE_LEVEL + 1);
+        if (downscale != com.yuyuframe.launcheragent.apigraphic.era.blaze3d.vanillagui.GuiElementShaders.GLASS_BLUR_DOWNSCALE) {
+            LauncherLog.err("[UiRenderer] Blaze3DBlur: COMPOSITE_LEVEL (réduction ×" + downscale
+                + ") ne correspond plus à GuiElementShaders.GLASS_BLUR_DOWNSCALE — verre du HUD décalé");
+        }
+    }
+
+    /**
+     * Premier niveau RÉELLEMENT écrit : le quart d'écran. Le demi-écran
+     * (niveau 0) n'existe plus (2026-10-10).
+     *
+     * <p>C'était la passe la plus chère de la chaîne — un quart des pixels de
+     * l'écran, cinq prélèvements chacun, plus de la moitié du coût total —
+     * pour un niveau que personne ne lit : le composite échantillonne le quart
+     * d'écran. La première descente va donc droit de l'écran au quart, avec le
+     * MÊME filtre dont le pas est doublé : ses quatre prélèvements diagonaux
+     * tombent alors chacun au coin de quatre texels de l'écran, et couvrent
+     * ensemble les 4 × 4 texels sous le pixel écrit, sans trou. C'est le
+     * principe des descentes « boîte à prélèvements bilinéaires » des chaînes
+     * de flou des moteurs de jeu (Jimenez, SIGGRAPH 2014).
+     */
+    private static final int FIRST_LEVEL = 1;
+
+    /** Au-delà de ce nombre de zones, on ne découpe plus : autant flouter tout l'écran. */
+    private static final int MAX_REGIONS = 32;
+
     private static Object[] levelTexture = new Object[LEVELS];
     private static Object[] levelView = new Object[LEVELS];
     private static int[] levelW = new int[LEVELS], levelH = new int[LEVELS];
@@ -269,7 +300,7 @@ public final class Blaze3DBlur {
     private static Object linearSampler;
 
     private static void ensureChain(Object device, int vpWidth, int vpHeight) throws Exception {
-        if (chainVpWidth == vpWidth && chainVpHeight == vpHeight && levelTexture[0] != null) return;
+        if (chainVpWidth == vpWidth && chainVpHeight == vpHeight && levelTexture[COMPOSITE_LEVEL] != null) return;
         for (int i = 0; i < LEVELS; i++) {
             if (levelTexture[i] != null) {
                 // Journalisé, jamais avalé : une fermeture qui échoue n'empêche
@@ -290,6 +321,7 @@ public final class Blaze3DBlur {
             h = Math.max(1, h / 2);
             levelW[i] = w;
             levelH[i] = h;
+            if (i < FIRST_LEVEL) continue; // jamais écrit ni lu : pas de texture
             levelTexture[i] = gpu.createTexture(device, "yuyuframe_blur_level_" + i, usage, w, h, 1);
             levelView[i] = gpu.createTextureView(device, levelTexture[i]);
         }
@@ -301,18 +333,55 @@ public final class Blaze3DBlur {
         LauncherLog.ui(1, "[UiRenderer] Blaze3DBlur: chaîne de flou (re)créée, " + vpWidth + "x" + vpHeight + " -> " + LEVELS + " niveaux");
     }
 
-    /** Dessine un quad plein écran-destination échantillonnant {@code srcView} avec le pipeline {@code pipeline}, écrit dans {@code dstView}. */
+    /**
+     * Une passe de {@code srcView} vers {@code dstView}, avec le pipeline donné.
+     *
+     * @param texelScale pas du filtre, en texels de la source — 1 partout, 2
+     *                   pour la descente qui saute le demi-écran (voir {@link #FIRST_LEVEL})
+     * @param regions    {@code null} = tout le niveau ; sinon seuls ces
+     *                   rectangles sont écrits (voir {@link #renderBlurChain})
+     */
     private static void drawBlurPass(Object device, Object encoder, Object pipeline, Object shaderSource,
-                                      Object srcView, Object srcSampler, int srcW, int srcH,
-                                      Object dstView, int dstW, int dstH, String debugLabel) throws Exception {
+                                      Object srcView, Object srcSampler, int srcW, int srcH, float texelScale,
+                                      Object dstView, int dstW, int dstH,
+                                      float[][] regions, float marginPx, int vpWidth, int vpHeight,
+                                      String debugLabel) throws Exception {
         currentStage = "drawBlurPass(" + debugLabel + ")/vertices";
-        ByteBuffer verts = ensureStagingBuffer(4 * 28);
         int rgba = 0xFFFFFFFF;
         short light0 = 0, light1 = 0;
-        putVertexPCTL(verts, 0f, (float) dstH, rgba, 0f, 1f, light0, light1);
-        putVertexPCTL(verts, 0f, 0f, rgba, 0f, 0f, light0, light1);
-        putVertexPCTL(verts, (float) dstW, 0f, rgba, 1f, 0f, light0, light1);
-        putVertexPCTL(verts, (float) dstW, (float) dstH, rgba, 1f, 1f, light0, light1);
+        int quads = 0;
+        ByteBuffer verts;
+        if (regions == null) {
+            verts = ensureStagingBuffer(4 * 28);
+            putVertexPCTL(verts, 0f, (float) dstH, rgba, 0f, 1f, light0, light1);
+            putVertexPCTL(verts, 0f, 0f, rgba, 0f, 0f, light0, light1);
+            putVertexPCTL(verts, (float) dstW, 0f, rgba, 1f, 0f, light0, light1);
+            putVertexPCTL(verts, (float) dstW, (float) dstH, rgba, 1f, 1f, light0, light1);
+            quads = 1;
+        } else {
+            // Un quad par zone, dans le repère du niveau : mêmes coordonnées de
+            // texture qu'un quad plein cadre aurait à cet endroit, donc le
+            // résultat y est identique au pixel près — seul le reste du niveau
+            // n'est pas écrit.
+            verts = ensureStagingBuffer(regions.length * 4 * 28);
+            for (float[] r : regions) {
+                float x0 = (float) Math.floor((Math.min(r[0], r[2]) - marginPx) / vpWidth * dstW);
+                float x1 = (float) Math.ceil((Math.max(r[0], r[2]) + marginPx) / vpWidth * dstW);
+                float y0 = (float) Math.floor((Math.min(r[1], r[3]) - marginPx) / vpHeight * dstH);
+                float y1 = (float) Math.ceil((Math.max(r[1], r[3]) + marginPx) / vpHeight * dstH);
+                x0 = Math.max(0f, x0);
+                y0 = Math.max(0f, y0);
+                x1 = Math.min(dstW, x1);
+                y1 = Math.min(dstH, y1);
+                if (x1 <= x0 || y1 <= y0) continue;
+                putVertexPCTL(verts, x0, y1, rgba, x0 / dstW, y1 / dstH, light0, light1);
+                putVertexPCTL(verts, x0, y0, rgba, x0 / dstW, y0 / dstH, light0, light1);
+                putVertexPCTL(verts, x1, y0, rgba, x1 / dstW, y0 / dstH, light0, light1);
+                putVertexPCTL(verts, x1, y1, rgba, x1 / dstW, y1 / dstH, light0, light1);
+                quads++;
+            }
+            if (quads == 0) return;
+        }
         verts.flip();
 
         currentStage = "drawBlurPass(" + debugLabel + ")/vertexBuffer";
@@ -324,7 +393,7 @@ public final class Blaze3DBlur {
         Object projectionSlice = gpu.slice(projectionBuf, 0L, 64L);
 
         currentStage = "drawBlurPass(" + debugLabel + ")/params";
-        Object blurParamsSlice = writeBlurParams(device, encoder, 1f / srcW, 1f / srcH);
+        Object blurParamsSlice = writeBlurParams(device, encoder, texelScale / srcW, texelScale / srcH);
 
         currentStage = "drawBlurPass(" + debugLabel + ")/renderPass";
         Object pass = gpu.openPass(encoder, "yuyuframe_blur_" + debugLabel, dstView);
@@ -337,7 +406,7 @@ public final class Blaze3DBlur {
             gpu.setUniform(pass, "BlurParams", blurParamsSlice);
             gpu.bindTexture(pass, "Sampler0", srcView, srcSampler);
             gpu.setVertexBuffer(pass, 0, vbo);
-            gpu.drawQuads(pass, 1);
+            gpu.drawQuads(pass, quads);
         } finally {
             gpu.closePass(pass);
         }
@@ -351,7 +420,30 @@ public final class Blaze3DBlur {
      * passes} borné à {@code [1, LEVELS]}.
      */
     private static boolean renderBlurChain(int vpWidth, int vpHeight, int passes) {
+        return renderBlurChain(vpWidth, vpHeight, passes, null);
+    }
+
+    /** La dernière chaîne ne couvrait que des zones : hors d'elles, les niveaux ne valent rien. */
+    private static boolean lastChainRegional;
+
+    /**
+     * @param regions {@code null} = tout l'écran. Sinon des rectangles
+     *        {@code {x1, y1, x2, y2}} en pixels de fenêtre (y vers le haut) :
+     *        le flou n'est calculé que là, élargi d'une marge.
+     *
+     *        <p>C'est ce que font les compositeurs de bureau derrière leurs
+     *        fenêtres (KWin, picom) : flouter tout l'écran pour six petits
+     *        panneaux de HUD, c'est payer cent fois la surface utile. Chaque
+     *        passe dessine un quad par zone au lieu d'un quad plein cadre ; à
+     *        l'intérieur d'une zone le résultat est celui de la chaîne
+     *        complète. La marge (trois texels du niveau le plus profond)
+     *        couvre la portée du filtre : sans elle, le bord d'une zone
+     *        tirerait vers lui ce qui traîne dans le reste du niveau, jamais
+     *        réécrit.
+     */
+    private static boolean renderBlurChain(int vpWidth, int vpHeight, int passes, float[][] regions) {
         try {
+            if (regions != null && (regions.length == 0 || regions.length > MAX_REGIONS)) regions = null;
             currentStage = "renderBlurChain/device";
             Object device = gpu.device();
             currentStage = "renderBlurChain/encoder";
@@ -363,13 +455,20 @@ public final class Blaze3DBlur {
             Object sourceView = gpu.mainColorView();
             if (sourceView == null) return false;
 
-            int p = Math.max(1, Math.min(passes, LEVELS));
+            // Niveau le plus profond : celui d'avant pour un même nombre
+            // d'étages (la force du flou ne change pas), jamais au-dessus du
+            // niveau que lit le composite.
+            int deepest = Math.max(COMPOSITE_LEVEL, Math.min(passes, LEVELS) - 1);
+            float marginPx = 3f * (1 << (deepest + 1));
 
             Object curView = sourceView;
             int curW = vpWidth, curH = vpHeight;
-            for (int i = 0; i < p; i++) {
+            for (int i = FIRST_LEVEL; i <= deepest; i++) {
+                // De l'écran droit au quart : pas du filtre doublé, voir FIRST_LEVEL.
+                float texelScale = i == FIRST_LEVEL ? (float) (1 << FIRST_LEVEL) : 1f;
                 drawBlurPass(device, encoder, downPipeline, downShaderSource,
-                    curView, linearSampler, curW, curH, levelView[i], levelW[i], levelH[i], "down" + i);
+                    curView, linearSampler, curW, curH, texelScale, levelView[i], levelW[i], levelH[i],
+                    regions, marginPx, vpWidth, vpHeight, "down" + i);
                 curView = levelView[i];
                 curW = levelW[i];
                 curH = levelH[i];
@@ -380,10 +479,12 @@ public final class Blaze3DBlur {
             // un gain nul — le composite rééchantillonne de toute façon en
             // bilinéaire, et sur une image aussi floue la différence entre un
             // quart et un demi d'écran ne se voit pas.
-            for (int i = p - 1; i > COMPOSITE_LEVEL; i--) {
+            for (int i = deepest; i > COMPOSITE_LEVEL; i--) {
                 drawBlurPass(device, encoder, upPipeline, upShaderSource,
-                    levelView[i], linearSampler, levelW[i], levelH[i], levelView[i - 1], levelW[i - 1], levelH[i - 1], "up" + i);
+                    levelView[i], linearSampler, levelW[i], levelH[i], 1f, levelView[i - 1], levelW[i - 1], levelH[i - 1],
+                    regions, marginPx, vpWidth, vpHeight, "up" + i);
             }
+            lastChainRegional = regions != null;
             return true;
         } catch (Throwable t) {
             if (failureLogCount < 5) {
@@ -451,9 +552,9 @@ public final class Blaze3DBlur {
      * #queueBlurredPanel} pour CE panneau-là : il recalcule la chaîne à son
      * propre tour dans la file, donc voit bien tout ce qui a été dessiné avant.
      */
-    public static void queueFrameChain(int passes, int vpWidth, int vpHeight) {
+    public static void queueFrameChain(int passes, int vpWidth, int vpHeight, float[][] regions) {
         if (!isAvailable()) return;
-        Blaze3DCore.enqueue(() -> renderFrameChain(passes, vpWidth, vpHeight));
+        Blaze3DCore.enqueue(() -> renderFrameChain(passes, vpWidth, vpHeight, regions));
     }
 
     /**
@@ -473,15 +574,19 @@ public final class Blaze3DBlur {
 
     private static int frameCounter;
 
-    private static boolean renderFrameChain(int passes, int vpWidth, int vpHeight) {
+    private static boolean renderFrameChain(int passes, int vpWidth, int vpHeight, float[][] regions) {
         if (!isAvailable() || !resolve()) return false;
+        // Par zones (le HUD en jeu) : recalculé à CHAQUE image. Le décor bouge
+        // derrière un HUD, et la chaîne n'y coûte presque plus rien.
+        if (regions != null) return renderBlurChain(vpWidth, vpHeight, passes, regions);
         // Réutilisation temporelle. Un changement de viewport force le recalcul :
         // les textures sont recréées, celles d'avant ne veulent plus rien dire.
+        // Une chaîne par zones aussi : elle ne couvrait pas l'écran.
         boolean viewportChanged = (vpWidth != chainVpWidth || vpHeight != chainVpHeight);
-        if (!viewportChanged && levelTexture[0] != null && RECOMPUTE_INTERVAL > 1) {
+        if (!viewportChanged && !lastChainRegional && levelTexture[COMPOSITE_LEVEL] != null && RECOMPUTE_INTERVAL > 1) {
             if ((++frameCounter % RECOMPUTE_INTERVAL) != 0) return true;
         }
-        return renderBlurChain(vpWidth, vpHeight, passes);
+        return renderBlurChain(vpWidth, vpHeight, passes, null);
     }
 
     /**
@@ -497,8 +602,8 @@ public final class Blaze3DBlur {
      * <p>Appelée depuis le hook d'extraction : la scène y est déjà rendue dans
      * le framebuffer principal, la source du flou est donc valide.
      */
-    public static boolean renderChainNow(int passes, int vpWidth, int vpHeight) {
-        return renderFrameChain(passes, vpWidth, vpHeight);
+    public static boolean renderChainNow(int passes, int vpWidth, int vpHeight, float[][] regions) {
+        return renderFrameChain(passes, vpWidth, vpHeight, regions);
     }
 
     /**

@@ -41,6 +41,15 @@ public final class Gl3Blur {
 
     private static final int LEVELS = 5;
     private static final int COMPOSITE_LEVEL = 1;
+    /**
+     * Premier niveau réellement écrit : le quart d'écran. Le demi-écran était
+     * la passe la plus chère pour un niveau que personne ne lit ; la première
+     * descente va droit de l'écran au quart, pas du filtre doublé — voir
+     * {@code Blaze3DBlur.FIRST_LEVEL}.
+     */
+    private static final int FIRST_LEVEL = 1;
+    /** Au-delà de ce nombre de zones, on ne découpe plus : autant flouter tout l'écran. */
+    private static final int MAX_REGIONS = 32;
     /** Étages utilisés quand un panneau doit calculer sa propre chaîne. */
     private static final int DEFAULT_PASSES = 4;
     /** Recalcul de la chaîne partagée une frame sur N — même valeur que Blaze3D. */
@@ -139,6 +148,8 @@ public final class Gl3Blur {
     /** Niveau lu par le composite, {@code -1} = aucune chaîne calculée. */
     private int resultLevel = -1;
     private long chainNanos;
+    /** La dernière chaîne ne couvrait que des zones : hors d'elles, les niveaux ne valent rien. */
+    private boolean chainRegional;
     private int frameCounter;
 
     private int downProgram = -1, upProgram = -1, compositeProgram = -1;
@@ -159,15 +170,21 @@ public final class Gl3Blur {
     }
 
     /** Chaîne partagée de la frame — voir la javadoc de classe. */
-    public boolean beginFrame(int passes, int vpWidth, int vpHeight) {
+    public boolean beginFrame(int passes, int vpWidth, int vpHeight, float[][] regions) {
         if (!ensurePrograms()) return false;
+        // Par zones (le HUD en jeu) : à CHAQUE image, le décor bouge derrière
+        // un HUD et la chaîne n'y coûte presque plus rien.
+        if (regions != null && regions.length > 0 && regions.length <= MAX_REGIONS) {
+            return computeChain(passes, vpWidth, vpHeight, regions);
+        }
         boolean sizeChanged = vpWidth != chainVpW || vpHeight != chainVpH;
-        if (!sizeChanged && resultLevel >= 0 && RECOMPUTE_INTERVAL > 1
+        // Une chaîne par zones ne couvrait pas l'écran : elle ne se réutilise pas.
+        if (!sizeChanged && !chainRegional && resultLevel >= 0 && RECOMPUTE_INTERVAL > 1
                 && (++frameCounter % RECOMPUTE_INTERVAL) != 0) {
             chainNanos = System.nanoTime();
             return true;
         }
-        return computeChain(passes, vpWidth, vpHeight);
+        return computeChain(passes, vpWidth, vpHeight, null);
     }
 
     /**
@@ -184,7 +201,7 @@ public final class Gl3Blur {
         if (!ensurePrograms()) return false;
         boolean usable = resultLevel >= 0 && chainVpW == vpWidth && chainVpH == vpHeight
             && System.nanoTime() - chainNanos < STALE_NANOS;
-        if (!usable && !computeChain(DEFAULT_PASSES, vpWidth, vpHeight)) return false;
+        if (!usable && !computeChain(DEFAULT_PASSES, vpWidth, vpHeight, null)) return false;
         return composite(x1, y1, x2, y2, r0, r1, r2, r3, tint, tintStrength, opacity, vpWidth, vpHeight);
     }
 
@@ -197,42 +214,54 @@ public final class Gl3Blur {
                                 float r0, float r1, float r2, float r3,
                                 int passes, UiColor tint, float tintStrength, int vpWidth, int vpHeight) {
         if (!ensurePrograms()) return false;
-        if (!computeChain(passes, vpWidth, vpHeight)) return false;
+        if (!computeChain(passes, vpWidth, vpHeight, null)) return false;
         return composite(x1, y1, x2, y2, r0, r1, r2, r3, tint, tintStrength, 1f, vpWidth, vpHeight);
     }
 
     // ── Chaîne ────────────────────────────────────────────────────────────
 
-    private boolean computeChain(int passes, int vpWidth, int vpHeight) {
-        int p = Math.max(1, Math.min(passes, LEVELS));
+    /**
+     * @param regions {@code null} = tout l'écran ; sinon le flou n'est calculé
+     *        que dans ces rectangles élargis d'une marge (trois texels du
+     *        niveau le plus profond, la portée du filtre). Même principe que
+     *        {@code Blaze3DBlur.renderBlurChain}, qui en donne le pourquoi.
+     */
+    private boolean computeChain(int passes, int vpWidth, int vpHeight, float[][] regions) {
+        // Niveau le plus profond : celui d'avant pour un même nombre d'étages,
+        // jamais au-dessus du niveau que lit le composite.
+        int deepest = Math.max(COMPOSITE_LEVEL, Math.min(passes, LEVELS) - 1);
+        float marginPx = 3f * (1 << (deepest + 1));
         offscreen.begin();
         try {
             // Copie du fond AVANT de toucher aux niveaux : leur (re)création lie
             // leurs framebuffers, et la copie lirait alors un niveau vide.
-            int source = backdrop.capture(vpWidth, vpHeight);
+            // Deux pixels de plus que la marge du flou : le filtre lit un peu au-delà de ce qu'il écrit.
+            int source = backdrop.capture(vpWidth, vpHeight, regions, marginPx + 4f);
             ensureLevels(vpWidth, vpHeight);
             int srcW = vpWidth, srcH = vpHeight;
             GL11.glDisable(GL11.GL_BLEND);
 
             GL20.glUseProgram(downProgram);
             GL20.glUniform1i(downSource, 0);
-            for (int i = 0; i < p; i++) {
-                renderInto(i, source, srcW, srcH, downProj, downTexel);
+            for (int i = FIRST_LEVEL; i <= deepest; i++) {
+                // De l'écran droit au quart : pas du filtre doublé, voir FIRST_LEVEL.
+                float texelScale = i == FIRST_LEVEL ? (float) (1 << FIRST_LEVEL) : 1f;
+                renderInto(i, source, srcW, srcH, texelScale, downProj, downTexel, regions, marginPx, vpWidth, vpHeight);
                 source = levelTex[i];
                 srcW = levelW[i];
                 srcH = levelH[i];
             }
 
-            int result = p - 1;
-            if (p - 1 > COMPOSITE_LEVEL) {
+            if (deepest > COMPOSITE_LEVEL) {
                 GL20.glUseProgram(upProgram);
                 GL20.glUniform1i(upSource, 0);
-                for (int i = p - 1; i > COMPOSITE_LEVEL; i--) {
-                    renderInto(i - 1, levelTex[i], levelW[i], levelH[i], upProj, upTexel);
+                for (int i = deepest; i > COMPOSITE_LEVEL; i--) {
+                    renderInto(i - 1, levelTex[i], levelW[i], levelH[i], 1f, upProj, upTexel,
+                        regions, marginPx, vpWidth, vpHeight);
                 }
-                result = COMPOSITE_LEVEL;
             }
-            resultLevel = result;
+            resultLevel = COMPOSITE_LEVEL;
+            chainRegional = regions != null;
             chainNanos = System.nanoTime();
             return true;
         } catch (Throwable t) {
@@ -245,22 +274,47 @@ public final class Gl3Blur {
         }
     }
 
-    /** Une passe plein cadre de {@code source} vers le niveau {@code target}. */
-    private void renderInto(int target, int source, int srcW, int srcH, int uProj, int uTexel) {
+    /**
+     * Une passe de {@code source} vers le niveau {@code target} : plein cadre,
+     * ou un quad par zone — mêmes coordonnées de texture qu'un quad plein cadre
+     * aurait à cet endroit, donc même résultat dans la zone.
+     *
+     * @param texelScale pas du filtre en texels de la source (2 pour la descente qui saute le demi-écran)
+     */
+    private void renderInto(int target, int source, int srcW, int srcH, float texelScale, int uProj, int uTexel,
+                            float[][] regions, float marginPx, int vpWidth, int vpHeight) {
         int w = levelW[target], h = levelH[target];
         GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, levelFbo[target]);
         GL11.glViewport(0, 0, w, h);
         Gl3Core.ortho(uProj, w, h);
-        GL20.glUniform2f(uTexel, 1f / srcW, 1f / srcH);
+        GL20.glUniform2f(uTexel, texelScale / srcW, texelScale / srcH);
         Gl3Core.bindTexture0(source);
-        FloatBuffer out = fullscreen.begin(6);
-        vertex(out, 0, 0, 0, 0);
-        vertex(out, w, 0, 1, 0);
-        vertex(out, w, h, 1, 1);
-        vertex(out, 0, 0, 0, 0);
-        vertex(out, w, h, 1, 1);
-        vertex(out, 0, h, 0, 1);
+        if (regions == null) {
+            FloatBuffer out = fullscreen.begin(6);
+            quad(out, 0, 0, w, h, w, h);
+            fullscreen.drawTriangles();
+            return;
+        }
+        FloatBuffer out = fullscreen.begin(6 * regions.length);
+        for (float[] r : regions) {
+            float x0 = Math.max(0f, (float) Math.floor((Math.min(r[0], r[2]) - marginPx) / vpWidth * w));
+            float x1 = Math.min(w, (float) Math.ceil((Math.max(r[0], r[2]) + marginPx) / vpWidth * w));
+            float y0 = Math.max(0f, (float) Math.floor((Math.min(r[1], r[3]) - marginPx) / vpHeight * h));
+            float y1 = Math.min(h, (float) Math.ceil((Math.max(r[1], r[3]) + marginPx) / vpHeight * h));
+            if (x1 <= x0 || y1 <= y0) continue;
+            quad(out, x0, y0, x1, y1, w, h);
+        }
         fullscreen.drawTriangles();
+    }
+
+    /** Deux triangles ; coordonnée de texture = position dans le niveau, ramenée à [0, 1]. */
+    private static void quad(FloatBuffer out, float x0, float y0, float x1, float y1, float w, float h) {
+        vertex(out, x0, y0, x0 / w, y0 / h);
+        vertex(out, x1, y0, x1 / w, y0 / h);
+        vertex(out, x1, y1, x1 / w, y1 / h);
+        vertex(out, x0, y0, x0 / w, y0 / h);
+        vertex(out, x1, y1, x1 / w, y1 / h);
+        vertex(out, x0, y1, x0 / w, y1 / h);
     }
 
     private static void vertex(FloatBuffer out, float x, float y, float u, float v) {
@@ -268,7 +322,7 @@ public final class Gl3Blur {
     }
 
     private void ensureLevels(int vpWidth, int vpHeight) {
-        if (vpWidth == chainVpW && vpHeight == chainVpH && levelTex[0] != -1) return;
+        if (vpWidth == chainVpW && vpHeight == chainVpH && levelTex[COMPOSITE_LEVEL] != -1) return;
         int w = vpWidth, h = vpHeight;
         for (int i = 0; i < LEVELS; i++) {
             if (levelFbo[i] != -1) GL30.glDeleteFramebuffers(levelFbo[i]);
@@ -277,6 +331,9 @@ public final class Gl3Blur {
             h = Math.max(1, h / 2);
             levelW[i] = w;
             levelH[i] = h;
+            levelTex[i] = -1;
+            levelFbo[i] = -1;
+            if (i < FIRST_LEVEL) continue; // jamais écrit ni lu : ni texture ni framebuffer
             levelTex[i] = Gl3Core.createTexture(w, h);
             levelFbo[i] = GL30.glGenFramebuffers();
             GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, levelFbo[i]);

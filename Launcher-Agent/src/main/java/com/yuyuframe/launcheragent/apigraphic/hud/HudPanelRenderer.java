@@ -64,7 +64,18 @@ public final class HudPanelRenderer {
      * donc "nouvelle frame, chaîne pas encore empilée" — pas besoin d'un
      * compteur de frames que ce moteur n'expose nulle part.
      */
-    public static void ensureGlassChain(UiRenderer renderer, int vpWidth, int vpHeight) {
+    /** Le HUD dessinera-t-il des panneaux de verre ? L'appelant ne relève leurs rectangles que dans ce cas. */
+    public static boolean usesGlass(UiRenderer renderer) {
+        return USE_GLASS && renderer.isGlassAvailable();
+    }
+
+    /**
+     * @param regions les rectangles {@code {x1, y1, x2, y2}} des panneaux de
+     *        cette frame : le flou n'est calculé que derrière eux (voir
+     *        {@code UiBackend.beginGlassFrame}), et à chaque image — en jeu le
+     *        décor bouge derrière le HUD.
+     */
+    public static void ensureGlassChain(UiRenderer renderer, int vpWidth, int vpHeight, float[][] regions) {
         if (!USE_GLASS || !renderer.isGlassAvailable()) return;
         // Voie « état de GUI vanilla » : le garde par taille de file ne vaut
         // plus rien (le HUD n'alimente plus cette file, elle reste vide et
@@ -72,11 +83,11 @@ public final class HudPanelRenderer {
         // VanillaGuiTarget.beginGlassFrame qui est idempotent sur la durée de
         // la passe — voir sa javadoc.
         if (com.yuyuframe.launcheragent.apigraphic.era.blaze3d.vanillagui.VanillaGuiTarget.isArmed()) {
-            renderer.beginGlassFrame(GLASS_PASSES, vpWidth, vpHeight);
+            renderer.beginGlassFrame(GLASS_PASSES, vpWidth, vpHeight, regions);
             return;
         }
         if (com.yuyuframe.launcheragent.apigraphic.era.blaze3d.pass.Blaze3DCore.queuedCount() > 0) return;
-        renderer.beginGlassFrame(GLASS_PASSES, vpWidth, vpHeight);
+        renderer.beginGlassFrame(GLASS_PASSES, vpWidth, vpHeight, regions);
     }
     // Ombre légère ajoutée (voir audit runtime/ui/ : le HUD était le seul
     // "panneau" du moteur sans aucune ombre, contrairement à UiPanel/cartes

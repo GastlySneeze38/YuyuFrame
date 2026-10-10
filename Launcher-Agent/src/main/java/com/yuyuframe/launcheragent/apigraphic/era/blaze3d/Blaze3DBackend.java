@@ -206,12 +206,12 @@ public final class Blaze3DBackend implements UiBackend {
     }
 
     @Override
-    public boolean beginGlassFrame(int passes, int vpWidth, int vpHeight) {
+    public boolean beginGlassFrame(int passes, int vpWidth, int vpHeight, float[][] regions) {
         // Voie vanilla : la chaîne est calculée TOUT DE SUITE et non mise en
         // file — sinon elle arriverait après la soumission de la GUI, et les
         // panneaux échantillonneraient le flou de la frame précédente.
-        if (VanillaGuiTarget.beginGlassFrame(passes, vpWidth, vpHeight)) return true;
-        Blaze3DBlur.queueFrameChain(passes, vpWidth, vpHeight);
+        if (VanillaGuiTarget.beginGlassFrame(passes, vpWidth, vpHeight, regions)) return true;
+        Blaze3DBlur.queueFrameChain(passes, vpWidth, vpHeight, regions);
         return true;
     }
 

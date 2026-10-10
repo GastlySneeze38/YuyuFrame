@@ -29,6 +29,16 @@ public final class Gl3Backdrop {
      * @return la texture, liée sur l'unité 0 en sortie
      */
     public int capture(int vpWidth, int vpHeight) {
+        return capture(vpWidth, vpHeight, null, 0f);
+    }
+
+    /**
+     * La même copie, limitée aux rectangles {@code {x1, y1, x2, y2}} donnés
+     * (élargis de {@code marginPx}) : copier tout l'écran à chaque image pour
+     * quelques petits panneaux de HUD coûtait plus que leur flou. Hors de ces
+     * rectangles, la texture garde ce qu'elle contenait — à ne pas lire.
+     */
+    public int capture(int vpWidth, int vpHeight, float[][] regions, float marginPx) {
         if (texture == -1 || width != vpWidth || height != vpHeight) {
             if (texture != -1) GL11.glDeleteTextures(texture);
             texture = Gl3Core.createTexture(vpWidth, vpHeight);
@@ -37,7 +47,18 @@ public final class Gl3Backdrop {
         } else {
             Gl3Core.bindTexture0(texture);
         }
-        GL11.glCopyTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, 0, 0, vpWidth, vpHeight);
+        if (regions == null) {
+            GL11.glCopyTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, 0, 0, vpWidth, vpHeight);
+            return texture;
+        }
+        for (float[] r : regions) {
+            int x0 = Math.max(0, (int) Math.floor(Math.min(r[0], r[2]) - marginPx));
+            int y0 = Math.max(0, (int) Math.floor(Math.min(r[1], r[3]) - marginPx));
+            int x1 = Math.min(vpWidth, (int) Math.ceil(Math.max(r[0], r[2]) + marginPx));
+            int y1 = Math.min(vpHeight, (int) Math.ceil(Math.max(r[1], r[3]) + marginPx));
+            if (x1 <= x0 || y1 <= y0) continue;
+            GL11.glCopyTexSubImage2D(GL11.GL_TEXTURE_2D, 0, x0, y0, x0, y0, x1 - x0, y1 - y0);
+        }
         return texture;
     }
 }
