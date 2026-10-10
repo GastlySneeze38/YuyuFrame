@@ -408,6 +408,11 @@ public final class MacroModule extends LauncherModule {
      */
     private Object lastAttemptedConnection;
 
+    /** Versions sans arbre de commandes : attente avant l'envoi, en ticks (une seconde). */
+    private static final int LOGIN_DELAY_TICKS = 20;
+    private Object waitingConnection;
+    private int waitedTicks;
+
     private void tickAutoLogin() {
         if (!autoLogin) return;
         // Poignée OPAQUE, comparée par identité seulement — voir
@@ -430,7 +435,23 @@ public final class MacroModule extends LauncherModule {
             return;
         }
 
-        String command = declaredLoginCommand();
+        String command;
+        if (NetworkData.hasCommandTree()) {
+            command = declaredLoginCommand();
+        } else {
+            // Version sans arbre de commandes (1.8.9) : le serveur n'a aucun
+            // moyen de déclarer /login. Le signal est alors le mot de passe
+            // que le joueur a enregistré pour CETTE adresse. On laisse au
+            // serveur le temps de finir l'arrivée du joueur : envoyée au tout
+            // premier tick, la commande précède le plugin de connexion.
+            if (connection != waitingConnection) {
+                waitingConnection = connection;
+                waitedTicks = 0;
+            }
+            if (++waitedTicks < LOGIN_DELAY_TICKS) return;
+            waitingConnection = null;
+            command = LOGIN_COMMANDS[0];
+        }
         if (command == null) {
             reportOnce(address + " ne déclare aucune commande de connexion — rien à envoyer");
             return;

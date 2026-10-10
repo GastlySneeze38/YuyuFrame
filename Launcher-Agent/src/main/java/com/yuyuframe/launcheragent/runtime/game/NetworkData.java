@@ -51,6 +51,15 @@ public final class NetworkData {
     }
 
     /**
+     * Cette version du jeu reçoit-elle un arbre de commandes du serveur ?
+     * {@code false} en 1.8.9 : il n'existe que depuis la 1.13, et
+     * {@link #hasCommand} y répond donc toujours non.
+     */
+    public static boolean hasCommandTree() {
+        return AccessorRegistry.isBound(AccessPoint.NETWORK_HAS_COMMAND);
+    }
+
+    /**
      * Le serveur déclare-t-il cette commande ? {@code false} en solo ou si
      * l'arbre de commandes n'est pas lisible.
      */
