@@ -228,9 +228,18 @@ public final class Blaze3DBackend implements UiBackend {
                               int vpWidth, int vpHeight) {
         // Voie vanilla : un GuiElementRenderState qui échantillonne la chaîne
         // de flou.
-        if (VanillaGuiTarget.glassPanel(x1, y1, x2, y2,
-                radiusBottomLeft, radiusBottomRight, radiusTopLeft, radiusTopRight,
-                tint, fallback, vpWidth, vpHeight)) return true;
+        // Sur cette voie le composite n'a qu'un créneau par panneau, l'alpha de
+        // la couleur, et il y lit la DENSITÉ du verre (voir
+        // GuiElementShaders.GLASS_FRAGMENT) : c'est la force de teinte qui la
+        // lui donne, pas l'opacité. Seul le HUD passe par ici.
+        if (VanillaGuiTarget.isArmed()) {
+            UiColor dense = new UiColor(fallback.r, fallback.g, fallback.b,
+                Math.min(1f, tintStrength / com.yuyuframe.launcheragent.apigraphic.era.blaze3d.vanillagui.GuiElementShaders.GLASS_DENSITY_TO_TINT)
+                    * fallback.a);
+            if (VanillaGuiTarget.glassPanel(x1, y1, x2, y2,
+                    radiusBottomLeft, radiusBottomRight, radiusTopLeft, radiusTopRight,
+                    tint, dense, vpWidth, vpHeight)) return true;
+        }
         if (Blaze3DBlur.isGlassAvailable() && !VanillaGuiTarget.isArmed()) {
             Blaze3DBlur.queueGlassPanel(
                 x1, y1, x2, y2, radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight,

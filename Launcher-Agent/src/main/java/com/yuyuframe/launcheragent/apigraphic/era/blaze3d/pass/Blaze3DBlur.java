@@ -148,6 +148,7 @@ public final class Blaze3DBlur {
         "in vec4 vertexColor;\n" +
         "in vec2 fragPos;\n" +
         "out vec4 fragColor;\n" +
+        com.yuyuframe.launcheragent.apigraphic.value.GlassRim.GLSL +
         "void main() {\n" +
         "    vec2 halfSize = (u_Rect.zw - u_Rect.xy) * 0.5;\n" +
         "    vec2 center = (u_Rect.xy + u_Rect.zw) * 0.5;\n" +
@@ -158,9 +159,19 @@ public final class Blaze3DBlur {
         "    vec2 q = abs(p) - halfSize + vec2(radius);\n" +
         "    float dist = min(max(q.x, q.y), 0.0) + length(max(q, vec2(0.0))) - radius;\n" +
         "    float alpha = 1.0 - smoothstep(-1.0, 0.0, dist);\n" +
-        "    vec2 screenUV = fragPos / u_ScreenSize.xy;\n" +
-        "    vec4 backdrop = texture(Sampler0, screenUV);\n" +
-        "    vec3 tinted = mix(backdrop.rgb, u_TintAndStrength.rgb, u_TintAndStrength.a);\n" +
+        // Relief du verre (voir GlassRim) : fragPos est en pixels, y vers le
+        // haut. Le fond est lu DÉCALÉ près du bord, chaque couleur un peu
+        // différemment — la réfraction d'un verre épais.
+        "    float halfMin = min(halfSize.x, halfSize.y);\n" +
+        "    vec2 bend = glassBend(p, q, dist, 1.0, halfMin);\n" +
+        "    vec3 backdrop = texture(Sampler0, (fragPos + bend) / u_ScreenSize.xy).rgb;\n" +
+        "    if (dot(bend, bend) > 0.01) {\n" +
+        "        backdrop.r = texture(Sampler0, (fragPos + bend * 1.30) / u_ScreenSize.xy).r;\n" +
+        "        backdrop.b = texture(Sampler0, (fragPos + bend * 0.70) / u_ScreenSize.xy).b;\n" +
+        "    }\n" +
+        "    vec3 tinted = mix(backdrop, u_TintAndStrength.rgb, u_TintAndStrength.a);\n" +
+        "    tinted = mix(tinted, vec3(0.0), glassShadow(p, q, dist, 1.0, halfSize));\n" +
+        "    tinted = mix(tinted, vec3(1.0), glassRim(p, q, dist, 1.0, halfSize));\n" +
         "    vec4 color = vec4(tinted, 1.0) * vertexColor * ColorModulator;\n" +
         "    color.a *= alpha;\n" +
         "    if (color.a < 0.01) {\n" +
@@ -459,7 +470,8 @@ public final class Blaze3DBlur {
             // d'étages (la force du flou ne change pas), jamais au-dessus du
             // niveau que lit le composite.
             int deepest = Math.max(COMPOSITE_LEVEL, Math.min(passes, LEVELS) - 1);
-            float marginPx = 3f * (1 << (deepest + 1));
+            // + la portée de la réfraction : le bord d'un panneau lit le fond AU-DELÀ de lui.
+            float marginPx = 3f * (1 << (deepest + 1)) + com.yuyuframe.launcheragent.apigraphic.value.GlassRim.BEND_REACH_PX;
 
             Object curView = sourceView;
             int curW = vpWidth, curH = vpHeight;

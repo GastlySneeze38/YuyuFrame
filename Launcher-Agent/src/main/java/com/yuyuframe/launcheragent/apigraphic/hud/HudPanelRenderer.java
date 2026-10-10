@@ -45,8 +45,11 @@ public final class HudPanelRenderer {
      */
     public static boolean USE_GLASS = false;
 
-    /** Étages de flou du HUD — 3 et non 4 : en jeu la fluidité prime, et ces panneaux sont petits (l'écart de qualité ne s'y voit quasiment pas). */
-    private static final int GLASS_PASSES = 3;
+    /** Étages de flou du HUD. */
+    // 4, comme les écrans (était 3 « pour la fluidité ») : le flou n'est plus
+    // calculé que derrière les panneaux, un étage de plus n'y coûte presque
+    // rien, et à 3 il était jugé pas assez prononcé.
+    private static final int GLASS_PASSES = 4;
 
     /**
      * Calcule la chaîne de flou partagée UNE SEULE FOIS par frame HUD.
@@ -207,8 +210,11 @@ public final class HudPanelRenderer {
                 // combiné à l'opacité par défaut du HUD, rendait l'effet trop
                 // discret ; la teinte est ce qui donne au panneau sa présence.
                 // Ne pas la retirer à nouveau sans demande explicite.
-                renderer.drawGlassPanel(x, y, x + w, y + h, r[0], r[1], r[2], r[3],
-                    UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_FIELD, panelBg, vpWidth, vpHeight);
+                // Verre DENSE : opaque, l'opacité du HUD y dose la teinte au
+                // lieu de laisser passer le décor net — voir
+                // UiRenderer#drawDenseGlassPanel.
+                renderer.drawDenseGlassPanel(x, y, x + w, y + h, r[0], r[1], r[2], r[3],
+                    UiTheme.GLASS_TINT, panelBg.a, panelBg, vpWidth, vpHeight);
             } else {
                 // drawRoundedRectHud (rayon unique) remplacé par la variante à
                 // 4 rayons — le texte différé d'une frame sur era E reste

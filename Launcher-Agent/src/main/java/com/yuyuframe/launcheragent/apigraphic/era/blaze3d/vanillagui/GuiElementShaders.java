@@ -245,6 +245,18 @@ public final class GuiElementShaders {
     public static final float GLASS_TINT_STRENGTH = 0.35f;
 
     /**
+     * Verre « dense » (les panneaux de HUD) : force de teinte = densité × ce
+     * facteur. À l'opacité de HUD par défaut (≈ 0.47) cela redonne la teinte
+     * d'avant ({@link #GLASS_TINT_STRENGTH}). Voir
+     * {@code UiRenderer.drawDenseGlassPanel}, qui applique la même règle aux
+     * autres rendus.
+     */
+    public static final float GLASS_DENSITY_TO_TINT = 0.75f;
+
+    /** Densité sous laquelle un verre dense commence à s'effacer. */
+    public static final float GLASS_DENSITY_FADE = 0.15f;
+
+    /**
      * Combien de fois la texture floutée est plus petite que la fenêtre, par
      * côté. Doit valoir {@code 2^(Blaze3DBlur.COMPOSITE_LEVEL + 1)} — le quart
      * d'écran, donc 4 ; {@code Blaze3DBlur} le vérifie à son chargement.
@@ -296,6 +308,7 @@ public final class GuiElementShaders {
         "flat in vec2 halfSize;\n" +
         "flat in vec4 radii;\n" +
         "out vec4 fragColor;\n" +
+        com.yuyuframe.launcheragent.apigraphic.value.GlassRim.GLSL +
         "void main() {\n" +
         // Coordonnée d'échantillonnage déduite du fragment, sans attribut ni
         // uniforme : gl_FragCoord est en pixels de FENÊTRE, et la texture
@@ -306,8 +319,7 @@ public final class GuiElementShaders {
         // texture est le quart d'écran : la coordonnée valait donc quatre fois
         // trop, et tout panneau hors du seizième bas-gauche de l'écran lisait
         // hors de l'image — le bord étiré, pas ce qu'il y a derrière lui.
-        "    vec2 uv = gl_FragCoord.xy / (vec2(textureSize(Sampler0, 0)) * " + GLASS_BLUR_DOWNSCALE + ".0);\n" +
-        "    vec3 blurred = texture(Sampler0, uv).rgb;\n" +
+        "    vec2 screen = vec2(textureSize(Sampler0, 0)) * " + GLASS_BLUR_DOWNSCALE + ".0;\n" +
         "    float radius = (localPos.y < 0.0)\n" +
         "        ? ((localPos.x < 0.0) ? radii.x : radii.y)\n" +
         "        : ((localPos.x < 0.0) ? radii.z : radii.w);\n" +
@@ -315,7 +327,31 @@ public final class GuiElementShaders {
         "    float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;\n" +
         "    float mask = 1.0 - smoothstep(-0.5, 0.5, d);\n" +
         "    if (mask <= 0.001) discard;\n" +
-        "    vec3 rgb = mix(blurred, vertexColor.rgb, " + GLASS_TINT_STRENGTH + ");\n" +
-        "    fragColor = vec4(rgb, vertexColor.a * mask) * ColorModulator;\n" +
+        // Relief du verre (voir GlassRim). localPos est en unités de GUI, y
+        // vers le BAS : retourné, puisque la lumière et gl_FragCoord comptent
+        // y vers le haut ; la taille d'un pixel d'écran dans cette unité vient
+        // de la dérivée. Le fond est lu DÉCALÉ près du bord, chaque couleur un
+        // peu différemment — la réfraction d'un verre épais.
+        "    vec2 up = vec2(localPos.x, -localPos.y);\n" +
+        "    float px = max(fwidth(localPos.x), 0.0001);\n" +
+        "    float halfMin = min(halfSize.x, halfSize.y);\n" +
+        "    vec2 bend = glassBend(up, q, d, px, halfMin);\n" +
+        "    vec3 blurred = texture(Sampler0, (gl_FragCoord.xy + bend) / screen).rgb;\n" +
+        "    if (dot(bend, bend) > 0.01) {\n" +
+        "        blurred.r = texture(Sampler0, (gl_FragCoord.xy + bend * 1.30) / screen).r;\n" +
+        "        blurred.b = texture(Sampler0, (gl_FragCoord.xy + bend * 0.70) / screen).b;\n" +
+        "    }\n" +
+        // L'alpha du sommet n'est PAS une transparence : c'est la DENSITÉ du
+        // verre (le réglage « Opacité du HUD »), qui dose la teinte. Le verre
+        // lui-même est opaque — s'il laissait passer le décor net à travers
+        // lui, le flou ne se verrait qu'à moitié (c'était le cas : « le flou
+        // n'est pas assez prononcé »). Il ne s'efface que quand la densité
+        // tombe vers zéro.
+        "    float density = vertexColor.a;\n" +
+        "    vec3 rgb = mix(blurred, vertexColor.rgb, min(0.9, density * " + GLASS_DENSITY_TO_TINT + "));\n" +
+        "    rgb = mix(rgb, vec3(0.0), glassShadow(up, q, d, px, halfSize));\n" +
+        "    rgb = mix(rgb, vec3(1.0), glassRim(up, q, d, px, halfSize));\n" +
+        "    float a = smoothstep(0.0, " + GLASS_DENSITY_FADE + ", density);\n" +
+        "    fragColor = vec4(rgb, a * mask) * ColorModulator;\n" +
         "}\n";
 }

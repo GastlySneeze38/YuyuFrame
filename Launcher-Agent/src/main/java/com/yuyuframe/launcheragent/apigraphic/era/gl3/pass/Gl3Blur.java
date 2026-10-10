@@ -125,14 +125,39 @@ public final class Gl3Blur {
         "uniform vec4 u_TintAndStrength;\n" +
         "uniform float u_Opacity;\n" +
         "out vec4 fragColor;\n" +
-        Gl3Core.GLSL_ROUNDED_BOX +
+        com.yuyuframe.launcheragent.apigraphic.value.GlassRim.GLSL +
         "void main() {\n" +
-        "    float coverage = roundedBoxCoverage(gl_FragCoord.xy, u_Rect, u_Radii);\n" +
-        "    float a = coverage * u_Opacity;\n" +
-        "    if (a < 0.01) discard;\n" +
-        "    vec3 backdrop = texture(u_Blurred, gl_FragCoord.xy / u_ScreenSize).rgb;\n" +
+        // La boîte arrondie de Gl3Core.GLSL_ROUNDED_BOX, écrite ici en clair :
+        // le relief du verre a besoin de la distance elle-même, pas seulement
+        // de la couverture qu'elle donne.
+        "    vec2 halfSize = (u_Rect.zw - u_Rect.xy) * 0.5;\n" +
+        "    vec2 p = gl_FragCoord.xy - (u_Rect.xy + u_Rect.zw) * 0.5;\n" +
+        "    float r = (p.x > 0.0) ? ((p.y < 0.0) ? u_Radii.y : u_Radii.w)\n" +
+        "                          : ((p.y < 0.0) ? u_Radii.x : u_Radii.z);\n" +
+        "    r = min(r, min(halfSize.x, halfSize.y));\n" +
+        "    vec2 q = abs(p) - halfSize + vec2(r);\n" +
+        "    float dist = min(max(q.x, q.y), 0.0) + length(max(q, vec2(0.0))) - r;\n" +
+        "    float coverage = 1.0 - smoothstep(-0.5, 0.5, dist);\n" +
+        "    if (coverage * u_Opacity < 0.01) discard;\n" +
+        // Relief du verre (voir GlassRim) : pixels de fenêtre, y vers le haut.
+        // Le fond est lu DÉCALÉ près du bord, chaque couleur un peu
+        // différemment — la réfraction d'un verre épais.
+        "    float halfMin = min(halfSize.x, halfSize.y);\n" +
+        "    vec2 bend = glassBend(p, q, dist, 1.0, halfMin);\n" +
+        "    vec3 backdrop = texture(u_Blurred, (gl_FragCoord.xy + bend) / u_ScreenSize).rgb;\n" +
+        "    if (dot(bend, bend) > 0.01) {\n" +
+        "        backdrop.r = texture(u_Blurred, (gl_FragCoord.xy + bend * 1.30) / u_ScreenSize).r;\n" +
+        "        backdrop.b = texture(u_Blurred, (gl_FragCoord.xy + bend * 0.70) / u_ScreenSize).b;\n" +
+        "    }\n" +
         "    vec3 tinted = mix(backdrop, u_TintAndStrength.rgb, u_TintAndStrength.a);\n" +
-        "    fragColor = vec4(tinted, a);\n" +
+        "    float shade = glassShadow(p, q, dist, 1.0, halfSize);\n" +
+        "    float shine = glassRim(p, q, dist, 1.0, halfSize);\n" +
+        "    tinted = mix(tinted, vec3(0.0), shade);\n" +
+        "    tinted = mix(tinted, vec3(1.0), shine);\n" +
+        // Sur un panneau très transparent (HUD), lumière et ombre du bord
+        // deviennent opaques, sinon le relief ne se verrait pas.
+        "    float a = u_Opacity + (1.0 - u_Opacity) * max(shine, shade) * step(0.01, u_Opacity);\n" +
+        "    fragColor = vec4(tinted, a * coverage);\n" +
         "}\n";
 
     private final Gl3Backdrop backdrop;
@@ -230,7 +255,8 @@ public final class Gl3Blur {
         // Niveau le plus profond : celui d'avant pour un même nombre d'étages,
         // jamais au-dessus du niveau que lit le composite.
         int deepest = Math.max(COMPOSITE_LEVEL, Math.min(passes, LEVELS) - 1);
-        float marginPx = 3f * (1 << (deepest + 1));
+        // + la portée de la réfraction : le bord d'un panneau lit le fond AU-DELÀ de lui.
+        float marginPx = 3f * (1 << (deepest + 1)) + com.yuyuframe.launcheragent.apigraphic.value.GlassRim.BEND_REACH_PX;
         offscreen.begin();
         try {
             // Copie du fond AVANT de toucher aux niveaux : leur (re)création lie

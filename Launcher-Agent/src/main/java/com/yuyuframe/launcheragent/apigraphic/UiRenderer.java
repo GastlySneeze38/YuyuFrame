@@ -678,6 +678,31 @@ public final class UiRenderer {
             fallback, vpWidth, vpHeight);
     }
 
+    /**
+     * Panneau de verre « dense » — celui du HUD. Le verre est OPAQUE : c'est
+     * le fond flouté qu'on voit, jamais le décor net à travers lui (un verre à
+     * moitié transparent ne montre son flou qu'à moitié). Ce que règle
+     * l'utilisateur avec l'opacité du HUD devient la {@code density} du verre,
+     * qui dose sa teinte ; il ne s'efface que quand elle tombe vers zéro.
+     *
+     * @param density  {@code [0,1]} — l'alpha qu'aurait eu l'aplat
+     * @param flat     l'aplat de repli, dessiné tel quel si le verre n'est pas disponible pour cette frame
+     */
+    public void drawDenseGlassPanel(float x1, float y1, float x2, float y2,
+                                    float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight,
+                                    UiColor tint, float density, UiColor flat, int vpWidth, int vpHeight) {
+        float strength = Math.min(0.9f, density
+            * com.yuyuframe.launcheragent.apigraphic.era.blaze3d.vanillagui.GuiElementShaders.GLASS_DENSITY_TO_TINT);
+        float visible = Math.max(0f, Math.min(1f, density
+            / com.yuyuframe.launcheragent.apigraphic.era.blaze3d.vanillagui.GuiElementShaders.GLASS_DENSITY_FADE));
+        UiColor solid = new UiColor(flat.r, flat.g, flat.b, visible);
+        if (backend().glassPanel(x1, y1, x2, y2,
+                radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight,
+                tint, strength, solid, vpWidth, vpHeight)) return;
+        drawRoundedRect(x1, y1, x2, y2, radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight,
+            flat, vpWidth, vpHeight);
+    }
+
     /** Raccourci rayon uniforme — voir {@link #drawGlassPanel(float, float, float, float, float, float, float, float, UiColor, float, UiColor, int, int)}. */
     public void drawGlassPanel(float x1, float y1, float x2, float y2, float radius,
                                 UiColor tint, float tintStrength, UiColor fallback, int vpWidth, int vpHeight) {
