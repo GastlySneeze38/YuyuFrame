@@ -1,5 +1,6 @@
 package com.yuyuframe.launcheragent.apimixin.v1_8_9.core;
 
+import com.yuyuframe.launcheragent.apimixin.mapping.YarnNamed;
 import net.minecraft.client.util.Session;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Mutable;
@@ -13,7 +14,13 @@ import org.spongepowered.asm.mixin.gen.Accessor;
  * ae}, seul champ de ce type) : {@link Mutable} lève le « final » au tissage.
  * Sur cette version il n'y a rien d'autre à refaire — ni service de compte,
  * ni clés de chat.
+ *
+ * <p>{@link YarnNamed} : la signature porte un type du jeu ({@code Session}),
+ * que Mixin compare à la lettre au type du champ ({@code avm}). Sans la
+ * traduction, « No candidates were found » et {@code MinecraftClient} entier
+ * n'est plus tissé.
  */
+@YarnNamed
 @Mixin(targets = "net.minecraft.client.MinecraftClient")
 public interface MinecraftClientAccessor189 {
 

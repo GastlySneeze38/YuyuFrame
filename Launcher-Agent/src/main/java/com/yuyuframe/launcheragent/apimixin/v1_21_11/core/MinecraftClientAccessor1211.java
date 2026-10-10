@@ -18,7 +18,12 @@ import org.spongepowered.asm.mixin.gen.Accessor;
  * currentFps}), et Sponge exige la même staticité pour l'accesseur. Type
  * primitif, donc rien à typer contre une classe obfusquée — même contrainte
  * que {@code CameraAccessor1211}.
+ *
+ * <p>{@code @YarnNamed} : les accessors du changement de compte portent des
+ * types du jeu ({@code Session}, {@code ProfileKeys}), que Mixin compare à la
+ * lettre au type du champ obfusqué — voir {@code MinecraftClientAccessor189}.
  */
+@com.yuyuframe.launcheragent.apimixin.mapping.YarnNamed
 @Mixin(targets = "net.minecraft.client.MinecraftClient")
 public interface MinecraftClientAccessor1211 {
 

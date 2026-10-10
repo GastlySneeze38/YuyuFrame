@@ -29,7 +29,11 @@ import java.lang.annotation.Target;
  *       javac génère une classe synthétique ({@code Outer$1}, table
  *       {@code $SwitchMap$}) qui ne peut pas être annotée. Utiliser des
  *       {@code if}. Vu par {@code RemapCheck} sur {@code VanillaGuiSink1211}.</li>
- *   <li>Jamais sur un {@code @Mixin}.</li>
+ *   <li>Jamais sur un {@code @Mixin}, à une exception près : une interface
+ *       d'accessors dont une signature porte un type du jeu. Mixin compare ce
+ *       type à celui du champ à la lettre et la refmap ne traduit que le nom ;
+ *       {@code LauncherMixinService.getClassNode} lui donne donc la version
+ *       traduite, la même que celle que la JVM charge.</li>
  *   <li>Oublier le marqueur ne se voit pas à la compilation : la classe part en
  *       jeu avec ses noms Yarn et lève {@code NoClassDefFoundError} au premier
  *       usage. Vérifier hors jeu avant tout test.</li>

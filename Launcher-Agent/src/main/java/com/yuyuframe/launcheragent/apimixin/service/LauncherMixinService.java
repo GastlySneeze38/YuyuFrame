@@ -3,6 +3,7 @@ package com.yuyuframe.launcheragent.apimixin.service;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.apimixin.mapping.MappingsRegistry;
 import com.yuyuframe.launcheragent.apimixin.mapping.YarnMappings;
+import com.yuyuframe.launcheragent.apimixin.service.transformer.YarnNamedRemapper;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.tree.ClassNode;
 import org.spongepowered.asm.launch.platform.container.IContainerHandle;
@@ -1113,7 +1114,17 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
         if (is == null) throw new ClassNotFoundException(name);
 
         try {
-            ClassReader cr = new ClassReader(is);
+            byte[] bytes = is.readAllBytes();
+            // Un accessor dont la signature porte un type du jeu (@YarnNamed) :
+            // Mixin compare le descripteur de l'accessor à celui du champ, à la
+            // lettre, et la refmap ne traduit que le NOM. Il lui faut donc la même
+            // traduction que celle que la JVM reçoit au chargement de l'interface
+            // (LauncherMixinTransformerWrapper), sinon « No candidates were found ».
+            if (YarnNamedRemapper.applies(nameSlash, bytes)) {
+                byte[] translated = YarnNamedRemapper.remap(bytes);
+                if (translated != null) bytes = translated;
+            }
+            ClassReader cr = new ClassReader(bytes);
             ClassNode cn = new ClassNode();
             cr.accept(cn, readerFlags == 0 ? ClassReader.EXPAND_FRAMES : readerFlags);
             if (!obfSlash.equals(nameSlash)) {
