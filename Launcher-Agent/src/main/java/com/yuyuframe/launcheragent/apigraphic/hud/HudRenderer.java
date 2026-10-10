@@ -59,8 +59,7 @@ public final class HudRenderer {
             }
             if (regions.isEmpty()) glass = false;
             else HudPanelRenderer.ensureGlassChain(renderer, vpWidth, vpHeight, regions.toArray(new float[0][]));
-        }
-        // Tout le texte du HUD en UNE passe par police au lieu d'une par
+        }        // Tout le texte du HUD en UNE passe par police au lieu d'une par
         // chaîne — voir UiRenderer.beginTextBatch. L'ordre Z convient ici : le
         // texte se retrouve au-dessus de TOUS les fonds de panneaux, ce qui est
         // exactement le rendu voulu (et les panneaux ne se chevauchent pas

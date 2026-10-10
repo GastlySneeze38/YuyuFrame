@@ -193,8 +193,7 @@ public final class GlobalUiSettings extends LauncherModule {
         // (panneaux HUD), PLUS UiTheme.RADIUS_MD (cartes du menu, reste fixe
         // à sa valeur par défaut, jamais réassignée par ce réglage).
         HudPanelRenderer.RADIUS = cornerRadius;
-        HudPanelRenderer.USE_GLASS = hudGlassBackground;
-        UiTheme.ACCENT = accentColor;
+        HudPanelRenderer.USE_GLASS = hudGlassBackground;        UiTheme.ACCENT = accentColor;
         UiTheme.ACCENT_DIM = new UiColor(accentColor.r, accentColor.g, accentColor.b, 70f / 255f);
         UiTheme.SIDEBAR_ACTIVE = new UiColor(accentColor.r, accentColor.g, accentColor.b, 34f / 255f);
         UiInputPoller.menuKeyName = menuKey;

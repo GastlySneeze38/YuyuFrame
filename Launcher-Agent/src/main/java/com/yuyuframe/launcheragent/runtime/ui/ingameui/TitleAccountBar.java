@@ -110,6 +110,19 @@ public final class TitleAccountBar {
         float gearX = accounts ? cardX + cardW + gap : margin;
         double mx = input.mouseX, my = input.mouseY;
 
+        // Les boutons sont en verre : le flou de l'écran-titre n'est calculé
+        // que derrière eux, à chaque image (le panorama tourne). La colonne du
+        // panneau déplié est prise large — sa hauteur exacte n'est connue que
+        // plus bas, et une zone trop grande ne coûte que quelques pixels.
+        List<float[]> glass = new ArrayList<>();
+        glass.add(new float[]{ gearX, cardY, gearX + cardH, cardY + cardH });
+        if (accounts) {
+            float columnBottom = expanded
+                ? Math.max(0f, cardY - px(6f) - GameAccounts.accounts().size() * px(40f) - px(110f))
+                : cardY;
+            glass.add(new float[]{ cardX, columnBottom, cardX + cardW, cardY + cardH });
+        }
+        renderer.beginGlassFrame(GLASS_PASSES, vw, vh, glass.toArray(new float[0][]));
         if (accounts) {
             if (!listAsked) {
                 listAsked = true;
@@ -176,6 +189,9 @@ public final class TitleAccountBar {
     /** Rapport de la fenêtre à la taille de référence, recalculé à chaque image. */
     private static float fit = 1f;
 
+    /** Étages de flou du verre des boutons — comme les écrans du client. */
+    private static final int GLASS_PASSES = 4;
+
     /** Une longueur de la barre : le réglage « Taille de l'interface », puis la taille de la fenêtre. */
     private static float px(float value) {
         return UiTheme.scaled(value) * fit;
@@ -190,8 +206,14 @@ public final class TitleAccountBar {
     private static void drawCard(UiRenderer renderer, float x, float y, float w, float h, boolean switching, int vw, int vh) {
         float hover = cardHover.get();
         renderer.drawShadow(x, y, x + w, y + h, UiTheme.RADIUS_MD, px(12f), 0f, new UiColor(0, 0, 0, 110), vw, vh);
-        UiColor bg = UiColor.lerp(UiTheme.PANEL_BG.withAlpha(0.86f), UiTheme.PANEL_BG_ALT.withAlpha(0.94f), hover);
-        renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_MD, expanded ? UiTheme.PANEL_BG_ALT.withAlpha(0.96f) : bg, vw, vh);
+        // Verre : le survol et l'état déplié densifient la teinte, puisque le
+        // fond n'a plus de couleur propre à éclaircir. La couleur donnée est
+        // l'aplat de repli, pour les rendus sans verre.
+        UiColor bg = UiColor.lerp(UiTheme.PANEL_BG, UiTheme.PANEL_BG_ALT, hover).withAlpha(1f);
+        float strength = expanded ? UiTheme.GLASS_STRENGTH_MODAL
+            : UiTheme.GLASS_STRENGTH_FIELD + (UiTheme.GLASS_STRENGTH_PANEL - UiTheme.GLASS_STRENGTH_FIELD) * hover;
+        renderer.drawGlassPanel(x, y, x + w, y + h, UiTheme.RADIUS_MD, UiTheme.GLASS_TINT, strength,
+            expanded ? UiTheme.PANEL_BG_ALT.withAlpha(1f) : bg, vw, vh);
         // Liseré d'accent à gauche, comme l'entrée active de la navigation du menu.
         float edge = px(3f);
         renderer.drawGradientRect(x, y + px(10f), x + edge, y + h - px(10f), edge / 2f,
@@ -289,7 +311,8 @@ public final class TitleAccountBar {
     private static void drawPanel(UiRenderer renderer, float x, float bottom, float w, float top, float rowH,
                                   List<String> message, float lineH, double mx, double my, int vw, int vh) {
         renderer.drawShadow(x, bottom, x + w, top, UiTheme.RADIUS_MD, px(12f), 0f, new UiColor(0, 0, 0, 110), vw, vh);
-        renderer.drawRoundedRect(x, bottom, x + w, top, UiTheme.RADIUS_MD, UiTheme.PANEL_BG.withAlpha(0.95f), vw, vh);
+        renderer.drawGlassPanel(x, bottom, x + w, top, UiTheme.RADIUS_MD, UiTheme.GLASS_TINT,
+            UiTheme.GLASS_STRENGTH_MODAL, UiTheme.PANEL_BG.withAlpha(1f), vw, vh);
 
         List<GameAccounts.Account> list = GameAccounts.accounts();
         float pad = px(7f);
@@ -348,8 +371,11 @@ public final class TitleAccountBar {
     private static void drawGear(UiRenderer renderer, float x, float y, float size, int vw, int vh) {
         float hover = gearHover.get();
         renderer.drawShadow(x, y, x + size, y + size, UiTheme.RADIUS_MD, px(12f), 0f, new UiColor(0, 0, 0, 110), vw, vh);
-        UiColor bg = UiColor.lerp(UiTheme.PANEL_BG.withAlpha(0.86f), UiTheme.ACCENT.withAlpha(0.55f), hover);
-        renderer.drawRoundedRect(x, y, x + size, y + size, UiTheme.RADIUS_MD, bg, vw, vh);
+        // Verre teinté de la couleur d'accent au survol (la couleur donnée est l'aplat de repli).
+        UiColor bg = UiColor.lerp(UiTheme.PANEL_BG, UiTheme.ACCENT, hover * 0.55f).withAlpha(1f);
+        UiColor tint = UiColor.lerp(UiTheme.GLASS_TINT, UiTheme.ACCENT, hover * 0.6f);
+        renderer.drawGlassPanel(x, y, x + size, y + size, UiTheme.RADIUS_MD, tint,
+            UiTheme.GLASS_STRENGTH_FIELD, bg, vw, vh);
         BufferedImage icon = UiRemoteImage.get(GEAR_ICON);
         if (icon != null) {
             // Grossit un peu au survol : seul retour visuel sur un bouton sans libellé.
