@@ -343,6 +343,35 @@ public abstract class Setting {
     }
 
     /**
+     * Ligne dont le module fournit lui-même le widget — pour ce qu'aucun type
+     * ci-dessus ne sait éditer (la grille de dessin de {@code CrosshairModule}).
+     * Rien à persister : la valeur éditée voyage par un {@link Opaque}.
+     *
+     * <p>Le widget est recréé à chaque reconstruction de l'écran : il lit et
+     * écrit l'état du module, il n'en garde pas.
+     */
+    public static final class Custom extends Setting {
+        /** {@code commit} : à appeler quand une modification est terminée (sauvegarde). */
+        public interface Factory {
+            com.yuyuframe.launcheragent.apigraphic.widget.UiWidget create(float x, float y, float w, float h, Runnable commit);
+        }
+
+        /** Hauteur de la ligne, à l'échelle 1 de l'interface. */
+        public final float height;
+        public final Factory factory;
+
+        Custom(String id, String cat, float height, Factory factory) {
+            super(id, "", "", cat, null);
+            this.height = height;
+            this.factory = factory;
+            this.persistent = false;
+        }
+
+        @Override public String serialize() { return null; }
+        @Override public boolean deserialize(String raw) { return true; }
+    }
+
+    /**
      * Bloc de TEXTE — un titre en gras et un paragraphe qui revient à la
      * ligne. Rien à régler ni à persister : sert à expliquer ce que fait un
      * module (voir {@code OptimizationModule}).

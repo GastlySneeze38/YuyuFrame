@@ -193,6 +193,17 @@ public abstract class LauncherModule {
     public void onConfigChanged() {}
 
     /**
+     * Ce module a-t-il un aperçu à montrer à côté de ses réglages ? L'écran de
+     * configuration lui réserve alors un cadre dans la place libre à droite de
+     * la liste — s'il y en a : sur une fenêtre étroite, pas d'aperçu.
+     */
+    public boolean hasConfigPreview() { return false; }
+
+    /** Dessine l'aperçu dans le carré donné ({@code x}/{@code y} : coin bas-gauche, y vers le haut). */
+    public void drawConfigPreview(com.yuyuframe.launcheragent.apigraphic.UiRenderer renderer,
+                                  float x, float y, float size, int vpWidth, int vpHeight) {}
+
+    /**
      * Appelé à CHAQUE frame (via {@link ModuleRegistry#tickAll()}), qu'un
      * écran custom soit ouvert ou non, UNIQUEMENT si {@link #isEnabled()} —
      * pour la logique globale qui doit continuer même en jeu (ex: FOV forcé,

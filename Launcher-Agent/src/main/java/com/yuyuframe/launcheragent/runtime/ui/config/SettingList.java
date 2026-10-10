@@ -162,6 +162,11 @@ public final class SettingList {
         return add(new Setting.Text(id, name, description, category, null, placeholder, get, set, false));
     }
 
+    /** Ligne au widget fourni par le module — voir {@link Setting.Custom}. {@code height} à l'échelle 1 de l'interface. */
+    public SettingList custom(String id, String category, float height, Setting.Custom.Factory factory) {
+        return add(new Setting.Custom(id, category, height, factory));
+    }
+
     /** Ligne bouton — une action, aucune valeur. */
     public SettingList action(String id, String name, String description, String category, Runnable run) {
         return add(new Setting.Action(id, name, description, category, null, run));

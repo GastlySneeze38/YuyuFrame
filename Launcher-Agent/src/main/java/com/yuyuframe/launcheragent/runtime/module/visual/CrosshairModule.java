@@ -1,62 +1,63 @@
 package com.yuyuframe.launcheragent.runtime.module.visual;
 
+import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
 import com.yuyuframe.launcheragent.apimixin.HookPoint;
 import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
+import com.yuyuframe.launcheragent.runtime.game.ClientData;
+import com.yuyuframe.launcheragent.runtime.game.PlayerData;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
+import com.yuyuframe.launcheragent.runtime.ui.config.SettingModal;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiPixelGrid;
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
+import com.yuyuframe.launcheragent.apigraphic.value.UiTheme;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 
-
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.File;
 import java.io.InputStream;
-import com.yuyuframe.launcheragent.runtime.game.PlayerData;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
- * Crosshair personnalisé — port du vrai PvP-Mod
- * ({@code CrosshairConfig}/{@code CrosshairHandler}, mode procédural
- * uniquement ici — le mode image PNG de PvP-Mod n'est pas repris, pas
- * demandé). Le vanilla est masqué par {@code MixinCrosshair189}
- * ({@code InGameHud.showCrosshair()} forcé à false), on dessine notre propre
- * croix ici à la place.
+ * Crosshair personnalisé. Le vanilla est masqué par le point {@code
+ * HUD_EXTRACT_CROSSHAIR} (un mixin par version), on dessine le nôtre à la
+ * place. Deux façons de le faire :
  *
- * Barre de rechargement ("nouveau PvP", combat 1.9+) : n'existait PAS dans
- * PvP-Mod (1.8.9 uniquement, combat sans cooldown) — nouvelle fonctionnalité.
- * Lit {@code PlayerEntity.getAttackCooldownProgress(float baseTime)} (Yarn,
- * mappings.tiny ligne ~80707) / réel Mojang 26.1+
- * {@code Player.getAttackStrengthScale(float)} (vérifié par javap sur le jar
- * client 26.1.2 réel + bytecode de {@code Gui.renderCrosshair}, qui appelle
- * {@code getAttackStrengthScale(0.0F)}). Absente sur 1.8.9 (pas de mapping,
- * pas de cooldown avant la refonte du combat) — {@link #attackCooldownProgress()}
- * renvoie alors {@code -1f} (repli "impossible à savoir") et la barre ENTIÈRE
- * (fond + remplissage) n'est simplement PAS dessinée sur ce bracket, plutôt
- * qu'une fausse barre toujours pleine (demande explicite de l'utilisateur :
- * "pour les anciennes version qui n'ont pas de cooldown ne le met juste
- * pas").
+ * <ul>
+ *   <li><b>Croix</b> : quatre barres (ou un point) réglées par des curseurs.</li>
+ *   <li><b>Dessin</b> : une grille de {@value #GRID} × {@value #GRID} pixels,
+ *       peinte à la main dans l'écran de configuration ({@link UiPixelGrid})
+ *       ou remplie depuis une image. Une image importée DEVIENT le dessin :
+ *       il n'y a qu'un seul modèle, donc une image se retouche ensuite au
+ *       pixel. Dessinée en rectangles de couleur, sans texture : nette à toute
+ *       taille, et rien à charger.</li>
+ * </ul>
  *
- * Utilise la VRAIE texture vanilla (demande explicite de l'utilisateur,
- * après un premier essai en rendu procédural jugé pas assez bon) :
- * {@code assets/minecraft/textures/gui/sprites/hud/
- * crosshair_attack_indicator_{background,progress}.png}, chargées depuis le
- * jar du jeu lui-même via le classloader courant (même motif que
- * {@code LauncherMixinService.getResourceAsStream} : contexte du thread,
- * repli sur le classloader de cette classe) puis dessinées avec
- * {@link UiRenderer#drawIcon} (déjà utilisé pour les icônes Modrinth,
- * chemin Blaze3D/legacy déjà éprouvé). La texture "progress" est recadrée
- * (largeur source réduite proportionnellement à l'avancement) plutôt
- * qu'étirée, pour reproduire le remplissage progressif de gauche à droite
- * de vanilla plutôt qu'un simple fondu.
+ * L'écran de configuration montre le résultat dans son cadre d'aperçu
+ * ({@link #drawConfigPreview}) — le même code de dessin que le HUD, agrandi.
  *
- * Absente si le chemin de ressource n'existe pas sur cette version (mise
- * en page d'assets différente sur les brackets plus anciens que le
- * système de sprites GUI, ou pas de mapping Yarn équivalent avant tout) —
- * repli propre sur un rendu procédural aux couleurs déjà calquées sur ces
- * mêmes textures (fond #3A3B3C, remplissage dégradé #D7D9EA → blanc,
- * extraits par échantillonnage pixel du jar 26.1.2), jamais de crash ni de
- * barre manquante.
+ * <h2>Barre de rechargement</h2>
+ *
+ * Masquer le crosshair de vanilla masque aussi sa barre de rechargement (le
+ * même appel dessine les deux). On la redessine donc, À L'IDENTIQUE : les
+ * deux vraies textures du jeu ({@code hud/crosshair_attack_indicator_*}, lues
+ * par le gestionnaire de ressources, donc celles du pack actif), à la taille
+ * et à la place de vanilla (16 × 4 pixels de GUI, sous le centre), visible
+ * seulement pendant le rechargement. Rien n'y est réglable, sinon de la
+ * montrer ou non — et ce réglage n'existe pas en 1.8.9, qui n'a pas de
+ * rechargement. Seul écart avec vanilla : son mélange « couleurs inversées »
+ * avec le décor n'est pas reproduit.
  */
 public final class CrosshairModule extends LauncherModule {
+
+    /** Côté de la grille de dessin. Impair : il y a une case du milieu, celle qui tombe sur le centre de l'écran. */
+    public static final int GRID = 33;
+
+    /** 0 = croix réglée par curseurs, 1 = dessin. */
+    public int mode = 0;
 
     public float size = 8f;
 
@@ -66,61 +67,57 @@ public final class CrosshairModule extends LauncherModule {
 
     public boolean dotMode = false;
 
+    /** Couleur de la croix, et du pinceau du dessin. */
     public UiColor color = new UiColor(255, 255, 255, 255);
+
+    /** Taille à l'écran d'un pixel du dessin. */
+    public float pixelSize = 2f;
 
     public boolean showCooldownBar = true;
 
-    public float cooldownWidth = 100f;
+    /** Le dessin : {@code GRID × GRID} couleurs ARGB, 0 = vide, ligne 0 en haut. Édité en place par la grille. */
+    private final int[] pixels = new int[GRID * GRID];
 
-    public float cooldownHeight = 20f;
+    /** Pourquoi le dernier import a échoué, ou {@code null}. Affiché dans les réglages. */
+    private String importError;
 
-    public float cooldownOffset = 14f;
-
-    /** #D7D9EA — teinte dominante du sprite vanilla "progress" (voir javadoc de tête). */
-    public UiColor cooldownColor = new UiColor(215, 217, 234, 255);
-
-    /** #3A3B3C — couleur EXACTE (pixel sampling) du sprite vanilla "background". */
-    public UiColor cooldownBackgroundColor = new UiColor(58, 59, 60, 255);
-
-    /**
-     * Deux catégories : les onglets apparaissent dans l'ordre de première
-     * déclaration ci-dessous ("Réglages" puis "Rechargement"), exactement
-     * comme ils suivaient l'ordre des champs auparavant.
-     */
     @Override
     protected void settings(SettingList s) {
-        s.slider("size", "Taille", "Réglages", 1f, 32f, 1f, () -> size, v -> size = v);
-        s.slider("thickness", "Épaisseur", "Réglages", 1f, 6f, 1f, () -> thickness, v -> thickness = v);
-        s.slider("gap", "Espacement central", "Réglages", 0f, 16f, 1f, () -> gap, v -> gap = v);
-        s.toggle("dotMode", "Point au lieu d'une croix", "Réglages", () -> dotMode, v -> dotMode = v);
+        s.dropdown("mode", "Type", "Croix : quatre barres réglées par les curseurs. Dessin : la grille plus bas, peinte à la main ou remplie depuis une image.",
+            "Réglages", new String[]{ "Croix", "Dessin" }, null, () -> mode, v -> mode = v);
+        s.slider("size", "Taille", "", "Réglages", 1f, 32f, 1f, () -> mode == 0, () -> size, v -> size = v);
+        s.slider("thickness", "Épaisseur", "", "Réglages", 1f, 6f, 1f, () -> mode == 0, () -> thickness, v -> thickness = v);
+        s.slider("gap", "Espacement central", "", "Réglages", 0f, 16f, 1f, () -> mode == 0, () -> gap, v -> gap = v);
+        s.toggle("dotMode", "Point au lieu d'une croix", "", "Réglages", () -> mode == 0, () -> dotMode, v -> dotMode = v);
         s.color("color", "Couleur", "Réglages", () -> color, v -> color = v);
 
-        s.toggle("showCooldownBar", "Afficher la barre de rechargement", "Rechargement",
-            () -> showCooldownBar, v -> showCooldownBar = v);
-        s.slider("cooldownWidth", "Largeur", "Rechargement", 6f, 300f, 1f,
-            () -> cooldownWidth, v -> cooldownWidth = v);
-        s.slider("cooldownHeight", "Hauteur", "Rechargement", 1f, 60f, 1f,
-            () -> cooldownHeight, v -> cooldownHeight = v);
-        s.slider("cooldownOffset", "Décalage vertical", "Rechargement", 0f, 60f, 1f,
-            () -> cooldownOffset, v -> cooldownOffset = v);
-        s.color("cooldownColor", "Couleur (rempli)", "Rechargement",
-            () -> cooldownColor, v -> cooldownColor = v);
-        s.color("cooldownBackgroundColor", "Couleur (fond)", "Rechargement",
-            () -> cooldownBackgroundColor, v -> cooldownBackgroundColor = v);
+        if (importError != null) {
+            s.warning("importError", "Import impossible", importError, "Dessin");
+        }
+        s.custom("drawing", "Dessin", 290f, (x, y, w, h, commit) ->
+            new UiPixelGrid(x, y, w, h, GRID, pixels, () -> color, () -> mode == 1,
+                "Choisis le type « Dessin » pour dessiner", this::rebuildRuns, commit));
+        s.info("drawingHelp", "Dessiner sa croix",
+            "Clic gauche pour peindre avec la couleur choisie plus haut, clic droit pour effacer. La croix claire de la grille marque le centre de l'écran.",
+            "Dessin");
+        s.slider("pixelSize", "Taille d'un pixel", "La taille à l'écran d'une case du dessin.",
+            "Dessin", 1f, 8f, 1f, () -> mode == 1, () -> pixelSize, v -> pixelSize = v);
+        s.action("importImage", "Importer une image",
+            "Remplace le dessin par une image PNG. Au-delà de 33 pixels de côté, elle est réduite.",
+            "Dessin", this::askImage);
+        s.action("clearDrawing", "Effacer le dessin", "", "Dessin", () -> {
+            java.util.Arrays.fill(pixels, 0);
+            rebuildRuns();
+        });
+        s.opaque("pixels", this::encodePixels, this::decodePixels);
+
+        // Pas de rechargement avant la refonte du combat (1.9) : le réglage n'aurait rien à montrer.
+        if (!"1.8.9".equals(AccessorRegistry.boundVersion())) {
+            s.toggle("showCooldownBar", "Afficher la barre de rechargement",
+                "La barre de vanilla sous le viseur, pendant le rechargement d'une attaque.",
+                "Rechargement", null, () -> showCooldownBar, v -> showCooldownBar = v);
+        }
     }
-
-    /** Contour fixe (pas configurable, juste pour détacher la barre de l'arrière-plan du jeu quel qu'il soit — le vrai vanilla n'en a pas besoin, il compte sur son propre alpha, mais notre croix personnalisable peut être posée sur n'importe quel décor). Utilisé UNIQUEMENT par le repli procédural (voir javadoc de tête) — la vraie texture vanilla n'en a pas besoin. */
-    private static final UiColor COOLDOWN_BORDER = new UiColor(0, 0, 0, 200);
-
-    private static final String VANILLA_BG_PATH = "assets/minecraft/textures/gui/sprites/hud/crosshair_attack_indicator_background.png";
-    private static final String VANILLA_PROGRESS_PATH = "assets/minecraft/textures/gui/sprites/hud/crosshair_attack_indicator_progress.png";
-
-    private static boolean vanillaTexturesAttempted;
-    private static BufferedImage vanillaBgImage;
-    private static BufferedImage vanillaProgressImage;
-    private static boolean vanillaTextureErrorLogged;
-
-    private static boolean cooldownErrorLogged;
 
     public CrosshairModule() {
         super("custom-crosshair", "Crosshair personnalisé", "Remplace la croix de visée vanilla", false,
@@ -132,123 +129,329 @@ public final class CrosshairModule extends LauncherModule {
         // concentriques, PAS un viseur).
         iconUrl = ICON_LOCAL_CROSSHAIR;
 
-        // Migration apimixin (ROADMAP-agent.md §3.2) — remplace l'ancien
-        // CrosshairMixin261 (mixin/, ModuleRegistry.get("custom-crosshair") +
-        // ci.cancel()) : dispatch()==true fait sauter le rendu vanilla dans
-        // HudExtractCrosshairMixin261 (apimixin/), exactement le même effet
-        // que l'ancien ci.cancel() — masquer la croix vanilla quand ce module
-        // est actif, notre propre croix étant dessinée séparément par
-        // onRenderOverlay ci-dessous.
+        // Un dessin de départ, pour que le type « Dessin » ne s'ouvre pas sur
+        // du vide : une croix fine. Remplacé par le dessin sauvegardé s'il y en a un.
+        int mid = GRID / 2, white = 0xFFFFFFFF;
+        for (int i = 2; i <= 5; i++) {
+            pixels[mid * GRID + mid - i] = white;
+            pixels[mid * GRID + mid + i] = white;
+            pixels[(mid - i) * GRID + mid] = white;
+            pixels[(mid + i) * GRID + mid] = white;
+        }
+        rebuildRuns();
+
+        // dispatch()==true fait sauter le rendu vanilla dans le mixin du
+        // crosshair de la version : la croix de vanilla disparaît quand ce
+        // module est actif, la nôtre étant dessinée par onRenderOverlay.
         VanillaHookRegistry.register(HookPoint.HUD_EXTRACT_CROSSHAIR, ctx -> isEnabled());
     }
+
+    // ── Dessin du viseur ───────────────────────────────────────────────────
+
+    private static boolean overlayErrorLogged;
 
     @Override
     public void onRenderOverlay(UiRenderer renderer, int vpWidth, int vpHeight) {
         try {
-            float cx = vpWidth / 2f;
-            float cy = vpHeight / 2f;
-
-            if (dotMode) {
-                renderer.drawRoundedRect(cx - thickness, cy - thickness, cx + thickness, cy + thickness, thickness, color, vpWidth, vpHeight);
-            } else {
-                // Gauche / droite / haut / bas — 4 barres autour du centre, avec l'espacement "gap"
-                renderer.drawRoundedRect(cx - gap - size, cy - thickness / 2f, cx - gap, cy + thickness / 2f, 0, color, vpWidth, vpHeight);
-                renderer.drawRoundedRect(cx + gap, cy - thickness / 2f, cx + gap + size, cy + thickness / 2f, 0, color, vpWidth, vpHeight);
-                renderer.drawRoundedRect(cx - thickness / 2f, cy - gap - size, cx + thickness / 2f, cy - gap, 0, color, vpWidth, vpHeight);
-                renderer.drawRoundedRect(cx - thickness / 2f, cy + gap, cx + thickness / 2f, cy + gap + size, 0, color, vpWidth, vpHeight);
-            }
-
-            if (showCooldownBar) {
-                float progress = attackCooldownProgress();
-                if (progress < 0f) return; // pas de cooldown sur ce bracket (1.8.9) — rien à dessiner, voir javadoc de tête
-                // Comportement vanilla (demande explicite) : la barre n'existe
-                // que PENDANT le rechargement — dès que l'attaque est prête,
-                // vanilla ne dessine RIEN du tout (vérifié par bytecode de
-                // Gui.renderCrosshair : "if (progress>=1f) return;" avant même
-                // d'atteindre le blit du fond/du remplissage) — elle réapparaît
-                // seulement au coup suivant qui relance le cooldown.
-                if (progress >= 0.999f) return;
-
-                float base = dotMode ? thickness : (gap + size);
-                // BUG TROUVÉ (retour utilisateur, capture d'écran) : le renderer
-                // (drawIcon/drawRoundedRect) utilise une convention Y-UP
-                // (+y = vers le HAUT de l'écran, voir la javadoc de
-                // UiRenderer#drawIcon) — "cy + décalage" plaçait donc la barre
-                // AU-DESSUS de la croix au lieu d'en dessous (invisible sur la
-                // croix elle-même, symétrique haut/bas, donc jamais remarqué
-                // avant). Pour aller EN DESSOUS (comme vanilla), il faut
-                // SOUSTRAIRE : le bord le plus proche de la croix est à
-                // cy - base - cooldownOffset, la barre s'étend encore plus loin
-                // (donc encore plus petit en y) sur cooldownHeight.
-                float y2 = cy - base - cooldownOffset;
-                float y1 = y2 - cooldownHeight;
-                float half = cooldownWidth / 2f;
-                float x1 = cx - half, x2 = cx + half;
-
-                ensureVanillaTextures();
-                if (vanillaBgImage != null && vanillaProgressImage != null) {
-                    drawVanillaCooldownBar(renderer, x1, y1, x2, y2, progress, vpWidth, vpHeight);
-                } else {
-                    drawProceduralCooldownBar(renderer, x1, y1, x2, y2, progress, vpWidth, vpHeight);
-                }
-            }
-        } catch (Throwable ignored) {}
-    }
-
-    /** Vraie texture vanilla — voir javadoc de tête. */
-    private void drawVanillaCooldownBar(UiRenderer renderer, float x1, float y1, float x2, float y2,
-                                         float progress, int vpWidth, int vpHeight) {
-        renderer.drawIcon("crosshair-cooldown-bg", vanillaBgImage, x1, y1, x2 - x1, y2 - y1, vpWidth, vpHeight);
-        if (progress <= 0.01f) return;
-        int srcW = vanillaProgressImage.getWidth();
-        int croppedW = Math.max(1, Math.round(srcW * Math.min(1f, progress)));
-        BufferedImage cropped = croppedW >= srcW ? vanillaProgressImage : vanillaProgressImage.getSubimage(0, 0, croppedW, vanillaProgressImage.getHeight());
-        float fillW = (x2 - x1) * ((float) croppedW / srcW);
-        renderer.drawIcon("crosshair-cooldown-fg-" + croppedW, cropped, x1, y1, fillW, y2 - y1, vpWidth, vpHeight);
-    }
-
-    /** Repli si la texture vanilla n'est pas disponible sur ce bracket — voir javadoc de tête. */
-    private void drawProceduralCooldownBar(UiRenderer renderer, float x1, float y1, float x2, float y2,
-                                            float progress, int vpWidth, int vpHeight) {
-        float radius = (y2 - y1) / 2f;
-
-        // Piste en pilule (radius = hauteur/2) — cohérent avec le reste du
-        // style (UiSlider etc.), pas un rectangle à coins vifs qui
-        // détonnait avec tout le reste de l'UI.
-        renderer.drawRoundedRect(x1, y1, x2, y2, radius, cooldownBackgroundColor, vpWidth, vpHeight);
-
-        if (progress > 0.01f) {
-            float fillX2 = x1 + (x2 - x1) * progress;
-            // Radius du remplissage plafonné à sa propre demi-largeur : évite
-            // une pilule déformée/auto-intersectante quand le remplissage est
-            // plus étroit que la hauteur de la barre (tout début du cooldown).
-            float fillRadius = Math.min(radius, (fillX2 - x1) / 2f);
-            UiColor fillHighlight = UiColor.lerp(cooldownColor, new UiColor(1f, 1f, 1f, cooldownColor.a), 0.45f);
-            renderer.drawGradientRect(x1, y1, fillX2, y2, fillRadius, cooldownColor, fillHighlight, vpWidth, vpHeight);
-        }
-
-        // Contour pour détacher la barre de n'importe quel arrière-plan
-        // (herbe claire, ciel, neige...) — sans lui, le fond translucide se
-        // fondait dans le décor selon la scène regardée.
-        renderer.drawRoundedRectBorder(x1, y1, x2, y2, radius, 1f, COOLDOWN_BORDER, vpWidth, vpHeight);
-    }
-
-    /** Chargement paresseux, une seule fois (jamais par frame) — voir javadoc de tête pour le chemin/motif de classloader. */
-    private static void ensureVanillaTextures() {
-        if (vanillaTexturesAttempted) return;
-        vanillaTexturesAttempted = true;
-        try {
-            vanillaBgImage = loadVanillaSprite(VANILLA_BG_PATH);
-            vanillaProgressImage = loadVanillaSprite(VANILLA_PROGRESS_PATH);
+            drawCrosshair(renderer, vpWidth / 2f, vpHeight / 2f, 1f, true, vpWidth, vpHeight);
+            if (showCooldownBar) drawCooldownBar(renderer, vpWidth, vpHeight);
         } catch (Throwable t) {
-            if (!vanillaTextureErrorLogged) {
-                vanillaTextureErrorLogged = true;
-                LauncherLog.err("[CrosshairModule] ensureVanillaTextures: " + t);
+            if (!overlayErrorLogged) {
+                overlayErrorLogged = true;
+                LauncherLog.err("[CrosshairModule] onRenderOverlay: " + t);
             }
         }
     }
 
-    private static BufferedImage loadVanillaSprite(String path) throws Exception {
+    /**
+     * Le viseur, centré sur ({@code cx}, {@code cy}), agrandi {@code zoom}
+     * fois — 1 en jeu, plus dans l'aperçu : c'est le même dessin.
+     *
+     * @param hud vrai pour le dessin en jeu, dont la géométrie est mémorisée d'une image à l'autre
+     */
+    private void drawCrosshair(UiRenderer renderer, float cx, float cy, float zoom, boolean hud,
+                               int vpWidth, int vpHeight) {
+        if (mode == 1) {
+            drawDrawing(renderer, cx, cy, pixelSize * zoom, hud, vpWidth, vpHeight);
+            return;
+        }
+        float t = thickness * zoom, g = gap * zoom, s = size * zoom;
+        if (dotMode) {
+            renderer.drawRoundedRect(cx - t, cy - t, cx + t, cy + t, t, color, vpWidth, vpHeight);
+            return;
+        }
+        // Gauche / droite / haut / bas — 4 barres autour du centre, avec l'espacement "gap"
+        renderer.drawRoundedRect(cx - g - s, cy - t / 2f, cx - g, cy + t / 2f, 0, color, vpWidth, vpHeight);
+        renderer.drawRoundedRect(cx + g, cy - t / 2f, cx + g + s, cy + t / 2f, 0, color, vpWidth, vpHeight);
+        renderer.drawRoundedRect(cx - t / 2f, cy - g - s, cx + t / 2f, cy - g, 0, color, vpWidth, vpHeight);
+        renderer.drawRoundedRect(cx - t / 2f, cy + g, cx + t / 2f, cy + g + s, 0, color, vpWidth, vpHeight);
+    }
+
+    /** Demi-encombrement du viseur à zoom 1, pour que l'aperçu choisisse un agrandissement qui tient. */
+    private float extent() {
+        if (mode == 1) return GRID * pixelSize / 2f;
+        return dotMode ? thickness : gap + size;
+    }
+
+    // Le dessin, réduit à des bandes : {colonne, ligne, longueur} par suite de
+    // cases de même couleur. Refait à chaque modification, pas à chaque image.
+    private int[] runs = new int[0];
+    private UiColor[] runColors = new UiColor[0];
+
+    private void rebuildRuns() {
+        List<Integer> data = new ArrayList<>();
+        List<UiColor> colors = new ArrayList<>();
+        for (int row = 0; row < GRID; row++) {
+            int col = 0;
+            while (col < GRID) {
+                int argb = pixels[row * GRID + col];
+                if (argb == 0) { col++; continue; }
+                int start = col;
+                while (col < GRID && pixels[row * GRID + col] == argb) col++;
+                data.add(start);
+                data.add(row);
+                data.add(col - start);
+                colors.add(UiPixelGrid.color(argb));
+            }
+        }
+        int[] flat = new int[data.size()];
+        for (int i = 0; i < flat.length; i++) flat[i] = data.get(i);
+        runs = flat;
+        runColors = colors.toArray(new UiColor[0]);
+        hudBounds = null;
+    }
+
+    // Géométrie du dessin en jeu, gardée tant que rien ne bouge (fenêtre,
+    // taille d'un pixel, dessin) : une croix ne se recalcule pas 200 fois par seconde.
+    private float[][] hudBounds;
+    private float hudCx, hudCy, hudCell;
+
+    private void drawDrawing(UiRenderer renderer, float cx, float cy, float cell, boolean hud,
+                             int vpWidth, int vpHeight) {
+        UiColor[] colors = runColors;
+        if (colors.length == 0) return;
+        float[][] bounds = hud ? hudBounds : null;
+        if (bounds == null || bounds.length != colors.length || hudCx != cx || hudCy != cy || hudCell != cell || !hud) {
+            bounds = runBounds(cx, cy, cell);
+            if (hud) {
+                hudBounds = bounds;
+                hudCx = cx;
+                hudCy = cy;
+                hudCell = cell;
+            }
+        }
+        renderer.drawRoundedRectBatch(bounds, colors, 0f, vpWidth, vpHeight);
+    }
+
+    /** Les bandes en pixels écran : la case du milieu de la grille est centrée sur ({@code cx}, {@code cy}), bords calés sur des pixels entiers. */
+    private float[][] runBounds(float cx, float cy, float cell) {
+        int[] data = runs;
+        float left = (float) Math.round(cx - GRID * cell / 2f);
+        float top = (float) Math.round(cy + GRID * cell / 2f);
+        float[][] bounds = new float[data.length / 3][];
+        for (int i = 0; i < bounds.length; i++) {
+            int col = data[i * 3], row = data[i * 3 + 1], length = data[i * 3 + 2];
+            bounds[i] = new float[]{ left + col * cell, top - (row + 1) * cell, left + (col + length) * cell, top - row * cell };
+        }
+        return bounds;
+    }
+
+    // ── Aperçu dans l'écran de configuration ───────────────────────────────
+
+    private static final UiColor PREVIEW_BACKGROUND = new UiColor(34, 38, 48, 255);
+
+    @Override
+    public boolean hasConfigPreview() {
+        return true;
+    }
+
+    @Override
+    public void drawConfigPreview(UiRenderer renderer, float x, float y, float boxSize, int vpWidth, int vpHeight) {
+        renderer.drawRoundedRect(x, y, x + boxSize, y + boxSize, UiTheme.RADIUS_SM, PREVIEW_BACKGROUND,
+            vpWidth, vpHeight);
+        // Trois fois la taille en jeu, moins si le viseur ne tiendrait pas dans le cadre.
+        float room = boxSize / 2f * 0.85f;
+        float zoom = Math.max(0.25f, Math.min(3f, room / Math.max(1f, extent())));
+        drawCrosshair(renderer, x + boxSize / 2f, y + boxSize / 2f, zoom, false, vpWidth, vpHeight);
+    }
+
+    // ── Import d'une image ─────────────────────────────────────────────────
+
+    private void askImage() {
+        SettingModal.request(new SettingModal("Importer une image", answers -> {
+            importError = importImage(answers.get(0));
+            if (importError == null) mode = 1;
+            // La ligne d'erreur apparaît ou disparaît, le type a pu changer : l'écran se reconstruit.
+            invalidateSettings();
+        }, SettingModal.Step.text("Chemin de l'image", "C:\\Users\\...\\crosshair.png")));
+    }
+
+    /** @return {@code null} si le dessin a été remplacé, sinon la raison de l'échec (texte source français). */
+    private String importImage(String typed) {
+        String path = typed == null ? "" : typed.trim();
+        // « Copier en tant que chemin » de Windows entoure le chemin de guillemets.
+        if (path.length() >= 2 && path.startsWith("\"") && path.endsWith("\"")) {
+            path = path.substring(1, path.length() - 1);
+        }
+        if (path.isEmpty()) return "Aucun chemin n'a été donné.";
+        try {
+            File file = new File(path);
+            if (!file.isFile()) return "Image introuvable à cet emplacement.";
+            BufferedImage image = javax.imageio.ImageIO.read(file);
+            if (image == null) return "Ce fichier n'est pas une image lisible.";
+            int[] fitted = fit(image);
+            boolean empty = true;
+            for (int argb : fitted) {
+                if (argb != 0) { empty = false; break; }
+            }
+            if (empty) return "L'image est entièrement transparente.";
+            System.arraycopy(fitted, 0, pixels, 0, pixels.length);
+            rebuildRuns();
+            return null;
+        } catch (Throwable t) {
+            LauncherLog.err("[CrosshairModule] import de l'image « " + path + " » : " + t);
+            return "Ce fichier n'est pas une image lisible.";
+        }
+    }
+
+    /**
+     * L'image ramenée à la grille : recopiée telle quelle et centrée si elle
+     * tient, sinon réduite au plus proche voisin (pas de lissage : un viseur
+     * est du pixel art). Les pixels presque transparents sont vidés.
+     */
+    private static int[] fit(BufferedImage image) {
+        int iw = image.getWidth(), ih = image.getHeight();
+        float shrink = Math.max(1f, Math.max(iw, ih) / (float) GRID);
+        int ow = Math.max(1, Math.min(GRID, Math.round(iw / shrink)));
+        int oh = Math.max(1, Math.min(GRID, Math.round(ih / shrink)));
+        int ox = (GRID - ow) / 2, oy = (GRID - oh) / 2;
+        int[] out = new int[GRID * GRID];
+        for (int row = 0; row < oh; row++) {
+            int sy = Math.min(ih - 1, (int) ((row + 0.5f) * ih / oh));
+            for (int col = 0; col < ow; col++) {
+                int sx = Math.min(iw - 1, (int) ((col + 0.5f) * iw / ow));
+                int argb = image.getRGB(sx, sy);
+                out[(oy + row) * GRID + ox + col] = (argb >>> 24) < 24 ? 0 : argb;
+            }
+        }
+        return out;
+    }
+
+    // ── Persistance du dessin : « longueur:couleur » par suite de cases identiques ──
+
+    private String encodePixels() {
+        StringBuilder sb = new StringBuilder();
+        int i = 0;
+        while (i < pixels.length) {
+            int argb = pixels[i], start = i;
+            while (i < pixels.length && pixels[i] == argb) i++;
+            if (sb.length() > 0) sb.append(',');
+            sb.append(i - start).append(':').append(Integer.toHexString(argb));
+        }
+        return sb.toString();
+    }
+
+    /** Une valeur illisible ou d'une autre taille de grille est ignorée : le dessin en place reste. */
+    private void decodePixels(String raw) {
+        if (raw == null || raw.isEmpty()) return;
+        try {
+            int[] decoded = new int[pixels.length];
+            int at = 0;
+            for (String token : raw.split(",")) {
+                int sep = token.indexOf(':');
+                int count = Integer.parseInt(token.substring(0, sep));
+                int argb = Integer.parseUnsignedInt(token.substring(sep + 1), 16);
+                if (count <= 0 || at + count > decoded.length) return;
+                java.util.Arrays.fill(decoded, at, at + count, argb);
+                at += count;
+            }
+            if (at != decoded.length) return;
+            System.arraycopy(decoded, 0, pixels, 0, pixels.length);
+            rebuildRuns();
+        } catch (RuntimeException malformed) {
+            LauncherLog.err("[CrosshairModule] dessin sauvegardé illisible, ignoré : " + malformed);
+        }
+    }
+
+    // ── Barre de rechargement, celle de vanilla ────────────────────────────
+
+    /** Les deux textures de vanilla font 16 × 4 pixels de GUI. */
+    private static final int BAR_W = 16, BAR_H = 4;
+    private static final String SPRITE_DIR = "textures/gui/sprites/hud/";
+
+    private static boolean spritesAttempted;
+    private static BufferedImage backgroundSprite, progressSprite;
+    private static boolean cooldownErrorLogged;
+
+    private void drawCooldownBar(UiRenderer renderer, int vpWidth, int vpHeight) {
+        float progress = attackCooldownProgress();
+        // Comme vanilla (bytecode de Gui.renderCrosshair) : rien tant que
+        // l'attaque est prête, la barre n'existe que pendant le rechargement.
+        // -1 = pas de rechargement sur cette version, ou monde pas chargé.
+        if (progress < 0f || progress >= 1f) return;
+        ensureSprites();
+        if (backgroundSprite == null || progressSprite == null) return;
+
+        // La place de vanilla, calculée comme lui en pixels de GUI entiers :
+        // x = largeur/2 - 8, y = hauteur/2 - 7 + 16 (y vers le BAS chez lui).
+        int scale = ClientData.guiScale();
+        if (scale <= 0) scale = 2;
+        int guiW = (int) Math.ceil(vpWidth / (double) scale), guiH = (int) Math.ceil(vpHeight / (double) scale);
+        int gx = guiW / 2 - 8, gy = guiH / 2 - 7 + 16;
+        float x = gx * scale;
+        float y = vpHeight - (gy + BAR_H) * scale; // coin BAS-gauche, y vers le haut
+
+        renderer.drawIcon("crosshair-cooldown-bg-" + scale, scaled(backgroundSprite, BAR_W, scale),
+            x, y, BAR_W * scale, BAR_H * scale, vpWidth, vpHeight);
+        // Vanilla : (int)(progress * 17) pixels de la texture, de gauche à droite — recadrée, jamais étirée.
+        int filled = Math.min(BAR_W, (int) (progress * 17f));
+        if (filled <= 0) return;
+        renderer.drawIcon("crosshair-cooldown-fg-" + scale + "-" + filled, scaled(progressSprite, filled, scale),
+            x, y, filled * scale, BAR_H * scale, vpWidth, vpHeight);
+    }
+
+    // Les textures agrandies une fois par taille (17 recadrages au plus par
+    // échelle de GUI) : agrandies au plus proche voisin ICI, pour que le
+    // moteur les pose pixel pour pixel au lieu de les lisser en les étirant.
+    private static final java.util.Map<String, BufferedImage> SCALED = new java.util.HashMap<>();
+
+    private static BufferedImage scaled(BufferedImage sprite, int columns, int scale) {
+        String key = System.identityHashCode(sprite) + ":" + columns + ":" + scale;
+        BufferedImage cached = SCALED.get(key);
+        if (cached != null) return cached;
+        int sw = Math.min(columns, sprite.getWidth()), sh = Math.min(BAR_H, sprite.getHeight());
+        BufferedImage out = new BufferedImage(sw * scale, sh * scale, BufferedImage.TYPE_INT_ARGB);
+        for (int py = 0; py < sh * scale; py++) {
+            for (int px = 0; px < sw * scale; px++) {
+                out.setRGB(px, py, sprite.getRGB(px / scale, py / scale));
+            }
+        }
+        SCALED.put(key, out);
+        return out;
+    }
+
+    /** Chargement paresseux, une seule fois. Par le gestionnaire de ressources (pack actif), sinon depuis le jar du jeu. */
+    private static void ensureSprites() {
+        if (spritesAttempted) return;
+        spritesAttempted = true;
+        try {
+            backgroundSprite = loadSprite("crosshair_attack_indicator_background.png");
+            progressSprite = loadSprite("crosshair_attack_indicator_progress.png");
+            if (backgroundSprite == null || progressSprite == null) {
+                LauncherLog.err("[CrosshairModule] textures de la barre de rechargement introuvables — barre non dessinée");
+            }
+        } catch (Throwable t) {
+            LauncherLog.err("[CrosshairModule] textures de la barre de rechargement : " + t);
+        }
+    }
+
+    private static BufferedImage loadSprite(String name) throws Exception {
+        byte[] bytes = ClientData.resourceBytes("minecraft", SPRITE_DIR + name);
+        if (bytes != null) {
+            BufferedImage image = javax.imageio.ImageIO.read(new ByteArrayInputStream(bytes));
+            if (image != null) return image;
+        }
+        String path = "assets/minecraft/" + SPRITE_DIR + name;
         ClassLoader cl = Thread.currentThread().getContextClassLoader();
         InputStream in = cl != null ? cl.getResourceAsStream(path) : null;
         if (in == null) in = CrosshairModule.class.getClassLoader().getResourceAsStream(path);
@@ -259,10 +462,8 @@ public final class CrosshairModule extends LauncherModule {
     }
 
     /**
-     * @return 0..1 (1 = attaque prête), ou {@code -1f} si le cooldown
-     * d'attaque n'existe pas sur ce bracket (1.8.9) / n'est pas encore
-     * lisible (monde pas chargé) — l'appelant doit alors ne RIEN dessiner
-     * du tout, pas juste replier sur "toujours prêt" (voir javadoc de tête).
+     * @return 0..1 (1 = attaque prête), ou {@code -1f} si le rechargement
+     * n'est pas lisible (monde pas chargé) — l'appelant ne dessine alors rien.
      */
     private float attackCooldownProgress() {
         // Par le POINT D'ACCÈS, pas par l'objet joueur : c'est la liaison de la

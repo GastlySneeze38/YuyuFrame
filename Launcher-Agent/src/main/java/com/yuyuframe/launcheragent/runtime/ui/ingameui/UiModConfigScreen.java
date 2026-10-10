@@ -80,6 +80,8 @@ public class UiModConfigScreen extends UiScreenBase {
     private String activeCategory;
     private UiScrollContainer scroll;
     private float sidebarX, sidebarY, sidebarW, sidebarH;
+    /** Cadre de l'aperçu du module (voir {@link LauncherModule#hasConfigPreview}) ; {@code previewSize} nul = pas d'aperçu. */
+    private float previewPanelX, previewPanelY, previewPanelW, previewPanelH, previewSize;
     private int lastLayoutWidth = -1, lastLayoutHeight = -1;
     private int lastSettingsRevision = -1;
 
@@ -162,6 +164,12 @@ public class UiModConfigScreen extends UiScreenBase {
                 UiTheme.TEXT_PRIMARY, UiTheme.scaled(0.68f), screenWidth, screenHeight);
             updateActiveCategory();
             if (scroll != null) scroll.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
+            if (previewSize > 0f) {
+                UiPanel.draw(renderer, previewPanelX, previewPanelY, previewPanelW, previewPanelH,
+                    Lang.tr("Aperçu"), screenWidth, screenHeight);
+                module.drawConfigPreview(renderer, previewPanelX + (previewPanelW - previewSize) / 2f,
+                    previewPanelY + UiTheme.scaled(14f), previewSize, screenWidth, screenHeight);
+            }
             // APRÈS la liste : la modale doit couvrir le contenu, pas
             // l'inverse. Son voile plein écran absorbe aussi les clics
             // alentour, puisque modalWidgets() rend sa liste exclusive.
@@ -252,6 +260,23 @@ public class UiModConfigScreen extends UiScreenBase {
             rowW = vp.w - scrollbarReserve;
         }
         scroll = new UiScrollContainer(vpX, vpY, vpW, Math.max(1f, vpH));
+
+        // L'aperçu du module, dans ce qui reste à droite de la liste (elle est
+        // plafonnée à CONTENT_MAX_W, le reste de l'écran ne servait à rien).
+        // Pas assez de place : pas d'aperçu, la liste ne lui cède rien.
+        float previewLeft = vpX + vpW + UiTheme.scaled(16f);
+        float previewRoom = screenWidth - SIDE_MARGIN - previewLeft;
+        previewSize = 0f;
+        if (module.hasConfigPreview() && previewRoom >= UiTheme.scaled(150f)) {
+            float pad = UiTheme.scaled(14f), title = UiTheme.scaled(30f);
+            float panelW = Math.min(previewRoom, UiTheme.scaled(300f));
+            float panelH = Math.min(panelW + title, vpH);
+            previewPanelX = previewLeft;
+            previewPanelW = panelW;
+            previewPanelH = panelH;
+            previewPanelY = vpY + vpH - panelH;
+            previewSize = Math.min(panelW - 2f * pad, panelH - title - pad);
+        }
 
         ConfigScreenBuilder.Result result = ConfigScreenBuilder.buildContinuous(module, rowX, rowW);
         anchors = result.anchors;

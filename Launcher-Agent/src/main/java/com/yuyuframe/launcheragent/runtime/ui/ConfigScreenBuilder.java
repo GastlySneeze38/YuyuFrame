@@ -499,6 +499,14 @@ public final class ConfigScreenBuilder {
             // qu'on veut sur le disque.
             return buttonRow(rows, x, w, cursor, label, () -> { a2.run.run(); commit.run(); });
         }
+        if (setting instanceof Setting.Custom) {
+            Setting.Custom c = (Setting.Custom) setting;
+            float height = UiTheme.scaled(c.height);
+            float rowY = cursor - height;
+            rows.add(new RowBackground(x, rowY, w, height));
+            rows.add(c.factory.create(x, rowY, w, height, commit));
+            return rowY - ROW_GAP;
+        }
         if (setting instanceof Setting.Info) {
             return infoRow(rows, x, w, cursor, label, tooltip, ((Setting.Info) setting).warning);
         }
