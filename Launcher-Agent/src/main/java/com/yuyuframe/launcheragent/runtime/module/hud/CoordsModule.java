@@ -6,40 +6,132 @@ import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.value.UiTheme;
 
+import com.yuyuframe.launcheragent.runtime.i18n.Lang;
 import com.yuyuframe.launcheragent.runtime.module.SingleHudModule;
 import com.yuyuframe.launcheragent.runtime.game.LevelData;
 import com.yuyuframe.launcheragent.runtime.game.PlayerData;
+import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
 
 /**
- * Port de PvP-Mod CoordsConfig/CoordsHud — sa propre carte, comme dans la
- * référence, + ligne Biome (accesseur retrouvé : World.getBiome(BlockPos),
- * absent de la passe précédente) et direction regardée, façon capture de
- * référence fournie par l'utilisateur.
+ * Position, orientation et biome du joueur — trois éléments que le joueur
+ * garde ou retire un par un, la mise en page suivant ce qui reste :
  *
- * Rendu personnalisé (voir HudElement.CustomRenderer) plutôt que ContentSource
- * simple : la direction regardée et le tiret décoratif s'alignent à DROITE
- * sur la même ligne que X/Y, ce que le modèle "une ligne de texte" de
- * ContentSource ne sait pas faire (toujours aligné à gauche).
+ * <ul>
+ *   <li><b>Coordonnées</b> : trois lignes X/Y/Z. L'orientation, si elle est
+ *       gardée, se loge à droite de la ligne Y, sous ses deux tirets ; le
+ *       sens de marche suit chaque valeur, entre parenthèses — « (+) » vert
+ *       si la coordonnée est en train d'augmenter, « (-) » rouge si elle
+ *       diminue, rien à l'arrêt. Mesuré sur le déplacement réel, pas sur le
+ *       regard : on peut reculer.</li>
+ *   <li><b>Orientation seule</b> (sans les coordonnées) : une règle graduée
+ *       qui défile avec le regard, les points cardinaux dessous, de longueur
+ *       réglable.</li>
+ *   <li><b>Biome</b> : toujours la dernière ligne, sous ce qui reste.</li>
+ * </ul>
+ *
+ * Tout retirer n'aurait pas de sens (la carte du module sert à ça) : les
+ * coordonnées sont alors affichées.
+ *
+ * <p>Rendu personnalisé (voir HudElement.CustomRenderer) plutôt que
+ * ContentSource simple : la colonne de droite et la règle ne tiennent pas
+ * dans le modèle « une ligne de texte alignée à gauche ».
  */
 public final class CoordsModule extends SingleHudModule {
+
+    public boolean showCoords = true;
+    public boolean showFacing = true;
+    public boolean showBiome = true;
+    /** « + » / « - » à droite de X et Z : le sens dans lequel on avance sur chaque axe. */
+    public boolean showDirection = true;
+    /** Longueur de la règle graduée (orientation sans coordonnées) : plus longue, elle montre plus de degrés. */
+    public float rulerLength = 140f;
+
+    @Override
+    protected void settings(SettingList s) {
+        s.toggle("showCoords", "Afficher les coordonnées",
+            "Les trois lignes X, Y et Z.",
+            "Réglages", null, () -> showCoords, v -> showCoords = v);
+        s.toggle("showDirection", "Afficher le sens de marche",
+            "Un (+) vert ou un (-) rouge à côté de chaque valeur pendant le déplacement : la coordonnée augmente ou diminue.",
+            "Réglages", null, () -> showDirection, v -> showDirection = v);
+        s.toggle("showFacing", "Afficher l'orientation",
+            "Le point cardinal regardé. Sans les coordonnées, il devient une règle graduée qui défile avec le regard.",
+            "Réglages", null, () -> showFacing, v -> showFacing = v);
+        s.slider("rulerLength", "Longueur de la règle",
+            "La largeur de la règle graduée. Plus longue, elle montre une plus grande part de l'horizon.",
+            "Réglages", 100f, 320f, 10f, () -> showFacing && !showCoords,
+            () -> rulerLength, v -> rulerLength = v);
+        s.toggle("showBiome", "Afficher le biome",
+            "Le biome dans lequel se trouve le joueur, sur la dernière ligne.",
+            "Réglages", null, () -> showBiome, v -> showBiome = v);
+    }
+
     public CoordsModule() {
-        super("coords", "Coordonnées", "Affiche la position X/Y/Z du joueur", true,
+        this(new Renderer());
+    }
+
+    private CoordsModule(Renderer renderer) {
+        super("coords", "Coordonnées", "Affiche la position, l'orientation et le biome du joueur", true,
             new HudElement("coords", "Coordonnées", HudAnchor.TOP_LEFT, 8f, 40f,
-                (HudElement.CustomRenderer) new Renderer()));
+                (HudElement.CustomRenderer) renderer));
+        renderer.module = this;
         iconUrl = icons8("map-marker");
     }
 
     private static final class Renderer implements HudElement.CustomRenderer {
         private static final float LINE_H = 16f;
         private static final float TEXT_SCALE = 0.4f;
-        // Largeur du CONTENU seul (marge ajoutée par le moteur, voir HudElement.naturalSize).
-        private static final float NATURAL_WIDTH = 140f;
+        // Largeurs du CONTENU seul (marge ajoutée par le moteur, voir HudElement.naturalSize).
+        private static final float WIDTH_FULL = 140f;
+        /** Les trois lignes X/Y/Z seules, sans colonne de droite ni biome : rien ne justifie la pleine largeur. */
+        private static final float WIDTH_COORDS_ONLY = 90f;
+        /** Hauteur de la règle graduée : graduations au-dessus, points cardinaux dessous. */
+        private static final float RULER_H = 2f * LINE_H;
+        /** Degrés visibles d'un bord à l'autre de la règle. */
+        private static final float RULER_SPAN = 150f;
         private static final UiColor BIOME_COLOR = new UiColor(120, 220, 140, 255);
         private static final UiColor ACCENT = new UiColor(100, 180, 255, 255);
+        private static final UiColor PLUS = new UiColor(110, 220, 130, 255);
+        private static final UiColor MINUS = new UiColor(240, 100, 100, 255);
+        /** Posé par le constructeur du module, juste après {@code super(...)}. */
+        CoordsModule module;
+
+        // Ce qui est réellement dessiné : jamais rien du tout (voir la javadoc de classe).
+        private boolean coords() {
+            CoordsModule m = module;
+            return m == null || m.showCoords || (!m.showFacing && !m.showBiome);
+        }
+
+        private boolean facing() {
+            return module == null || module.showFacing;
+        }
+
+        private boolean biome() {
+            return module == null || module.showBiome;
+        }
+
+        private boolean direction() {
+            return module == null || module.showDirection;
+        }
+
+        /** L'orientation seule, sans les coordonnées pour la porter : c'est la règle graduée. */
+        private boolean ruler() {
+            return facing() && !coords();
+        }
 
         @Override
         public float[] naturalSize() {
-            return new float[]{ NATURAL_WIDTH, 4 * LINE_H };
+            float height = 0f;
+            if (coords()) height += 3f * LINE_H;
+            if (ruler()) height += RULER_H;
+            if (biome()) height += LINE_H;
+            float width;
+            if (ruler()) {
+                width = module == null ? WIDTH_FULL : Math.max(100f, Math.min(320f, module.rulerLength));
+            } else {
+                width = biome() || (coords() && (facing() || direction())) ? WIDTH_FULL : WIDTH_COORDS_ONLY;
+            }
+            return new float[]{ width, height };
         }
 
         @Override
@@ -48,7 +140,9 @@ public final class CoordsModule extends SingleHudModule {
             float rowX = x;
             float rightEdge = x + w;
 
-            String xLine = "X: --", yLine = "Y: --", zLine = "Z: --", facing = null, biome = null;
+            String xLine = "X: --", yLine = "Y: --", zLine = "Z: --", biome = null;
+            boolean known = false;
+            float yaw = 0f;
             try {
                 // Joueur, position et yaw par les ACCESSORS Mixin (PlayerData) —
                 // zéro réflexion. Ce bloc résolvait auparavant le joueur
@@ -60,17 +154,25 @@ public final class CoordsModule extends SingleHudModule {
                     xLine = "X: " + (int) Math.floor(pos[0]);
                     yLine = "Y: " + (int) Math.floor(pos[1]);
                     zLine = "Z: " + (int) Math.floor(pos[2]);
-                    facing = facingLetter(PlayerData.yaw());
-                    biome = com.yuyuframe.launcheragent.runtime.i18n.Lang.tr("Plaines");
+                    yaw = PlayerData.yaw();
+                    known = true;
+                    // Un exemple de déplacement aussi, pour que l'éditeur montre les signes.
+                    moving[0] = 1; moving[1] = 0; moving[2] = -1;
+                    hasLastPos = false;
+                    biome = Lang.tr("Plaines");
                 } else if (PlayerData.inGame()) {
                     double[] pos = PlayerData.position();
                     double px = pos[0], py = pos[1], pz = pos[2];
                     xLine = "X: " + (int) Math.floor(px);
                     yLine = "Y: " + (int) Math.floor(py);
                     zLine = "Z: " + (int) Math.floor(pz);
-
-                    facing = facingLetter(PlayerData.yaw());
-                    biome = cachedBiomeName((int) Math.floor(px), (int) Math.floor(py), (int) Math.floor(pz));
+                    yaw = PlayerData.yaw();
+                    trackMovement(pos);
+                    known = true;
+                    // Résolu seulement s'il est affiché : c'est la lecture la plus chère du module.
+                    if (biome()) {
+                        biome = cachedBiomeName((int) Math.floor(px), (int) Math.floor(py), (int) Math.floor(pz));
+                    }
                 }
             } catch (Throwable t) {
                 // BUG TROUVÉ (1.20.4, test utilisateur) : ce catch était
@@ -85,32 +187,100 @@ public final class CoordsModule extends SingleHudModule {
                 drawExceptionDiag(t);
             }
 
-            float ty = y + h - textScale * 24f; // première ligne, en haut de la zone de contenu
-            renderer.drawText(xLine, rowX, ty, UiTheme.TEXT_PRIMARY, textScale, vpWidth, vpHeight);
-            // "--" (2 tirets ASCII), PAS le caractère tiret cadratin "–"
-            // (U+2013) : hors de la plage de glyphes générée par UiFont (32-126
-            // + 160-255 + Œ/œ, voir UiFont.java) — retombait sur le glyphe de
-            // repli, affiché comme un point d'interrogation.
-            drawRightAligned(renderer, "--", rightEdge, ty, ACCENT, textScale, vpWidth, vpHeight); // tiret décoratif
-            ty -= lineH;
+            float top = y + h; // bord haut de ce qui reste à dessiner, descend à chaque bloc
 
-            renderer.drawText(yLine, rowX, ty, UiTheme.TEXT_PRIMARY, textScale, vpWidth, vpHeight);
-            // Valeur d'orientation (N/S/E/O) EN ACCENT — contrairement à FPS/ms
-            // où seule l'ÉTIQUETTE (FPS/ms) prend la couleur, jamais la VALEUR
-            // numérique : ici c'est l'inverse, c'est justement la valeur
-            // (la lettre de direction) qui doit ressortir.
-            if (facing != null) drawRightAligned(renderer, facing, rightEdge, ty, ACCENT, textScale, vpWidth, vpHeight);
-            ty -= lineH;
+            if (coords()) {
+                boolean signs = known && direction();
+                int xDir = signs ? moving[0] : 0, yDir = signs ? moving[1] : 0, zDir = signs ? moving[2] : 0;
 
-            renderer.drawText(zLine, rowX, ty, UiTheme.TEXT_PRIMARY, textScale, vpWidth, vpHeight);
-            ty -= lineH;
+                float ty = top - textScale * 24f; // première ligne, en haut de la zone de contenu
+                drawValue(renderer, xLine, xDir, rowX, ty, textScale, vpWidth, vpHeight);
+                // "--" (2 tirets ASCII), PAS le tiret cadratin (U+2013) : hors de la
+                // plage de glyphes de UiFont, il retombait sur le glyphe de repli.
+                // Décor de l'orientation : il part avec elle.
+                if (facing()) drawRightAligned(renderer, "--", rightEdge, ty, ACCENT, textScale, vpWidth, vpHeight);
+                ty -= lineH;
 
-            String biomeLabel = "Biome: ";
-            renderer.drawText(biomeLabel, rowX, ty, UiTheme.TEXT_PRIMARY, textScale, vpWidth, vpHeight);
-            if (biome != null) {
-                float labelW = renderer.textWidth(biomeLabel, textScale);
-                renderer.drawText(biome, rowX + labelW, ty, BIOME_COLOR, textScale, vpWidth, vpHeight);
+                drawValue(renderer, yLine, yDir, rowX, ty, textScale, vpWidth, vpHeight);
+                // Valeur d'orientation EN ACCENT — contrairement à FPS/ms où
+                // seule l'ÉTIQUETTE prend la couleur, jamais la VALEUR
+                // numérique : ici c'est justement la valeur (le point
+                // cardinal) qui doit ressortir.
+                if (known && facing()) {
+                    drawRightAligned(renderer, facingLetter(yaw), rightEdge, ty, ACCENT, textScale, vpWidth, vpHeight);
+                }
+                ty -= lineH;
+
+                drawValue(renderer, zLine, zDir, rowX, ty, textScale, vpWidth, vpHeight);
+                top -= 3f * lineH;
             }
+
+            if (ruler()) {
+                drawRuler(renderer, x, top, w, scale, yaw, vpWidth, vpHeight);
+                top -= RULER_H * scale;
+            }
+
+            if (biome()) {
+                float ty = top - textScale * 24f;
+                String biomeLabel = "Biome: ";
+                renderer.drawText(biomeLabel, rowX, ty, UiTheme.TEXT_PRIMARY, textScale, vpWidth, vpHeight);
+                if (biome != null) {
+                    float labelW = renderer.textWidth(biomeLabel, textScale);
+                    renderer.drawText(biome, rowX + labelW, ty, BIOME_COLOR, textScale, vpWidth, vpHeight);
+                }
+            }
+        }
+
+        /**
+         * La règle graduée : une graduation tous les 15°, plus longue tous les
+         * 45° avec son point cardinal dessous ; le repère du milieu est la
+         * direction regardée. Elle défile comme une boussole — ce qui est à
+         * droite du joueur est à droite du repère.
+         *
+         * <p>Repère : {@code top} est le bord HAUT de la règle (y vers le haut).
+         * Rien n'est découpé : une graduation s'efface en approchant d'un bord,
+         * et un point cardinal qui dépasserait n'est pas dessiné.
+         */
+        private void drawRuler(UiRenderer renderer, float x, float top, float w, float scale, float yaw,
+                               int vpWidth, int vpHeight) {
+            float textScale = TEXT_SCALE * scale;
+            float half = w / 2f, cx = x + half;
+            // Pas fixe : une règle plus longue montre plus de degrés, elle n'étire pas les graduations.
+            float perDegree = WIDTH_FULL / RULER_SPAN * scale;
+            float fade = 25f * scale;
+            float tickTop = top - 3f * scale;
+            float thin = Math.max(1f, scale);
+            float normalized = ((yaw % 360f) + 360f) % 360f;
+
+            for (int mark = 0; mark < 360; mark += 15) {
+                // Écart au regard, ramené dans [-180, 180[ : le yaw croît en tournant à droite.
+                float delta = ((mark - normalized + 540f) % 360f) - 180f;
+                float dx = delta * perDegree;
+                float room = half - Math.abs(dx);
+                if (room <= 0f) continue;
+                float alpha = Math.min(1f, room / fade);
+
+                boolean major = mark % 45 == 0;
+                boolean cardinal = mark % 90 == 0;
+                float length = (major ? 9f : 5f) * scale;
+                UiColor tick = (cardinal ? UiTheme.TEXT_PRIMARY : UiTheme.TEXT_MUTED).multiplyAlpha(alpha);
+                float tx = cx + dx;
+                renderer.drawRoundedRect(tx - thin / 2f, tickTop - length, tx + thin / 2f, tickTop, 0f, tick,
+                    vpWidth, vpHeight);
+
+                if (!major) continue;
+                String label = compassLabel(mark);
+                float tw = renderer.textWidth(label, textScale);
+                if (Math.abs(dx) + tw / 2f > half) continue;
+                UiColor color = (cardinal ? ACCENT : UiTheme.TEXT_SECONDARY).multiplyAlpha(alpha);
+                renderer.drawText(label, tx - tw / 2f, tickTop - 13f * scale - textScale * 24f, color, textScale,
+                    vpWidth, vpHeight);
+            }
+
+            // Le repère : la direction regardée, par-dessus les graduations.
+            float marker = Math.max(2f, 2f * scale);
+            renderer.drawRoundedRect(cx - marker / 2f, tickTop - 12f * scale, cx + marker / 2f, top, 0f, ACCENT,
+                vpWidth, vpHeight);
         }
 
         /**
@@ -162,13 +332,72 @@ public final class CoordsModule extends SingleHudModule {
             renderer.drawText(text, rightEdge - tw, ty, color, scale, vpW, vpH);
         }
 
+        // ── Sens du déplacement ────────────────────────────────────────────
+        // Mesuré sur la position elle-même, d'une image à l'autre : le regard
+        // ne dit rien du sens (on recule, on marche de côté, on tombe).
+
+        /** En dessous, la coordonnée n'a pas bougé (bruit de flottant, joueur immobile). */
+        private static final double MOVE_EPSILON = 1.0e-4;
+        /** Un signe reste affiché ce temps après le dernier mouvement sur son axe. La position n'avance
+         *  que 20 fois par seconde : sans cette tenue il clignoterait entre deux ticks. */
+        private static final long SIGN_HOLD_NANOS = 250_000_000L;
+
+        private final double[] lastPos = new double[3];
+        private boolean hasLastPos;
+        /** Par axe (X, Y, Z) : +1 la coordonnée augmente, -1 elle diminue, 0 immobile. */
+        private final int[] moving = new int[3];
+        private final long[] movedAt = new long[3];
+
+        private void trackMovement(double[] pos) {
+            long now = System.nanoTime();
+            for (int axis = 0; axis < 3; axis++) {
+                double delta = hasLastPos ? pos[axis] - lastPos[axis] : 0;
+                if (Math.abs(delta) > MOVE_EPSILON) {
+                    moving[axis] = delta > 0 ? 1 : -1;
+                    movedAt[axis] = now;
+                } else if (moving[axis] != 0 && now - movedAt[axis] > SIGN_HOLD_NANOS) {
+                    moving[axis] = 0;
+                }
+                lastPos[axis] = pos[axis];
+            }
+            hasLastPos = true;
+        }
+
+        /**
+         * Une ligne « X: 123 », suivie de « (+) » en vert si la coordonnée est
+         * en train d'augmenter, de « (-) » en rouge si elle diminue, de rien si
+         * elle ne bouge pas ({@code direction} : +1, -1 ou 0). ASCII seulement :
+         * le signe moins typographique n'est pas dans la police (voir UiFont).
+         */
+        private void drawValue(UiRenderer renderer, String line, int direction, float x, float ty,
+                               float textScale, int vpW, int vpH) {
+            renderer.drawText(line, x, ty, UiTheme.TEXT_PRIMARY, textScale, vpW, vpH);
+            if (direction == 0) return;
+            boolean plus = direction > 0;
+            float after = x + renderer.textWidth(line + " ", textScale);
+            renderer.drawText(plus ? "(+)" : "(-)", after, ty, plus ? PLUS : MINUS, textScale, vpW, vpH);
+        }
+
         /** Yaw vanilla : 0°=Sud, 90°=Ouest, 180°=Nord, 270°=Est (sens horaire vu du dessus) — 4 secteurs de 90°. */
         private String facingLetter(float yaw) {
             float normalized = ((yaw % 360f) + 360f) % 360f;
-            if (normalized >= 315f || normalized < 45f) return "S";
-            if (normalized < 135f) return "O";
-            if (normalized < 225f) return "N";
-            return "E";
+            if (normalized >= 315f || normalized < 45f) return Lang.tr("S");
+            if (normalized < 135f) return Lang.tr("O");
+            if (normalized < 225f) return Lang.tr("N");
+            return Lang.tr("E");
+        }
+
+        /** Le point cardinal d'une graduation de la règle ({@code mark} : yaw multiple de 45°). */
+        private static String compassLabel(int mark) {
+            String s = Lang.tr("S"), o = Lang.tr("O"), n = Lang.tr("N"), e = Lang.tr("E");
+            if (mark == 0) return s;
+            if (mark == 45) return s + o;
+            if (mark == 90) return o;
+            if (mark == 135) return n + o;
+            if (mark == 180) return n;
+            if (mark == 225) return n + e;
+            if (mark == 270) return e;
+            return s + e;
         }
 
 
