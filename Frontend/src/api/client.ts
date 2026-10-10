@@ -177,6 +177,13 @@ export interface SkinRef {
   variant: SkinVariant
   /** `player:<pseudo>`, `url`, `file` ou `mojang` — d'où il vient. */
   origin: string
+  /**
+   * Compte hors ligne : adresse sous laquelle Mojang héberge ce skin — ce
+   * qu'un serveur de jeu peut montrer aux autres joueurs. Absente tant que le
+   * skin n'est vu que du joueur lui-même ; toujours absente pour un compte
+   * Microsoft, dont le skin est déjà chez Mojang.
+   */
+  hosted?: string | null
 }
 
 /** Skin déjà porté par un compte. Voir `account/skins/history.rs`. */
@@ -640,6 +647,12 @@ export const api = {
      */
     apply: (uuid: string, kind: SkinKind, source: string, variant: SkinVariant, origin: string) =>
       invoke<SkinRef>('skin_apply', { uuid, kind, source, variant, origin }),
+    /**
+     * Compte hors ligne : fait héberger par Mojang le skin que porte le compte,
+     * et rend son adresse. Demande un compte YuyuFrame connecté ; un échec ne
+     * retire pas le skin, il reste seulement invisible des autres joueurs.
+     */
+    host: (uuid: string) => invoke<string>('skin_host', { uuid }),
     /** Skins déjà portés, du plus récent au plus ancien. */
     history: (uuid: string) => invoke<SkinHistoryEntry[]>('skin_history', { uuid }),
     historyForget: (uuid: string, id: number) => invoke<void>('skin_history_forget', { uuid, id }),

@@ -53,6 +53,11 @@ public class MinecraftClient {
         throw new UnsupportedOperationException("stub compile-only");
     }
 
+    /** {@code gfj.af()} — pour y inscrire la texture d'un skin. */
+    public net.minecraft.client.texture.TextureManager getTextureManager() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
     public Framebuffer getFramebuffer() {
         throw new UnsupportedOperationException("stub compile-only");
     }

@@ -4,6 +4,7 @@ import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.celeritas.RendererSwitch;
 import com.yuyuframe.launcheragent.runtime.module.optimization.OptimizationModule;
 import com.yuyuframe.launcheragent.runtime.presence.PlayerStyle;
+import com.yuyuframe.launcheragent.runtime.skin.SkinPoster;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
@@ -55,6 +56,12 @@ public final class PlayerModule extends LauncherModule {
      * empreinte de l'adresse du serveur est envoyée pour départager les homonymes.
      */
     public boolean onlineOnly;
+    /**
+     * Compte hors ligne : poser son skin sur les serveurs de jeu sans avoir à
+     * taper la commande ({@link SkinPoster}). Allumé par défaut (choix de
+     * l'utilisateur, 2026-10-10).
+     */
+    public boolean autoSkin = true;
 
     /**
      * Les versions récentes où le module existe. Elles n'en ont qu'une partie :
@@ -128,6 +135,15 @@ public final class PlayerModule extends LauncherModule {
         s.toggle("preview", "Aperçu sur tous les joueurs",
             "Pour régler l'apparence sans attendre de croiser un joueur YuyuFrame",
             "Où", null, () -> preview, v -> { preview = v; apply(); });
+        // Compte hors ligne : le skin choisi dans le launcher. Voir runtime/skin.
+        s.info("skin-info", "Compte hors ligne",
+            "Votre skin vient du launcher. Les autres joueurs le voient sur les serveurs qui ont la commande /skin (plugin SkinsRestorer).",
+            "Skin");
+        s.toggle("autoSkin", "Poser mon skin automatiquement",
+            "Envoie /skin url à votre place en arrivant sur un serveur, une seule fois par serveur",
+            "Skin", null, () -> autoSkin, v -> { autoSkin = v; apply(); });
+        s.action("skin-post", "Poser mon skin sur ce serveur", "Envoie la commande maintenant", "Skin",
+            SkinPoster::postNow);
     }
 
     /** Ce que seule la 1.8.9 sait dessiner : le choix du logo, les fonds, les couleurs du pseudo. */
@@ -181,6 +197,8 @@ public final class PlayerModule extends LauncherModule {
         PlayerStyle.active = styleOthers && isEnabled();
         // Vaut même module éteint : c'est aussi ce qui décide si l'on s'annonce sur un serveur hors ligne.
         PlayerStyle.onlineOnly = onlineOnly;
+        // Vaut même module éteint, comme la ligne du dessus : le skin n'a rien à voir avec le nametag.
+        SkinPoster.auto = autoSkin;
     }
 
     private static int rgb(UiColor c) {

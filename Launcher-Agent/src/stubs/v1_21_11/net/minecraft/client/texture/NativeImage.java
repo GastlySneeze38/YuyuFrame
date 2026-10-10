@@ -12,6 +12,11 @@ public final class NativeImage implements AutoCloseable {
         throw new UnsupportedOperationException("stub compile-only");
     }
 
+    /** Décode un PNG ({@code fyh.a(byte[])}). L'image rendue est à fermer, ou à confier à une texture. */
+    public static NativeImage read(byte[] bytes) throws java.io.IOException {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
     @Override
     public void close() {
         throw new UnsupportedOperationException("stub compile-only");

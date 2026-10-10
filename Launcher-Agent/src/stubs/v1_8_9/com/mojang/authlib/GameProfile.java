@@ -25,4 +25,9 @@ public class GameProfile {
     public String getName() {
         throw new UnsupportedOperationException("stub compile-only");
     }
+
+    /** Les propriétés du profil — dont {@code textures}, le skin que le serveur donne au joueur. */
+    public com.mojang.authlib.properties.PropertyMap getProperties() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
 }

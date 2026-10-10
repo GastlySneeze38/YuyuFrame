@@ -33,6 +33,9 @@ public final class GameProfile {
      */
     public String name() { return null; }
 
+    /** Les propriétés du profil — dont {@code textures}, le skin que le serveur donne au joueur. */
+    public com.mojang.authlib.properties.PropertyMap properties() { return null; }
+
     /** L'UUID du compte — même record. */
     public java.util.UUID id() { return null; }
 }

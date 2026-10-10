@@ -13,6 +13,7 @@ import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { ModalShell } from '@/components/ui/ModalShell'
 import { SkinFace } from '@/components/ui/SkinFace'
 import { showError } from '@/stores/useErrorToast'
+import { parseApiError } from '@/lib/apiError'
 import { forgetSkinPreview, rememberSkinPreview, skinPreview } from '@/lib/skinCache'
 import { loadLatestSkin } from '@/lib/skinLoad'
 import { takeSkinDraft } from '@/lib/skinDraft'
@@ -85,6 +86,14 @@ type Pending =
   | { type: 'forget'; entry: SkinHistoryEntry }
 
 /**
+ * Mise en ligne du skin d'un compte hors ligne (`api.skin.host`). `idle` ne dit
+ * pas si elle a réussi : c'est `current.hosted` qui le dit. `signedOut` est à
+ * part de `failed` parce que le remède n'est pas le même — se connecter à son
+ * compte YuyuFrame, et non réessayer.
+ */
+type Hosting = 'idle' | 'busy' | 'failed' | 'signedOut'
+
+/**
  * Apparence par défaut du compte, quand aucun skin n'est choisi.
  *
  * Le bouton « retirer le skin » laissait le personnage sans texture, ce qui
@@ -101,6 +110,9 @@ export default function Skins() {
   const [params, setParams] = useSearchParams()
   const [accounts, setAccounts] = useState<McAccountInfo[] | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
+  /** Le compte affiché, lisible depuis une réponse arrivée plus tard (voir `host`). */
+  const selectedRef = useRef<string | null>(null)
+  selectedRef.current = selected
   const [tab, setTab] = useState<Tab>('player')
   /** La marche par défaut : un personnage qui bouge se lit mieux qu'un
    *  mannequin, et c'est la pose que l'aperçu jouait déjà avant d'être réglable. */
@@ -119,6 +131,8 @@ export default function Skins() {
   const [searching, setSearching] = useState(false)
   const [busy, setBusy] = useState(false)
   const [justApplied, setJustApplied] = useState(false)
+  /** Compte hors ligne : où en est la mise en ligne du skin chez Mojang. */
+  const [hosting, setHosting] = useState<Hosting>('idle')
   const [pending, setPending] = useState<Pending | null>(null)
   const [showHosting, setShowHosting] = useState(false)
   const [showPoses, setShowPoses] = useState(false)
@@ -199,6 +213,7 @@ export default function Skins() {
     setCandidate(null)
     setHistory([])
     setJustApplied(false)
+    setHosting('idle')
     // L'apparence par défaut n'est demandée qu'une fois la réponse connue :
     // lancée avant, elle arrivait parfois après le skin enregistré et le
     // recouvrait (`lib/skinLoad.ts`).
@@ -387,10 +402,36 @@ export default function Skins() {
       setCandidate(null)
       setJustApplied(true)
       loadHistory(account.mc_uuid)
+      if (account.is_offline && !saved.hosted) void host(account.mc_uuid)
+      else setHosting('idle')
     } catch (e) {
       showError(e)
     } finally {
       setBusy(false)
+    }
+  }
+
+  /**
+   * Compte hors ligne : faire héberger le skin par Mojang, pour qu'un serveur
+   * de jeu puisse le montrer aux autres joueurs.
+   *
+   * À part de l'application, et jamais bloquant : l'envoi prend quelques
+   * secondes et peut échouer (pas de compte YuyuFrame connecté, service
+   * saturé) sans que le skin cesse d'être porté. L'échec se lit sur l'écran,
+   * avec de quoi réessayer — pas dans une erreur qui laisserait croire que
+   * l'application a raté.
+   */
+  const host = async (uuid: string) => {
+    setHosting('busy')
+    try {
+      const hosted = await api.skin.host(uuid)
+      // Le compte affiché a pu changer pendant l'envoi : on ne touche qu'au sien.
+      if (selectedRef.current !== uuid) return
+      setCurrent((c) => (c ? { ...c, hosted } : c))
+      setHosting('idle')
+    } catch (e) {
+      if (selectedRef.current !== uuid) return
+      setHosting(parseApiError(e).code === 'not_signed_in' ? 'signedOut' : 'failed')
     }
   }
 
@@ -616,13 +657,25 @@ export default function Skins() {
                 // qui le cherchent le cherchent là.
                 footer={
                   !candidate && current ? (
-                    <button
-                      onClick={() => setPending({ type: 'default' })}
-                      disabled={busy}
-                      className="text-[11.5px] font-medium text-txt-muted underline decoration-txt-muted/40 underline-offset-2 transition-colors hover:text-txt-primary disabled:opacity-40"
-                    >
-                      {t('skins.defaultSkin')}
-                    </button>
+                    <div className="flex flex-col items-center gap-1.5">
+                      {/* Compte hors ligne : dire si les autres joueurs peuvent
+                          voir ce skin, et offrir de le mettre en ligne quand ce
+                          n'est pas fait (appliqué hors connexion, envoi raté). */}
+                      {account?.is_offline && (
+                        <HostingLine
+                          hosted={!!current.hosted}
+                          hosting={hosting}
+                          onHost={() => void host(account.mc_uuid)}
+                        />
+                      )}
+                      <button
+                        onClick={() => setPending({ type: 'default' })}
+                        disabled={busy}
+                        className="text-[11.5px] font-medium text-txt-muted underline decoration-txt-muted/40 underline-offset-2 transition-colors hover:text-txt-primary disabled:opacity-40"
+                      >
+                        {t('skins.defaultSkin')}
+                      </button>
+                    </div>
                   ) : null
                 }
               />
@@ -738,7 +791,13 @@ export default function Skins() {
           du tout. */}
       <AnimatePresence>
         {justApplied && account && (
-          <AppliedModal offline={account.is_offline} onClose={() => setJustApplied(false)} />
+          <AppliedModal
+            offline={account.is_offline}
+            hosted={!!current?.hosted}
+            hosting={hosting}
+            onHost={() => void host(account.mc_uuid)}
+            onClose={() => setJustApplied(false)}
+          />
         )}
       </AnimatePresence>
 
@@ -1048,7 +1107,13 @@ function SourcePicker({ value, onChange }: { value: Tab; onChange: (tab: Tab) =>
  * on se voit avec l'ancien skin et on conclut que l'application a échoué —
  * puis on recommence.
  */
-function AppliedModal({ offline, onClose }: { offline: boolean; onClose: () => void }) {
+function AppliedModal({ offline, hosted, hosting, onHost, onClose }: {
+  offline: boolean
+  hosted: boolean
+  hosting: Hosting
+  onHost: () => void
+  onClose: () => void
+}) {
   const t = useT()
   return (
     <ModalShell title={t('skins.appliedTitle')} onClose={onClose} maxWidth="max-w-md">
@@ -1056,9 +1121,70 @@ function AppliedModal({ offline, onClose }: { offline: boolean; onClose: () => v
         <p className="text-[13px] leading-relaxed text-txt-secondary">
           {offline ? t('skins.appliedOffline') : t('skins.appliedMojang')}
         </p>
+        {/* Sur un compte hors ligne, ce qui manque encore à « appliqué » : que
+            les autres puissent le voir. La mise en ligne est partie toute
+            seule, on en montre l'état ici plutôt que de faire attendre. */}
+        {offline && (
+          <div className="rounded-xl border border-line bg-surface-1 p-3.5">
+            <HostingLine hosted={hosted} hosting={hosting} onHost={onHost} detailed />
+          </div>
+        )}
         <Button variant="primary" onClick={onClose} fullWidth>{t('skins.gotIt')}</Button>
       </div>
     </ModalShell>
+  )
+}
+
+/**
+ * Compte hors ligne : le skin est-il visible des autres joueurs ?
+ *
+ * Il ne l'est que s'il est hébergé chez Mojang — c'est ce qu'un serveur de jeu
+ * peut montrer. Une seule ligne, quatre états, et un bouton seulement quand il
+ * y a quelque chose à tenter. `detailed` ajoute la phrase d'explication, dans
+ * la fenêtre qui suit l'application ; sous l'aperçu, la ligne reste courte.
+ */
+function HostingLine({ hosted, hosting, onHost, detailed = false }: {
+  hosted: boolean
+  hosting: Hosting
+  onHost: () => void
+  detailed?: boolean
+}) {
+  const t = useT()
+  const size = detailed ? 'text-[13px]' : 'text-[11.5px]'
+  if (hosted) {
+    return (
+      <p className={`${size} leading-relaxed text-txt-secondary`}>
+        <span className="font-medium text-success">{t('skins.hostedShort')}</span>
+        {detailed && <> — {t('skins.hostedDetail')}</>}
+      </p>
+    )
+  }
+  if (hosting === 'busy') {
+    return (
+      <p className={`flex items-center gap-2 ${size} leading-relaxed text-txt-secondary`}>
+        <ButtonSpinner />
+        {t('skins.hostingBusy')}
+      </p>
+    )
+  }
+  return (
+    <div className={`flex flex-col gap-1.5 ${detailed ? 'items-start' : 'items-center'}`}>
+      <p className={`${size} leading-relaxed text-txt-secondary`}>
+        {hosting === 'signedOut'
+          ? t('skins.hostingSignedOut')
+          : hosting === 'failed'
+            ? t('skins.hostingFailed')
+            : t('skins.notHosted')}
+      </p>
+      {hosting !== 'signedOut' && (
+        <button
+          onClick={onHost}
+          className={`${size} font-medium text-accent-text underline decoration-accent-text/40 underline-offset-2 transition-colors hover:text-txt-primary`}
+        >
+          {hosting === 'failed' ? t('skins.hostingRetry') : t('skins.hostingStart')}
+        </button>
+      )}
+    </div>
   )
 }
 

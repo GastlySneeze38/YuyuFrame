@@ -11,4 +11,14 @@ public class TextureManager {
     public void bindTexture(Identifier id) {
         throw new UnsupportedOperationException("stub compile-only");
     }
+
+    /** {@code bmj.a(jy, bmk)} — inscrit une texture sous ce nom. */
+    public boolean loadTexture(Identifier id, Texture texture) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    /** {@code bmj.c(jy)} — retire la texture de ce nom et la libère. */
+    public void close(Identifier id) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
 }

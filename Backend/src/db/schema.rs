@@ -209,6 +209,13 @@ pub fn init_db(path: &Path) -> Result<Connection> {
     // compte hors ligne qu'il n'y a personne à qui l'envoyer, et l'interface
     // avertit alors que le skin ne vit que dans cette base.
     let _ = conn.execute("ALTER TABLE mc_sessions ADD COLUMN skin_kind TEXT", []);
+    // Adresse sous laquelle Mojang héberge le skin d'un compte HORS LIGNE
+    // (2026-10-10, `account/skins/host.rs`). Un tel compte n'a personne à qui
+    // déclarer son skin ; pour qu'un serveur de jeu puisse le montrer aux
+    // autres, il faut pourtant qu'il soit sur textures.minecraft.net. NULL =
+    // pas (encore) hébergé : le skin n'est vu que du joueur lui-même. Vidée à
+    // chaque changement de skin, l'adresse étant celle d'une image précise.
+    let _ = conn.execute("ALTER TABLE mc_sessions ADD COLUMN skin_hosted_url TEXT", []);
 
     // Comptes Minecraft rattachés au PC plutôt qu'au compte YuyuFrame.
     crate::account::minecraft::store::migrate_to_pc_scope(&conn)?;

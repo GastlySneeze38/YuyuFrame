@@ -166,6 +166,8 @@ public final class GameAccounts {
                 Object result = AccessorRegistry.invoke(AccessPoint.CLIENT_SET_ACCOUNT, null, name, id, token, offline);
                 if (result == null) {
                     currentUuid = uuid;
+                    // Le skin d'un compte hors ligne est celui du compte : il change avec lui.
+                    com.yuyuframe.launcheragent.runtime.skin.OwnSkin.refresh();
                     LauncherLog.info("[ACCOUNT] Compte Minecraft changé : " + name);
                 } else {
                     error = "Changement de compte impossible";

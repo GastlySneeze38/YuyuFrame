@@ -6,7 +6,7 @@
 
 YuyuFrame is a Minecraft launcher developed by Ghasty. The source code of the launcher is public: https://github.com/GastlySneeze38/YuyuFrame. This policy describes what the launcher and the YuyuFrame servers do with your data. You are asked to accept it when you create a YuyuFrame account.
 
-A YuyuFrame account is optional: the launcher installs and starts Minecraft without one. An account is needed for a subscription, cloud sync, support tickets, crash reports and reviews.
+A YuyuFrame account is optional: the launcher installs and starts Minecraft without one. An account is needed for a subscription, cloud sync, support tickets, crash reports, reviews, and making the skin of an offline Minecraft account visible to other players.
 
 ## 2. Data we collect
 
@@ -23,6 +23,8 @@ A YuyuFrame account is optional: the launcher installs and starts Minecraft with
 **Security e-mails.** We e-mail you when something important happens on your account: sign-in from a new device, password changed or reset, e-mail address changed, authenticator app enabled, backup codes regenerated.
 
 **Minecraft and Microsoft accounts.** When you sign in with Microsoft to play, the access and refresh tokens are exchanged directly between your computer and Microsoft, and stay **on your computer only**. They are never sent to YuyuFrame servers. If you are signed in to YuyuFrame, the launcher sends us the Minecraft username and UUID of the accounts you added, so that support can find your account from your Minecraft name.
+
+**Skins of offline Minecraft accounts.** An offline Minecraft account has no skin at Mojang, so other players cannot see the one you chose. If you are signed in to YuyuFrame when you apply a skin to such an account, the launcher sends the skin image to our server, which passes it to MineSkin. MineSkin puts it on one of its own Minecraft accounts so that Mojang hosts it, and returns its address. The image is sent as unlisted, so it is not shown in MineSkin's public gallery; anyone who has its address at Mojang can still fetch it. Our server keeps neither the image nor the address. In game, the built-in client can then send the command `/skin url` with that address to a server you join, so that the server shows your skin to other players; you can turn this off in the "Player" module. Nothing is sent for a Microsoft account, or when you are not signed in to YuyuFrame.
 
 **Subscription and payment.** Paid plans are billed through Stripe or Lemon Squeezy. You enter your payment details on their hosted page; YuyuFrame servers never receive your card number. We receive a signed notification saying which plan was bought, for which account, and the amount, and we keep it in a billing journal.
 
@@ -81,6 +83,7 @@ We rely on the following providers, each strictly for the feature it supports:
 - **Microsoft** and **Mojang**: Minecraft sign-in and skins, directly from your computer
 - **Modrinth** and **CurseForge**: search and download of mods, modpacks, resource packs and shaders
 - **Ely.by**: the skin catalogue
+- **MineSkin**: hosting the skin of an offline Minecraft account at Mojang (it receives the skin image from our server)
 - **PostHog** (European Union): anonymous usage statistics, which you can turn off
 - **Backblaze B2**: storage of encrypted backups
 - **An e-mail delivery provider**: sending confirmation codes and security e-mails to your address

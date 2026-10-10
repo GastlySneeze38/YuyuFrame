@@ -32,6 +32,11 @@ public final class NativeImage {
         throw new UnsupportedOperationException("stub compile-only");
     }
 
+    /** Décode un PNG (vérifié javap, 26.1 à 26.3). L'image rendue est à fermer, ou à confier à une texture. */
+    public static NativeImage read(byte[] bytes) throws java.io.IOException {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
     public void close() {
         throw new UnsupportedOperationException("stub compile-only");
     }

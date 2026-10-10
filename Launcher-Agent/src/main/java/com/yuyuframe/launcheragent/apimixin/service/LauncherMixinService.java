@@ -347,6 +347,10 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
         new RefmapEntry("com/yuyuframe/launcheragent/apimixin/v1_21_11/player/TabListLogoMixin1211",
             "net/minecraft/client/gui/hud/PlayerListHud", "getPlayerName",
             "(Lnet/minecraft/client/network/PlayerListEntry;)Lnet/minecraft/text/Text;", null),
+        // ── apimixin 1.21.11 : skin d'un compte hors ligne ──
+        new RefmapEntry("com/yuyuframe/launcheragent/apimixin/v1_21_11/skin/OwnSkinMixin1211",
+            "net/minecraft/client/network/PlayerListEntry", "getSkinTextures",
+            "()Lnet/minecraft/entity/player/SkinTextures;", null),
 
         // ── apimixin 1.21.11, lot 4 : reste du catalogue 26.1.2 ────────────
         // HUD (InGameHud) — sélecteurs seulement ; les cibles @At(INVOKE) des
@@ -581,6 +585,13 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
         new RefmapEntry(M189 + "hud/PlayerListStyleMixin189",
             "net/minecraft/client/gui/hud/PlayerListHud", "getPlayerName",
             "(Lnet/minecraft/client/network/PlayerListEntry;)Ljava/lang/String;", null),
+        // Skin d'un compte hors ligne.
+        new RefmapEntry(M189 + "skin/OwnSkinMixin189",
+            "net/minecraft/client/network/PlayerListEntry", "getSkinTexture",
+            "()Lnet/minecraft/util/Identifier;", null),
+        new RefmapEntry(M189 + "skin/OwnSkinMixin189",
+            "net/minecraft/client/network/PlayerListEntry", "getModel",
+            "()Ljava/lang/String;", null),
 
         new RefmapEntry(M189 + "render/ItemDecorationsExtractMixin189",
             "net/minecraft/client/render/item/ItemRenderer", "renderGuiItemOverlay",

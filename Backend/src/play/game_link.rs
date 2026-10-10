@@ -19,6 +19,7 @@
 //! | `token`           | `token⇥<visible 0/1>⇥<jeton ou ->`                         |
 //! | `accounts`        | `accounts⇥<uuid en jeu>⇥(<uuid>⇥<pseudo>⇥<hors ligne 0/1>)…` |
 //! | `switch⇥<uuid>`   | `account⇥<uuid>⇥<pseudo>⇥<hors ligne 0/1>⇥<jeton Minecraft>` |
+//! | `skin`            | `skin⇥<modèle ou ->⇥<adresse chez Mojang ou ->⇥<chemin du PNG ou ->` |
 //! | (tout)            | `error⇥<message>`                                          |
 //!
 //! Qui peut s'y brancher : le tube porte un nom tiré au hasard, n'accepte
@@ -131,6 +132,21 @@ async fn answer(ctx: &Context, question: &str) -> String {
             }
             Err(e) => error(&e),
         },
+        "skin" => {
+            let skin = match current_uuid(&ctx.instance_id) {
+                Some(uuid) => crate::account::skins::host::game_skin(&ctx.state, &uuid).await,
+                None => None,
+            };
+            match skin {
+                Some(skin) => format!(
+                    "skin\t{}\t{}\t{}",
+                    field(&skin.variant),
+                    skin.hosted.as_deref().map(field).unwrap_or_else(|| "-".into()),
+                    skin.path.map(|p| field(&p.to_string_lossy())).unwrap_or_else(|| "-".into()),
+                ),
+                None => "skin\t-\t-\t-".to_string(),
+            }
+        }
         "switch" => match parts.next() {
             Some(uuid) if !uuid.is_empty() => switch_account(ctx, uuid).await,
             _ => error("Compte non précisé"),

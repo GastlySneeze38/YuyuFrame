@@ -77,6 +77,7 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         crate::account::skins::skin::skin_remove,
         crate::account::skins::skin::skin_current,
         crate::account::skins::skin::skin_preview_for_account,
+        crate::account::skins::host::skin_host,
         crate::account::skins::catalog::skin_catalog_browse,
         crate::account::skins::catalog::skin_catalog_previews,
         crate::instances::versions::list_versions,

@@ -6,15 +6,18 @@
 // n'avons pas de stockage à offrir pour les skins des comptes hors ligne, alors
 // on ne stocke rien : on ne manipule que des skins DÉJÀ hébergés.
 //
-// Deux sources, et deux seulement :
+// Trois sources :
 //
 //   1. le skin d'un compte premium — on demande son profil à Mojang, qui nous
 //      rend l'URL de sa texture sur textures.minecraft.net ;
-//   2. une URL fournie par l'utilisateur, vers n'importe quel PNG public.
+//   2. une URL fournie par l'utilisateur, vers n'importe quel PNG public ;
+//   3. un fichier PNG (importé, ou dessiné dans l'éditeur). Sur un compte
+//      Microsoft il est envoyé à Mojang et redevient une URL ; sur un compte
+//      hors ligne il reste dans `skins/local/`, seul dossier qui ne soit pas
+//      un cache.
 //
-// Ce que le launcher garde en base est donc un triplet {url, modèle, origine},
-// pas des pixels. Le disque ne sert que de cache d'aperçu, effaçable sans
-// conséquence.
+// Ce que le launcher garde en base est donc {genre, source, modèle, origine},
+// pas des pixels.
 //
 // ── Les deux moitiés de « appliquer » ────────────────────────────────────────
 // Pour un compte Microsoft, appliquer veut dire le poser chez Mojang : le skin
@@ -23,8 +26,9 @@
 // modification du compte de l'utilisateur, jamais faite en passant.
 //
 // Pour un compte hors ligne, il n'y a personne à qui le déclarer : la référence
-// reste dans notre base et ne change pour l'instant que l'affichage du
-// launcher. C'est l'agent, plus tard, qui la rendra visible en jeu.
+// reste dans notre base. Le client intégré l'affiche sur le joueur lui-même, et
+// `host.rs` la fait héberger par Mojang pour qu'un serveur de jeu puisse la
+// montrer aux autres.
 
 use base64::Engine as _;
 use serde::Serialize;
@@ -114,7 +118,7 @@ pub struct HistoryEntry {
 /// les deux seuls formats de skin Minecraft) en lisant le chunk IHDR
 /// directement — largeur et hauteur en big-endian aux octets 16-23. Pas besoin
 /// d'un décodeur d'image complet pour ça.
-fn validate_skin_png(bytes: &[u8]) -> Result<(), String> {
+pub(super) fn validate_skin_png(bytes: &[u8]) -> Result<(), String> {
     if bytes.len() < 24 || bytes[0..8] != PNG_SIGNATURE {
         return Err("Ce n'est pas un PNG — vérifie l'URL".to_string());
     }
@@ -193,7 +197,7 @@ fn cache_dir() -> PathBuf {
 /// À la différence du cache d'à côté, ce dossier n'est PAS jetable : il contient
 /// les seuls exemplaires de ces skins. C'est ce que l'interface annonce à
 /// l'import — effacer les données du launcher les efface avec.
-fn local_dir() -> PathBuf {
+pub(super) fn local_dir() -> PathBuf {
     crate::paths::root().join("skins").join("local")
 }
 
@@ -225,7 +229,7 @@ async fn resolve_preview(kind: &str, source: &str) -> Result<String, String> {
     fetch_preview(source).await
 }
 
-fn cache_path(url: &str) -> PathBuf {
+pub(super) fn cache_path(url: &str) -> PathBuf {
     let digest: [u8; 32] = Sha256::digest(url.as_bytes()).into();
     let name: String = digest.iter().take(16).map(|b| format!("{:02x}", b)).collect();
     cache_dir().join(format!("{}.png", name))
@@ -488,7 +492,7 @@ pub async fn skin_export_png(data: String, path: String) -> Result<(), String> {
 
 // ── Application ──────────────────────────────────────────────────────────────
 
-async fn account_row(state: &SharedState, uuid: &str) -> Result<db::McSessionRow, String> {
+pub(super) async fn account_row(state: &SharedState, uuid: &str) -> Result<db::McSessionRow, String> {
     let s = state.read().await;
     let conn = s.db.lock().await;
     db::get_mc_session(&conn, uuid)
@@ -612,17 +616,22 @@ pub async fn skin_apply(
     // une URL, partageable comme les autres. Un compte hors ligne, lui, garde le
     // fichier, faute de destinataire.
     let skin = if row.is_offline {
-        db::SkinRef { kind: kind.clone(), source: source.clone(), variant: variant.clone(), origin }
+        // Un skin déjà chez Mojang (celui d'un joueur premium) est hébergé
+        // d'office ; les autres le seront par `host::skin_host`, que
+        // l'interface appelle ensuite — l'envoi prend plusieurs secondes et
+        // peut échouer sans que le skin cesse d'être appliqué.
+        let hosted = if local { None } else { super::host::mojang_texture_url(&source) };
+        db::SkinRef { kind: kind.clone(), source: source.clone(), variant: variant.clone(), origin, hosted }
     } else {
         let session = crate::account::minecraft::fresh_session(&state, &uuid).await?;
         match bytes_or_uri {
             Some(bytes) => {
                 let hosted = upload_to_mojang(&session.access_token, bytes, &variant).await?;
-                db::SkinRef { kind: "url".into(), source: hosted, variant: variant.clone(), origin }
+                db::SkinRef { kind: "url".into(), source: hosted, variant: variant.clone(), origin, hosted: None }
             }
             None => {
                 push_to_mojang(&session.access_token, &source, &variant).await?;
-                db::SkinRef { kind: "url".into(), source: source.clone(), variant: variant.clone(), origin }
+                db::SkinRef { kind: "url".into(), source: source.clone(), variant: variant.clone(), origin, hosted: None }
             }
         }
     };

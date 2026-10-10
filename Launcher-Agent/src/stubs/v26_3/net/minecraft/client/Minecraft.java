@@ -50,6 +50,8 @@ public abstract class Minecraft {
     public abstract Window getWindow();
     public abstract User getUser();
     public abstract int getFps();
+    /** Vérifié javap (26.1 à 26.3) — pour y inscrire la texture d'un skin. */
+    public abstract net.minecraft.client.renderer.texture.TextureManager getTextureManager();
 
     public LocalPlayer player;
     public ClientLevel level;

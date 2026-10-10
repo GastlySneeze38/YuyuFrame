@@ -79,6 +79,8 @@ public final class RuntimeBridge implements AgentBridge {
         com.yuyuframe.launcheragent.runtime.presence.PresenceContext.tick();
         // Réponses du launcher aux demandes de la liste déroulante des comptes.
         com.yuyuframe.launcheragent.runtime.account.GameAccounts.tick();
+        // Skin d'un compte hors ligne : celui du launcher, et sa pose sur le serveur de jeu.
+        com.yuyuframe.launcheragent.runtime.skin.OwnSkin.tick();
         // Réglage « Police » : la police du jeu, dès que ses ressources sont lisibles.
         com.yuyuframe.launcheragent.runtime.ui.MinecraftFont.tick();
     }

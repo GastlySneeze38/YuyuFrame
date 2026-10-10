@@ -121,17 +121,23 @@ pub struct SkinRef {
     pub variant: String,
     /// D'où vient la référence : `player:<pseudo>`, `url`, `file` ou `mojang`.
     pub origin: String,
+    /// Compte hors ligne : adresse sous laquelle Mojang héberge ce skin, celle
+    /// qu'un serveur de jeu peut montrer aux autres joueurs. `None` = le skin
+    /// n'est vu que du joueur lui-même. Toujours `None` pour un compte
+    /// Microsoft, dont le skin est déjà chez Mojang.
+    pub hosted: Option<String>,
 }
 
 pub fn set_skin_ref(conn: &Connection, mc_uuid: &str, skin: &SkinRef) -> Result<()> {
     conn.execute(
-        "UPDATE mc_sessions SET skin_url=?1, skin_variant=?2, skin_origin=?3, skin_kind=?4, updated_at=?5
-         WHERE yuyu_user_id=?6 AND mc_uuid=?7",
+        "UPDATE mc_sessions SET skin_url=?1, skin_variant=?2, skin_origin=?3, skin_kind=?4, skin_hosted_url=?5, updated_at=?6
+         WHERE yuyu_user_id=?7 AND mc_uuid=?8",
         params![
             skin.source,
             skin.variant,
             skin.origin,
             skin.kind,
+            skin.hosted,
             chrono::Utc::now().timestamp(),
             PC_SCOPE,
             mc_uuid
@@ -140,10 +146,22 @@ pub fn set_skin_ref(conn: &Connection, mc_uuid: &str, skin: &SkinRef) -> Result<
     Ok(())
 }
 
+/// Range l'adresse hébergée du skin — seulement si le compte porte encore le
+/// skin pour lequel elle a été obtenue : l'hébergement prend plusieurs
+/// secondes, le joueur a pu en changer entre-temps. Rend `false` dans ce cas.
+pub fn set_skin_hosted(conn: &Connection, mc_uuid: &str, skin: &SkinRef, hosted: &str) -> Result<bool> {
+    let changed = conn.execute(
+        "UPDATE mc_sessions SET skin_hosted_url=?1
+         WHERE yuyu_user_id=?2 AND mc_uuid=?3 AND skin_url=?4 AND COALESCE(skin_variant, 'classic')=?5",
+        params![hosted, PC_SCOPE, mc_uuid, skin.source, skin.variant],
+    )?;
+    Ok(changed > 0)
+}
+
 pub fn clear_skin_ref(conn: &Connection, mc_uuid: &str) -> Result<()> {
     conn.execute(
         "UPDATE mc_sessions
-         SET skin_url=NULL, skin_variant=NULL, skin_origin=NULL, skin_kind=NULL, updated_at=?1
+         SET skin_url=NULL, skin_variant=NULL, skin_origin=NULL, skin_kind=NULL, skin_hosted_url=NULL, updated_at=?1
          WHERE yuyu_user_id=?2 AND mc_uuid=?3",
         params![chrono::Utc::now().timestamp(), PC_SCOPE, mc_uuid],
     )?;
@@ -157,7 +175,7 @@ pub fn clear_skin_ref(conn: &Connection, mc_uuid: &str) -> Result<()> {
 /// étaient toutes des URL.
 pub fn get_skin_ref(conn: &Connection, mc_uuid: &str) -> Result<Option<SkinRef>> {
     let row = conn.query_row(
-        "SELECT skin_url, skin_variant, skin_origin, skin_kind FROM mc_sessions
+        "SELECT skin_url, skin_variant, skin_origin, skin_kind, skin_hosted_url FROM mc_sessions
          WHERE yuyu_user_id = ?1 AND mc_uuid = ?2",
         params![PC_SCOPE, mc_uuid],
         |r| {
@@ -166,15 +184,17 @@ pub fn get_skin_ref(conn: &Connection, mc_uuid: &str) -> Result<Option<SkinRef>>
                 r.get::<_, Option<String>>(1)?,
                 r.get::<_, Option<String>>(2)?,
                 r.get::<_, Option<String>>(3)?,
+                r.get::<_, Option<String>>(4)?,
             ))
         },
     );
     match row {
-        Ok((Some(source), variant, origin, kind)) => Ok(Some(SkinRef {
+        Ok((Some(source), variant, origin, kind, hosted)) => Ok(Some(SkinRef {
             kind: kind.unwrap_or_else(|| "url".to_string()),
             source,
             variant: variant.unwrap_or_else(|| "classic".to_string()),
             origin: origin.unwrap_or_else(|| "url".to_string()),
+            hosted: hosted.filter(|h| !h.is_empty()),
         })),
         Ok(_) => Ok(None),
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
