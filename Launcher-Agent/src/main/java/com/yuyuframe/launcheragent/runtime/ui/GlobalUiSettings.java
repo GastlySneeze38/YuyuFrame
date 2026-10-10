@@ -44,6 +44,9 @@ public final class GlobalUiSettings extends LauncherModule {
     // changement.
     public int themeMode = 0;
 
+    /** 0 = police moderne (dessinée par Java), 1 = police de Minecraft (voir {@link MinecraftFont}). */
+    public int fontMode = 0;
+
     public float hudOpacity = BASE_HUD_BG.a * 100f;
 
     // BUG TROUVÉ (retour utilisateur : "c'est le rayon des coins des HUD et
@@ -120,6 +123,10 @@ public final class GlobalUiSettings extends LauncherModule {
             "Palette générale de l'interface — sombre (par défaut) ou claire.",
             "Apparence", new String[]{ "Sombre", "Clair" }, null,
             () -> themeMode, v -> themeMode = v);
+        s.dropdown("fontMode", "Police",
+            "La police de toute l'interface (menu, réglages, HUD) : moderne, ou celle de Minecraft — prise dans le jeu, donc celle de ton pack de ressources.",
+            "Apparence", new String[]{ "Moderne", "Minecraft" }, null,
+            () -> fontMode, v -> fontMode = v);
         s.slider("hudOpacity", "Opacité du HUD (en jeu)",
             "Transparence des panneaux HUD affichés en jeu (FPS, ping, coordonnées...) — pas les cartes du menu.",
             "Apparence", 10f, 100f, 1f, null, () -> hudOpacity, v -> hudOpacity = v);
@@ -185,6 +192,8 @@ public final class GlobalUiSettings extends LauncherModule {
     public void onConfigChanged() {
         Lang.setLanguage(language);
         UiTheme.applyMode(themeMode == 1 ? UiTheme.Mode.LIGHT : UiTheme.Mode.DARK);
+        // Appliquée au prochain tick, pas ici : les ressources du jeu ne sont pas lisibles au démarrage.
+        MinecraftFont.want(fontMode == 1);
 
         float hudAlpha = Math.max(0f, Math.min(1f, hudOpacity / 100f));
         HudPanelRenderer.PANEL_BG = new UiColor(BASE_HUD_BG.r, BASE_HUD_BG.g, BASE_HUD_BG.b, hudAlpha);

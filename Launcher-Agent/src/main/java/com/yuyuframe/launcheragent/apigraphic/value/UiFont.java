@@ -87,8 +87,117 @@ public final class UiFont {
     // pour un atlas construit une seule fois au démarrage.
     public static final int ATLAS_PADDING = 32;
 
-    public static final UiFont REGULAR = new UiFont(Font.PLAIN);
-    public static final UiFont BOLD = new UiFont(Font.BOLD);
+    /** La police « moderne » : celle que Java dessine. Toujours disponible. */
+    public static final UiFont SANS_REGULAR = new UiFont(Font.PLAIN);
+    public static final UiFont SANS_BOLD = new UiFont(Font.BOLD);
+
+    /**
+     * Les polices de TOUTE l'interface. Plus {@code final} (2026-10-10) : le
+     * réglage « Police » les remplace par la paire tirée des textures du jeu
+     * (voir {@link #pixel} et {@code runtime.ui.MinecraftFont}). Tout le code
+     * relit ces champs à chaque dessin, donc le changement est immédiat ; et
+     * comme les atlas GPU sont rangés par INSTANCE de police, chaque paire
+     * garde le sien — rien n'est jamais retéléversé en basculant.
+     */
+    public static volatile UiFont REGULAR = SANS_REGULAR;
+    public static volatile UiFont BOLD = SANS_BOLD;
+
+    /** Remplace les polices de l'interface ; {@code null} = revenir à la police moderne. */
+    public static void use(UiFont regular, UiFont bold) {
+        REGULAR = regular != null ? regular : SANS_REGULAR;
+        BOLD = bold != null ? bold : SANS_BOLD;
+    }
+
+    /**
+     * Un glyphe d'une police en pixels, déjà agrandi à la résolution de
+     * l'atlas : {@code mask[y * width + x]} vrai = pixel plein.
+     */
+    public static final class PixelGlyph {
+        final boolean[] mask;
+        final int width, height;
+        /** Hauteur du bord HAUT du masque au-dessus de la ligne de base, en pixels d'atlas. */
+        final int topAboveBaseline;
+
+        public PixelGlyph(boolean[] mask, int width, int height, int topAboveBaseline) {
+            this.mask = mask;
+            this.width = width;
+            this.height = height;
+            this.topAboveBaseline = topAboveBaseline;
+        }
+    }
+
+    /**
+     * Une police bâtie à partir de glyphes en pixels (la police de Minecraft).
+     *
+     * @param unit     pixels d'atlas pour un pixel de la police d'origine —
+     *                 l'espacement entre deux lettres, et le décalage du gras
+     * @param ascent   au-dessus de la ligne de base, en pixels d'atlas
+     * @param descent  en dessous, en pixels d'atlas
+     * @param space    avance de l'espace, en pixels d'atlas
+     * @param bold     gras à la façon du jeu : le glyphe redessiné un pixel de police plus à droite
+     * @return {@code null} si la police n'a pas de « ? » (rien pour remplacer un caractère absent)
+     */
+    public static UiFont pixel(Map<Character, PixelGlyph> source, int unit, int ascent, int descent,
+                               int space, boolean bold) {
+        if (source.get('?') == null) return null;
+        return new UiFont(source, unit, ascent, descent, space, bold);
+    }
+
+    private UiFont(Map<Character, PixelGlyph> source, int unit, int ascent, int descent, int space, boolean bold) {
+        this.ascent = ascent;
+        this.descent = descent;
+        this.cellHeight = ascent + descent + 4;
+
+        // Placement : même grille que la police moderne, une cellule par
+        // glyphe, large de son dessin + l'espacement d'un pixel de police.
+        int padding = ATLAS_PADDING;
+        int atlasW = 1024;
+        int cursorX = padding, cursorY = padding;
+        Map<Character, int[]> placement = new HashMap<>();
+        Map<Character, PixelGlyph> all = new HashMap<>(source);
+        // L'espace : un glyphe sans dessin, dont la cellule (dessin + espacement) fait l'avance voulue.
+        all.put(' ', new PixelGlyph(new boolean[0], Math.max(0, space - unit), 0, 0));
+        for (Map.Entry<Character, PixelGlyph> e : all.entrySet()) {
+            int w = e.getValue().width + unit + (bold ? unit : 0);
+            if (cursorX + w + padding > atlasW) {
+                cursorX = padding;
+                cursorY += cellHeight + padding;
+            }
+            placement.put(e.getKey(), new int[]{ cursorX, cursorY, w });
+            cursorX += w + padding;
+        }
+        int neededH = cursorY + cellHeight + padding;
+        int atlasH = 64;
+        while (atlasH < neededH) atlasH *= 2;
+
+        int[] argb = new int[atlasW * atlasH];
+        final int white = 0xFFFFFFFF;
+        for (Map.Entry<Character, int[]> e : placement.entrySet()) {
+            PixelGlyph glyph = all.get(e.getKey());
+            int[] p = e.getValue();
+            int top = p[1] + ascent - glyph.topAboveBaseline;
+            for (int pass = 0; pass < (bold ? 2 : 1); pass++) {
+                int left = p[0] + pass * unit;
+                for (int y = 0; y < glyph.height; y++) {
+                    int ay = top + y;
+                    if (ay < 0 || ay >= atlasH) continue;
+                    for (int x = 0; x < glyph.width; x++) {
+                        if (glyph.mask[y * glyph.width + x]) argb[ay * atlasW + left + x] = white;
+                    }
+                }
+            }
+            glyphs.put(e.getKey(), new Glyph(
+                p[0] / (float) atlasW, p[1] / (float) atlasH,
+                (p[0] + p[2]) / (float) atlasW, (p[1] + cellHeight) / (float) atlasH,
+                p[2], p[2]));
+        }
+
+        atlasImage = new BufferedImage(atlasW, atlasH, BufferedImage.TYPE_INT_ARGB);
+        atlasImage.setRGB(0, 0, atlasW, atlasH, argb, 0, atlasW);
+        buildSignedDistanceField(atlasImage);
+        atlasImagePlain = sdfToCoverage(atlasImage, 0.35f, 0.65f);
+        fallback = glyphs.get('?');
+    }
 
     public static final class Glyph {
         public final float u0, v0, u1, v1;
