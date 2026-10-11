@@ -20,6 +20,7 @@
 //! | `accounts`        | `accounts⇥<uuid en jeu>⇥(<uuid>⇥<pseudo>⇥<hors ligne 0/1>)…` |
 //! | `switch⇥<uuid>`   | `account⇥<uuid>⇥<pseudo>⇥<hors ligne 0/1>⇥<jeton Minecraft>` |
 //! | `skin`            | `skin⇥<modèle ou ->⇥<adresse chez Mojang ou ->⇥<chemin du PNG ou ->` |
+//! | `skin⇥<uuid>`     | la même chose pour un autre compte de la liste (sa tête, dans le jeu) |
 //! | (tout)            | `error⇥<message>`                                          |
 //!
 //! Qui peut s'y brancher : le tube porte un nom tiré au hasard, n'accepte
@@ -133,9 +134,14 @@ async fn answer(ctx: &Context, question: &str) -> String {
             Err(e) => error(&e),
         },
         "skin" => {
-            let skin = match current_uuid(&ctx.instance_id) {
-                Some(uuid) => crate::account::skins::host::game_skin(&ctx.state, &uuid).await,
-                None => None,
+            // Sans argument : le compte en jeu. Avec un UUID : un autre compte
+            // de la liste, dont le jeu veut afficher la tête.
+            let skin = match parts.next().filter(|uuid| !uuid.is_empty()) {
+                Some(uuid) => crate::account::skins::host::game_skin(&ctx.state, uuid, false).await,
+                None => match current_uuid(&ctx.instance_id) {
+                    Some(uuid) => crate::account::skins::host::game_skin(&ctx.state, &uuid, true).await,
+                    None => None,
+                },
             };
             match skin {
                 Some(skin) => format!(

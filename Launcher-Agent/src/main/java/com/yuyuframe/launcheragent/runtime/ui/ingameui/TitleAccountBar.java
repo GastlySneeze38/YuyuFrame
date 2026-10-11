@@ -11,6 +11,7 @@ import com.yuyuframe.launcheragent.apigraphic.widget.UiDrawable;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.account.GameAccounts;
 import com.yuyuframe.launcheragent.runtime.game.ClientData;
+import com.yuyuframe.launcheragent.runtime.skin.AccountFaces;
 import com.yuyuframe.launcheragent.runtime.i18n.Lang;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 
@@ -223,7 +224,8 @@ public final class TitleAccountBar {
         float avatar = h - pad * 2f;
         GameAccounts.Account current = currentAccount();
         String name = ClientData.username();
-        drawAvatar(renderer, current == null ? null : current.uuid, name, x + pad + edge, y + pad, avatar, vw, vh);
+        drawAvatar(renderer, current == null ? null : current.uuid, current != null && current.offline, name,
+            x + pad + edge, y + pad, avatar, vw, vh);
 
         float textX = x + pad + edge + avatar + px(10f);
         // Un vrai chevron, pas la lettre « v » : même famille d'icônes que l'engrenage d'à côté.
@@ -259,13 +261,24 @@ public final class TitleAccountBar {
      * temps qu'elle arrive — ou si elle n'arrive pas — une pastille à
      * l'initiale du pseudo tient sa place.
      */
-    private static void drawAvatar(UiRenderer renderer, String uuid, String name, float x, float y, float size, int vw, int vh) {
+    private static void drawAvatar(UiRenderer renderer, String uuid, boolean offline, String name, float x, float y, float size,
+                                   int vw, int vh) {
         float radius = px(4f);
         BufferedImage head = null;
         String url = null;
         if (uuid != null && !uuid.isEmpty()) {
-            url = "https://mc-heads.net/avatar/" + uuid.replace("-", "") + "/64";
-            head = UiRemoteImage.get(url);
+            if (offline) {
+                // Le service d'avatars ne connaît pas le skin d'un compte hors ligne (il rend Steve) :
+                // sa tête vient du fichier que garde le launcher. Sans skin, la pastille à l'initiale.
+                AccountFaces.Face face = AccountFaces.face(uuid);
+                if (face != null) {
+                    url = face.key;
+                    head = face.image;
+                }
+            } else {
+                url = "https://mc-heads.net/avatar/" + uuid.replace("-", "") + "/64";
+                head = UiRemoteImage.get(url);
+            }
         }
         if (head != null) {
             renderer.drawIcon(url, head, x, y, size, size, vw, vh);
@@ -328,7 +341,7 @@ public final class TitleAccountBar {
                     current ? UiTheme.ACCENT_DIM : UiTheme.CARD_HOVER, vw, vh);
             }
             float avatar = rowH - pad * 2f;
-            drawAvatar(renderer, account.uuid, account.name, x + pad + inset, rowBottom + pad, avatar, vw, vh);
+            drawAvatar(renderer, account.uuid, account.offline, account.name, x + pad + inset, rowBottom + pad, avatar, vw, vh);
             float textX = x + pad + inset + avatar + px(9f);
             // « hors ligne » à droite, en petit : ce compte ne rejoint pas les serveurs qui vérifient les comptes.
             String tag = account.offline ? Lang.tr("hors ligne") : "";

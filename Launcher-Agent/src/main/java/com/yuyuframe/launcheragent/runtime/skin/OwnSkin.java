@@ -168,6 +168,7 @@ public final class OwnSkin {
             readSelf();
         }
         SkinPoster.tick(now);
+        AccountFaces.tick();
     }
 
     private static void readSelf() {

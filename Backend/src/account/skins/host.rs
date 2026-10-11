@@ -121,13 +121,17 @@ fn first_try(key: String) -> bool {
     TRIED.lock().unwrap_or_else(|p| p.into_inner()).get_or_insert_with(HashSet::new).insert(key)
 }
 
-/// Le skin du compte avec lequel le jeu tourne. `None` pour un compte
-/// Microsoft (son skin vient de Mojang) ou un compte sans skin.
+/// Le skin d'un compte hors ligne, pour le jeu. `None` pour un compte
+/// Microsoft (son skin vient de Mojang), un compte sans skin ou un compte
+/// inconnu.
 ///
-/// Un skin pas encore hébergé — appliqué hors connexion, ou avant que cette
-/// fonction existe — l'est ici en tâche de fond : le jeu repose la question et
-/// reçoit l'adresse à la suivante.
-pub async fn game_skin(state: &SharedState, uuid: &str) -> Option<GameSkin> {
+/// `host_missing` : pour le compte AVEC LEQUEL le jeu tourne, un skin pas
+/// encore hébergé — appliqué hors connexion, ou avant que cette fonction
+/// existe — l'est ici en tâche de fond ; le jeu repose la question et reçoit
+/// l'adresse à la suivante. Faux pour les autres comptes de la liste, dont le
+/// jeu ne veut que la tête : les afficher n'est pas une raison d'envoyer leur
+/// skin où que ce soit.
+pub async fn game_skin(state: &SharedState, uuid: &str, host_missing: bool) -> Option<GameSkin> {
     let row = account_row(state, uuid).await.ok()?;
     if !row.is_offline {
         return None;
@@ -146,7 +150,7 @@ pub async fn game_skin(state: &SharedState, uuid: &str) -> Option<GameSkin> {
             None
         }
     };
-    if skin.hosted.is_none() && first_try(format!("{uuid}\t{}\t{}", skin.source, skin.variant)) {
+    if host_missing && skin.hosted.is_none() && first_try(format!("{uuid}\t{}\t{}", skin.source, skin.variant)) {
         let state = state.clone();
         let uuid = uuid.to_string();
         tokio::spawn(async move {
