@@ -82,10 +82,12 @@ public final class GlassRim {
         "    return glassNormal(p, q) * (t * t * 24.0 * k);\n" +
         "}\n" +
         // Part de lumière à ajouter, de 0 à 1 : liseré net + biseau doux. Le
-        // liseré fait TOUT le tour, mais en GRIS discret (0.14) : il n'est
-        // clair que là où la lumière tape (voir glassLight), et même là il ne
-        // va pas jusqu'au blanc (0.66) — un liseré blanc partout se lit comme
-        // un contour, pas comme un reflet. hs : demi-taille du panneau.
+        // liseré fait TOUT le tour, mais en GRIS discret (0.08) : il n'est
+        // clair que là où la lumière tape (voir glassLight), et même là il
+        // reste loin du blanc (0.36) — un liseré blanc partout se lit comme
+        // un contour, pas comme un reflet. Baissés le 2026-10-11 avec toute la
+        // palette (0.14 et 0.66 avant, biseau 0.14) : le clair était trop
+        // prononcé. hs : demi-taille du panneau.
         "float glassRim(vec2 p, vec2 q, float dist, float px, vec2 hs) {\n" +
         "    float k = glassDepth(min(hs.x, hs.y), px);\n" +
         "    float lit = glassLight(p, q, hs);\n" +
@@ -99,7 +101,7 @@ public final class GlassRim {
         // s'éteint en douceur vers l'intérieur.
         "    float edge = 1.0 - smoothstep(0.75 * px, 2.75 * px, inside);\n" +
         "    float bevel = 1.0 - smoothstep(0.0, 10.0 * k * px, inside);\n" +
-        "    return clamp(edge * mix(0.14, 0.66, lit) + bevel * bevel * lit * 0.14 * k, 0.0, 1.0);\n" +
+        "    return clamp(edge * mix(0.08, 0.36, lit) + bevel * bevel * lit * 0.08 * k, 0.0, 1.0);\n" +
         "}\n" +
         // Part d'ombre, de 0 à 1 : le biseau là où il ne prend pas la lumière.
         "float glassShadow(vec2 p, vec2 q, float dist, float px, vec2 hs) {\n" +

@@ -32,29 +32,40 @@ public final class UiTheme {
     private static Mode currentMode = Mode.DARK;
     public static Mode currentMode() { return currentMode; }
 
+    // ── Palette sombre ASSOMBRIE (2026-10-11) ───────────────────────────────
+    // Retour utilisateur : « le blanc et le clair sont beaucoup trop prononcés,
+    // fais en sorte que tout soit plus sombre ». Tout a baissé d'un cran, dans
+    // les mêmes proportions pour garder la hiérarchie : textes, accent, fonds,
+    // contours et reflets du verre, et le verre lui-même est plus dense (voir
+    // GLASS_STRENGTH_*). Les valeurs d'avant sont notées à côté de chacune.
     public static UiColor OVERLAY_BG     = new UiColor(8, 8, 12, 235);
-    public static UiColor SIDEBAR_BG     = new UiColor(17, 17, 22, 255);
-    public static UiColor SIDEBAR_HOVER  = new UiColor(255, 255, 255, 26);
-    public static UiColor SIDEBAR_ACTIVE = new UiColor(139, 124, 255, 34);
-    public static UiColor PANEL_BG       = new UiColor(27, 27, 34, 255);
-    public static UiColor PANEL_BG_ALT   = new UiColor(34, 34, 43, 255);
-    public static UiColor CARD_BG        = new UiColor(31, 31, 39, 255);
-    public static UiColor CARD_HOVER     = new UiColor(40, 40, 50, 255);
+    public static UiColor SIDEBAR_BG     = new UiColor(14, 14, 18, 255);   // 17, 17, 22
+    public static UiColor SIDEBAR_HOVER  = new UiColor(255, 255, 255, 16); // alpha 26
+    public static UiColor SIDEBAR_ACTIVE = new UiColor(104, 90, 214, 34);
+    public static UiColor PANEL_BG       = new UiColor(22, 22, 28, 255);   // 27, 27, 34
+    public static UiColor PANEL_BG_ALT   = new UiColor(28, 28, 36, 255);   // 34, 34, 43
+    public static UiColor CARD_BG        = new UiColor(25, 25, 32, 255);   // 31, 31, 39
+    public static UiColor CARD_HOVER     = new UiColor(33, 33, 42, 255);   // 40, 40, 50
 
-    public static UiColor ACCENT     = new UiColor(139, 124, 255, 255);
-    public static UiColor ACCENT_DIM = new UiColor(139, 124, 255, 70);
-    public static UiColor DANGER     = new UiColor(230, 95, 95, 255);
+    public static UiColor ACCENT     = new UiColor(104, 90, 214, 255);     // 139, 124, 255
+    public static UiColor ACCENT_DIM = new UiColor(104, 90, 214, 70);
+    public static UiColor DANGER     = new UiColor(200, 82, 82, 255);      // 230, 95, 95
 
-    public static UiColor TEXT_PRIMARY   = new UiColor(232, 232, 238, 255);
-    // REMONTÉS pour le verre (2026-08-27) — 150->182 et 105->146. Sur l'ancien
-    // fond OPAQUE et uniforme, un secondaire à 150 et un atténué à 105 tenaient
-    // très bien la hiérarchie. Sur du verre, le fond n'est plus une constante :
-    // c'est le décor du jeu flouté, qui peut être clair (ciel, neige, sable) —
-    // un gris moyen s'y dissout au lieu de se lire comme "moins important".
-    // Remontés juste assez pour rester lisibles partout SANS écraser la
-    // hiérarchie avec TEXT_PRIMARY (232), qui garde une marge nette.
-    public static UiColor TEXT_SECONDARY = new UiColor(182, 182, 194, 255);
-    public static UiColor TEXT_MUTED     = new UiColor(146, 146, 158, 255);
+    public static UiColor TEXT_PRIMARY   = new UiColor(204, 204, 212, 255); // 232, 232, 238
+    // Le secondaire et l'atténué avaient été REMONTÉS pour le verre
+    // (2026-08-27) : sur un décor flouté qui peut être clair (ciel, neige), un
+    // gris moyen se dissout. Ils redescendent ici avec le reste, mais le verre
+    // est devenu plus dense dans le même geste — le fond derrière un texte est
+    // donc plus sombre qu'alors, et l'écart avec lui reste comparable.
+    public static UiColor TEXT_SECONDARY = new UiColor(156, 156, 168, 255); // 182, 182, 194
+    public static UiColor TEXT_MUTED     = new UiColor(122, 122, 134, 255); // 146, 146, 158
+
+    /**
+     * Opacité des icônes des cartes : ce sont des images blanches, sans
+     * couleur à régler — les rendre un peu transparentes sur un fond sombre
+     * est ce qui les grise.
+     */
+    public static float ICON_ALPHA = 0.78f;
 
     /**
      * Ombre portée sous un texte posé DIRECTEMENT sur le décor (titre de
@@ -67,7 +78,7 @@ public final class UiTheme {
      */
     public static UiColor TEXT_SHADOW = new UiColor(0, 0, 0, 150);
 
-    public static UiColor TRACK_OFF = new UiColor(55, 55, 65, 255);
+    public static UiColor TRACK_OFF = new UiColor(44, 44, 53, 255); // 55, 55, 65
 
     // ── Verre dépoli (rework UI 2026-08-27) ─────────────────────────────────
     //
@@ -88,15 +99,15 @@ public final class UiTheme {
     public static UiColor GLASS_TINT = new UiColor(13, 13, 19, 255);
 
     /** Sidebar — la plus teintée : c'est le support de la navigation, le texte doit y être lisible quel que soit le décor derrière (ciel clair, neige...). */
-    public static float GLASS_STRENGTH_SIDEBAR = 0.66f;
+    public static float GLASS_STRENGTH_SIDEBAR = 0.78f; // 0.66 — les cinq ont monté le 2026-10-11, voir « Palette sombre ASSOMBRIE »
     /** Cartes de mods — un peu plus transparentes que la sidebar : elles sont nombreuses, un verre trop dense redonnerait un aplat plein écran (donc aucun intérêt au flou). */
-    public static float GLASS_STRENGTH_CARD = 0.58f;
+    public static float GLASS_STRENGTH_CARD = 0.72f; // 0.58
     /** Champs/pilules (recherche, barres) — les plus légers, ce sont de petites surfaces où le flou se voit le mieux. */
-    public static float GLASS_STRENGTH_FIELD = 0.52f;
+    public static float GLASS_STRENGTH_FIELD = 0.66f; // 0.52
     /** Panneaux de section des écrans de config (voir {@code UiPanel}) — ils portent du texte dense sur de grandes surfaces, donc plus teintés qu'une carte. */
-    public static float GLASS_STRENGTH_PANEL = 0.68f;
+    public static float GLASS_STRENGTH_PANEL = 0.80f; // 0.68
     /** Modales/tiroirs — les plus denses : ils doivent couper franchement avec l'écran derrière eux (tiroir de filtres de ModrinthContentScreen). */
-    public static float GLASS_STRENGTH_MODAL = 0.78f;
+    public static float GLASS_STRENGTH_MODAL = 0.88f; // 0.78
 
     /**
      * Liseré de lumière sur le bord HAUT d'une surface de verre — signature
@@ -104,7 +115,7 @@ public final class UiTheme {
      * éclairée d'un matériau épais. Sans lui, un panneau flouté "flotte" sans
      * limite nette et se confond avec le décor dès que celui-ci est clair.
      */
-    public static UiColor GLASS_HAIRLINE = new UiColor(255, 255, 255, 30);
+    public static UiColor GLASS_HAIRLINE = new UiColor(255, 255, 255, 16); // alpha 30
 
     /**
      * Contour COMPLET d'une surface de verre — nettement plus marqué que
@@ -118,10 +129,10 @@ public final class UiTheme {
      * distingue le bord de la carte. Un contour explicite redevient donc
      * nécessaire, alors qu'il était superflu avant.
      */
-    public static UiColor GLASS_BORDER = new UiColor(255, 255, 255, 60);
+    public static UiColor GLASS_BORDER = new UiColor(255, 255, 255, 30); // alpha 60
 
     /** Contour au survol — plus lumineux, c'est le retour visuel principal maintenant que le fond bouge peu au survol (voir ModCard). */
-    public static UiColor GLASS_BORDER_HOVER = new UiColor(255, 255, 255, 115);
+    public static UiColor GLASS_BORDER_HOVER = new UiColor(255, 255, 255, 64); // alpha 115
 
     /**
      * Voile de fond quand le verre est disponible — REMPLACE {@link #OVERLAY_BG}
@@ -130,7 +141,7 @@ public final class UiTheme {
      * flouté. Assez sombre pour garder le contraste du texte hors panneaux,
      * assez clair pour que le décor reste lisible.
      */
-    public static UiColor GLASS_SCRIM = new UiColor(6, 6, 10, 140);
+    public static UiColor GLASS_SCRIM = new UiColor(6, 6, 10, 176); // alpha 140
 
     /**
      * Palette LIGHT — fond quasi-blanc légèrement teinté violet (pas un gris
@@ -173,34 +184,34 @@ public final class UiTheme {
         static final UiColor TEXT_SHADOW        = new UiColor(255, 255, 255, 150);
     }
 
+    // Doit rester ALIGNÉ, valeur pour valeur, sur les champs du haut : c'est ce
+    // bloc qu'applyMode(DARK) recopie à chaque changement de réglage. Un écart
+    // restaurerait en silence l'ancienne palette.
     private static final class Dark {
         static final UiColor OVERLAY_BG     = new UiColor(8, 8, 12, 235);
-        static final UiColor SIDEBAR_BG     = new UiColor(17, 17, 22, 255);
-        static final UiColor SIDEBAR_HOVER  = new UiColor(255, 255, 255, 26);
-        static final UiColor SIDEBAR_ACTIVE = new UiColor(139, 124, 255, 34);
-        static final UiColor PANEL_BG       = new UiColor(27, 27, 34, 255);
-        static final UiColor PANEL_BG_ALT   = new UiColor(34, 34, 43, 255);
-        static final UiColor CARD_BG        = new UiColor(31, 31, 39, 255);
-        static final UiColor CARD_HOVER     = new UiColor(40, 40, 50, 255);
+        static final UiColor SIDEBAR_BG     = new UiColor(14, 14, 18, 255);
+        static final UiColor SIDEBAR_HOVER  = new UiColor(255, 255, 255, 16);
+        static final UiColor SIDEBAR_ACTIVE = new UiColor(104, 90, 214, 34);
+        static final UiColor PANEL_BG       = new UiColor(22, 22, 28, 255);
+        static final UiColor PANEL_BG_ALT   = new UiColor(28, 28, 36, 255);
+        static final UiColor CARD_BG        = new UiColor(25, 25, 32, 255);
+        static final UiColor CARD_HOVER     = new UiColor(33, 33, 42, 255);
 
-        static final UiColor ACCENT     = new UiColor(139, 124, 255, 255);
-        static final UiColor ACCENT_DIM = new UiColor(139, 124, 255, 70);
-        static final UiColor DANGER     = new UiColor(230, 95, 95, 255);
+        static final UiColor ACCENT     = new UiColor(104, 90, 214, 255);
+        static final UiColor ACCENT_DIM = new UiColor(104, 90, 214, 70);
+        static final UiColor DANGER     = new UiColor(200, 82, 82, 255);
 
-        static final UiColor TEXT_PRIMARY   = new UiColor(232, 232, 238, 255);
-        // Doivent rester ALIGNÉS sur les champs remontés pour le verre (voir
-        // plus haut) — sans ça, un simple applyMode(DARK) restaurerait
-        // silencieusement les anciennes valeurs trop sombres.
-        static final UiColor TEXT_SECONDARY = new UiColor(182, 182, 194, 255);
-        static final UiColor TEXT_MUTED     = new UiColor(146, 146, 158, 255);
+        static final UiColor TEXT_PRIMARY   = new UiColor(204, 204, 212, 255);
+        static final UiColor TEXT_SECONDARY = new UiColor(156, 156, 168, 255);
+        static final UiColor TEXT_MUTED     = new UiColor(122, 122, 134, 255);
 
-        static final UiColor TRACK_OFF = new UiColor(55, 55, 65, 255);
+        static final UiColor TRACK_OFF = new UiColor(44, 44, 53, 255);
 
         static final UiColor GLASS_TINT     = new UiColor(13, 13, 19, 255);
-        static final UiColor GLASS_HAIRLINE = new UiColor(255, 255, 255, 30);
-        static final UiColor GLASS_SCRIM    = new UiColor(6, 6, 10, 140);
-        static final UiColor GLASS_BORDER       = new UiColor(255, 255, 255, 60);
-        static final UiColor GLASS_BORDER_HOVER = new UiColor(255, 255, 255, 115);
+        static final UiColor GLASS_HAIRLINE = new UiColor(255, 255, 255, 16);
+        static final UiColor GLASS_SCRIM    = new UiColor(6, 6, 10, 176);
+        static final UiColor GLASS_BORDER       = new UiColor(255, 255, 255, 30);
+        static final UiColor GLASS_BORDER_HOVER = new UiColor(255, 255, 255, 64);
         static final UiColor TEXT_SHADOW        = new UiColor(0, 0, 0, 150);
     }
 
@@ -263,6 +274,6 @@ public final class UiTheme {
      * Utilisées pour les dégradés/jeux de lumière (voir UiToggle, ModCard,
      * SidebarItem) — jamais pour une couleur "à plat", qui doit rester ACCENT.
      */
-    public static UiColor accentLight() { return UiColor.lerp(ACCENT, new UiColor(255, 255, 255, 255), 0.28f); }
+    public static UiColor accentLight() { return UiColor.lerp(ACCENT, new UiColor(255, 255, 255, 255), 0.16f); } // 0.28 avant le 2026-10-11
     public static UiColor accentDark() { return UiColor.lerp(ACCENT, new UiColor(0, 0, 0, 255), 0.35f); }
 }

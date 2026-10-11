@@ -185,7 +185,20 @@ public final class GlobalUiSettings extends LauncherModule {
         // UiTheme.UI_SCALE restait bloqué sur la valeur de départ codée en
         // dur de UiTheme jusqu'à la première visite de l'écran "Paramètres").
         HudConfigStore.applyTo(this);
+        // La couleur d'accent est enregistrée même quand on n'y a jamais
+        // touché : sans ceci, l'ancien violet par défaut reviendrait du disque
+        // par-dessus le nouveau, plus sombre (voir UiTheme, palette du
+        // 2026-10-11). Une couleur choisie par le joueur n'est pas concernée.
+        if (isLegacyDefaultAccent(accentColor)) {
+            accentColor = UiTheme.ACCENT;
+        }
         onConfigChanged();
+    }
+
+    /** L'accent par défaut d'avant le 2026-10-11 : 139, 124, 255. */
+    private static boolean isLegacyDefaultAccent(UiColor color) {
+        return color != null
+            && Math.round(color.r * 255f) == 139 && Math.round(color.g * 255f) == 124 && Math.round(color.b * 255f) == 255;
     }
 
     @Override

@@ -1672,13 +1672,14 @@ public class UiMainMenuScreen extends UiScreenBase {
             // à une vraie URL distante ci-dessous.
             if (LauncherModule.ICON_LOCAL_CROSSHAIR.equals(cardIconUrl)) {
                 int px = Math.max(8, Math.round(size));
-                renderer.drawIcon(LauncherModule.ICON_LOCAL_CROSSHAIR, crosshairImage(px), ix, iy, size, size, alpha, vpWidth, vpHeight);
+                renderer.drawIcon(LauncherModule.ICON_LOCAL_CROSSHAIR, crosshairImage(px), ix, iy, size, size,
+                    alpha * UiTheme.ICON_ALPHA, vpWidth, vpHeight);
                 return;
             }
             BufferedImage icon = cardIconUrl != null ? UiRemoteImage.get(cardIconUrl) : null;
             if (icon != null) {
                 iconFade.markReady();
-                renderer.drawIcon(cardIconUrl, icon, ix, iy, size, size, iconFade.alpha() * alpha, vpWidth, vpHeight);
+                renderer.drawIcon(cardIconUrl, icon, ix, iy, size, size, iconFade.alpha() * alpha * UiTheme.ICON_ALPHA, vpWidth, vpHeight);
                 return;
             }
             // Dégradé (accent clair en haut, dim en bas) plutôt qu'un fond
@@ -1857,7 +1858,8 @@ public class UiMainMenuScreen extends UiScreenBase {
             float nameMaxW = w - pad * 2f - heartReserve;
             String truncName = renderer.truncate(displayName, nameScale, nameMaxW);
             renderer.drawText(truncName, drawX + pad, drawY + barH / 2f - UiTheme.scaled(4f),
-                new UiColor(1f, 1f, 1f, 1f).multiplyAlpha(alpha), nameScale, vpWidth, vpHeight);
+                // Un blanc adouci, pas le blanc pur : il tranchait trop sur la bande (2026-10-11).
+                new UiColor(0.84f, 0.84f, 0.88f, 1f).multiplyAlpha(alpha), nameScale, vpWidth, vpHeight);
         }
 
         @Override
