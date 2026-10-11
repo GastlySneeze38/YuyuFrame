@@ -6,6 +6,7 @@ import type { YuyuDevice, YuyuMfaResp } from '@/api/client'
 import { useStore } from '@/stores/useStore'
 import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
+import { MaskedEmail } from '@/components/ui/MaskedEmail'
 import { PlanBadge } from '@/components/plans/PlanBadge'
 import { PasswordChangeModal } from '@/components/account/PasswordChangeModal'
 import { EmailVerifyModal } from '@/components/account/EmailVerifyModal'
@@ -85,7 +86,11 @@ export function YuyuAccountPanel() {
               <p className="truncate text-[13px] font-semibold text-txt-primary">{yuyuUsername}</p>
               <PlanBadge plan={yuyuPlan} />
             </div>
-            <p className="truncate text-[11px] text-txt-muted">{yuyuEmail ?? t('account.noEmail')}</p>
+            {yuyuEmail ? (
+              <MaskedEmail email={yuyuEmail} className="text-[11px] text-txt-muted" />
+            ) : (
+              <p className="truncate text-[11px] text-txt-muted">{t('account.noEmail')}</p>
+            )}
           </div>
           <Button variant="ghost" size="sm" onClick={handleLogout}>
             {t('account.logout')}
@@ -127,11 +132,31 @@ export function YuyuAccountPanel() {
           )}
         </AnimatePresence>
 
+        {/* E-mail jamais confirmé : le serveur supprime le compte un jour
+            après sa création. Le dire ici, avec de quoi y remédier — la
+            fenêtre de confirmation peut avoir été remise à plus tard. */}
+        <AnimatePresence>
+          {verificationRequired && (
+            <motion.div
+              variants={fadeVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              className="flex items-center gap-3 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2"
+            >
+              <p className="min-w-0 flex-1 text-[11px] leading-relaxed text-warning">{t('account.unverifiedWarning')}</p>
+              <Button size="sm" variant="primary" onClick={() => setShowVerify(true)}>
+                {t('account.verifyEmail')}
+              </Button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* E-mail */}
         <motion.div variants={listItemVariants}>
           <Row
             label={t('account.email')}
-            value={yuyuEmail ?? t('account.noEmail')}
+            value={yuyuEmail ? <MaskedEmail email={yuyuEmail} /> : t('account.noEmail')}
             action={
               <Button size="sm" onClick={() => toggle('email')}>
                 {yuyuEmail ? t('account.change') : t('account.add')}
@@ -192,9 +217,11 @@ export function YuyuAccountPanel() {
 
       <AnimatePresence>
         {showPassword && <PasswordChangeModal onClose={() => setShowPassword(false)} />}
-        {/* Changement d'adresse en cours. Si le compte n'avait pas d'adresse
-            confirmée, c'est App.tsx qui impose déjà la même fenêtre. */}
-        {showVerify && !verificationRequired && <EmailVerifyModal onClose={() => setShowVerify(false)} />}
+        {/* Changement d'adresse en cours, ou confirmation demandée depuis
+            l'avertissement ci-dessus. Tant que le compte n'a aucune adresse
+            confirmée, la fenêtre garde ses sorties du mode imposé (changer
+            d'adresse, se déconnecter). */}
+        {showVerify && <EmailVerifyModal forced={verificationRequired} onClose={() => setShowVerify(false)} />}
         {totpMode && (
           <TotpModal
             mode={totpMode}
@@ -211,7 +238,7 @@ export function YuyuAccountPanel() {
 
 // ── Briques ──────────────────────────────────────────────────────────────────
 
-function Row({ label, value, action }: { label: string; value: string; action?: React.ReactNode }) {
+function Row({ label, value, action }: { label: string; value: React.ReactNode; action?: React.ReactNode }) {
   return (
     <div className="flex items-center gap-3 rounded-xl border border-line bg-surface-1 px-3 py-2.5">
       <div className="flex min-w-0 flex-1 flex-col">

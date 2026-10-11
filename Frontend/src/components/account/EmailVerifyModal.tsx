@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api, type YuyuEmailResp } from '@/api/client'
 import { ModalShell } from '@/components/ui/ModalShell'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
+import { MaskedEmail } from '@/components/ui/MaskedEmail'
 import { errorMessage } from '@/lib/apiError'
 import { showNotice } from '@/stores/useErrorToast'
 import { useStore } from '@/stores/useStore'
@@ -10,11 +11,13 @@ import { useT } from '@/i18n'
 /**
  * Confirmation de l'e-mail par le code reçu.
  *
- * En mode imposé (`forced`), la fenêtre ne se ferme pas : le serveur refuse
- * tout le reste tant que l'adresse n'est pas confirmée (code
- * `email_verification_required`). Deux sorties restent quand même, sans quoi
- * une faute de frappe à l'inscription enfermerait le joueur : changer
- * d'adresse, et se déconnecter.
+ * En mode imposé (`forced`), le serveur refuse tout le reste tant que
+ * l'adresse n'est pas confirmée (code `email_verification_required`), et le
+ * compte est supprimé un jour après sa création. La fenêtre ne se ferme ni par
+ * Échap ni par un clic à côté, mais trois sorties restent : changer d'adresse
+ * (une faute de frappe à l'inscription n'enferme pas), se déconnecter, et
+ * « plus tard » — la page Compte rappelle alors l'échéance et rouvre la
+ * fenêtre.
  *
  * Un compte d'avant l'e-mail obligatoire n'a pas d'adresse du tout : la
  * fenêtre s'ouvre alors directement sur la saisie de l'adresse.
@@ -137,7 +140,11 @@ export function EmailVerifyModal({ forced, onClose }: { forced?: boolean; onClos
         </>
       ) : (
         <>
-          <p className="text-[12px] text-txt-secondary">{t('emailVerify.description', { email: target ?? '' })}</p>
+          {/* L'adresse est cachée dans la phrase, et lisible juste en dessous
+              par son œil : c'est ici qu'on repère une faute de frappe. */}
+          <p className="text-[12px] text-txt-secondary">{t('emailVerify.description', { email: '••••••••••' })}</p>
+          {target && <MaskedEmail email={target} className="text-[12px] text-txt-primary" />}
+          {forced && <p className="text-[11px] leading-relaxed text-warning">{t('emailVerify.deleteWarning')}</p>}
           <input
             value={code}
             onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
@@ -163,9 +170,17 @@ export function EmailVerifyModal({ forced, onClose }: { forced?: boolean; onClos
                 </button>
               )}
               {forced ? (
-                <button onClick={logout} disabled={busy} className={link}>
-                  {t('emailVerify.logout')}
-                </button>
+                <>
+                  <button onClick={logout} disabled={busy} className={link}>
+                    {t('emailVerify.logout')}
+                  </button>
+                  {/* Remettre à plus tard : le serveur refuse toujours tout le
+                      reste, mais le launcher redevient utilisable sans compte
+                      — et la page Compte rappelle l'échéance. */}
+                  <button onClick={onClose} disabled={busy} className={link}>
+                    {t('emailVerify.later')}
+                  </button>
+                </>
               ) : (
                 <button onClick={onClose} disabled={busy} className={link}>
                   {t('common.cancel')}

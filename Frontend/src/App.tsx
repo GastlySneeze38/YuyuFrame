@@ -116,6 +116,13 @@ export default function App() {
   const applyDetectedLanguage = useStore((s) => s.applyDetectedLanguage)
   const passwordResetRequired = useStore((s) => s.yuyuPasswordResetRequired)
   const emailVerificationRequired = useStore((s) => s.yuyuSignedIn && s.yuyuEmailVerificationRequired)
+  // « Plus tard » sur la fenêtre de confirmation : elle ne revient pas avant
+  // le prochain démarrage ou la prochaine connexion. La page Compte garde
+  // l'avertissement et le bouton pour confirmer.
+  const [verifyLater, setVerifyLater] = useState(false)
+  useEffect(() => {
+    if (!emailVerificationRequired) setVerifyLater(false)
+  }, [emailVerificationRequired])
   // Les trois modales de démarrage ne sont plus des drapeaux locaux : elles
   // sont déposées dans la file, qui décide de l'ordre et n'en montre qu'une
   // à la fois (voir stores/useModalQueue.ts).
@@ -580,7 +587,9 @@ export default function App() {
       {passwordResetRequired && <PasswordChangeModal forced onClose={() => {}} />}
       {/* Après le mot de passe provisoire, jamais en même temps : le serveur
           les réclame dans cet ordre. */}
-      {emailVerificationRequired && !passwordResetRequired && <EmailVerifyModal forced onClose={() => {}} />}
+      {emailVerificationRequired && !passwordResetRequired && !verifyLater && (
+        <EmailVerifyModal forced onClose={() => setVerifyLater(true)} />
+      )}
       <div className="flex-1 overflow-hidden" style={{ filter: `brightness(${brightness / 100})` }}>
         {/* Suspense À L'INTÉRIEUR de la transition, jamais au-dessus : une
             page chargée à la demande suspend le rendu, et un Suspense placé

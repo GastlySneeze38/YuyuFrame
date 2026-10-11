@@ -67,7 +67,7 @@ To exercise these rights, open a support ticket from the launcher (Support scree
 
 ## 6. Data retention
 
-- **Account data**: as long as your account exists.
+- **Account data**: as long as your account exists. An account whose e-mail address is never confirmed is deleted 24 hours after it was created.
 - **Cloud sync data**: until you delete the synced instance or your account.
 - **Sessions and devices**: until you sign the device out; a device unused for 60 days no longer appears in your list.
 - **Crash reports and support tickets**: until you delete them or your account. When an account is deleted, its crash reports are detached from it: the technical cause is kept, without any link to you.
