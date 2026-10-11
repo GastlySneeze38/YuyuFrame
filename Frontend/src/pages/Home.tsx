@@ -20,6 +20,7 @@ import { ProCard } from '@/components/home/ProCard'
 import { LaunchSweep } from '@/components/home/LaunchSweep'
 import { AgentModal, WarningIcon } from '@/components/home/AgentModal'
 import { Skyline } from '@/components/home/Skyline'
+import { GhastFlight } from '@/components/home/GhastFlight'
 import { ServerCard } from '@/components/servers/ServerCard'
 import { ServerManageModal } from '@/components/servers/ServerManageModal'
 import { ServerConfirmModal } from '@/components/servers/ServerConfirmModal'
@@ -175,6 +176,9 @@ export default function Home() {
     setCancellingByInstance((prev) => withEntry(prev, id, value ? true : null))
   const [showInstanceSwitch, setShowInstanceSwitch] = useState(false)
   const [bannerPulse, setBannerPulse] = useState(false)
+  /** Easter egg : un ghast traverse la bannière (Maj + clic sur le titre).
+   *  Voir `GhastFlight.tsx` et docs/product/easter-eggs.md. */
+  const [ghastFlying, setGhastFlying] = useState(false)
   /** Survol du bouton de lancement — pilote la comète (voir LaunchSweep). */
   const [launchHover, setLaunchHover] = useState(false)
   /** Pastille de l'entrée « Support » : les réponses de l'équipe non lues,
@@ -599,6 +603,9 @@ export default function Home() {
             <div className="absolute inset-0 pointer-events-none animate-banner-flash rounded-[20px] z-10 bg-[radial-gradient(ellipse_at_50%_50%,rgba(160,130,255,0.95)_0%,rgba(90,70,255,0.6)_35%,transparent_72%)]" />
           )}
 
+          {/* Avant les arbres : il vole dans le ciel, donc derrière eux. */}
+          {ghastFlying && <GhastFlight onDone={() => setGhastFlying(false)} />}
+
           <Skyline />
 
           <div className="absolute bottom-0 left-0 right-0 h-24 bg-[linear-gradient(to_top,rgba(9,9,13,0.95),transparent)]" />
@@ -636,7 +643,14 @@ export default function Home() {
                 ],
               }}
               transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
-              className="font-black leading-none tracking-[-0.015em] text-white text-[clamp(26px,6vh,58px)]"
+              // Maj + clic : le ghast. Jamais pendant un lancement ni une
+              // partie, et un seul à la fois. Aucun curseur ni survol : rien
+              // ne doit l'annoncer.
+              onClick={(e) => {
+                if (!e.shiftKey || gameRunning || Object.keys(progressByInstance).length > 0) return
+                setGhastFlying(true)
+              }}
+              className="select-none font-black leading-none tracking-[-0.015em] text-white text-[clamp(26px,6vh,58px)]"
             >
               YuyuFrame
             </motion.h1>
