@@ -1219,6 +1219,8 @@ export const fr = {
     appliedMojang: 'Ton compte porte ce skin chez Mojang. Compte quelques minutes avant que tous les serveurs et tous les joueurs le voient : si le jeu affiche encore l’ancien, c’est normal, ne le réapplique pas.',
     appliedOffline: 'Le compte porte ce skin. Avec le client intégré, tu te vois avec en jeu ; pour que les autres le voient, il est mis en ligne chez Mojang, puis posé sur les serveurs qui ont la commande /skin.',
     hostedShort: 'En ligne',
+    copyCommand: 'Copier',
+    commandCopied: 'Copiée',
     hostedDetail: 'le client intégré peut le poser sur les serveurs qui ont la commande /skin.',
     hostingBusy: 'Mise en ligne du skin…',
     notHosted: 'Pas encore en ligne : toi seul vois ce skin.',

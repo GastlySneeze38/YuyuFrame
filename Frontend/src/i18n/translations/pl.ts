@@ -1217,6 +1217,8 @@ export const pl: TranslationSchema = {
     appliedMojang: 'Twoje konto nosi tę skórkę u Mojanga. Licz się z kilkoma minutami, zanim zobaczą ją wszystkie serwery i wszyscy gracze: jeśli gra wciąż pokazuje starą, to normalne — nie stosuj jej ponownie.',
     appliedOffline: 'Konto nosi tę skórkę. Z wbudowanym klientem widzisz się w niej w grze; żeby widzieli ją inni, trafia do sieci u Mojanga, a potem jest ustawiana na serwerach z komendą /skin.',
     hostedShort: 'W sieci',
+    copyCommand: 'Kopiuj',
+    commandCopied: 'Skopiowano',
     hostedDetail: 'wbudowany klient może ją ustawić na serwerach z komendą /skin.',
     hostingBusy: 'Wysyłanie skórki do sieci…',
     notHosted: 'Jeszcze nie w sieci: tę skórkę widzisz tylko ty.',

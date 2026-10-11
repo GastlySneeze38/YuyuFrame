@@ -1217,6 +1217,8 @@ export const it: TranslationSchema = {
     appliedMojang: 'Il tuo account indossa questa skin su Mojang. Conta qualche minuto prima che la vedano tutti i server e tutti i giocatori: se il gioco mostra ancora la vecchia è normale — non riapplicarla.',
     appliedOffline: 'L’account indossa questa skin. Con il client integrato ti vedi con lei in gioco; perché la vedano gli altri, viene messa online su Mojang e poi impostata sui server che hanno il comando /skin.',
     hostedShort: 'Online',
+    copyCommand: 'Copia',
+    commandCopied: 'Copiato',
     hostedDetail: 'il client integrato può impostarla sui server che hanno il comando /skin.',
     hostingBusy: 'Messa online della skin…',
     notHosted: 'Non ancora online: solo tu vedi questa skin.',

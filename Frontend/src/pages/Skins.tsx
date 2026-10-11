@@ -636,6 +636,15 @@ export default function Skins() {
                 pose={pose}
                 spin={spin}
                 onPoses={posesFit ? null : () => setShowPoses(true)}
+                online={
+                  !account?.is_offline || candidate || !current
+                    ? null
+                    : current.hosted
+                      ? 'yes'
+                      : hosting === 'busy'
+                        ? 'busy'
+                        : 'no'
+                }
                 label={
                   candidate
                     ? candidate.fromHistory
@@ -657,13 +666,14 @@ export default function Skins() {
                 // qui le cherchent le cherchent là.
                 footer={
                   !candidate && current ? (
-                    <div className="flex flex-col items-center gap-1.5">
+                    <div className="flex w-full min-w-0 flex-col items-center gap-1.5">
                       {/* Compte hors ligne : dire si les autres joueurs peuvent
                           voir ce skin, et offrir de le mettre en ligne quand ce
                           n'est pas fait (appliqué hors connexion, envoi raté). */}
                       {account?.is_offline && (
                         <HostingLine
-                          hosted={!!current.hosted}
+                          hosted={current.hosted ?? null}
+                          slim={current.variant === 'slim'}
                           hosting={hosting}
                           onHost={() => void host(account.mc_uuid)}
                         />
@@ -793,7 +803,8 @@ export default function Skins() {
         {justApplied && account && (
           <AppliedModal
             offline={account.is_offline}
-            hosted={!!current?.hosted}
+            hosted={current?.hosted ?? null}
+            slim={current?.variant === 'slim'}
             hosting={hosting}
             onHost={() => void host(account.mc_uuid)}
             onClose={() => setJustApplied(false)}
@@ -1107,9 +1118,10 @@ function SourcePicker({ value, onChange }: { value: Tab; onChange: (tab: Tab) =>
  * on se voit avec l'ancien skin et on conclut que l'application a échoué —
  * puis on recommence.
  */
-function AppliedModal({ offline, hosted, hosting, onHost, onClose }: {
+function AppliedModal({ offline, hosted, slim, hosting, onHost, onClose }: {
   offline: boolean
-  hosted: boolean
+  hosted: string | null
+  slim: boolean
   hosting: Hosting
   onHost: () => void
   onClose: () => void
@@ -1126,12 +1138,64 @@ function AppliedModal({ offline, hosted, hosting, onHost, onClose }: {
             seule, on en montre l'état ici plutôt que de faire attendre. */}
         {offline && (
           <div className="rounded-xl border border-line bg-surface-1 p-3.5">
-            <HostingLine hosted={hosted} hosting={hosting} onHost={onHost} detailed />
+            <HostingLine hosted={hosted} slim={slim} hosting={hosting} onHost={onHost} detailed />
           </div>
         )}
         <Button variant="primary" onClick={onClose} fullWidth>{t('skins.gotIt')}</Button>
       </div>
     </ModalShell>
+  )
+}
+
+/**
+ * La commande qui pose ce skin sur un serveur de jeu, à copier.
+ *
+ * Le client intégré la tape tout seul ; elle est là pour ceux qui l'ont coupé,
+ * pour un serveur où elle n'est pas partie, ou pour la donner à quelqu'un.
+ * C'est la même que celle du client (`runtime/skin/SkinPoster`) : sans modèle
+ * pour un skin classique, le plugin le déduit de l'image.
+ */
+function SkinCommand({ url, slim }: { url: string; slim: boolean }) {
+  const t = useT()
+  const [copied, setCopied] = useState(false)
+  const command = `/skin url "${url}"${slim ? ' slim' : ''}`
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(command)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1600)
+    } catch (e) {
+      showError(e)
+    }
+  }
+  // Toute la case copie : la cible est large, et il n'y a rien d'autre à y
+  // faire. Elle s'enfonce au clic, et son libellé laisse place à « Copiée ».
+  return (
+    <motion.button
+      type="button"
+      onClick={copy}
+      title={command}
+      whileHover={{ scale: 1.01 }}
+      whileTap={{ scale: 0.96 }}
+      transition={fastTransition}
+      className={`flex w-full min-w-0 items-center gap-2 rounded-lg border px-2 py-1.5 transition-colors ${
+        copied ? 'border-success/50 bg-success/10' : 'border-line bg-surface-2 hover:border-accent/45'
+      }`}
+    >
+      <code className="min-w-0 flex-1 truncate text-left font-mono text-[11px] text-txt-secondary">{command}</code>
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.span
+          key={copied ? 'copied' : 'copy'}
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -4 }}
+          transition={fastTransition}
+          className={`shrink-0 text-[11px] font-medium ${copied ? 'text-success' : 'text-accent-text'}`}
+        >
+          {copied ? t('skins.commandCopied') : t('skins.copyCommand')}
+        </motion.span>
+      </AnimatePresence>
+    </motion.button>
   )
 }
 
@@ -1143,8 +1207,10 @@ function AppliedModal({ offline, hosted, hosting, onHost, onClose }: {
  * y a quelque chose à tenter. `detailed` ajoute la phrase d'explication, dans
  * la fenêtre qui suit l'application ; sous l'aperçu, la ligne reste courte.
  */
-function HostingLine({ hosted, hosting, onHost, detailed = false }: {
-  hosted: boolean
+function HostingLine({ hosted, slim, hosting, onHost, detailed = false }: {
+  /** L'adresse du skin chez Mojang, ou `null` tant qu'il n'y est pas. */
+  hosted: string | null
+  slim: boolean
   hosting: Hosting
   onHost: () => void
   detailed?: boolean
@@ -1153,10 +1219,16 @@ function HostingLine({ hosted, hosting, onHost, detailed = false }: {
   const size = detailed ? 'text-[13px]' : 'text-[11.5px]'
   if (hosted) {
     return (
-      <p className={`${size} leading-relaxed text-txt-secondary`}>
-        <span className="font-medium text-success">{t('skins.hostedShort')}</span>
-        {detailed && <> — {t('skins.hostedDetail')}</>}
-      </p>
+      <div className={`flex w-full min-w-0 flex-col gap-1.5 ${detailed ? 'items-start' : 'items-center'}`}>
+        {/* Sous l'aperçu, « en ligne » est dit par le point vert du coin :
+            seule la commande reste. */}
+        {detailed && (
+          <p className={`${size} leading-relaxed text-txt-secondary`}>
+            <span className="font-medium text-success">{t('skins.hostedShort')}</span> — {t('skins.hostedDetail')}
+          </p>
+        )}
+        <SkinCommand url={hosted} slim={slim} />
+      </div>
     )
   }
   if (hosting === 'busy') {
@@ -1881,7 +1953,14 @@ function SkinPreview({
   pose,
   spin,
   onPoses,
+  online = null,
 }: {
+  /**
+   * Compte hors ligne : le skin est-il hébergé, donc visible des autres
+   * joueurs ? Un point dans le coin, vert ou rouge. `null` : rien à dire
+   * (compte Microsoft, pas de skin, skin en attente d'application).
+   */
+  online?: 'yes' | 'no' | 'busy' | null
   dataUri: string | null
   /** Apparence par défaut du compte, montrée quand aucun skin n'est choisi. */
   fallbackUrl: string | null
@@ -1978,7 +2057,7 @@ function SkinPreview({
 
   return (
     <div
-      className={`flex min-h-0 flex-col gap-2 rounded-2xl border p-3 transition-colors lg:p-4 ${
+      className={`flex min-h-0 min-w-0 flex-col gap-2 rounded-2xl border p-3 transition-colors lg:p-4 ${
         pending ? 'border-accent/30 bg-accent/5' : 'border-line bg-surface-1'
       }`}
     >
@@ -1989,6 +2068,23 @@ function SkinPreview({
           courte. */}
       <div ref={boxRef} className="relative min-h-[120px] w-full flex-1">
         <canvas ref={canvasRef} className="h-full w-full" />
+
+        {/* En ligne ou non, d'un coup d'œil : le détail (la commande, de quoi
+            réessayer) est sous l'aperçu. Décalé quand le bouton des positions
+            occupe déjà le coin. */}
+        {online && (
+          <span
+            title={online === 'yes' ? t('skins.hostedShort') : online === 'busy' ? t('skins.hostingBusy') : t('skins.notHosted')}
+            aria-label={online === 'yes' ? t('skins.hostedShort') : online === 'busy' ? t('skins.hostingBusy') : t('skins.notHosted')}
+            className={`absolute h-2.5 w-2.5 rounded-full ${onPoses ? 'right-10 top-3' : 'right-1 top-1'} ${
+              online === 'yes'
+                ? 'bg-success shadow-[0_0_8px_rgb(var(--success)/0.7)]'
+                : online === 'busy'
+                  ? 'animate-pulse bg-warning'
+                  : 'bg-danger shadow-[0_0_8px_rgb(var(--danger)/0.6)]'
+            }`}
+          />
+        )}
 
         {onPoses && (
           <button
@@ -2005,7 +2101,10 @@ function SkinPreview({
         )}
       </div>
 
-      <div className="flex flex-col items-center gap-1 text-center">
+      {/* `w-full min-w-0` : sans largeur imposée ce bloc prend celle de son
+          contenu, et une ligne longue (la commande du skin) sortait de la carte
+          au lieu d'être tronquée. */}
+      <div className="flex w-full min-w-0 flex-col items-center gap-1 text-center">
         <p className="text-[13px] font-semibold text-txt-primary">{label}</p>
         {note && <p className="text-[11.5px] leading-relaxed text-txt-secondary">{note}</p>}
         {footer}
