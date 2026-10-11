@@ -229,15 +229,69 @@ public class HudElement {
      */
     private String[] cachedLines;
 
+    private static final String[] NOTHING = new String[0];
+    /** Dans l'éditeur de HUD seulement : de quoi donner une taille à une boîte qui n'a rien à montrer. */
+    private static final String[] PLACEHOLDER = { "--" };
+    private boolean contentErrorLogged;
+
     public String[] contentLines() {
         if (cachedLines == null) {
+            String[] lines = NOTHING;
             try {
-                cachedLines = content != null ? content.lines() : new String[]{ "--" };
+                if (content != null) {
+                    String[] given = content.lines();
+                    if (given != null) lines = given;
+                }
             } catch (Throwable t) {
-                cachedLines = new String[]{ "--" };
+                // Une fois par élément : sinon l'erreur reviendrait à chaque image.
+                if (!contentErrorLogged) {
+                    contentErrorLogged = true;
+                    com.yuyuframe.launcheragent.base.log.LauncherLog.err("[HudElement] contenu illisible : " + t);
+                }
             }
+            // L'éditeur doit pouvoir saisir et placer chaque boîte, même vide.
+            cachedLines = !written(lines) && HudPreview.active() ? PLACEHOLDER : lines;
         }
         return cachedLines;
+    }
+
+    private static boolean written(String[] lines) {
+        for (String line : lines) {
+            if (line != null && !line.trim().isEmpty()) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Y a-t-il quelque chose à afficher CETTE image ? Règle commune à tous
+     * les éléments du HUD (2026-10-11) : <b>un élément qui n'a rien d'écrit
+     * n'apparaît pas</b>, ni son fond ni son contour — pas de panneau vide à
+     * l'écran, pas de tirets en attendant une valeur.
+     *
+     * <ul>
+     *   <li>élément de texte : au moins une ligne non vide. Une source qui n'a
+     *       pas de valeur rend donc un tableau vide (voir FpsModule, PingModule) ;</li>
+     *   <li>élément à rendu personnalisé : ce qu'en dit
+     *       {@link CustomRenderer#hasContent()}.</li>
+     * </ul>
+     *
+     * Dans l'éditeur de HUD, tout élément apparaît quand même : on doit
+     * pouvoir le placer avant qu'il ait quoi que ce soit à montrer.
+     */
+    public boolean hasContent() {
+        if (HudPreview.active()) return true;
+        if (customRenderer != null) {
+            try {
+                return customRenderer.hasContent();
+            } catch (Throwable t) {
+                if (!contentErrorLogged) {
+                    contentErrorLogged = true;
+                    com.yuyuframe.launcheragent.base.log.LauncherLog.err("[HudElement] hasContent : " + t);
+                }
+                return false;
+            }
+        }
+        return written(contentLines());
     }
 
     /**
@@ -287,12 +341,8 @@ public class HudElement {
             }
             return new float[]{ contentSize[0] + 2 * padX, contentSize[1] + 2 * padY };
         }
-        String[] lines;
-        try {
-            lines = contentLines();
-        } catch (Throwable t) {
-            lines = new String[]{ "--" };
-        }
+        // contentLines() ne lève pas : une source en échec rend « rien ».
+        String[] lines = contentLines();
         float contentW = 0f;
         for (String line : lines) {
             contentW = Math.max(contentW, com.yuyuframe.launcheragent.apigraphic.value.UiFont.REGULAR.textWidth(line, HudPanelRenderer.TEXT_SCALE));

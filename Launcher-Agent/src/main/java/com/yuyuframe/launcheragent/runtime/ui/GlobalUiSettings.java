@@ -1,6 +1,8 @@
 package com.yuyuframe.launcheragent.runtime.ui;
 
 import com.yuyuframe.launcheragent.runtime.i18n.Lang;
+import com.yuyuframe.launcheragent.runtime.share.ShareDialog;
+import com.yuyuframe.launcheragent.runtime.ui.config.SettingModal;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudPanelRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
@@ -167,6 +169,15 @@ public final class GlobalUiSettings extends LauncherModule {
         s.toggle("hudGlassBackground", "Fond flouté (HUD)",
             "Remplace l'aplat sombre derrière les panneaux HUD par un fond de verre dépoli qui floute le décor du jeu. Le réglage \"Opacité du HUD\" continue de s'appliquer.",
             "HUD en jeu", null, () -> hudGlassBackground, v -> hudGlassBackground = v);
+
+        // Partage par lien : le même lien que celui du launcher (voir runtime/share).
+        s.info("share-info", "Partager mes paramètres",
+            "Un lien qui contient tous vos réglages : modules, HUD et apparence. Rien n'est hébergé, tout est dans le lien. Vos mots de passe de connexion automatique et vos macros n'y sont jamais.",
+            "Partage");
+        // Une fenêtre à part : son lien à copier, celui d'un autre à coller, et ce que chaque geste a donné.
+        s.action("share-open", "Ouvrir le partage",
+            "Copier votre lien, ou appliquer celui d'un autre joueur", "Partage",
+            () -> SettingModal.requestDialog(new ShareDialog()));
     }
 
     private GlobalUiSettings() {

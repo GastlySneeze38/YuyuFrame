@@ -54,6 +54,8 @@ public final class HudRenderer {
             for (HudElement element : HudRegistry.elements()) {
                 if (!globalShow && !element.showWhenScreenOpen) continue;
                 element.refreshSize();
+                // Un élément qui n'a rien à montrer ne sera pas dessiné : pas de flou à calculer derrière lui.
+                if (!element.hasContent()) continue;
                 float x = element.screenX(vpWidth), y = element.screenY(vpHeight);
                 regions.add(new float[]{ x, y, x + element.w, y + element.h });
             }

@@ -72,4 +72,37 @@ public final class SettingModal {
         pending = null;
         return m;
     }
+
+    // ── Fenêtre libre ─────────────────────────────────────────────────────
+    //
+    // Pour ce qui n'est pas une suite de questions (le partage des réglages :
+    // un lien à lire, un autre à coller, un résultat à annoncer) : le
+    // demandeur fournit toute la fenêtre, l'écran de configuration se
+    // contente de la poser par-dessus son contenu et de lui réserver les
+    // clics. Même demande en attente que ci-dessus, pour la même raison.
+
+    /** Une fenêtre modale dessinée par celui qui la demande. */
+    public interface Dialog {
+        /** Appelé une fois, à l'ouverture : de quoi se refermer soi-même. */
+        void opened(Runnable close);
+
+        /** Les widgets actifs ; tant que la fenêtre est ouverte, eux seuls reçoivent les clics. */
+        List<com.yuyuframe.launcheragent.apigraphic.widget.UiWidget> widgets();
+
+        void draw(com.yuyuframe.launcheragent.apigraphic.UiRenderer renderer, double mouseX, double mouseY,
+                  int vpWidth, int vpHeight);
+    }
+
+    private static Dialog pendingDialog;
+
+    public static void requestDialog(Dialog dialog) {
+        pendingDialog = dialog;
+    }
+
+    /** {@code null} s'il n'y a rien à ouvrir. Consomme la demande. */
+    public static Dialog consumeDialog() {
+        Dialog d = pendingDialog;
+        pendingDialog = null;
+        return d;
+    }
 }

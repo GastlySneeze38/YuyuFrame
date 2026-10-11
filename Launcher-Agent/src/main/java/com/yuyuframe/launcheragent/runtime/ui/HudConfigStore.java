@@ -295,6 +295,74 @@ public final class HudConfigStore {
         }
     }
 
+    // ── Partage par lien (voir runtime/share) ────────────────────────────────
+
+    /** Recopie dans {@link #DATA} l'état courant de tout ce qui se persiste — ce que {@link #writeNow} écrit sur le disque. */
+    private static void serializeAll() {
+        for (LauncherModule module : ModuleRegistry.all()) {
+            serializeModule(module);
+        }
+        serializeModule(GlobalUiSettings.INSTANCE);
+        for (ModuleGroup group : ModuleRegistry.groups()) {
+            DATA.setProperty("group." + group.id + ".favorite", String.valueOf(group.favorite));
+        }
+    }
+
+    /**
+     * Tous les réglages, une ligne {@code clé=valeur} par réglage — la matière
+     * d'un lien de partage. Le tri de ce qui a le droit de voyager n'est pas
+     * fait ici mais par le noyau natif, au même endroit pour l'envoi et la
+     * réception.
+     */
+    public static synchronized String exportText() {
+        ensureLoaded();
+        serializeAll();
+        StringBuilder text = new StringBuilder();
+        for (String key : new java.util.TreeSet<>(DATA.stringPropertyNames())) {
+            String value = DATA.getProperty(key);
+            // Une ligne par réglage : une valeur sur plusieurs lignes ne peut pas voyager.
+            if (value == null || value.indexOf('\n') >= 0 || value.indexOf('\r') >= 0) continue;
+            text.append(key).append('=').append(value).append('\n');
+        }
+        return text.toString();
+    }
+
+    /**
+     * Applique des réglages reçus d'un lien ({@code clé=valeur}, une par
+     * ligne, déjà filtrés par le noyau natif). <b>Fusion</b> : chaque réglage
+     * reçu remplace le sien, le reste ne bouge pas.
+     *
+     * @return le nombre de réglages appliqués
+     */
+    public static synchronized int importText(String lines) {
+        ensureLoaded();
+        // L'état courant d'abord : sans cela, ce qui a été réglé depuis la dernière
+        // écriture serait perdu au profit de la valeur encore sur le disque.
+        serializeAll();
+        int count = 0;
+        for (String line : lines.split("\n")) {
+            int at = line.indexOf('=');
+            if (at <= 0) continue;
+            DATA.setProperty(line.substring(0, at), line.substring(at + 1));
+            count++;
+        }
+        if (count == 0) return 0;
+        for (LauncherModule module : ModuleRegistry.all()) {
+            applyTo(module);
+            // applyTo ne prévient pas le module (voir ModuleRegistry.register).
+            module.onConfigChanged();
+            module.invalidateSettings();
+        }
+        applyTo(GlobalUiSettings.INSTANCE);
+        GlobalUiSettings.INSTANCE.onConfigChanged();
+        GlobalUiSettings.INSTANCE.invalidateSettings();
+        for (ModuleGroup group : ModuleRegistry.groups()) {
+            applyFavoriteTo(group);
+        }
+        save();
+        return count;
+    }
+
     private static void serializeModule(LauncherModule module) {
         String id = module.id;
         DATA.setProperty(id + ".enabled", String.valueOf(module.isEnabled()));

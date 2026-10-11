@@ -14,4 +14,5 @@ mod mesh;
 mod modrinth;
 mod mouse;
 mod presence;
+mod share;
 mod sort;

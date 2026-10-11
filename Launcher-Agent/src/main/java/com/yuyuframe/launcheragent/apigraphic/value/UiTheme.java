@@ -50,6 +50,8 @@ public final class UiTheme {
     public static UiColor ACCENT     = new UiColor(104, 90, 214, 255);     // 139, 124, 255
     public static UiColor ACCENT_DIM = new UiColor(104, 90, 214, 70);
     public static UiColor DANGER     = new UiColor(200, 82, 82, 255);      // 230, 95, 95
+    /** « C'est fait » : le pendant de {@link #DANGER}, pour annoncer qu'un geste a réussi. Le même dans les deux thèmes. */
+    public static final UiColor SUCCESS = new UiColor(92, 196, 128, 255);
 
     public static UiColor TEXT_PRIMARY   = new UiColor(204, 204, 212, 255); // 232, 232, 238
     // Le secondaire et l'atténué avaient été REMONTÉS pour le verre

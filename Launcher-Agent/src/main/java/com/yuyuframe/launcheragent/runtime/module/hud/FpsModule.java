@@ -25,6 +25,8 @@ public final class FpsModule extends SingleHudModule {
 
     /** FPS réel courant — accessor Mixin via ClientData.fps(). */
     private static final class ContentSource implements HudElement.ContentSource {
+        private static final String[] NOTHING = new String[0];
+
         @Override
         public String[] lines() {
             // FPS par l'accessor Mixin, via ClientData — zéro réflexion.
@@ -33,7 +35,8 @@ public final class FpsModule extends SingleHudModule {
             // obfusqués, où ce module ne fonctionne de toute façon plus depuis
             // que tout l'accès aux données du jeu passe par les accessors.
             int fps = ClientData.fps();
-            return new String[]{ fps < 0 ? "-- FPS" : fps + " FPS" };
+            // Pas de valeur : rien d'écrit, donc l'élément n'apparaît pas (HudElement.hasContent).
+            return fps < 0 ? NOTHING : new String[]{ fps + " FPS" };
         }
     }
 }

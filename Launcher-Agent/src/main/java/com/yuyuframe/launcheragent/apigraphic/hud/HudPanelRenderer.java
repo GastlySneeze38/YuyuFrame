@@ -174,7 +174,9 @@ public final class HudPanelRenderer {
         // HudElement.CustomRenderer.hasContent(). Demandé explicitement par
         // l'utilisateur ("quand il y a rien à afficher... le background ne
         // s'affiche pas").
-        if (element.customRenderer != null && !element.customRenderer.hasContent()) return;
+        // Généralisé le 2026-10-11 à TOUS les éléments, texte compris : la
+        // règle vit dans HudElement.hasContent().
+        if (!element.hasContent()) return;
 
         // skipBackground() : le renderer gère ENTIÈREMENT sa propre
         // apparence/position (voir ArmorDurabilityModule, style "Vanilla") —

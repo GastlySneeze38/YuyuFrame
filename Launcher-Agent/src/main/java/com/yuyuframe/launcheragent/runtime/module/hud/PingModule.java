@@ -19,6 +19,9 @@ public final class PingModule extends SingleHudModule {
 
     /** Ping réel du joueur local — retrouve le PlayerListEntry via son UUID (même chemin que l'onglet multijoueur vanilla). */
     private static final class ContentSource implements HudElement.ContentSource {
+        private static final String[] NOTHING = new String[0];
+        private boolean errorLogged;
+
         @Override
         public String[] lines() {
             // Joueur par l'accessor Mixin (PlayerData), connexion par
@@ -40,9 +43,15 @@ public final class PingModule extends SingleHudModule {
                 // ni le joueur ni la connexion, donc ne nomme plus aucun type
                 // du jeu. Le -1 est distinct d'un vrai ping, voir PlayerData.
                 int ping = PlayerData.ping();
-                return ping < 0 ? new String[]{ "-- ms" } : new String[]{ ping + " ms" };
+                // Pas de ping (solo, entrée de liste pas encore reçue) : rien
+                // d'écrit, donc l'élément n'apparaît pas (HudElement.hasContent).
+                return ping < 0 ? NOTHING : new String[]{ ping + " ms" };
             } catch (Throwable t) {
-                return new String[]{ "-- ms" };
+                if (!errorLogged) {
+                    errorLogged = true;
+                    com.yuyuframe.launcheragent.base.log.LauncherLog.err("[PingModule] ping illisible : " + t);
+                }
+                return NOTHING;
             }
         }
     }

@@ -91,6 +91,8 @@ public class UiModConfigScreen extends UiScreenBase {
      * ne peut pas l'ouvrir lui-même.
      */
     private UiModalForm modal;
+    /** Fenêtre libre en cours ({@link SettingModal.Dialog}), ou {@code null}. Jamais en même temps que {@link #modal}. */
+    private SettingModal.Dialog dialog;
     private float lastUiScale = -1f;
 
     public UiModConfigScreen(Object lastScreen, LauncherModule module) {
@@ -155,6 +157,11 @@ public class UiModConfigScreen extends UiScreenBase {
                 HudConfigStore.save();
             });
         }
+        SettingModal.Dialog requestedDialog = SettingModal.consumeDialog();
+        if (requestedDialog != null) {
+            dialog = requestedDialog;
+            dialog.opened(() -> dialog = null);
+        }
 
         UiRenderer.get(getClass().getClassLoader()).beginGlassFrame(GLASS_PASSES, screenWidth, screenHeight);
         super.uiDraw(mouseX, mouseY);
@@ -174,6 +181,7 @@ public class UiModConfigScreen extends UiScreenBase {
             // l'inverse. Son voile plein écran absorbe aussi les clics
             // alentour, puisque modalWidgets() rend sa liste exclusive.
             if (modal != null) modal.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
+            if (dialog != null) dialog.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
             // Ré-appliqué ici (déjà dessiné une fois dans super.uiDraw()) — voir
             // sa javadoc : sans ça, le titre/panneau ci-dessus apparaîtrait
             // d'un coup sec, jamais couvert par le voile.
@@ -183,6 +191,7 @@ public class UiModConfigScreen extends UiScreenBase {
 
     @Override
     protected java.util.List<com.yuyuframe.launcheragent.apigraphic.widget.UiWidget> modalWidgets() {
+        if (dialog != null) return dialog.widgets();
         return modal == null ? null : modal.widgets();
     }
 
@@ -190,6 +199,7 @@ public class UiModConfigScreen extends UiScreenBase {
     @Override
     protected void onModalEscape() {
         modal = null;
+        dialog = null;
     }
 
     @Override
@@ -197,7 +207,7 @@ public class UiModConfigScreen extends UiScreenBase {
         super.uiPollInput(input);
         // La liste ne défile plus tant qu'une modale est ouverte : le contenu
         // derrière n'est pas censé bouger.
-        if (scroll != null && modal == null) scroll.pollInput(input);
+        if (scroll != null && modal == null && dialog == null) scroll.pollInput(input);
     }
 
     private void buildLayout() {

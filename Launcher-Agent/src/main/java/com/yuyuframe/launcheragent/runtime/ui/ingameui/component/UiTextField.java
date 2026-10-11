@@ -173,6 +173,48 @@ public class UiTextField extends UiWidget implements UiFocusable {
         selAnchor = -1;
     }
 
+    /**
+     * La tranche du texte qui tient dans le champ : {@code [visibleFrom, visibleTo)}.
+     *
+     * <p>Un texte plus long que le champ en sortait et s'écrivait par-dessus
+     * ce qui se trouvait à sa droite (un lien de partage collé traversait tout
+     * l'écran). Le champ défile donc : la tranche suit le curseur, et seul ce
+     * qui tient est dessiné. Recalculée à chaque dessin par {@link #fitVisible}.
+     */
+    private int visibleFrom;
+    private int visibleTo;
+
+    /** Le plus grand {@code to} tel que {@code shown[from, to)} tienne dans {@code avail} (recherche par dichotomie : la largeur croît avec la longueur). */
+    private static int lastFitting(UiRenderer renderer, String shown, int from, float avail, float scale) {
+        int low = from, high = shown.length();
+        while (low < high) {
+            int mid = (low + high + 1) >>> 1;
+            if (renderer.textWidth(shown.substring(from, mid), scale) <= avail) low = mid;
+            else high = mid - 1;
+        }
+        return low;
+    }
+
+    private void fitVisible(UiRenderer renderer, String shown, float avail, float scale) {
+        int length = shown.length();
+        // Sans le focus, on montre le début : c'est ce qu'on lit d'un champ au repos.
+        int from = focused ? Math.min(visibleFrom, length) : 0;
+        int mark = Math.max(0, Math.min(caret, length));
+        if (mark < from) from = mark;
+        // Le curseur doit rester dans la tranche : on avance le début tant qu'il déborde à droite.
+        if (focused && renderer.textWidth(shown.substring(from, mark), scale) > avail) {
+            int low = from, high = mark;
+            while (low < high) {
+                int mid = (low + high) >>> 1;
+                if (renderer.textWidth(shown.substring(mid, mark), scale) <= avail) high = mid;
+                else low = mid + 1;
+            }
+            from = low;
+        }
+        visibleFrom = from;
+        visibleTo = lastFitting(renderer, shown, from, avail, scale);
+    }
+
     /** Index de caractère le plus proche de {@code mx} (espace framebuffer) — recherche linéaire sur les largeurs de préfixe, largement assez rapide pour une requête de recherche. */
     private int caretIndexForX(UiRenderer renderer, double mx) {
         // displayed() : sur un champ masqué, les points n'ont pas la largeur
@@ -184,9 +226,13 @@ public class UiTextField extends UiWidget implements UiFocusable {
         float startX = textStartX();
         float sc = scale();
         float best = Float.MAX_VALUE;
-        int bestIdx = s.length();
-        for (int i = 0; i <= s.length(); i++) {
-            float charX = startX + renderer.textWidth(s.substring(0, i), sc);
+        // Seule la tranche visible compte (voir visibleFrom) : un clic ne peut
+        // tomber que sur un caractère dessiné.
+        int from = Math.min(visibleFrom, s.length());
+        int to = Math.max(from, Math.min(visibleTo, s.length()));
+        int bestIdx = to;
+        for (int i = from; i <= to; i++) {
+            float charX = startX + renderer.textWidth(s.substring(from, i), sc);
             float dist = Math.abs((float) mx - charX);
             if (dist < best) {
                 best = dist;
@@ -262,16 +308,23 @@ public class UiTextField extends UiWidget implements UiFocusable {
         // du vrai texte et flotterait à côté des points.
         String shown = displayed();
 
+        // Ce qui tient dans le champ, entre le début du texte et le bouton
+        // d'effacement (ou la marge de droite) — voir visibleFrom.
+        float avail = (clearVisible ? x + w - h : x + w - UiTheme.scaled(8f)) - (x + textPad);
+        fitVisible(renderer, shown, Math.max(0f, avail), scale);
+        int from = visibleFrom, to = visibleTo;
+
         // Surlignage de sélection — DERRIÈRE le texte, voir ordre de dessin.
         if (focused && hasSelection()) {
-            int s = selectionStart(), e = selectionEnd();
-            float xs = x + textPad + renderer.textWidth(shown.substring(0, s), scale);
-            float xe = x + textPad + renderer.textWidth(shown.substring(0, e), scale);
+            int s = Math.max(from, Math.min(to, selectionStart()));
+            int e = Math.max(from, Math.min(to, selectionEnd()));
+            float xs = x + textPad + renderer.textWidth(shown.substring(from, s), scale);
+            float xe = x + textPad + renderer.textWidth(shown.substring(from, e), scale);
             renderer.drawRoundedRect(xs, baseline - glyphBottomOffset(scale), xe, baseline + glyphTopOffset(scale), 2f,
                 UiTheme.ACCENT.multiplyAlpha(0.4f), vpWidth, vpHeight);
         }
 
-        renderer.drawText(shown, x + textPad, baseline, UiTheme.TEXT_PRIMARY, scale, vpWidth, vpHeight);
+        renderer.drawText(shown.substring(from, to), x + textPad, baseline, UiTheme.TEXT_PRIMARY, scale, vpWidth, vpHeight);
 
         // Curseur clignotant à sa VRAIE position (plus un "|" toujours en fin
         // de texte) — masqué pendant qu'une sélection non vide est affichée
@@ -281,7 +334,8 @@ public class UiTextField extends UiWidget implements UiFocusable {
         // champ (~28px) donnait une grosse barre disproportionnée par rapport
         // au texte (~15px), confirmé en jeu ("bar clignotante trop grande").
         if (focused && !hasSelection() && (System.currentTimeMillis() / 500L) % 2 == 0) {
-            float cx = x + textPad + renderer.textWidth(shown.substring(0, caret), scale);
+            int mark = Math.max(from, Math.min(to, caret));
+            float cx = x + textPad + renderer.textWidth(shown.substring(from, mark), scale);
             renderer.drawRoundedRect(cx, baseline - glyphBottomOffset(scale), cx + UiTheme.scaled(1.2f), baseline + glyphTopOffset(scale),
                 0f, UiTheme.TEXT_PRIMARY, vpWidth, vpHeight);
         }

@@ -262,6 +262,12 @@ public final class PotionEffectsModule extends SingleHudModule {
             return new float[]{ contentW, cachedRows.size() * lineHeight() };
         }
 
+        /** Aucun effet actif : l'élément n'apparaît pas (HudElement.hasContent). L'éditeur de HUD, lui, reçoit des effets d'exemple. */
+        @Override
+        public boolean hasContent() {
+            return !currentRows().isEmpty();
+        }
+
         private float lineHeight() {
             return showDuration ? LINE_H : LINE_H_COMPACT;
         }

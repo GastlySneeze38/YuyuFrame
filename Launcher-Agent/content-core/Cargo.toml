@@ -24,6 +24,10 @@ taffy = { version = "0.14.0", features = ["serde"] }
 # SHA-256 des empreintes de présence (src/presence/fingerprint.rs). Déjà dans
 # l'arbre de dépendances par ureq (rustls) — même version, rien de plus à compiler.
 ring = "0.17"
+# Liens de partage des réglages (src/share/codec.rs) : zstd + dictionnaire
+# figé, la même version et les mêmes options que le launcher, dont c'est la
+# copie.
+zstd = { version = "0.13", default-features = false }
 
 # Souris brute (src/mouse/windows.rs) : liaisons vers l'API Windows, sans code
 # autour. Déjà dans l'arbre de dépendances par ureq — même version.
@@ -32,6 +36,9 @@ windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_Security",
     "Win32_System_Threading",
+    # Presse-papiers (src/share/clipboard.rs).
+    "Win32_System_DataExchange",
+    "Win32_System_Memory",
     "Win32_UI_Input",
     # SendInput : seulement pour le test de bout en bout (mouvement injecté).
     "Win32_UI_Input_KeyboardAndMouse",
