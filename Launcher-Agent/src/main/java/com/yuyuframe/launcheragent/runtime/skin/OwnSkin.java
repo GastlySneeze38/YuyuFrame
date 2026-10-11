@@ -98,6 +98,22 @@ public final class OwnSkin {
         return hostedUrl;
     }
 
+    /** Appelé, sur le fil du jeu, quand {@link #hostedUrl()} change ou qu'un skin vient d'être chargé — posé par le module qui les affiche. */
+    public static volatile Runnable onHostedChanged;
+    /** Levé par le fil de lecture, relevé au tick suivant. */
+    private static volatile boolean changed;
+
+    /** La commande qui pose ce skin sur un serveur de jeu, ou {@code null} tant qu'il n'est pas en ligne. */
+    public static String command() {
+        String hosted = hostedUrl;
+        Skin skin = current;
+        if (hosted == null) {
+            return null;
+        }
+        // Sans modèle, le plugin le déduit de l'image ; « slim » le force pour les bras fins.
+        return "/skin url \"" + hosted + "\"" + (skin != null && skin.slim ? " slim" : "");
+    }
+
     /** Le pseudo de notre joueur dans le monde courant, ou {@code null} hors d'un monde. */
     static String selfName() {
         return selfName;
@@ -169,6 +185,13 @@ public final class OwnSkin {
         }
         SkinPoster.tick(now);
         AccountFaces.tick();
+        if (changed) {
+            changed = false;
+            Runnable listener = onHostedChanged;
+            if (listener != null) {
+                listener.run();
+            }
+        }
     }
 
     private static void readSelf() {
@@ -202,7 +225,13 @@ public final class OwnSkin {
             return;
         }
         String hosted = "-".equals(parts[2]) ? null : parts[2];
+        String before = hostedUrl;
         hostedUrl = textureHash(hosted) == null ? null : hosted;
+        // L'adresse arrive souvent après coup (mise en ligne en tâche de fond) : qui l'affiche doit le savoir.
+        Runnable listener = onHostedChanged;
+        if (listener != null && !java.util.Objects.equals(before, hostedUrl)) {
+            listener.run();
+        }
         String path = "-".equals(parts[3]) ? null : parts[3];
         boolean slim = "slim".equals(parts[1]);
         if (path == null) {
@@ -242,6 +271,9 @@ public final class OwnSkin {
             loadedSlim = slim;
             current = new Skin(argb, png.toByteArray(), slim, ++revisions);
             LauncherLog.info("[SKIN] Skin du launcher chargé (" + (slim ? "bras fins" : "classique") + ")");
+            // Ce qu'on affiche du skin dépend aussi de sa présence, pas seulement de son
+            // adresse. Prévenu au prochain tick : ici on est sur le fil de lecture.
+            changed = true;
         } catch (Throwable error) {
             // Retenu comme lu : sans cela la lecture, et son erreur, reviendraient à chaque question au launcher.
             loadedPath = path;

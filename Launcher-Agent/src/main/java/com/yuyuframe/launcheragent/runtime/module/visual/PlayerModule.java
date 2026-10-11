@@ -4,6 +4,8 @@ import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.celeritas.RendererSwitch;
 import com.yuyuframe.launcheragent.runtime.module.optimization.OptimizationModule;
 import com.yuyuframe.launcheragent.runtime.presence.PlayerStyle;
+import com.yuyuframe.launcheragent.runtime.share.NativeShare;
+import com.yuyuframe.launcheragent.runtime.skin.OwnSkin;
 import com.yuyuframe.launcheragent.runtime.skin.SkinPoster;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
@@ -82,6 +84,8 @@ public final class PlayerModule extends LauncherModule {
             "Nametag et pseudos YuyuFrame", true);
         iconUrl = icons8("user");
         instance = this;
+        // Le lien du skin s'affiche dans les réglages et arrive après coup.
+        OwnSkin.onHostedChanged = this::invalidateSettings;
         apply();
     }
 
@@ -144,6 +148,30 @@ public final class PlayerModule extends LauncherModule {
             "Skin", null, () -> autoSkin, v -> { autoSkin = v; apply(); });
         s.action("skin-post", "Poser mon skin sur ce serveur", "Envoie la commande maintenant", "Skin",
             SkinPoster::postNow);
+        // L'adresse du skin chez Mojang : ce que le serveur de jeu reçoit. Elle
+        // arrive du launcher, souvent après coup — la liste est refaite quand
+        // elle change (voir OwnSkin.onHostedChanged).
+        String hosted = OwnSkin.hostedUrl();
+        if (hosted == null) {
+            // Rien à dire pour un compte Microsoft ou un compte sans skin : il n'y a pas de skin à mettre en ligne.
+            if (OwnSkin.current() != null) {
+                s.info("skin-link", "Lien du skin", "Pas encore en ligne : vous seul voyez ce skin.", "Skin");
+            }
+        } else {
+            // Une espace avant l'empreinte : l'adresse n'a aucun endroit où passer à la ligne.
+            s.info("skin-link", "Lien du skin", hosted.replace("/texture/", "/texture/ "), "Skin");
+            s.action("skin-copy", "Copier la commande /skin", "À coller dans le chat d'un serveur", "Skin",
+                PlayerModule::copySkinCommand);
+        }
+    }
+
+    private static void copySkinCommand() {
+        String command = OwnSkin.command();
+        if (command == null) return;
+        NativeShare.Outcome outcome = NativeShare.copy(command);
+        if (!outcome.ok) {
+            com.yuyuframe.launcheragent.base.log.LauncherLog.err("[SKIN] Commande non copiée : " + outcome.text);
+        }
     }
 
     /** Ce que seule la 1.8.9 sait dessiner : le choix du logo, les fonds, les couleurs du pseudo. */

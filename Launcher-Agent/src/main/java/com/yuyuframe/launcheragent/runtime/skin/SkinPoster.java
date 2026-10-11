@@ -189,6 +189,7 @@ public final class SkinPoster {
         status = Status.SENT;
         try {
             // Sans modèle, le plugin le déduit de l'image ; « slim » le force pour les bras fins.
+            // La même commande que celle qu'on donne à copier : OwnSkin.command().
             NetworkData.sendCommand(COMMAND + " url \"" + hosted + "\"" + (slim ? " slim" : ""));
             LauncherLog.info("[SKIN] /skin url envoyée au serveur (essai " + attempts + ")");
         } catch (Throwable error) {
