@@ -556,6 +556,12 @@ public class UiColorPicker extends UiWidget {
         setExpanded(!expanded);
     }
 
+    /** Le panneau ouvert couvre ce point : le clic est pour lui, pas pour le réglage qu'il cache (voir UiWidget#overlayContains). */
+    @Override
+    public boolean overlayContains(double mouseX, double mouseY) {
+        return expanded && mouseX >= x && mouseX <= x + PANEL_W && mouseY >= panelBottom() && mouseY <= panelTop();
+    }
+
     @Override
     public void pollContinuous(UiInputPoller input) {
         if (!expanded) return;

@@ -98,4 +98,20 @@ public abstract class UiWidget {
      * (voir UiColorPicker/UiDropdown) le surchargent.
      */
     public void drawOverlay(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {}
+
+    /**
+     * Le contenu flottant de ce widget (liste déroulée, panneau de couleurs)
+     * couvre-t-il ce point ? Le clic y revient alors à lui seul.
+     *
+     * <p>Pendant de {@link #drawOverlay} pour la souris : un panneau flottant
+     * est dessiné par-dessus ce qui se trouve plus bas, mais il traite ses
+     * clics lui-même ({@link #pollContinuous}), en dehors de la recherche du
+     * widget cliqué. Sans cette question, cette recherche trouvait aussi le
+     * widget RECOUVERT et lui envoyait le même clic — choisir une ligne d'une
+     * liste basculait l'interrupteur caché dessous. Qui distribue les clics
+     * la pose d'abord (voir {@code UiScrollContainer}, {@code UiScreenBase}).
+     */
+    public boolean overlayContains(double mouseX, double mouseY) {
+        return false;
+    }
 }

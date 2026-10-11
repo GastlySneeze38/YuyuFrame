@@ -225,6 +225,27 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
      * — comportement de CHAQUE widget existant qui ne surcharge que l'ancien
      * {@link UiWidget#onClick()} reste 100% inchangé (voir sa javadoc).
      */
+    /**
+     * Un panneau flottant couvre-t-il ce point ? Ceux des widgets de l'écran,
+     * et ceux que l'écran range ailleurs (le contenu d'une liste défilante :
+     * voir {@link #floatingPanelElsewhere}).
+     */
+    private boolean floatingPanelAt(List<UiWidget> targets, double mouseX, double mouseY) {
+        for (UiWidget w : targets) {
+            if (w.overlayContains(mouseX, mouseY)) return true;
+        }
+        return floatingPanelElsewhere(mouseX, mouseY);
+    }
+
+    /**
+     * À surcharger par un écran dont une partie des widgets vit hors de
+     * {@link #widgets} (une liste défilante) : un panneau flottant ouvert
+     * là-bas peut recouvrir un widget d'ici.
+     */
+    protected boolean floatingPanelElsewhere(double mouseX, double mouseY) {
+        return false;
+    }
+
     private boolean dispatchClick(int button, boolean doubleClick) {
         if (button < 0 || button > 2 || lastInput == null) return false;
         List<UiWidget> active = modalWidgets();
@@ -245,7 +266,11 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
         // clic est un événement rare, pas un test par frame, la mise en
         // cache ne visait de toute façon pas ce point d'appel précis).
         UiHitTest.invalidate();
-        UiWidget clicked = UiHitTest.find(targets, lastInput.mouseX, lastInput.mouseY);
+        // Un panneau flottant ouvert sous la souris (liste déroulée, couleurs)
+        // traite ce clic lui-même : ce qu'il recouvre ne le reçoit pas. Voir
+        // UiWidget#overlayContains et floatingPanelAt.
+        UiWidget clicked = floatingPanelAt(targets, lastInput.mouseX, lastInput.mouseY)
+            ? null : UiHitTest.find(targets, lastInput.mouseX, lastInput.mouseY);
         // Perte de focus au clic EXTÉRIEUR — barre de recherche moderne : un
         // champ texte reste focus indéfiniment sinon (pas de mécanisme
         // d'exclusivité ailleurs), curseur clignotant en fond même après avoir

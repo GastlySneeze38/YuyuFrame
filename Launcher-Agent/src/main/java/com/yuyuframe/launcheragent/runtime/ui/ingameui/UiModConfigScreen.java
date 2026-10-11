@@ -195,6 +195,12 @@ public class UiModConfigScreen extends UiScreenBase {
         return modal == null ? null : modal.widgets();
     }
 
+    /** Une liste déroulée de la colonne des réglages peut descendre sur un onglet ou sur l'aperçu : le clic est pour elle. */
+    @Override
+    protected boolean floatingPanelElsewhere(double mouseX, double mouseY) {
+        return modal == null && dialog == null && scroll != null && scroll.overlayContains(mouseX, mouseY);
+    }
+
     /** Échap ferme d'abord la modale, pas l'écran — sinon on perdrait la saisie en cours en voulant juste annuler une étape. */
     @Override
     protected void onModalEscape() {

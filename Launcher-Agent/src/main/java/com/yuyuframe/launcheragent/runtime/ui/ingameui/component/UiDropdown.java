@@ -97,6 +97,28 @@ public class UiDropdown extends UiWidget {
         expanded = !expanded;
     }
 
+    /**
+     * Instant où un clic a été pris par la liste déroulée. Ce clic la referme
+     * sur-le-champ : pour qui demande ensuite à qui il revient
+     * ({@link #overlayContains}), elle n'est déjà plus ouverte — alors que
+     * c'est bien elle qui l'a reçu. On s'en souvient donc un court instant.
+     */
+    private long clickTakenAtNanos;
+    private static final long CLICK_MEMORY_NANOS = 200_000_000L;
+
+    private boolean overPanel(double mx, double my) {
+        float panelTop = y - PANEL_PAD;
+        float panelBottom = panelTop - options.size() * ROW_H;
+        return mx >= x && mx <= x + w && my >= panelBottom && my <= panelTop;
+    }
+
+    /** La liste déroulée couvre ce point : le clic est pour elle, pas pour le réglage qu'elle cache. */
+    @Override
+    public boolean overlayContains(double mouseX, double mouseY) {
+        boolean justTaken = clickTakenAtNanos != 0L && System.nanoTime() - clickTakenAtNanos < CLICK_MEMORY_NANOS;
+        return (expanded || justTaken) && overPanel(mouseX, mouseY);
+    }
+
     @Override
     public void pollContinuous(UiInputPoller input) {
         if (!expanded || !input.leftClicked) return;
@@ -108,6 +130,7 @@ public class UiDropdown extends UiWidget {
             if (input.mouseX >= x && input.mouseX <= x + w && input.mouseY >= rowBottom && input.mouseY <= rowTop) {
                 selectedIndex = i;
                 expanded = false;
+                clickTakenAtNanos = System.nanoTime();
                 if (onChange != null) onChange.accept(i);
                 return;
             }

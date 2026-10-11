@@ -343,6 +343,11 @@ public class UiScrollContainer {
         // la souris elle-même n'a pas bougé. Une liste FRAÎCHE à chaque appel
         // change de référence à chaque fois, donc le cache se réinvalide
         // correctement dès que le CONTENU (pas juste la position souris) change.
+        // Un panneau flottant ouvert sous la souris (liste déroulée, couleurs) ?
+        // Demandé AVANT pollContinuous : c'est là qu'il traite le clic, et
+        // souvent se referme — après, il ne couvrirait plus rien.
+        boolean overFloating = overlayContains(input.mouseX, input.mouseY);
+
         List<UiWidget> visibleNow = new ArrayList<>();
         for (UiWidget w : content) {
             if (!visible(w)) continue;
@@ -376,7 +381,13 @@ public class UiScrollContainer {
             // en dessous du cadre recevait encore les clics. Un clic HORS du
             // viewport ne touche plus aucun widget du contenu — il sert
             // seulement, ci-dessous, à retirer le focus des champs.
-            UiWidget clicked = overViewport ? UiHitTest.find(visibleNow, input.mouseX, input.mouseY) : null;
+            //
+            // BUG TROUVÉ (retour utilisateur 2026-10-11 : « sur toutes les
+            // listes déroulantes les éléments en dessous restent cliquables ») :
+            // la liste déroulée traite son clic elle-même, puis cette recherche
+            // trouvait le réglage qu'elle RECOUVRE et lui envoyait le même clic.
+            // Un clic sur un panneau flottant ne touche plus rien d'autre.
+            UiWidget clicked = overViewport && !overFloating ? UiHitTest.find(visibleNow, input.mouseX, input.mouseY) : null;
 
             // PERTE DE FOCUS au clic extérieur — même règle que
             // UiScreenBase.dispatchClick, qui ne pouvait pas l'appliquer ici :
@@ -396,6 +407,14 @@ public class UiScrollContainer {
 
             if (clicked != null) clicked.onClick(clickedButton, false);
         }
+    }
+
+    /** Un widget du contenu a-t-il un panneau flottant ouvert sous ce point ? Voir {@link UiWidget#overlayContains}. */
+    public boolean overlayContains(double mouseX, double mouseY) {
+        for (UiWidget w : content) {
+            if (visible(w) && w.overlayContains(mouseX, mouseY)) return true;
+        }
+        return false;
     }
 
     public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
