@@ -38,6 +38,12 @@ const DEFAULT_RENEW: Duration = Duration::from_secs(120);
 /// ni marteler l'API ni faire disparaître le joueur.
 const MIN_RENEW_SECS: u64 = 30;
 const MAX_RENEW_SECS: u64 = 240;
+/// Tant que le signal n'est pas parti (preuve ou envoi en échec), on réessaie
+/// vite : attendre la cadence normale laissait le joueur sans logo chez les
+/// autres pendant deux minutes — et, leur réponse « absent » étant gardée,
+/// bien plus longtemps. Surtout après un changement de compte en jeu, où l'on
+/// rejoint un serveur dans les secondes qui suivent.
+const RETRY: Duration = Duration::from_secs(15);
 
 pub(super) async fn visible(state: &SharedState) -> bool {
     let s = state.read().await;
@@ -61,6 +67,8 @@ pub fn spawn(state: SharedState, mut account: tokio::sync::watch::Receiver<Minec
         let mut proven = false;
         let mut renew = DEFAULT_RENEW;
         loop {
+            // Vrai quand le signal devait partir et n'est pas parti.
+            let mut failed = false;
             // Relus à chaque tour : le réglage et la connexion peuvent changer en cours de partie.
             // Un compte hors ligne n'est pas reconnu par cette route : rien à prouver, rien à annoncer.
             if session.refresh_token.is_some() && signed_in(&state).await && visible(&state).await {
@@ -68,7 +76,8 @@ pub fn spawn(state: SharedState, mut account: tokio::sync::watch::Receiver<Minec
                     proven = match prove_minecraft_account(&state, &session).await {
                         Ok(()) => true,
                         Err(e) => {
-                            tracing::debug!("compte Minecraft non prouvé : {e}");
+                            tracing::warn!("compte Minecraft {} non prouvé, nouvel essai dans {} s : {e}", session.username, RETRY.as_secs());
+                            failed = true;
                             false
                         }
                     };
@@ -81,7 +90,8 @@ pub fn spawn(state: SharedState, mut account: tokio::sync::watch::Receiver<Minec
                             }
                         }
                         Err(e) => {
-                            tracing::debug!("signal de présence refusé : {}", e.message);
+                            tracing::warn!("signal de présence de {} refusé ({}) : {}", session.username, e.code, e.message);
+                            failed = true;
                             // Preuve trop ancienne ou compte inconnu du serveur : à refaire.
                             // Une panne de réseau, elle, ne remet pas la preuve en cause.
                             if e.code == "bad_request" || e.code == "not_found" {
@@ -93,7 +103,7 @@ pub fn spawn(state: SharedState, mut account: tokio::sync::watch::Receiver<Minec
             }
             // Le compte a changé en jeu : on repart tout de suite avec le nouveau.
             tokio::select! {
-                _ = tokio::time::sleep(renew) => {}
+                _ = tokio::time::sleep(if failed { RETRY } else { renew }) => {}
                 changed = account.changed() => {
                     if changed.is_err() {
                         return;

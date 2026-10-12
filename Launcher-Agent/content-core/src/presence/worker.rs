@@ -117,6 +117,12 @@ fn run(shared: &Shared, client: &Client, tokens: &TokenStore) {
             continue;
         }
 
+        // Les questions suivent les arrivées : sur une liste agitée, on
+        // attend d'en avoir quelques-unes avant d'envoyer.
+        if !shared.directory().release(now) {
+            continue;
+        }
+
         // Les comptes Microsoft croisés.
         let batch = shared.directory().take_batch(now);
         if !batch.is_empty() {

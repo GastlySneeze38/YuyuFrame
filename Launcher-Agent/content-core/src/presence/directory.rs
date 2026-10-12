@@ -27,6 +27,30 @@ const PRESENT_TTL: Duration = Duration::from_secs(300);
 /// Un joueur absent peut lancer YuyuFrame plus tard, mais c'est rare et
 /// chaque question compte dans le quota : on attend plus longtemps.
 const ABSENT_TTL: Duration = Duration::from_secs(600);
+/// Les premiers « absent » d'un joueur sont revérifiés vite. On pose la
+/// question à l'instant où il apparaît, souvent AVANT que son propre signal
+/// soit arrivé au serveur : sur un serveur hors ligne il ne s'annonce qu'une
+/// fois entré, et après un changement de compte en jeu la preuve du nouveau
+/// compte prend quelques secondes. Sans cela, il restait sans logo pendant
+/// les dix minutes d'`ABSENT_TTL`.
+const ABSENT_RECHECKS: [Duration; 2] = [Duration::from_secs(8), Duration::from_secs(40)];
+/// Les questions suivent les arrivées. Un joueur qu'on voit pour la première
+/// fois est une arrivée ; chaque arrivée fait partir les questions en attente
+/// et redemander les arrivés récents restés « absents ». Sur une liste qui
+/// bouge beaucoup (lobby d'un grand serveur), on attend trois arrivées pour
+/// le faire ; sur une liste calme (survie entre amis), chaque arrivée compte.
+const JOINS_PER_ROUND_BUSY: u32 = 3;
+/// À partir de ce nombre d'arrivées dans la fenêtre, la liste « bouge beaucoup ».
+const BUSY_JOINS: usize = 10;
+const BUSY_WINDOW: Duration = Duration::from_secs(60);
+/// Sur une liste agitée, des arrivées en attente ne restent jamais plus
+/// longtemps sans réponse, même si la troisième ne vient pas.
+const HOLD_MAX: Duration = Duration::from_secs(6);
+/// Un « absent » n'est redemandé par les arrivées des autres que s'il est
+/// lui-même arrivé depuis peu, pas plus de tant de fois, et pas coup sur coup.
+const RECENT_ARRIVAL: Duration = Duration::from_secs(600);
+const MAX_JOIN_RECHECKS: u8 = 2;
+const JOIN_RECHECK_GAP: Duration = Duration::from_secs(3);
 /// Sans question depuis ce délai, le joueur n'est plus dans les parages.
 const FORGET_AFTER: Duration = Duration::from_secs(1800);
 /// Empreintes par requête — la limite du serveur (`MAX_LOOKUP`).
@@ -127,6 +151,12 @@ struct Entry {
     prints: [[u8; 32]; MAX_SERVER_FORMS],
     forms: u8,
     answer: Answer,
+    /// Réponses « absent » d'affilée (voir `ABSENT_RECHECKS`).
+    absent_streak: u8,
+    /// Première fois qu'on a vu ce joueur : son arrivée, de notre point de vue.
+    first_seen: Instant,
+    /// Fois où l'arrivée d'un autre l'a fait redemander (`MAX_JOIN_RECHECKS`).
+    join_rechecks: u8,
     /// Quand la réponse a été reçue ; `None` tant qu'il n'y en a pas.
     checked_at: Option<Instant>,
     /// Déjà dans la file ou dans une requête en cours.
@@ -161,6 +191,11 @@ pub struct Directory {
     epoch: u64,
     next_announce: Instant,
     renew: Duration,
+    /// Les arrivées de la dernière minute : ce qui dit si la liste bouge.
+    recent_joins: VecDeque<Instant>,
+    /// Arrivées pas encore suivies d'un envoi, et l'heure de la plus ancienne.
+    pending_joins: u32,
+    first_pending: Option<Instant>,
 }
 
 impl Directory {
@@ -177,6 +212,65 @@ impl Directory {
             epoch: 0,
             next_announce: now,
             renew: DEFAULT_RENEW,
+            recent_joins: VecDeque::new(),
+            pending_joins: 0,
+            first_pending: None,
+        }
+    }
+
+    fn note_join(&mut self, now: Instant) {
+        self.recent_joins.push_back(now);
+        self.pending_joins += 1;
+        self.first_pending.get_or_insert(now);
+    }
+
+    fn quick_allowed(&self, offline: bool) -> bool {
+        // Les questions en plus ne se prennent que sur la première moitié du
+        // budget de l'heure, pour qu'un gros serveur ne prive pas de réponse
+        // les joueurs croisés ensuite.
+        match offline {
+            true => self.offline_spent < OFFLINE_HOURLY_BUDGET / 2,
+            false => self.spent < HOURLY_BUDGET / 2,
+        }
+    }
+
+    /// Le fil réseau peut-il envoyer maintenant ? Sans arrivée en attente,
+    /// oui : les rafraîchissements suivent leur cours. Avec, on attend le
+    /// nombre d'arrivées que demande l'agitation de la liste (ou `HOLD_MAX`),
+    /// puis les arrivés récents restés « absents » repartent avec le lot.
+    pub fn release(&mut self, now: Instant) -> bool {
+        while self.recent_joins.front().is_some_and(|at| now.duration_since(*at) >= BUSY_WINDOW) {
+            self.recent_joins.pop_front();
+        }
+        let Some(first) = self.first_pending else { return true };
+        let busy = self.recent_joins.len() >= BUSY_JOINS;
+        if busy && self.pending_joins < JOINS_PER_ROUND_BUSY && now.duration_since(first) < HOLD_MAX {
+            return false;
+        }
+        self.pending_joins = 0;
+        self.first_pending = None;
+        self.recheck_recent_arrivals(now);
+        true
+    }
+
+    fn recheck_recent_arrivals(&mut self, now: Instant) {
+        let quick = [self.quick_allowed(false), self.quick_allowed(true)];
+        for (key, entry) in self.entries.iter_mut() {
+            let due = entry.answer == Answer::Absent
+                && !entry.queued
+                && quick[key.offline as usize]
+                && entry.join_rechecks < MAX_JOIN_RECHECKS
+                && now.duration_since(entry.first_seen) < RECENT_ARRIVAL
+                && entry.checked_at.is_some_and(|at| now.duration_since(at) >= JOIN_RECHECK_GAP);
+            if !due {
+                continue;
+            }
+            entry.join_rechecks += 1;
+            entry.queued = true;
+            match key.offline {
+                true => self.offline_queue.push_back(*key),
+                false => self.queue.push_back(*key),
+            }
         }
     }
 
@@ -218,12 +312,16 @@ impl Directory {
         if key.offline && self.server.is_empty() {
             return Answer::Absent;
         }
+        let quick = self.quick_allowed(key.offline);
         if let Some(entry) = self.entries.get_mut(&key) {
             entry.asked_at = now;
             let stale = match (entry.checked_at, entry.answer) {
                 (None, _) => true,
                 (Some(at), Answer::Present) => now.duration_since(at) >= PRESENT_TTL,
-                (Some(at), _) => now.duration_since(at) >= ABSENT_TTL,
+                (Some(at), _) => {
+                    let recheck = ABSENT_RECHECKS.get(entry.absent_streak.saturating_sub(1) as usize).filter(|_| quick);
+                    now.duration_since(at) >= *recheck.unwrap_or(&ABSENT_TTL)
+                }
             };
             if stale && !entry.queued {
                 entry.queued = true;
@@ -239,7 +337,8 @@ impl Directory {
             return Answer::Unknown;
         }
         let (prints, forms) = self.prints(&key);
-        self.entries.insert(key, Entry { prints, forms, answer: Answer::Unknown, checked_at: None, queued: true, asked_at: now });
+        self.entries.insert(key, Entry { prints, forms, answer: Answer::Unknown, absent_streak: 0, first_seen: now, join_rechecks: 0, checked_at: None, queued: true, asked_at: now });
+        self.note_join(now);
         if key.offline {
             self.offline_queue.push_back(key);
         } else {
@@ -321,6 +420,7 @@ impl Directory {
             }
             if let Some(entry) = self.entries.get_mut(&key) {
                 entry.answer = if found { Answer::Present } else { Answer::Absent };
+                entry.absent_streak = if found { 0 } else { entry.absent_streak.saturating_add(1) };
                 entry.checked_at = Some(now);
                 entry.queued = false;
             }
@@ -468,6 +568,12 @@ mod tests {
         dir.query(key(2, "Alex"), now);
         let batch = dir.take_batch(now);
         dir.apply(&batch, &[true, false], now);
+        // Les revérifications rapides de l'absent sont passées : il attend le délai long.
+        for after in ABSENT_RECHECKS {
+            dir.query(key(2, "Alex"), now + after);
+            let again = dir.take_batch(now + after);
+            dir.apply(&again, &[false], now);
+        }
 
         let later = now + PRESENT_TTL;
         assert_eq!(dir.query(key(1, "Steve"), later), Answer::Present, "pas de clignotement");
@@ -481,6 +587,108 @@ mod tests {
         assert_eq!(dir.query(key(1, "Steve"), later), Answer::Absent);
         dir.query(key(2, "Alex"), now + ABSENT_TTL);
         assert_eq!(dir.take_batch(now + ABSENT_TTL).len(), 1);
+    }
+
+    #[test]
+    fn un_joueur_qui_vient_d_arriver_est_reverifie_vite() {
+        let now = Instant::now();
+        let mut dir = Directory::new(now);
+        // Demandé à l'instant où il apparaît : son signal n'est pas encore au serveur.
+        dir.query(key(1, "Steve"), now);
+        let batch = dir.take_batch(now);
+        dir.apply(&batch, &[false], now);
+
+        let soon = now + ABSENT_RECHECKS[0];
+        assert_eq!(dir.query(key(1, "Steve"), soon - Duration::from_secs(1)), Answer::Absent);
+        assert!(dir.take_batch(soon).is_empty(), "pas avant le premier délai");
+        dir.query(key(1, "Steve"), soon);
+        let batch = dir.take_batch(soon);
+        assert_eq!(batch.len(), 1);
+        dir.apply(&batch, &[true], soon);
+        assert_eq!(dir.query(key(1, "Steve"), soon), Answer::Present);
+
+        // Budget de l'heure à moitié dépensé : plus de revérification rapide.
+        dir.query(key(2, "Alex"), soon);
+        let batch = dir.take_batch(soon);
+        dir.apply(&batch, &[false], soon);
+        dir.spent = HOURLY_BUDGET / 2;
+        dir.query(key(2, "Alex"), soon + ABSENT_RECHECKS[0]);
+        assert!(dir.take_batch(soon + ABSENT_RECHECKS[0]).is_empty());
+    }
+
+    #[test]
+    fn sur_une_liste_calme_chaque_arrivee_fait_partir_les_questions() {
+        let now = Instant::now();
+        let mut dir = Directory::new(now);
+        assert!(dir.release(now), "rien en attente : les rafraîchissements passent");
+        // Un ami arrive, demandé avant que son signal soit au serveur.
+        dir.query(key(1, "Steve"), now);
+        assert!(dir.release(now));
+        let batch = dir.take_batch(now);
+        dir.apply(&batch, &[false], now);
+
+        // Un second arrive un peu plus tard : le premier repart avec lui.
+        let later = now + JOIN_RECHECK_GAP;
+        dir.query(key(2, "Alex"), later);
+        assert!(dir.release(later));
+        let batch = dir.take_batch(later);
+        assert_eq!(batch.iter().map(|(k, _)| *k).collect::<Vec<_>>(), vec![key(2, "Alex"), key(1, "Steve")]);
+        dir.apply(&batch, &[false, true], later);
+        assert_eq!(dir.query(key(1, "Steve"), later), Answer::Present);
+    }
+
+    #[test]
+    fn sur_une_liste_agitee_on_attend_trois_arrivees() {
+        let now = Instant::now();
+        let mut dir = Directory::new(now);
+        // L'entrée dans un lobby : tout le monde d'un coup, envoyé d'un coup.
+        for n in 0..BUSY_JOINS as u128 {
+            dir.query(key(n + 1, "Joueur"), now);
+        }
+        assert!(dir.release(now));
+        let batch = dir.take_batch(now);
+        dir.apply(&batch, &vec![false; batch.len()], now);
+
+        let t = now + Duration::from_secs(10);
+        dir.query(key(101, "Un"), t);
+        assert!(!dir.release(t), "une arrivée ne suffit pas");
+        dir.query(key(102, "Deux"), t);
+        assert!(!dir.release(t));
+        dir.query(key(103, "Trois"), t);
+        assert!(dir.release(t));
+        // Les trois arrivées, et les arrivés récents restés absents.
+        assert_eq!(dir.take_batch(t).len(), 3 + BUSY_JOINS);
+
+        // Une arrivée isolée ne reste pas en attente indéfiniment.
+        let t = t + Duration::from_secs(1);
+        dir.query(key(104, "Seul"), t);
+        assert!(!dir.release(t));
+        assert!(dir.release(t + HOLD_MAX));
+
+        // La liste se calme : chaque arrivée compte de nouveau.
+        let calm = t + HOLD_MAX + BUSY_WINDOW;
+        dir.query(key(105, "Tard"), calm);
+        assert!(dir.release(calm));
+    }
+
+    #[test]
+    fn les_arrivees_ne_font_pas_redemander_sans_fin() {
+        let now = Instant::now();
+        let mut dir = Directory::new(now);
+        dir.query(key(1, "Steve"), now);
+        dir.release(now);
+        let batch = dir.take_batch(now);
+        dir.apply(&batch, &[false], now);
+        let mut asked = 0;
+        for n in 0..5u64 {
+            let t = now + JOIN_RECHECK_GAP * (n as u32 + 1);
+            dir.query(key(10 + n as u128, "Autre"), t);
+            dir.release(t);
+            let batch = dir.take_batch(t);
+            asked += batch.iter().filter(|(k, _)| *k == key(1, "Steve")).count();
+            dir.apply(&batch, &vec![false; batch.len()], t);
+        }
+        assert_eq!(asked, MAX_JOIN_RECHECKS as usize);
     }
 
     #[test]
