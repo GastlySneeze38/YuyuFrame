@@ -103,13 +103,36 @@ pub fn install_tray(app: &tauri::AppHandle) {
     }
 }
 
+/// Une reconstruction de la fenêtre est en cours.
+///
+/// Deux demandes peuvent arriver ensemble : la partie se termine (le launcher
+/// revient) au moment où l'on relance l'exécutable ou clique l'icône de
+/// notification. Chacune ne voyait pas encore la fenêtre de l'autre et en
+/// construisait une ; la seconde échouait (même nom de fenêtre), et son échec
+/// éteignait le launcher — qui disparaissait donc au lieu de revenir.
+///
+/// Un drapeau et non un verrou : la construction passe par le fil principal,
+/// qui est parfois celui qui demande — l'y faire attendre le bloquerait.
+static REOPENING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 /// Reconstruit la fenêtre principale à l'identique de `tauri.conf.json`.
 pub fn reopen_main_window(app: &tauri::AppHandle) {
+    use std::sync::atomic::Ordering;
+
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.set_focus();
         return;
     }
+    // Quelqu'un d'autre la construit déjà : elle arrive, rien à faire de plus.
+    if REOPENING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    build_main_window(app);
+    REOPENING.store(false, Ordering::SeqCst);
+}
+
+fn build_main_window(app: &tauri::AppHandle) {
     let built = tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::App("index.html".into()))
         .title("YuyuFrame")
         .inner_size(1280.0, 760.0)
@@ -127,6 +150,14 @@ pub fn reopen_main_window(app: &tauri::AppHandle) {
         }
         Err(e) => {
             tracing::warn!("Réouverture de la fenêtre impossible : {e}");
+            // Elle existe quand même (construite entre-temps par une autre
+            // demande) : l'échec ne coûte rien, on la montre.
+            if let Some(window) = app.get_webview_window("main") {
+                state::set_window_open(true);
+                let _ = window.show();
+                let _ = window.set_focus();
+                return;
+            }
             // Sans fenêtre ni partie à surveiller, le processus n'aurait plus
             // aucun moyen d'être vu ni arrêté : mieux vaut s'éteindre que de
             // laisser un fantôme dans le gestionnaire des tâches.
