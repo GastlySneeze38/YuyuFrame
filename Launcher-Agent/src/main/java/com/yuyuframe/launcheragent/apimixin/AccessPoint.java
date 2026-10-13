@@ -634,6 +634,51 @@ public enum AccessPoint {
      */
     NETWORK_ADD_CLIENT_COMMANDS,
 
+    // ── Entités et combat (docs/scoring/capture.md) ────────────────────────
+    // Receveur de tous les ENTITY_* : l'entité, poignée opaque reçue d'un
+    // point d'accroche (ENTITY_LOAD, ENTITY_ATTACK) ou de LEVEL_PLAYERS.
+    // Receveur null = notre propre joueur.
+    /**
+     * Distance de chute accumulée de NOTRE joueur, en blocs ({@code Double}).
+     * Le client ne la simule de façon fiable que pour son propre joueur :
+     * pas de pendant {@code ENTITY_*}.
+     */
+    PLAYER_FALL_DISTANCE,
+    /** Identifiant réseau de l'entité ({@code Integer}) — celui que portent les paquets. */
+    ENTITY_NETWORK_ID,
+    /** UUID de l'entité ({@code java.util.UUID}). */
+    ENTITY_UUID,
+    /** Nom de profil d'un joueur, ou l'UUID en texte pour une autre entité ({@code String}) — jamais le nom affiché, que les serveurs décorent. */
+    ENTITY_NAME,
+    /** Position de l'entité, {@code double[]{x, y, z}}. */
+    ENTITY_POSITION,
+    /** Vitesse de l'entité en blocs par tick, {@code double[]{x, y, z}} — plus fiable qu'une différence de positions. */
+    ENTITY_DELTA_MOVEMENT,
+    /** L'entité touche-t-elle le sol ? {@code Boolean}. */
+    ENTITY_ON_GROUND,
+    /**
+     * Équipement d'une entité vivante, {@code ItemInfo[6]} dans l'ordre de
+     * {@link #PLAYER_EQUIPMENT} (tête, torse, jambes, pieds, main principale,
+     * main secondaire). {@code null} pour une entité qui n'en porte pas.
+     */
+    ENTITY_EQUIPMENT,
+    /** Les joueurs du monde courant, notre joueur compris ({@code Object[]} de poignées opaques). */
+    LEVEL_PLAYERS,
+    /**
+     * Identifiant de registre d'une pile, SANS espace de noms ({@code "mace"},
+     * {@code "wind_charge"}). Receveur : la pile ({@code ItemInfo.handle}).
+     * {@code null} pour une pile vide.
+     */
+    ITEM_ID,
+    /**
+     * Niveau d'un enchantement sur une pile, 0 s'il n'y est pas. Receveur : la
+     * pile ({@code ItemInfo.handle}). Argument : chemin de registre sans
+     * espace de noms ({@code "protection"}, {@code "breach"}) — même
+     * convention que {@link #PLAYER_HELD_ENCHANT_LEVEL}, qui ne lit que
+     * l'objet en main de notre joueur.
+     */
+    ITEM_ENCHANT_LEVEL,
+
     // ── Sons d'interface (net.minecraft.client.sounds.SoundManager) ────────
     /**
      * Joue un son d'interface. Arguments : identifiant de registre

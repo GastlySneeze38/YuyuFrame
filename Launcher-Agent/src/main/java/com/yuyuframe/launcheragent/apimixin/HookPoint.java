@@ -210,6 +210,48 @@ public enum HookPoint {
      */
     PIERCING_ATTACK,
 
+    // ── Combat : ce que le scoring observe (docs/scoring/capture.md) ─────────
+    // Notifications pures, aucune n'est annulable. Aucune ne transmet un type
+    // du jeu autre que la poignée opaque d'une entité : les paquets sont
+    // réduits à un porteur de apimixin/data par le mixin de la version.
+    /**
+     * Le joueur ATTAQUE une entité — {@code MultiPlayerGameMode.attack(Player,
+     * Entity)}, à l'entrée. Contexte : l'entité visée (poignée opaque, à lire
+     * par les accès {@code ENTITY_*}).
+     *
+     * <p>C'est une intention, pas un coup porté : le serveur peut la refuser
+     * (hors de portée, cible invulnérable). Le coup se confirme par
+     * {@link #DAMAGE_EVENT}.
+     */
+    ENTITY_ATTACK,
+    /**
+     * Le serveur annonce qu'une entité a subi des dégâts —
+     * {@code ClientPacketListener.handleDamageEvent}. Contexte : un
+     * {@code apimixin.data.DamageEvent} (entité touchée, type de dégât, auteur,
+     * source directe).
+     *
+     * <p>C'est la SEULE confirmation d'un coup : la vie des autres joueurs
+     * n'est jamais lue, beaucoup de serveurs la masquent.
+     */
+    DAMAGE_EVENT,
+    /**
+     * Le serveur annonce un événement d'entité —
+     * {@code ClientPacketListener.handleEntityEvent}. Contexte : un
+     * {@code apimixin.data.EntityEvent} (entité, code). Codes utiles au
+     * scoring : 3 = mort, 35 = totem consommé.
+     */
+    ENTITY_EVENT,
+    /**
+     * Le joueur UTILISE l'objet tenu — {@code MultiPlayerGameMode.useItem(Player,
+     * InteractionHand)}, à l'entrée. Contexte : un {@code apimixin.data.ItemUse}
+     * (identifiant de l'objet, main).
+     *
+     * <p>À l'entrée et non à la sortie : une fois l'objet utilisé, la pile a
+     * pu tomber à zéro (dernière charge de vent), et la main ne dit plus ce
+     * qui vient de partir.
+     */
+    ITEM_USE,
+
     // ── Raccourcis clavier (fabric-key-mapping-api-v1) ────────────────────────
     /** Voir {@code OptionsMixin} — enregistrement de {@code KeyMapping} custom. */
     KEYBIND_REGISTER,

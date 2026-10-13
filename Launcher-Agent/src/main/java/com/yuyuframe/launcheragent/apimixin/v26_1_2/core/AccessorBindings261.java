@@ -303,23 +303,66 @@ public final class AccessorBindings261 {
         AccessorRegistry.bind(AccessPoint.PLAYER_HELD_ENCHANT_LEVEL, (r, a) -> {
             LocalPlayer p = player(r);
             if (p == null || a.length < 1 || !(a[0] instanceof String)) return null;
-            ItemStack stack = p.getItemInHand(InteractionHand.MAIN_HAND);
-            if (stack == null || stack.isEmpty()) return Integer.valueOf(0);
-            net.minecraft.world.item.enchantment.ItemEnchantments enchantments =
-                stack.get(DataComponentsAccessor261.la$enchantments());
-            if (enchantments == null || enchantments.isEmpty()) return Integer.valueOf(0);
-            for (Object entry : enchantments.keySet()) {
-                @SuppressWarnings("unchecked")
-                Holder<net.minecraft.world.item.enchantment.Enchantment> holder =
-                    (Holder<net.minecraft.world.item.enchantment.Enchantment>) entry;
-                if (holder == null) continue;
-                java.util.Optional<net.minecraft.resources.ResourceKey<net.minecraft.world.item.enchantment.Enchantment>> key =
-                    holder.unwrapKey();
-                if (key == null || !key.isPresent()) continue;
-                net.minecraft.resources.Identifier id = key.get().identifier();
-                if (id != null && a[0].equals(id.getPath())) return Integer.valueOf(enchantments.getLevel(holder));
-            }
-            return Integer.valueOf(0);
+            return Integer.valueOf(enchantLevel(p.getItemInHand(InteractionHand.MAIN_HAND), (String) a[0]));
+        });
+        // ── Entités et combat (docs/scoring/capture.md) ────────────────────
+        // Receveur : l'entité ; null = notre joueur. Tout passe par les
+        // accessors EntityAccessor261 / LivingEntityAccessor261, même pour
+        // des membres publics.
+        AccessorRegistry.bind(AccessPoint.PLAYER_FALL_DISTANCE, (r, a) -> {
+            EntityAccessor261 e = entity(null);
+            return e == null ? null : Double.valueOf(e.la$fallDistance());
+        });
+        AccessorRegistry.bind(AccessPoint.ENTITY_NETWORK_ID, (r, a) -> {
+            EntityAccessor261 e = entity(r);
+            return e == null ? null : Integer.valueOf(e.la$id());
+        });
+        AccessorRegistry.bind(AccessPoint.ENTITY_UUID, (r, a) -> {
+            EntityAccessor261 e = entity(r);
+            return e == null ? null : e.la$uuid();
+        });
+        AccessorRegistry.bind(AccessPoint.ENTITY_NAME, (r, a) -> {
+            EntityAccessor261 e = entity(r);
+            return e == null ? null : e.la$scoreboardName();
+        });
+        AccessorRegistry.bind(AccessPoint.ENTITY_POSITION, (r, a) -> {
+            EntityAccessor261 e = entity(r);
+            return e == null ? null : new double[]{ e.la$x(), e.la$y(), e.la$z() };
+        });
+        AccessorRegistry.bind(AccessPoint.ENTITY_DELTA_MOVEMENT, (r, a) -> {
+            EntityAccessor261 e = entity(r);
+            net.minecraft.world.phys.Vec3 v = e == null ? null : e.la$deltaMovement();
+            return v == null ? null : new double[]{ v.x, v.y, v.z };
+        });
+        AccessorRegistry.bind(AccessPoint.ENTITY_ON_GROUND, (r, a) -> {
+            EntityAccessor261 e = entity(r);
+            return e == null ? null : Boolean.valueOf(e.la$onGround());
+        });
+        AccessorRegistry.bind(AccessPoint.ENTITY_EQUIPMENT, (r, a) -> {
+            Object target = r != null ? r : player(null);
+            if (!(target instanceof LivingEntityAccessor261)) return null;
+            LivingEntityAccessor261 e = (LivingEntityAccessor261) target;
+            return new ItemInfo[]{
+                item(e.la$itemBySlot(EquipmentSlot.HEAD)),
+                item(e.la$itemBySlot(EquipmentSlot.CHEST)),
+                item(e.la$itemBySlot(EquipmentSlot.LEGS)),
+                item(e.la$itemBySlot(EquipmentSlot.FEET)),
+                item(e.la$itemInHand(InteractionHand.MAIN_HAND)),
+                item(e.la$itemInHand(InteractionHand.OFF_HAND)),
+            };
+        });
+        AccessorRegistry.bind(AccessPoint.LEVEL_PLAYERS, (r, a) -> {
+            MinecraftAccessor261 m = mc(null);
+            Object level = m == null ? null : m.la$level();
+            if (!(level instanceof ClientLevelAccessor261)) return null;
+            java.util.List<?> players = ((ClientLevelAccessor261) level).la$players();
+            return players == null ? null : players.toArray();
+        });
+        AccessorRegistry.bind(AccessPoint.ITEM_ID, (r, a) ->
+            com.yuyuframe.launcheragent.apimixin.v26_1_2.combat.CombatEvents261.itemId(r));
+        AccessorRegistry.bind(AccessPoint.ITEM_ENCHANT_LEVEL, (r, a) -> {
+            if (!(r instanceof ItemStack) || a.length < 1 || !(a[0] instanceof String)) return null;
+            return Integer.valueOf(enchantLevel((ItemStack) r, (String) a[0]));
         });
         AccessorRegistry.bind(AccessPoint.PLAYER_HELD_FOOD, (r, a) -> {
             LocalPlayer p = player(r);
@@ -537,6 +580,39 @@ public final class AccessorBindings261 {
      * {@code getDamage}→{@code getDamageValue} ({@code getMaxDamage} et
      * {@code getCount} inchangés).
      */
+    /**
+     * Receveur → accessor d'entité ; {@code null} = notre joueur. Rend
+     * {@code null} si l'objet n'est pas une entité ou si l'accessor ne s'est
+     * pas tissé.
+     */
+    private static EntityAccessor261 entity(Object receiver) {
+        Object target = receiver != null ? receiver : player(null);
+        return target instanceof EntityAccessor261 ? (EntityAccessor261) target : null;
+    }
+
+    /**
+     * Niveau de l'enchantement {@code path} (chemin de registre sans espace
+     * de noms) sur cette pile, 0 s'il n'y est pas.
+     */
+    private static int enchantLevel(ItemStack stack, String path) {
+        if (stack == null || stack.isEmpty()) return 0;
+        net.minecraft.world.item.enchantment.ItemEnchantments enchantments =
+            stack.get(DataComponentsAccessor261.la$enchantments());
+        if (enchantments == null || enchantments.isEmpty()) return 0;
+        for (Object entry : enchantments.keySet()) {
+            @SuppressWarnings("unchecked")
+            Holder<net.minecraft.world.item.enchantment.Enchantment> holder =
+                (Holder<net.minecraft.world.item.enchantment.Enchantment>) entry;
+            if (holder == null) continue;
+            java.util.Optional<net.minecraft.resources.ResourceKey<net.minecraft.world.item.enchantment.Enchantment>> key =
+                holder.unwrapKey();
+            if (key == null || !key.isPresent()) continue;
+            net.minecraft.resources.Identifier id = key.get().identifier();
+            if (id != null && path.equals(id.getPath())) return enchantments.getLevel(holder);
+        }
+        return 0;
+    }
+
     private static ItemInfo item(ItemStack stack) {
         if (stack == null || stack.isEmpty()) return ItemInfo.EMPTY;
         boolean damageable = stack.isDamageableItem();
