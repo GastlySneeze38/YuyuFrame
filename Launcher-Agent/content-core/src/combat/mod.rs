@@ -16,6 +16,7 @@
 //! n'attend jamais le disque.
 
 mod bridge;
+mod history;
 mod journal;
 mod record;
 mod score;

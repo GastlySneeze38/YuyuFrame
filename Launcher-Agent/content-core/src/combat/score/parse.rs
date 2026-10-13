@@ -42,6 +42,10 @@ pub struct Duel {
     pub foe_density: f64,
     /// `win`, `loss`, `draw`, `unknown` — ou rien si le journal s'arrête avant le verdict.
     pub result: Option<String>,
+    /// Le pseudo de l'adversaire, s'il est nommé dans le journal.
+    pub foe_name: Option<String>,
+    /// L'heure d'ouverture du duel, en millisecondes depuis 1970.
+    pub time: Option<u64>,
 }
 
 fn int(value: &Value) -> Option<i32> {
@@ -100,6 +104,11 @@ pub fn parse(text: &str) -> Option<Duel> {
         my_density: 0.0,
         foe_density: 0.0,
         result: None,
+        foe_name: lines
+            .iter()
+            .filter(|l| l["k"] == "p" && int(&l["id"]) == foe && foe.is_some())
+            .find_map(|l| l["name"].as_str().map(str::to_string)),
+        time: lines.iter().find(|l| l["k"] == "h").and_then(|l| l["time"].as_u64()),
     };
     for line in &lines {
         let t = line["t"].as_u64().unwrap_or(0);

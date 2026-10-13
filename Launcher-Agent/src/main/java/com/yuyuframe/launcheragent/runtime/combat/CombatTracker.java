@@ -133,20 +133,6 @@ public final class CombatTracker {
         return active && NativeCombat.recording();
     }
 
-    /**
-     * La touche du duel, en recours : ouvre s'il n'y en a pas, ferme sinon.
-     * Sans effet hors d'un monde. Rend le nouvel état.
-     */
-    public static boolean toggleMatch() {
-        if (!active || AccessorRegistry.get(AccessPoint.CLIENT_PLAYER, null) == null) {
-            return recording();
-        }
-        // Le noyau doit savoir où écrire avant d'ouvrir le fichier.
-        if (!contextSent) {
-            sendContext();
-        }
-        return NativeCombat.key();
-    }
 
     /** Une lecture qui lève ne doit ni casser le tick du jeu, ni remplir le journal de l'agent. */
     private static void guarded(Runnable step) {

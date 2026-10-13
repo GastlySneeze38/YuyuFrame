@@ -49,6 +49,10 @@ pub struct Report {
     pub score_version: u32,
     /// `win`, `loss`, `draw`, `unknown` — absent si le journal s'arrête avant le verdict.
     pub result: Option<String>,
+    /// Le pseudo de l'adversaire et l'heure d'ouverture du duel (millisecondes
+    /// depuis 1970), pour l'historique.
+    pub foe_name: Option<String>,
+    pub time: Option<u64>,
     pub engaged_secs: f64,
     pub mine: Opportunities,
     pub theirs: Opportunities,
@@ -118,6 +122,8 @@ pub fn score_journal(text: &str) -> Option<Report> {
         extractor_version: EXTRACTOR_VERSION,
         score_version: rating::SCORE_VERSION,
         result: duel.result.clone(),
+        foe_name: duel.foe_name.clone(),
+        time: duel.time,
         engaged_secs: features.engaged_secs,
         mine: Opportunities::of(&features.mine),
         theirs: Opportunities::of(&features.theirs),

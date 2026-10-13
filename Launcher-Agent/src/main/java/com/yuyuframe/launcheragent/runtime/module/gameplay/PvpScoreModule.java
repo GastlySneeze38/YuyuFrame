@@ -1,18 +1,13 @@
 package com.yuyuframe.launcheragent.runtime.module.gameplay;
 
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
-import com.yuyuframe.launcheragent.apigraphic.platform.lwjgl3.UiInputPollerModern;
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.value.UiTheme;
-import com.yuyuframe.launcheragent.apimixin.AccessPoint;
-import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
 import com.yuyuframe.launcheragent.apimixin.HookPoint;
 import com.yuyuframe.launcheragent.runtime.combat.CombatTracker;
 import com.yuyuframe.launcheragent.runtime.combat.NativeCombat;
-import com.yuyuframe.launcheragent.runtime.game.ClientData;
 import com.yuyuframe.launcheragent.runtime.i18n.Lang;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
-import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
 
 /**
  * Score PvP (docs/scoring/) : allumé, le module relève les duels à la masse,
@@ -25,8 +20,9 @@ import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
  * ({@code content-core/src/combat/}). Le résumé arrive ici en nombres, déjà
  * calculés ({@link NativeCombat#report}).
  *
- * <p>Une touche ouvre ou ferme un duel à la main, en recours : le noyau le
- * fait de lui-même sur les serveurs qu'il sait lire.
+ * <p>La carte du module ouvre l'historique ({@code UiPvpScoreScreen}) : la
+ * moyenne des notes, puis les duels, chacun menant à son détail. Le module
+ * n'a aucun réglage — les duels sont reconnus sans rien demander au joueur.
  *
  * <p>Éteint par défaut : tant que le score n'est pas calibré, personne ne
  * doit se retrouver avec des journaux écrits sans l'avoir demandé.
@@ -36,20 +32,15 @@ public final class PvpScoreModule extends LauncherModule {
     /** Les versions dont les mixins de combat existent ({@code apimixin/<version>/combat}). */
     public static final java.util.Set<String> VERSIONS = java.util.Set.of("26.1.2", "26.3");
 
-    private static final String SOUND = "minecraft:block.note_block.pling";
     /** Durée d'affichage du résumé. */
     private static final long SHOWN_NANOS = 12_000_000_000L;
 
     /** Libellés des six familles, dans l'ordre de {@link NativeCombat#REPORT_FAMILIES}. */
-    private static final String[] FAMILIES = {
+    public static final String[] FAMILIES = {
         "Conversion", "Qualité du smash", "Défense", "Contrôle vertical", "Ressources", "Niveau adverse",
     };
-    private static final String[] RESULTS = { "", "Victoire", "Défaite", "Match nul", "" };
-
-    /** La touche qui ouvre et ferme un duel à la main. */
-    public String matchKey = "K";
-
-    private boolean keyWasDown;
+    /** Libellés des résultats, par code ({@link NativeCombat#REPORT_RESULT}). */
+    public static final String[] RESULTS = { "", "Victoire", "Défaite", "Match nul", "" };
 
     private final double[] incoming = new double[NativeCombat.REPORT_LEN];
     /** Le résumé affiché, et le numéro du dernier reçu — celui d'avant le lancement n'est pas montré. */
@@ -72,39 +63,13 @@ public final class PvpScoreModule extends LauncherModule {
     }
 
     @Override
-    protected void settings(SettingList s) {
-        s.keybind("matchKey", "Touche du duel",
-            "Ouvre ou ferme un duel à la main, quand il n'est pas reconnu tout seul.",
-            "Réglages", null, () -> matchKey, v -> matchKey = v);
-    }
-
-    @Override
     protected void onEnabledChanged(boolean enabled) {
         CombatTracker.setActive(enabled);
     }
 
-    /**
-     * À chaque image : la touche, et l'arrivée d'un nouveau résumé.
-     *
-     * <p>La touche est lue ici et non à chaque tick du jeu : un appui bref
-     * tient moins d'un vingtième de seconde et serait manqué. Elle est
-     * ignorée quand un écran est ouvert — sinon taper la lettre dans le chat
-     * ouvrirait un duel.
-     */
+    /** À chaque image : un nouveau résumé est-il arrivé du noyau ? */
     @Override
     public void onTick() {
-        UiInputPollerModern input = UiInputPollerModern.ACTIVE;
-        boolean down = input != null && input.isKeyDownByName(matchKey)
-            && AccessorRegistry.get(AccessPoint.CLIENT_SCREEN, null) == null;
-        if (down && !keyWasDown) {
-            boolean before = CombatTracker.recording();
-            boolean after = CombatTracker.toggleMatch();
-            if (after != before) {
-                ClientData.playUiSound(SOUND, after ? 1.8f : 0.7f, 1f);
-            }
-        }
-        keyWasDown = down;
-
         int number = NativeCombat.report(incoming);
         if (number != lastReport) {
             lastReport = number;

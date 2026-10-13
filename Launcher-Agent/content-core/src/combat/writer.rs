@@ -190,7 +190,7 @@ fn close(sink: &mut Option<Sink>) {
 }
 
 /// `…/123.events.ndjson.zst` → `…/123.json`.
-fn summary_path(journal: &Path) -> std::path::PathBuf {
+pub fn summary_path(journal: &Path) -> std::path::PathBuf {
     let name = journal.file_name().and_then(|n| n.to_str()).unwrap_or("duel");
     journal.with_file_name(format!("{}.json", name.split('.').next().unwrap_or(name)))
 }

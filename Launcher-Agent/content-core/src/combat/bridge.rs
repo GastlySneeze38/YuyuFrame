@@ -20,7 +20,8 @@ use super::writer::send;
 /// devient `yf_combat_key` (la touche bascule), plus `yf_combat_recording`.
 /// 4 (2026-10-13) : `yf_combat_report`, le résumé du dernier duel.
 /// 5 (2026-10-13) : six familles dans le résumé au lieu de cinq.
-const ABI_VERSION: u32 = 5;
+/// 6 (2026-10-13) : `yf_combat_history`, l'historique des duels.
+const ABI_VERSION: u32 = 6;
 
 /// Autres joueurs transmis par tick, au plus.
 const MAX_OTHERS: usize = 16;
@@ -92,6 +93,32 @@ pub unsafe extern "C" fn yf_combat_report(out: *mut f64, len: i32) -> i32 {
         std::slice::from_raw_parts_mut(out, values.len()).copy_from_slice(&values);
     }
     number
+}
+
+/// L'historique des duels de l'instance, pour l'écran du module : la moyenne
+/// des notes puis un duel par ligne (format dans `history.rs`). `dir` : le
+/// dossier de l'instance. Rend le nombre d'octets écrits dans `out`, ou
+/// l'opposé de la place qu'il aurait fallu si `out` est trop petit.
+///
+/// Relit et renote les journaux : quelques millisecondes par duel. À appeler
+/// à l'ouverture de l'écran, pas à chaque image.
+///
+/// # Safety
+/// `dir` doit pointer sur `dir_len` octets lisibles, `out` sur `out_len`
+/// octets inscriptibles.
+#[no_mangle]
+pub unsafe extern "C" fn yf_combat_history(dir: *const u8, dir_len: i32, out: *mut u8, out_len: i32) -> i32 {
+    let dir = text(dir, dir_len);
+    if dir.is_empty() || out.is_null() || out_len <= 0 {
+        return 0;
+    }
+    let history = super::history::history(std::path::Path::new(&dir));
+    let bytes = history.as_bytes();
+    if bytes.len() > out_len as usize {
+        return -(bytes.len() as i32);
+    }
+    std::slice::from_raw_parts_mut(out, bytes.len()).copy_from_slice(bytes);
+    bytes.len() as i32
 }
 
 /// Un duel est-il ouvert ? 1 = oui.

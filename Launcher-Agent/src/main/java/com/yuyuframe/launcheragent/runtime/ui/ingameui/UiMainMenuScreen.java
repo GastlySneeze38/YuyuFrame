@@ -931,7 +931,11 @@ public class UiMainMenuScreen extends UiScreenBase {
                 boolean hasSomethingToShow = ownerGroup != null
                     || !mod.settings().isEmpty()
                     || mod instanceof HudElementOwner;
-                Runnable cardAction = ownerGroup != null
+                // Le Score PvP n'a aucun réglage, mais il a un écran à lui :
+                // l'historique des duels.
+                Runnable cardAction = mod instanceof com.yuyuframe.launcheragent.runtime.module.gameplay.PvpScoreModule
+                    ? () -> closeTo(new UiPvpScoreScreen(UiMainMenuScreen.this))
+                    : ownerGroup != null
                     ? () -> closeTo(new UiModGroupConfigScreen(UiMainMenuScreen.this, ownerGroup, mod))
                     : hasSomethingToShow
                         ? () -> closeTo(new UiModConfigScreen(UiMainMenuScreen.this, mod))

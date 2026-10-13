@@ -32,7 +32,10 @@ import java.util.UUID;
 public final class NativeCombat {
 
     /** Même valeur que {@code ABI_VERSION} dans combat/bridge.rs. */
-    private static final int ABI_VERSION = 5;
+    private static final int ABI_VERSION = 6;
+
+    /** Place réservée au texte de l'historique : deux cents duels en tiennent bien moins. */
+    private static final int HISTORY_BYTES = 256 * 1024;
 
     /**
      * Le résumé d'un duel, en nombres — {@code Report::numbers} dans
@@ -56,6 +59,8 @@ public final class NativeCombat {
     public static final int REPORT_MY_CONVERTED = 12;
     public static final int REPORT_THEIR_OPENED = 13;
     public static final int REPORT_THEIR_CONVERTED = 14;
+    /** Secondes passées avec l'adversaire à portée. */
+    public static final int REPORT_ENGAGED_SECS = 15;
 
     /** Nombres décrivant notre joueur à un tick — {@code ME_LEN} dans combat/record.rs, même ordre. */
     public static final int ME_LEN = 15;
@@ -99,7 +104,7 @@ public final class NativeCombat {
 
     private static MethodHandle context;
     private static MethodHandle world;
-    private static MethodHandle key;
+    private static MethodHandle history;
     private static MethodHandle recording;
     private static MethodHandle report;
     private static MethodHandle tick;
@@ -147,7 +152,9 @@ public final class NativeCombat {
                 FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT,
                     ValueLayout.ADDRESS, ValueLayout.JAVA_INT), heap);
             world = linker.downcallHandle(lib.find("yf_combat_world").orElseThrow(), FunctionDescriptor.ofVoid());
-            key = linker.downcallHandle(lib.find("yf_combat_key").orElseThrow(), FunctionDescriptor.of(ValueLayout.JAVA_INT));
+            // Pas « critical » : cet appel relit des fichiers. Mémoire native, donc.
+            history = linker.downcallHandle(lib.find("yf_combat_history").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT));
             recording = linker.downcallHandle(lib.find("yf_combat_recording").orElseThrow(), FunctionDescriptor.of(ValueLayout.JAVA_INT));
             report = linker.downcallHandle(lib.find("yf_combat_report").orElseThrow(),
                 FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT), heap);
@@ -204,21 +211,35 @@ public final class NativeCombat {
     }
 
     /**
-     * La touche du duel : ouvre un duel s'il n'y en a pas, ferme celui qui
-     * est ouvert sinon. Le noyau ouvre et ferme aussi les duels de lui-même ;
-     * la touche n'est qu'un recours.
+     * L'historique des duels de l'instance, calculé par le noyau : une ligne
+     * d'en-tête (moyenne des notes), puis une ligne par duel, champs séparés
+     * par des tabulations — format dans {@code content-core/src/combat/history.rs}.
      *
-     * @return vrai si un duel est ouvert après l'appui
+     * <p>Le noyau relit et renote les journaux : à appeler à l'ouverture d'un
+     * écran, jamais à chaque image.
+     *
+     * @param dir le dossier de l'instance
+     * @return le texte, ou {@code null} si le noyau n'est pas disponible
      */
-    public static boolean key() {
-        if (!READY) {
-            return false;
+    public static String history(String dir) {
+        if (!READY || dir == null || dir.isEmpty()) {
+            return null;
         }
-        try {
-            return (int) key.invokeExact() == 1;
+        try (Arena arena = Arena.ofConfined()) {
+            byte[] d = utf8(dir);
+            MemorySegment in = arena.allocate(Math.max(1, d.length));
+            MemorySegment.copy(d, 0, in, ValueLayout.JAVA_BYTE, 0, d.length);
+            MemorySegment out = arena.allocate(HISTORY_BYTES);
+            int written = (int) history.invokeExact(in, d.length, out, HISTORY_BYTES);
+            if (written <= 0) {
+                return written == 0 ? "" : null;
+            }
+            byte[] bytes = new byte[written];
+            MemorySegment.copy(out, ValueLayout.JAVA_BYTE, 0, bytes, 0, written);
+            return new String(bytes, StandardCharsets.UTF_8);
         } catch (Throwable error) {
             failed(error);
-            return false;
+            return null;
         }
     }
 
