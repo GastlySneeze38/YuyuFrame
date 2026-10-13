@@ -58,6 +58,11 @@ fn now_ms() -> u64 {
 struct Sink {
     file: File,
     pending: Vec<u8>,
+    /// Où écrire le résumé du duel, à sa fermeture.
+    summary: std::path::PathBuf,
+    /// Tout le journal du duel, gardé pour le noter à la fermeture : quelques
+    /// centaines de Ko pour un long duel.
+    text: String,
 }
 
 impl Sink {
@@ -65,7 +70,24 @@ impl Sink {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        Ok(Self { file: File::create(path)?, pending: Vec::new() })
+        Ok(Self { file: File::create(path)?, pending: Vec::new(), summary: summary_path(path), text: String::new() })
+    }
+
+    fn line(&mut self, line: &str) {
+        self.pending.extend_from_slice(line.as_bytes());
+        self.pending.push(b'\n');
+        self.text.push_str(line);
+        self.text.push('\n');
+    }
+
+    /// Note le duel et écrit son résumé à côté du journal. Le journal reste
+    /// la source : ce fichier se recalcule à volonté.
+    fn summarize(&self) {
+        let Some(report) = super::score::score_journal(&self.text) else { return };
+        let written = serde_json::to_string_pretty(&report).map_err(|e| e.to_string()).and_then(|json| std::fs::write(&self.summary, json).map_err(|e| e.to_string()));
+        if let Err(e) = written {
+            eprintln!("[YuyuFrame] résumé du duel {} impossible à écrire : {e}", self.summary.display());
+        }
     }
 
     /// Termine le bloc en cours : compressé d'un seul tenant, donc lisible seul.
@@ -107,8 +129,7 @@ fn run(records: std::sync::mpsc::Receiver<Record>) {
                 }
                 Out::Line(line) => {
                     if let Some(sink) = sink.as_mut() {
-                        sink.pending.extend_from_slice(line.as_bytes());
-                        sink.pending.push(b'\n');
+                        sink.line(&line);
                     }
                 }
                 Out::Close => close(&mut sink),
@@ -147,7 +168,16 @@ fn flush(sink: &mut Option<Sink>) {
 
 fn close(sink: &mut Option<Sink>) {
     flush(sink);
+    if let Some(sink) = sink.as_ref() {
+        sink.summarize();
+    }
     *sink = None;
+}
+
+/// `…/123.events.ndjson.zst` → `…/123.json`.
+fn summary_path(journal: &Path) -> std::path::PathBuf {
+    let name = journal.file_name().and_then(|n| n.to_str()).unwrap_or("duel");
+    journal.with_file_name(format!("{}.json", name.split('.').next().unwrap_or(name)))
 }
 
 #[cfg(test)]
@@ -169,6 +199,21 @@ mod tests {
         let mut text = String::new();
         zstd::stream::read::Decoder::new(File::open(&path).unwrap()).unwrap().read_to_string(&mut text).unwrap();
         assert_eq!(text, "{\"k\":\"h\"}\n{\"k\":\"s\"}\n{\"k\":\"d\"}\n");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn le_resume_s_ecrit_a_cote_du_journal() {
+        assert_eq!(summary_path(Path::new("m/1791915779624.events.ndjson.zst")), Path::new("m/1791915779624.json"));
+        let dir = std::env::temp_dir().join(format!("yf-combat-resume-{}", now_ms()));
+        let mut sink = Some(Sink::open(&dir.join("42.events.ndjson.zst")).unwrap());
+        sink.as_mut().unwrap().line("{\"k\":\"h\",\"me\":1}");
+        sink.as_mut().unwrap().line("{\"k\":\"r\",\"result\":\"draw\",\"foe\":2}");
+        close(&mut sink);
+        let report: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(dir.join("42.json")).unwrap()).unwrap();
+        assert_eq!(report["result"], "draw");
+        assert_eq!(report["reason"], "too_short", "un duel sans échantillon n'est pas noté");
+        assert!(report["score"].is_null());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
