@@ -77,6 +77,8 @@ public final class CombatTracker {
         VanillaHookRegistry.register(HookPoint.CLIENT_TICK, ctx -> { guarded(CombatTracker::tick); return false; });
         VanillaHookRegistry.register(HookPoint.SERVER_CONNECT, ctx -> { guarded(CombatTracker::sendContext); return false; });
         VanillaHookRegistry.register(HookPoint.CLIENT_LEVEL_LOAD, ctx -> {
+            // Le noyau ferme le duel en cours à tout changement de monde.
+            recording = false;
             if (active) NativeCombat.world();
             return false;
         });
@@ -114,9 +116,37 @@ public final class CombatTracker {
         }
         active = on;
         contextSent = false;
+        recording = false;
         if (!on) {
             NativeCombat.close();
         }
+    }
+
+    /**
+     * Un duel est-il ouvert ? C'est l'état de la touche, pas un jugement :
+     * le joueur l'ouvre et le ferme lui-même, le noyau écrit entre les deux.
+     */
+    private static boolean recording;
+
+    public static boolean recording() {
+        return recording;
+    }
+
+    /**
+     * La touche du duel : ouvre s'il n'y en a pas, ferme sinon. Sans effet
+     * hors d'un monde. Rend le nouvel état.
+     */
+    public static boolean toggleMatch() {
+        if (!active || AccessorRegistry.get(AccessPoint.CLIENT_PLAYER, null) == null) {
+            return recording;
+        }
+        // Le noyau doit savoir où écrire avant d'ouvrir le fichier.
+        if (!contextSent) {
+            sendContext();
+        }
+        recording = !recording;
+        NativeCombat.match(recording);
+        return recording;
     }
 
     /** Une lecture qui lève ne doit ni casser le tick du jeu, ni remplir le journal de l'agent. */

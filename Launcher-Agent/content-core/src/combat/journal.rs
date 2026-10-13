@@ -2,20 +2,22 @@
 //! temps est le compteur de ticks, et les décisions sortent sous forme
 //! d'ordres (`Out`) que le fil d'écriture exécute. Tout se teste sans disque.
 //!
-//! Trois règles :
+//! **Un duel, un fichier, et c'est le joueur qui dit où il commence** : une
+//! touche ouvre le duel, la même le ferme (`Record::Match`). Détecter seul le
+//! début, la fin et le résultat d'un duel dépend de chaque serveur — Minemen
+//! ne change pas de monde et ne tue personne, vu le 2026-10-13 — et attendra
+//! que le calcul du score soit avancé (docs/scoring/match-1v1.md).
 //!
-//! - **On n'écrit que pendant un combat.** Un combat commence quand notre
-//!   joueur et un autre JOUEUR s'infligent des dégâts (paquet de dégâts du
-//!   serveur), et dure tant que le dernier de ces échanges a moins de
-//!   `COMBAT_TICKS`. Traverser un lobby plein de monde n'écrit rien.
-//! - **Ce qui précède le premier coup compte.** Les `PREROLL` dernières lignes
-//!   sont gardées en mémoire et écrites d'un coup à l'ouverture du combat :
-//!   l'approche et le premier smash, réussi ou manqué, sont dans le journal.
+//! Trois règles pendant un duel :
+//!
+//! - **Ce qui précède l'appui compte.** Les `PREROLL` dernières lignes sont
+//!   gardées en mémoire en permanence et écrites à l'ouverture : une touche
+//!   pressée un peu tard ne perd pas le premier échange.
 //! - **Un échantillon n'est gardé que pendant l'engagement** : un autre
 //!   joueur à moins d'`ENGAGE_BLOCKS`. Les événements, eux, le sont toujours.
+//! - **Seuls les vrais joueurs comptent** (`real_player`).
 //!
-//! Un fichier par monde : un changement de monde ferme le journal en cours,
-//! et le suivant ne s'ouvre qu'à son premier combat.
+//! Un changement de monde ferme le duel en cours.
 
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
@@ -28,15 +30,13 @@ use super::record::*;
 pub const TELEMETRY_VERSION: u32 = 1;
 /// Un autre joueur à moins de cette distance : on est engagé.
 const ENGAGE_BLOCKS: f64 = 16.0;
-/// Un combat dure tant que le dernier échange de dégâts a moins que cela (30 s).
-const COMBAT_TICKS: u64 = 600;
-/// Lignes gardées avant le premier coup (10 s d'échantillons).
+/// Lignes gardées avant l'ouverture du duel (10 s d'échantillons).
 const PREROLL: usize = 200;
 
 /// Un ordre pour le fil d'écriture.
 #[derive(Debug, PartialEq)]
 pub enum Out {
-    /// Ouvrir un nouveau fichier dans ce dossier ; la première ligne suit.
+    /// Ouvrir un nouveau fichier ; la première ligne suit.
     Open(PathBuf),
     Line(String),
     /// Terminer le fichier en cours.
@@ -51,16 +51,15 @@ pub struct Journal {
     /// Notre identifiant réseau, connu au premier tick. Pas de valeur
     /// « absente » parmi les entiers : un identifiant peut être négatif.
     me: Option<i32>,
-    /// Les joueurs connus dans ce monde : identifiant réseau → (UUID, pseudo).
+    /// Les vrais joueurs connus dans ce monde : identifiant réseau → (UUID, pseudo).
     players: HashMap<i32, (u128, String)>,
     equipment: HashMap<i32, String>,
     /// Ce qui a déjà été écrit dans le fichier ouvert.
     written_players: HashMap<i32, (u128, String)>,
     written_equipment: HashMap<i32, String>,
-    /// Tick du dernier échange de dégâts entre nous et un joueur.
-    last_exchange: Option<u64>,
     preroll: VecDeque<String>,
-    open: bool,
+    /// Un duel est ouvert : son fichier aussi.
+    recording: bool,
 }
 
 impl Journal {
@@ -75,9 +74,8 @@ impl Journal {
             equipment: HashMap::new(),
             written_players: HashMap::new(),
             written_equipment: HashMap::new(),
-            last_exchange: None,
             preroll: VecDeque::new(),
-            open: false,
+            recording: false,
         }
     }
 
@@ -93,6 +91,8 @@ impl Journal {
                 self.mc = mc;
             }
             Record::World | Record::Close => self.end_world(&mut out),
+            Record::Match { start: true } => self.start_match(now_ms, &mut out),
+            Record::Match { start: false } => self.end_match(&mut out),
             Record::Player { id, uuid, name } => {
                 if real_player(uuid, &name) {
                     self.players.insert(id, (uuid, name));
@@ -115,17 +115,10 @@ impl Journal {
                         "me": rounded(&me),
                         "o": others.iter().map(|o| rounded(o)).collect::<Vec<_>>(),
                     });
-                    self.emit(line, now_ms, &mut out);
-                }
-                // Le combat s'est éteint : ce qui suit n'est plus qu'un pré-enregistrement.
-                if !self.in_combat() {
-                    self.last_exchange = None;
+                    self.emit(line, &mut out);
                 }
             }
             Record::Event { kind, a, b, c, text } => {
-                if kind == EVENT_DAMAGE && self.is_exchange(a, b) {
-                    self.last_exchange = Some(self.tick);
-                }
                 let line = match kind {
                     EVENT_ATTACK => json!({ "k": "a", "t": self.tick, "target": a }),
                     EVENT_DAMAGE => json!({ "k": "d", "t": self.tick, "entity": a, "cause": b, "direct": c, "type": text }),
@@ -133,47 +126,47 @@ impl Journal {
                     EVENT_ITEM_USE => json!({ "k": "u", "t": self.tick, "item": text, "main": a == 1 }),
                     _ => return out,
                 };
-                self.emit(line, now_ms, &mut out);
+                self.emit(line, &mut out);
             }
         }
         out
     }
 
-    fn in_combat(&self) -> bool {
-        self.last_exchange.is_some_and(|at| self.tick - at < COMBAT_TICKS)
+    /// Le joueur ouvre un duel : un nouveau fichier, son en-tête, qui est là,
+    /// et les dernières secondes. Un duel déjà ouvert est d'abord fermé.
+    fn start_match(&mut self, now_ms: u64, out: &mut Vec<Out>) {
+        self.end_match(out);
+        // Hors d'un monde, il n'y a nulle part où écrire ni rien à écrire.
+        let Some(dir) = self.dir.clone() else { return };
+        self.recording = true;
+        out.push(Out::Open(dir.join("yuyuframe").join("matches").join(format!("{now_ms}.events.ndjson.zst"))));
+        let header = json!({ "k": "h", "v": TELEMETRY_VERSION, "server": self.server, "mc": self.mc, "time": now_ms, "me": self.me, "t": self.tick });
+        out.push(Out::Line(header.to_string()));
+        self.write_identities(out);
+        out.extend(self.preroll.drain(..).map(Out::Line));
     }
 
-    /// Ce paquet de dégâts est-il un coup entre notre joueur et un autre
-    /// joueur, dans un sens ou dans l'autre ?
-    fn is_exchange(&self, entity: i32, cause: i32) -> bool {
-        let Some(me) = self.me else { return false };
-        if entity == cause {
-            return false;
+    fn end_match(&mut self, out: &mut Vec<Out>) {
+        if self.recording {
+            out.push(Out::Close);
         }
-        (entity == me && self.players.contains_key(&cause)) || (cause == me && self.players.contains_key(&entity))
+        self.recording = false;
+        self.written_players.clear();
+        self.written_equipment.clear();
     }
 
-    /// Hors combat, la ligne attend dans le pré-enregistrement. En combat,
-    /// elle part — précédée, la première fois, de l'ouverture du fichier et
-    /// de tout ce qui attendait.
-    fn emit(&mut self, line: Value, now_ms: u64, out: &mut Vec<Out>) {
+    /// Hors duel, la ligne attend dans le pré-enregistrement. Pendant un
+    /// duel, elle part, précédée de ce qui a changé chez les joueurs.
+    fn emit(&mut self, line: Value, out: &mut Vec<Out>) {
         let line = line.to_string();
-        if !self.in_combat() {
+        if !self.recording {
             if self.preroll.len() == PREROLL {
                 self.preroll.pop_front();
             }
             self.preroll.push_back(line);
             return;
         }
-        let Some(dir) = self.dir.clone() else { return };
-        if !self.open {
-            self.open = true;
-            out.push(Out::Open(dir.join("yuyuframe").join("matches").join(format!("{now_ms}.events.ndjson.zst"))));
-            let header = json!({ "k": "h", "v": TELEMETRY_VERSION, "server": self.server, "mc": self.mc, "time": now_ms, "me": self.me });
-            out.push(Out::Line(header.to_string()));
-        }
         self.write_identities(out);
-        out.extend(self.preroll.drain(..).map(Out::Line));
         out.push(Out::Line(line));
     }
 
@@ -187,28 +180,24 @@ impl Journal {
             }
         }
         for (id, text) in &self.equipment {
-            if self.written_equipment.get(id) != Some(text) {
+            // Celui d'un vrai joueur seulement : les personnages du serveur
+            // envoient aussi le leur, et n'ont rien à faire dans le journal.
+            if self.players.contains_key(id) && self.written_equipment.get(id) != Some(text) {
                 out.push(Out::Line(json!({ "k": "e", "t": self.tick, "id": id, "eq": text }).to_string()));
                 self.written_equipment.insert(*id, text.clone());
             }
         }
     }
 
-    /// Fin du monde courant : les identifiants réseau ne valent plus rien, et
-    /// le fichier se termine.
+    /// Fin du monde courant : le duel en cours se ferme, et les identifiants
+    /// réseau ne valent plus rien.
     fn end_world(&mut self, out: &mut Vec<Out>) {
-        if self.open {
-            out.push(Out::Close);
-        }
-        self.open = false;
+        self.end_match(out);
         self.tick = 0;
         self.me = None;
-        self.last_exchange = None;
         self.preroll.clear();
         self.players.clear();
         self.equipment.clear();
-        self.written_players.clear();
-        self.written_equipment.clear();
     }
 }
 
@@ -252,8 +241,6 @@ mod tests {
         let mut journal = Journal::new();
         journal.feed(Record::Context { dir: PathBuf::from("instance"), server: "minemen.club:25565".into(), mc: "26.3".into() }, 1000);
         journal.feed(Record::Player { id: FOE, uuid: FOE_UUID, name: "Rival".into() }, 1000);
-        // Un premier tick, adversaire au loin : le journal sait qui nous sommes.
-        journal.feed(tick(100.0), 1000);
         journal
     }
 
@@ -270,6 +257,9 @@ mod tests {
         Record::Event { kind: EVENT_DAMAGE, a: entity, b: cause, c: cause, text: "mace_smash".into() }
     }
 
+    const START: Record = Record::Match { start: true };
+    const END: Record = Record::Match { start: false };
+
     fn kinds(out: &[Out]) -> String {
         out.iter()
             .map(|o| match o {
@@ -281,38 +271,58 @@ mod tests {
     }
 
     #[test]
-    fn rien_n_est_ecrit_hors_combat() {
+    fn rien_n_est_ecrit_sans_duel_ouvert() {
         let mut journal = started();
         for _ in 0..50 {
-            assert!(journal.feed(tick(3.0), 2000).is_empty(), "croiser un joueur n'ouvre aucun fichier");
+            assert!(journal.feed(tick(3.0), 2000).is_empty());
         }
-        // Des dégâts qui ne nous concernent pas non plus.
-        assert!(journal.feed(hit(FOE, 42), 2000).is_empty());
-        // Ni un coup porté à autre chose qu'un joueur (un monstre).
-        assert!(journal.feed(hit(42, ME), 2000).is_empty());
+        assert!(journal.feed(hit(FOE, ME), 2000).is_empty(), "même un coup n'ouvre rien : c'est la touche qui ouvre");
+        // Fermer un duel qui n'est pas ouvert ne fait rien.
+        assert!(journal.feed(END, 2000).is_empty());
     }
 
     #[test]
-    fn le_premier_coup_ouvre_le_fichier_et_ecrit_ce_qui_precedait() {
+    fn la_touche_ouvre_le_fichier_et_ecrit_ce_qui_precedait() {
         let mut journal = started();
         journal.feed(tick(3.0), 2000);
-        journal.feed(tick(2.0), 2000);
-        let out = journal.feed(hit(FOE, ME), 3000);
-        // Ouverture, en-tête, le joueur adverse, les deux échantillons d'avant, le coup.
-        assert_eq!(kinds(&out), "Ohpssd");
+        journal.feed(hit(FOE, ME), 2000);
+        let out = journal.feed(START, 3000);
+        // Ouverture, en-tête, l'adversaire, puis l'échantillon et le coup d'avant.
+        assert_eq!(kinds(&out), "Ohpsd");
         assert_eq!(out[0], Out::Open(PathBuf::from("instance").join("yuyuframe").join("matches").join("3000.events.ndjson.zst")));
         let Out::Line(header) = &out[1] else { panic!() };
         let header: Value = serde_json::from_str(header).unwrap();
         assert_eq!(header["server"], "minemen.club:25565");
         assert_eq!(header["me"], ME);
-        // Ensuite, chaque tick d'engagement part aussitôt, sans rien répéter.
+        // Ensuite, tout part aussitôt, sans rien répéter.
         assert_eq!(kinds(&journal.feed(tick(2.0), 3000)), "s");
+        assert_eq!(kinds(&journal.feed(hit(ME, FOE), 3000)), "d");
+    }
+
+    #[test]
+    fn la_touche_ferme_le_duel_et_un_second_a_son_propre_fichier() {
+        let mut journal = started();
+        journal.feed(START, 3000);
+        journal.feed(tick(1.0), 3000);
+        assert_eq!(journal.feed(END, 4000), vec![Out::Close]);
+        assert!(journal.feed(tick(1.0), 4000).is_empty(), "duel fermé : plus rien ne part");
+        // Le second duel répète qui est là : chaque fichier se lit seul.
+        assert_eq!(kinds(&journal.feed(START, 5000)), "Ohps");
+        // Rouvrir sans avoir fermé : l'ancien fichier se termine d'abord.
+        assert_eq!(kinds(&journal.feed(START, 6000)), "COhp");
+    }
+
+    #[test]
+    fn hors_d_un_monde_la_touche_ne_fait_rien() {
+        let mut journal = Journal::new();
+        assert!(journal.feed(START, 1000).is_empty());
+        assert!(journal.feed(tick(1.0), 1000).is_empty());
     }
 
     #[test]
     fn un_echantillon_n_est_garde_que_pendant_l_engagement() {
         let mut journal = started();
-        journal.feed(hit(ME, FOE), 3000);
+        journal.feed(START, 3000);
         assert_eq!(kinds(&journal.feed(tick(ENGAGE_BLOCKS), 3000)), "s");
         assert!(journal.feed(tick(ENGAGE_BLOCKS + 0.5), 3000).is_empty(), "adversaire trop loin");
         // Un événement, lui, est écrit même à distance.
@@ -325,12 +335,13 @@ mod tests {
         let mut journal = started();
         // Même identifiant que l'adversaire, mais un UUID version 2 : un personnage.
         journal.feed(Record::Player { id: FOE, uuid: 0x4a50fccd83ef24eb842805d66f1dc106, name: "Rival".into() }, 1000);
-        journal.feed(tick(1.0), 2000);
-        // Ses « coups » n'ouvrent aucun combat, et il n'est dans aucun échantillon.
-        assert!(journal.feed(hit(ME, FOE), 3000).is_empty());
+        journal.feed(Record::Equipment { id: FOE, text: ";;;;;".into() }, 1000);
+        // Ni lui ni son équipement ne sont écrits, et il n'engage personne.
+        assert_eq!(kinds(&journal.feed(START, 3000)), "Oh");
+        assert!(journal.feed(tick(1.0), 3000).is_empty());
         // Un pseudo qui n'en est pas un non plus.
         journal.feed(Record::Player { id: FOE, uuid: FOE_UUID, name: "§aDuels".into() }, 3000);
-        assert!(journal.feed(hit(ME, FOE), 3000).is_empty());
+        assert!(journal.feed(tick(1.0), 3000).is_empty());
     }
 
     #[test]
@@ -339,45 +350,26 @@ mod tests {
         for _ in 0..(PREROLL + 50) {
             journal.feed(tick(1.0), 2000);
         }
-        let out = journal.feed(hit(FOE, ME), 3000);
-        let samples = kinds(&out).matches('s').count();
-        assert_eq!(samples, PREROLL);
+        let out = journal.feed(START, 3000);
+        assert_eq!(kinds(&out).matches('s').count(), PREROLL);
     }
 
     #[test]
-    fn le_combat_s_eteint_sans_echange() {
+    fn un_changement_de_monde_ferme_le_duel() {
         let mut journal = started();
-        journal.feed(hit(FOE, ME), 3000);
-        for _ in 0..(COMBAT_TICKS - 1) {
-            assert_eq!(kinds(&journal.feed(tick(1.0), 3000)), "s");
-        }
-        assert!(journal.feed(tick(1.0), 3000).is_empty(), "30 s sans échange : on n'écrit plus");
-        // Un nouvel échange reprend dans le même fichier, sans le rouvrir.
-        let out = journal.feed(hit(ME, FOE), 4000);
-        assert_eq!(kinds(&out), "sd");
-    }
-
-    #[test]
-    fn un_changement_de_monde_termine_le_fichier() {
-        let mut journal = started();
-        journal.feed(hit(FOE, ME), 3000);
+        journal.feed(START, 3000);
         assert_eq!(journal.feed(Record::World, 4000), vec![Out::Close]);
-        // Sans fichier ouvert, il n'y a rien à fermer.
+        // Sans duel ouvert, il n'y a rien à fermer.
         assert!(journal.feed(Record::World, 4000).is_empty());
-        // Les identifiants de l'ancien monde ne valent plus : ce coup n'ouvre
-        // rien, il attend avec le reste du pré-enregistrement.
-        assert!(journal.feed(hit(FOE, ME), 5000).is_empty());
-        // Le joueur revu dans le nouveau monde, le combat rouvre un fichier.
-        journal.feed(Record::Player { id: FOE, uuid: FOE_UUID, name: "Rival".into() }, 5000);
-        journal.feed(tick(1.0), 5000);
-        assert_eq!(kinds(&journal.feed(hit(FOE, ME), 6000)), "Ohpdsd");
+        // Les joueurs de l'ancien monde sont oubliés : le duel suivant ne les nomme pas.
+        assert_eq!(kinds(&journal.feed(START, 5000)), "Oh");
     }
 
     #[test]
     fn un_equipement_n_est_ecrit_qu_a_son_changement() {
         let mut journal = started();
         journal.feed(Record::Equipment { id: FOE, text: "netherite_helmet,protection=4;;;;mace,density=5;".into() }, 2000);
-        assert_eq!(kinds(&journal.feed(hit(FOE, ME), 3000)), "Ohped");
+        assert_eq!(kinds(&journal.feed(START, 3000)), "Ohpe");
         journal.feed(Record::Equipment { id: FOE, text: "netherite_helmet,protection=4;;;;mace,density=5;".into() }, 3000);
         assert_eq!(kinds(&journal.feed(tick(1.0), 3000)), "s");
         journal.feed(Record::Equipment { id: FOE, text: ";;;;mace,density=5;".into() }, 3000);

@@ -14,7 +14,9 @@ use super::writer::send;
 
 /// Version du contrat. Java refuse une DLL qui n'annonce pas la version qu'il
 /// attend (`NativeCombat.ABI_VERSION`), au lieu de l'appeler de travers.
-const ABI_VERSION: u32 = 1;
+/// 2 (2026-10-13) : `yf_combat_match` — le journal ne s'écrit plus qu'entre
+/// l'ouverture et la fermeture d'un duel.
+const ABI_VERSION: u32 = 2;
 
 /// Autres joueurs transmis par tick, au plus.
 const MAX_OTHERS: usize = 16;
@@ -57,6 +59,14 @@ pub unsafe extern "C" fn yf_combat_context(dir: *const u8, dir_len: i32, server:
 #[no_mangle]
 pub extern "C" fn yf_combat_world() {
     send(Record::World);
+}
+
+/// Le joueur ouvre (`start` ≠ 0) ou ferme un duel. Ouvrir crée le fichier du
+/// journal ; rien n'est écrit en dehors d'un duel. Ouvrir alors qu'un duel
+/// est déjà ouvert ferme d'abord celui-ci.
+#[no_mangle]
+pub extern "C" fn yf_combat_match(start: i32) {
+    send(Record::Match { start: start != 0 });
 }
 
 /// Un tick du jeu. `me` : `ME_LEN` nombres (`record.rs`). `others` :

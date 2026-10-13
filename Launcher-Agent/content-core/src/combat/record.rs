@@ -32,8 +32,10 @@ pub const EVENT_ITEM_USE: i32 = 4;
 pub enum Record {
     /// Entrée dans un monde : où écrire, et de quoi parle le journal.
     Context { dir: PathBuf, server: String, mc: String },
-    /// Changement de monde : le journal en cours se termine.
+    /// Changement de monde : le duel en cours se ferme.
     World,
+    /// Le joueur ouvre (`start`) ou ferme un duel, d'une touche.
+    Match { start: bool },
     Tick { me: [f64; ME_LEN], others: Vec<[f64; OTHER_LEN]> },
     /// Qui est derrière un identifiant réseau.
     Player { id: i32, uuid: u128, name: String },

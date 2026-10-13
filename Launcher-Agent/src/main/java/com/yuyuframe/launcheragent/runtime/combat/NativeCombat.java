@@ -32,7 +32,7 @@ import java.util.UUID;
 public final class NativeCombat {
 
     /** Même valeur que {@code ABI_VERSION} dans combat/bridge.rs. */
-    private static final int ABI_VERSION = 1;
+    private static final int ABI_VERSION = 2;
 
     /** Nombres décrivant notre joueur à un tick — {@code ME_LEN} dans combat/record.rs, même ordre. */
     public static final int ME_LEN = 15;
@@ -76,6 +76,7 @@ public final class NativeCombat {
 
     private static MethodHandle context;
     private static MethodHandle world;
+    private static MethodHandle match;
     private static MethodHandle tick;
     private static MethodHandle player;
     private static MethodHandle equipment;
@@ -121,6 +122,7 @@ public final class NativeCombat {
                 FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT,
                     ValueLayout.ADDRESS, ValueLayout.JAVA_INT), heap);
             world = linker.downcallHandle(lib.find("yf_combat_world").orElseThrow(), FunctionDescriptor.ofVoid());
+            match = linker.downcallHandle(lib.find("yf_combat_match").orElseThrow(), FunctionDescriptor.ofVoid(ValueLayout.JAVA_INT));
             tick = linker.downcallHandle(lib.find("yf_combat_tick").orElseThrow(),
                 FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT), heap);
             player = linker.downcallHandle(lib.find("yf_combat_player").orElseThrow(),
@@ -168,6 +170,20 @@ public final class NativeCombat {
         }
         try {
             world.invokeExact();
+        } catch (Throwable error) {
+            failed(error);
+        }
+    }
+
+    /**
+     * Le joueur ouvre ou ferme un duel. Rien n'est écrit en dehors d'un duel.
+     */
+    public static void match(boolean start) {
+        if (!READY) {
+            return;
+        }
+        try {
+            match.invokeExact(start ? 1 : 0);
         } catch (Throwable error) {
             failed(error);
         }
