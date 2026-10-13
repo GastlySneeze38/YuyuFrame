@@ -10,7 +10,7 @@ use super::features::{Features, Measure};
 
 /// Version de la formule. Tout changement de coefficient ou de référence
 /// l'incrémente.
-pub const SCORE_VERSION: u32 = 2;
+pub const SCORE_VERSION: u32 = 3;
 
 /// Poids du lissage : une famille observée sur `K` événements compte autant
 /// que sa référence.
@@ -36,7 +36,6 @@ const CONVERSION: Reference = Reference { mean: 0.35, spread: 0.15 };
 const SMASH_QUALITY: Reference = Reference { mean: 0.78, spread: 0.12 };
 const EXPOSURE: Reference = Reference { mean: 0.82, spread: 0.12 };
 const VERTICAL: Reference = Reference { mean: 0.50, spread: 0.15 };
-const HEIGHT: Reference = Reference { mean: 0.50, spread: 0.15 };
 const RESOURCES: Reference = Reference { mean: 0.65, spread: 0.15 };
 
 /// De la moyenne des écarts à l'écart de la note. Une moyenne de familles
@@ -77,8 +76,12 @@ pub struct Rating {
     pub smash_quality: Sub,
     pub exposure: Sub,
     pub vertical: Sub,
-    pub height: Sub,
     pub resources: Sub,
+    /// Le niveau de l'adversaire : les mêmes familles, mesurées de son côté
+    /// et jugées avec les mêmes références. Il entre dans la note comme une
+    /// sixième famille — bien jouer contre un adversaire fort vaut plus, et
+    /// dominer un adversaire faible vaut moins.
+    pub opponent: Sub,
 }
 
 /// Fonction de répartition de la loi normale (Abramowitz et Stegun 7.1.26,
@@ -97,9 +100,9 @@ pub fn rate(features: &Features) -> Rating {
         sub(features.smash_quality, &SMASH_QUALITY),
         sub(features.exposure, &EXPOSURE),
         sub(features.vertical, &VERTICAL),
-        sub(features.height, &HEIGHT),
         sub(features.resources, &RESOURCES),
     ];
+    let opponent = opponent_level(features);
     let opportunities = features.mine.len() + features.theirs.len();
     let reason = if features.engaged_secs < MIN_ENGAGED_SECS {
         Some("too_short")
@@ -108,8 +111,9 @@ pub fn rate(features: &Features) -> Rating {
     } else {
         None
     };
-    // Poids égaux, puis la moyenne ramenée à l'échelle d'un écart (`SPREAD_FACTOR`).
-    let mean = subs.iter().map(|s| s.z).sum::<f64>() / subs.len() as f64;
+    // Poids égaux — mes cinq familles et le niveau de l'adversaire — puis la
+    // moyenne ramenée à l'échelle d'un écart (`SPREAD_FACTOR`).
+    let mean = (subs.iter().map(|s| s.z).sum::<f64>() + opponent.z) / (subs.len() + 1) as f64;
     let z = mean * SPREAD_FACTOR;
     let n = opportunities as f64;
     Rating {
@@ -120,16 +124,46 @@ pub fn rate(features: &Features) -> Rating {
         smash_quality: subs[1],
         exposure: subs[2],
         vertical: subs[3],
-        height: subs[4],
-        resources: subs[5],
+        resources: subs[4],
+        opponent,
     }
+}
+
+/// Le niveau de l'adversaire, sur l'échelle d'une famille.
+///
+/// Ce sont ses quatre familles mesurables, jugées avec les mêmes références
+/// que les nôtres, puis combinées comme une note. `value` est ce niveau entre
+/// 0 et 1, `count` le nombre d'opportunités sur lequel il repose.
+///
+/// Il n'est pas indépendant de notre jeu : on ne le voit jouer que contre
+/// nous, donc sa conversion est l'envers de notre défense. C'est voulu ici —
+/// perdre contre quelqu'un qui convertit tout baisse notre défense et monte
+/// son niveau, et les deux se compensent en partie dans la note.
+fn opponent_level(features: &Features) -> Sub {
+    let foe = &features.foe;
+    let subs = [
+        sub(foe.conversion, &CONVERSION),
+        sub(foe.smash_quality, &SMASH_QUALITY),
+        sub(foe.exposure, &EXPOSURE),
+        sub(foe.vertical, &VERTICAL),
+    ];
+    let z = subs.iter().map(|s| s.z).sum::<f64>() / subs.len() as f64 * SPREAD_FACTOR;
+    let level = phi(z);
+    Sub { value: level, count: (features.mine.len() + features.theirs.len()) as f64, smoothed: level, z, score: (100.0 * level).round() }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    /// Un adversaire dont on ne sait rien : il pèse comme la référence.
+    const UNKNOWN_FOE: Measure = Measure { value: 0.0, count: 0.0 };
+
     fn features(opps: usize, secs: f64, each: Measure) -> Features {
+        against(opps, secs, each, UNKNOWN_FOE)
+    }
+
+    fn against(opps: usize, secs: f64, each: Measure, foe: Measure) -> Features {
         let one = super::super::features::Opportunity { open: 0, close: 0, converted: false, expected: 0.0, realized: 0.0, offset: 0.0, target_speed: 0.0 };
         Features {
             mine: vec![one; opps],
@@ -139,7 +173,7 @@ mod tests {
             smash_quality: each,
             exposure: each,
             vertical: each,
-            height: each,
+            foe: super::super::features::FoeMeasures { conversion: foe, smash_quality: foe, exposure: foe, vertical: foe },
             resources: each,
             smash_charge: None,
         }
@@ -181,5 +215,18 @@ mod tests {
         let seen = [0.05, 0.95, 1.08, 0.47, 1.88];
         let combined = 100.0 * phi(seen.iter().sum::<f64>() / 5.0 * SPREAD_FACTOR);
         assert!(combined > 80.0 && combined < 92.0, "{combined}");
+    }
+
+    #[test]
+    fn le_niveau_de_l_adversaire_pese_dans_la_note() {
+        let mine = Measure { value: 0.5, count: 20.0 };
+        let strong = rate(&against(20, 120.0, mine, Measure { value: 0.9, count: 20.0 }));
+        let unknown = rate(&against(20, 120.0, mine, UNKNOWN_FOE));
+        let weak = rate(&against(20, 120.0, mine, Measure { value: 0.1, count: 20.0 }));
+        // Le même jeu vaut plus contre un adversaire fort, moins contre un faible.
+        assert!(strong.score.unwrap() > unknown.score.unwrap());
+        assert!(unknown.score.unwrap() > weak.score.unwrap());
+        assert!(strong.opponent.score > 90.0 && weak.opponent.score < 10.0);
+        assert_eq!(unknown.opponent.score, 50.0, "sans rien savoir de lui, il est moyen");
     }
 }

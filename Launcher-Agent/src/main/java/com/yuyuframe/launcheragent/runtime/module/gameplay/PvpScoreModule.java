@@ -42,7 +42,7 @@ public final class PvpScoreModule extends LauncherModule {
 
     /** Libellés des six familles, dans l'ordre de {@link NativeCombat#REPORT_FAMILIES}. */
     private static final String[] FAMILIES = {
-        "Conversion", "Qualité du smash", "Défense", "Contrôle vertical", "Prise de hauteur", "Ressources",
+        "Conversion", "Qualité du smash", "Défense", "Contrôle vertical", "Ressources", "Niveau adverse",
     };
     private static final String[] RESULTS = { "", "Victoire", "Défaite", "Match nul", "" };
 

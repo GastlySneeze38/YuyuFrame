@@ -47,7 +47,7 @@ public final class NativeCombat {
     public static final int REPORT_RESULT = 2;
     /** Pourquoi il n'y a pas de note : 0 il y en a une, 1 duel trop court, 2 trop peu d'opportunités. */
     public static final int REPORT_REASON = 3;
-    /** Les six familles sur 100, à la suite : conversion, qualité du smash, exposition, contrôle vertical, prise de hauteur, ressources. */
+    /** Les six familles sur 100, à la suite : conversion, qualité du smash, exposition, contrôle vertical, ressources, niveau de l'adversaire. */
     public static final int REPORT_FAMILIES = 4;
     public static final int FAMILY_COUNT = 6;
     /** En millisecondes, ou −1 s'il est inconnu. */

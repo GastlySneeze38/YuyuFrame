@@ -29,8 +29,8 @@ const HIT_DELAY_TICKS: u64 = 4;
 const REFERENCE_FALL: f64 = 8.0;
 /// Écart de hauteur à partir duquel un joueur « tient la hauteur ».
 const HEIGHT_ADVANTAGE: f64 = 1.5;
-/// Hauteur au-dessus de l'adversaire qui vaut le maximum pour la famille
-/// « prise de hauteur » : au-delà, monter plus haut ne rapporte plus.
+/// Hauteur au-dessus de l'adversaire qui vaut le maximum dans le contrôle
+/// vertical : au-delà, monter plus haut ne rapporte plus.
 const REFERENCE_HEIGHT: f64 = 12.0;
 /// Une charge de vent est utile si une opportunité s'ouvre dans ce délai (3 s).
 const WIND_USEFUL_TICKS: u64 = 60;
@@ -233,12 +233,13 @@ pub struct Features {
     pub smash_quality: Measure,
     /// Laisse-t-il des ouvertures ? Part des opportunités adverses NON converties.
     pub exposure: Measure,
-    /// Qui tient la hauteur ? Ma part du temps passé avec l'avantage de hauteur.
+    /// Qui domine la hauteur ? Pour moitié ma part du temps passé avec
+    /// l'avantage de hauteur ; pour l'autre, la hauteur que je prends
+    /// au-dessus de l'adversaire et ma part de cette hauteur face à la sienne.
     pub vertical: Measure,
-    /// Prend-il de la hauteur, et plus que l'adversaire ? Pour moitié la
-    /// hauteur atteinte au-dessus de lui, pour moitié ma part de cette
-    /// hauteur face à la sienne au-dessus de moi.
-    pub height: Measure,
+    /// Les mêmes mesures vues du côté de l'adversaire : son niveau, tel
+    /// qu'on peut le lire de ce qu'il a fait contre nous.
+    pub foe: FoeMeasures,
     /// Les ressources servent-elles ? Charges de vent suivies d'une
     /// opportunité, totems forcés face aux totems consommés.
     pub resources: Measure,
@@ -247,45 +248,77 @@ pub struct Features {
     pub smash_charge: Option<f64>,
 }
 
+/// Ce qu'on sait mesurer de l'adversaire : quatre des cinq familles. Ses
+/// ressources ne se voient pas d'ici (son inventaire, ses charges de vent).
+pub struct FoeMeasures {
+    pub conversion: Measure,
+    pub smash_quality: Measure,
+    pub exposure: Measure,
+    pub vertical: Measure,
+}
+
+fn converted(list: &[Opportunity]) -> f64 {
+    list.iter().filter(|o| o.converted).count() as f64
+}
+
+/// Bonus moyen des smashs portés, rapporté à celui d'une chute de référence.
+fn quality(list: &[Opportunity], density: f64) -> Measure {
+    let reference = smash_bonus(REFERENCE_FALL, density);
+    let landed: Vec<f64> = list.iter().filter(|o| o.converted).map(|o| (o.realized / reference).min(1.0)).collect();
+    Measure::rate(landed.iter().sum(), landed.len() as f64)
+}
+
+/// Le contrôle vertical d'un joueur, d'après les écarts de hauteur du duel
+/// vus de son côté (positif : il est au-dessus), triés.
+///
+/// Trois parts : la moitié pour le TEMPS passé avec l'avantage, un quart
+/// pour la HAUTEUR qu'il prend au-dessus de l'autre (plafonnée à
+/// `REFERENCE_HEIGHT`), un quart pour sa part de cette hauteur face à celle
+/// de l'autre. La hauteur est celle de ses meilleurs moments — le neuvième
+/// décile — pour qu'un seul envol ne fasse pas la mesure.
+fn vertical_control(gaps: &[f64]) -> Measure {
+    if gaps.is_empty() {
+        return Measure::NONE;
+    }
+    let above = gaps.iter().filter(|g| **g > HEIGHT_ADVANTAGE).count() as f64;
+    let below = gaps.iter().filter(|g| **g < -HEIGHT_ADVANTAGE).count() as f64;
+    let time = if above + below > 0.0 { above / (above + below) } else { 0.5 };
+    let tenth = ((gaps.len() - 1) as f64 * 0.1).round() as usize;
+    let high = gaps[gaps.len() - 1 - tenth].max(0.0);
+    let their_high = (-gaps[tenth]).max(0.0);
+    let share = if high + their_high > 0.0 { high / (high + their_high) } else { 0.5 };
+    let value = 0.5 * time + 0.25 * (high / REFERENCE_HEIGHT).min(1.0) + 0.25 * share;
+    // Compté en tranches de quatre secondes : une minute de duel pèse autant
+    // que quinze opportunités, pas que mille deux cents.
+    Measure { value, count: gaps.len() as f64 / 80.0 }
+}
+
 pub fn extract(duel: &Duel) -> Features {
     let ticks = |by_me: bool| -> Vec<u64> { duel.hits.iter().filter(|h| h.smash && h.by_me == by_me).map(|h| h.t).collect() };
     let my_smashes = ticks(true);
     let mine = opportunities(&views(&duel.samples, true), &my_smashes, duel.my_density);
     let theirs = opportunities(&views(&duel.samples, false), &ticks(false), duel.foe_density);
 
-    let converted = |list: &[Opportunity]| list.iter().filter(|o| o.converted).count() as f64;
     let conversion = Measure::rate(converted(&mine), mine.len() as f64);
     let exposure = Measure::rate(theirs.len() as f64 - converted(&theirs), theirs.len() as f64);
-
-    let reference = smash_bonus(REFERENCE_FALL, duel.my_density);
-    let landed: Vec<f64> = mine.iter().filter(|o| o.converted).map(|o| (o.realized / reference).min(1.0)).collect();
-    let smash_quality = Measure::rate(landed.iter().sum(), landed.len() as f64);
+    let smash_quality = quality(&mine, duel.my_density);
 
     let engaged: Vec<&Sample> = duel.samples.iter().filter(|s| s.foe.is_some()).collect();
-    let height = |s: &&Sample| s.me[Y] - s.foe.as_ref().map(|f| f[Y]).unwrap_or(s.me[Y]);
-    let above = engaged.iter().filter(|s| height(s) > HEIGHT_ADVANTAGE).count() as f64;
-    let below = engaged.iter().filter(|s| height(s) < -HEIGHT_ADVANTAGE).count() as f64;
-    // Compté en tranches de quatre secondes : une minute de duel pèse autant
-    // que quinze opportunités, pas que mille deux cents.
-    let vertical = Measure { count: (above + below) / 80.0, ..Measure::rate(above, above + below) };
-
-    // La hauteur prise : celle qu'on atteint au-dessus de l'adversaire dans
-    // ses meilleurs moments (le neuvième décile, pour qu'un seul envol ne
-    // fasse pas la mesure), et la même chose vue de son côté.
-    let mut gaps: Vec<f64> = engaged.iter().map(height).collect();
+    let mut gaps: Vec<f64> = engaged.iter().map(|s| s.me[Y] - s.foe.as_ref().map(|f| f[Y]).unwrap_or(s.me[Y])).collect();
     gaps.sort_by(f64::total_cmp);
-    let decile = |from_top: bool| -> f64 {
-        if gaps.is_empty() {
-            return 0.0;
-        }
-        let index = (gaps.len() - 1) as f64 * 0.9;
-        let index = if from_top { index.round() as usize } else { gaps.len() - 1 - index.round() as usize };
-        if from_top { gaps[index].max(0.0) } else { (-gaps[index]).max(0.0) }
+    let vertical = vertical_control(&gaps);
+
+    // L'adversaire, par les mêmes mesures retournées : ses opportunités sont
+    // les `theirs`, les ouvertures qu'il laisse sont les `mine`, et les
+    // écarts de hauteur changent de signe.
+    let mut their_gaps: Vec<f64> = gaps.iter().map(|g| -g).collect();
+    their_gaps.sort_by(f64::total_cmp);
+    let foe = FoeMeasures {
+        conversion: Measure::rate(converted(&theirs), theirs.len() as f64),
+        smash_quality: quality(&theirs, duel.foe_density),
+        exposure: Measure::rate(mine.len() as f64 - converted(&mine), mine.len() as f64),
+        vertical: vertical_control(&their_gaps),
     };
-    let (mine_high, theirs_high) = (decile(true), decile(false));
-    let share = if mine_high + theirs_high > 0.0 { mine_high / (mine_high + theirs_high) } else { 0.5 };
-    let height_value = 0.5 * (mine_high / REFERENCE_HEIGHT).min(1.0) + 0.5 * share;
-    let height = Measure { value: height_value, count: engaged.len() as f64 / 80.0 };
 
     let winds: Vec<u64> = duel.uses.iter().filter(|(_, item)| item == "wind_charge").map(|(t, _)| *t).collect();
     let useful = winds.iter().filter(|t| mine.iter().any(|o| o.open >= **t && o.open - **t <= WIND_USEFUL_TICKS)).count() as f64;
@@ -299,7 +332,7 @@ pub fn extract(duel: &Duel) -> Features {
         .collect();
     let smash_charge = (!charges.is_empty()).then(|| charges.iter().sum::<f64>() / charges.len() as f64);
 
-    Features { engaged_secs: engaged.len() as f64 / 20.0, mine, theirs, conversion, smash_quality, exposure, vertical, height, resources, smash_charge }
+    Features { engaged_secs: engaged.len() as f64 / 20.0, mine, theirs, conversion, smash_quality, exposure, vertical, foe, resources, smash_charge }
 }
 
 #[cfg(test)]

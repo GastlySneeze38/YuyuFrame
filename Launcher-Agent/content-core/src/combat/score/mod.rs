@@ -17,7 +17,7 @@ use serde::Serialize;
 
 /// Version de l'extraction des features. Changer la définition d'une
 /// opportunité ou d'une famille l'incrémente.
-pub const EXTRACTOR_VERSION: u32 = 1;
+pub const EXTRACTOR_VERSION: u32 = 2;
 
 /// Le décompte des opportunités d'un joueur.
 #[derive(Debug, Serialize)]
@@ -70,7 +70,7 @@ impl Report {
     /// (0 aucun, 1 victoire, 2 défaite, 3 nul, 4 inconnu) ; raison de
     /// l'absence de note (0 aucune, 1 duel trop court, 2 trop peu
     /// d'opportunités) ; les six familles sur 100 (conversion, qualité du
-    /// smash, exposition, contrôle vertical, prise de hauteur, ressources) ;
+    /// smash, exposition, contrôle vertical, ressources, niveau de l'adversaire) ;
     /// ping (−1 si inconnu) ; mes opportunités ouvertes puis converties ;
     /// celles de l'adversaire ; secondes au contact.
     pub fn numbers(&self) -> [f64; REPORT_LEN] {
@@ -95,8 +95,8 @@ impl Report {
             self.rating.smash_quality.score,
             self.rating.exposure.score,
             self.rating.vertical.score,
-            self.rating.height.score,
             self.rating.resources.score,
+            self.rating.opponent.score,
             self.ping.unwrap_or(-1.0),
             self.mine.opened as f64,
             self.mine.converted as f64,
