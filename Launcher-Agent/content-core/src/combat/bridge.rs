@@ -18,7 +18,9 @@ use super::writer::send;
 /// l'ouverture et la fermeture d'un duel.
 /// 3 (2026-10-13) : le noyau reconnaît les duels seul ; `yf_combat_match`
 /// devient `yf_combat_key` (la touche bascule), plus `yf_combat_recording`.
-const ABI_VERSION: u32 = 3;
+/// 4 (2026-10-13) : `yf_combat_report`, le résumé du dernier duel.
+/// 5 (2026-10-13) : six familles dans le résumé au lieu de cinq.
+const ABI_VERSION: u32 = 5;
 
 /// Autres joueurs transmis par tick, au plus.
 const MAX_OTHERS: usize = 16;
@@ -73,6 +75,23 @@ pub extern "C" fn yf_combat_key() -> i32 {
     let start = !super::writer::recording();
     send(Record::Match { start });
     start as i32
+}
+
+/// Le résumé du dernier duel fermé. Rend son numéro — 0 tant qu'aucun duel
+/// ne s'est fermé depuis le lancement, puis 1, 2… — et, si `out` a la place
+/// (`REPORT_LEN` nombres), y écrit le résumé dans l'ordre de
+/// `score::Report::numbers`. Java le relit à chaque tick et n'affiche que
+/// lorsque le numéro change.
+///
+/// # Safety
+/// `out` doit pointer sur `len` nombres inscriptibles (ou être nul).
+#[no_mangle]
+pub unsafe extern "C" fn yf_combat_report(out: *mut f64, len: i32) -> i32 {
+    let (number, values) = super::writer::last_report();
+    if !out.is_null() && len as usize >= values.len() {
+        std::slice::from_raw_parts_mut(out, values.len()).copy_from_slice(&values);
+    }
+    number
 }
 
 /// Un duel est-il ouvert ? 1 = oui.

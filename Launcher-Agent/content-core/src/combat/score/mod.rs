@@ -54,15 +54,67 @@ pub struct Report {
     pub theirs: Opportunities,
     /// Charge d'attaque moyenne à mes smashs (relevée, pas notée).
     pub smash_charge: Option<f64>,
+    /// Ping moyen pendant le duel, en millisecondes (affiché, pas corrigé).
+    pub ping: Option<f64>,
     #[serde(flatten)]
     pub rating: rating::Rating,
+}
+
+/// Nombre de valeurs de [`Report::numbers`].
+pub const REPORT_LEN: usize = 16;
+
+impl Report {
+    /// Le résumé en nombres, pour l'interface en jeu — contrat avec
+    /// `runtime/combat/NativeCombat.java` (constantes `REPORT_*`). Dans
+    /// l'ordre : note (−1 si le duel n'est pas noté) ; confiance ; résultat
+    /// (0 aucun, 1 victoire, 2 défaite, 3 nul, 4 inconnu) ; raison de
+    /// l'absence de note (0 aucune, 1 duel trop court, 2 trop peu
+    /// d'opportunités) ; les six familles sur 100 (conversion, qualité du
+    /// smash, exposition, contrôle vertical, prise de hauteur, ressources) ;
+    /// ping (−1 si inconnu) ; mes opportunités ouvertes puis converties ;
+    /// celles de l'adversaire ; secondes au contact.
+    pub fn numbers(&self) -> [f64; REPORT_LEN] {
+        let result = match self.result.as_deref() {
+            Some("win") => 1.0,
+            Some("loss") => 2.0,
+            Some("draw") => 3.0,
+            Some(_) => 4.0,
+            None => 0.0,
+        };
+        let reason = match self.rating.reason {
+            Some("too_short") => 1.0,
+            Some(_) => 2.0,
+            None => 0.0,
+        };
+        [
+            self.rating.score.unwrap_or(-1.0),
+            self.rating.confidence,
+            result,
+            reason,
+            self.rating.conversion.score,
+            self.rating.smash_quality.score,
+            self.rating.exposure.score,
+            self.rating.vertical.score,
+            self.rating.height.score,
+            self.rating.resources.score,
+            self.ping.unwrap_or(-1.0),
+            self.mine.opened as f64,
+            self.mine.converted as f64,
+            self.theirs.opened as f64,
+            self.theirs.converted as f64,
+            self.engaged_secs,
+        ]
+    }
 }
 
 /// Note un journal. `None` si le texte n'en est pas un.
 pub fn score_journal(text: &str) -> Option<Report> {
     let duel = parse::parse(text)?;
     let features = features::extract(&duel);
+    // Le ping est le quinzième nombre de chaque tick ; −1 quand le jeu ne le connaît pas.
+    let pings: Vec<f64> = duel.samples.iter().map(|s| s.me[14]).filter(|p| *p >= 0.0).collect();
     Some(Report {
+        ping: (!pings.is_empty()).then(|| (pings.iter().sum::<f64>() / pings.len() as f64).round()),
         extractor_version: EXTRACTOR_VERSION,
         score_version: rating::SCORE_VERSION,
         result: duel.result.clone(),
@@ -94,6 +146,14 @@ mod tests {
         let score = report.rating.score.expect("assez d'opportunités pour une note");
         assert!((0.0..=100.0).contains(&score));
         assert!(report.rating.confidence > 0.0 && report.rating.confidence < 1.0);
+        // Le même résumé, en nombres pour l'interface.
+        let numbers = report.numbers();
+        assert_eq!(numbers[0], score);
+        assert_eq!(numbers[2], 2.0, "défaite");
+        assert_eq!(numbers[3], 0.0, "duel noté");
+        assert!(numbers[4..10].iter().all(|family| (0.0..=100.0).contains(family)));
+        assert!(numbers[10] > 0.0, "ping connu");
+        assert_eq!((numbers[11], numbers[12]), (report.mine.opened as f64, 3.0));
     }
 
     #[test]

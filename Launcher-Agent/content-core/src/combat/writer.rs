@@ -35,6 +35,20 @@ pub fn recording() -> bool {
     RECORDING.load(std::sync::atomic::Ordering::Relaxed)
 }
 
+/// Le résumé du dernier duel fermé, et son numéro : l'interface en jeu le
+/// relit à chaque tick et n'affiche que ce qui est nouveau.
+static LAST_REPORT: std::sync::Mutex<(i32, [f64; super::score::REPORT_LEN])> = std::sync::Mutex::new((0, [0.0; super::score::REPORT_LEN]));
+
+fn publish(numbers: [f64; super::score::REPORT_LEN]) {
+    let mut last = LAST_REPORT.lock().unwrap_or_else(|p| p.into_inner());
+    *last = (last.0 + 1, numbers);
+}
+
+/// Numéro du dernier résumé (0 : aucun duel fermé depuis le lancement) et ses nombres.
+pub fn last_report() -> (i32, [f64; super::score::REPORT_LEN]) {
+    *LAST_REPORT.lock().unwrap_or_else(|p| p.into_inner())
+}
+
 /// Dépose un enregistrement pour le fil d'écriture. Ne bloque jamais : file
 /// pleine (disque à l'arrêt), l'enregistrement est perdu plutôt que de figer
 /// le jeu.
@@ -84,6 +98,7 @@ impl Sink {
     /// la source : ce fichier se recalcule à volonté.
     fn summarize(&self) {
         let Some(report) = super::score::score_journal(&self.text) else { return };
+        publish(report.numbers());
         let written = serde_json::to_string_pretty(&report).map_err(|e| e.to_string()).and_then(|json| std::fs::write(&self.summary, json).map_err(|e| e.to_string()));
         if let Err(e) = written {
             eprintln!("[YuyuFrame] résumé du duel {} impossible à écrire : {e}", self.summary.display());

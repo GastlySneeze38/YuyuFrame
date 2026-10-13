@@ -10,7 +10,7 @@ use super::features::{Features, Measure};
 
 /// Version de la formule. Tout changement de coefficient ou de référence
 /// l'incrémente.
-pub const SCORE_VERSION: u32 = 1;
+pub const SCORE_VERSION: u32 = 2;
 
 /// Poids du lissage : une famille observée sur `K` événements compte autant
 /// que sa référence.
@@ -26,11 +26,26 @@ struct Reference {
     spread: f64,
 }
 
-const CONVERSION: Reference = Reference { mean: 0.35, spread: 0.18 };
-const SMASH_QUALITY: Reference = Reference { mean: 0.60, spread: 0.15 };
-const EXPOSURE: Reference = Reference { mean: 0.65, spread: 0.18 };
+// Version 2 (2026-10-13) : les premières valeurs étaient trop basses — sur
+// quatre vrais duels, la qualité du smash sortait entre 0,71 et 0,81, la
+// défense à 0,88 deux fois, les ressources à 0,68 et 0,80, donc ces trois
+// familles affichaient 85 à 97 à chaque duel. Les moyennes sont remontées
+// vers ce qui a été observé. Quatre duels du même joueur : c'est un repère,
+// pas une calibration.
+const CONVERSION: Reference = Reference { mean: 0.35, spread: 0.15 };
+const SMASH_QUALITY: Reference = Reference { mean: 0.78, spread: 0.12 };
+const EXPOSURE: Reference = Reference { mean: 0.82, spread: 0.12 };
 const VERTICAL: Reference = Reference { mean: 0.50, spread: 0.15 };
-const RESOURCES: Reference = Reference { mean: 0.45, spread: 0.18 };
+const HEIGHT: Reference = Reference { mean: 0.50, spread: 0.15 };
+const RESOURCES: Reference = Reference { mean: 0.65, spread: 0.15 };
+
+/// De la moyenne des écarts à l'écart de la note. Une moyenne de familles
+/// est plus resserrée qu'une famille seule, il faut donc l'élargir — mais
+/// pas comme si elles étaient indépendantes (×√6) : un joueur bon dans l'une
+/// l'est souvent dans les autres, et ce facteur-là faisait sortir 97 d'un
+/// duel dont les familles valaient 52 à 97. Valeur pour des familles à
+/// moitié liées, à mesurer sur les matchs collectés.
+const SPREAD_FACTOR: f64 = 1.3;
 
 /// Une famille dans la note : sa valeur observée, lissée, puis son écart à la
 /// référence.
@@ -40,12 +55,15 @@ pub struct Sub {
     pub count: f64,
     pub smoothed: f64,
     pub z: f64,
+    /// La famille seule, sur 100 : ce que l'interface montre.
+    pub score: f64,
 }
 
 fn sub(measure: Measure, reference: &Reference) -> Sub {
     // Peu d'événements : la valeur est tirée vers la référence. Aucun : c'est la référence.
     let smoothed = (measure.count * measure.value + K * reference.mean) / (measure.count + K);
-    Sub { value: measure.value, count: measure.count, smoothed, z: (smoothed - reference.mean) / reference.spread }
+    let z = (smoothed - reference.mean) / reference.spread;
+    Sub { value: measure.value, count: measure.count, smoothed, z, score: (100.0 * phi(z)).round() }
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -59,6 +77,7 @@ pub struct Rating {
     pub smash_quality: Sub,
     pub exposure: Sub,
     pub vertical: Sub,
+    pub height: Sub,
     pub resources: Sub,
 }
 
@@ -78,6 +97,7 @@ pub fn rate(features: &Features) -> Rating {
         sub(features.smash_quality, &SMASH_QUALITY),
         sub(features.exposure, &EXPOSURE),
         sub(features.vertical, &VERTICAL),
+        sub(features.height, &HEIGHT),
         sub(features.resources, &RESOURCES),
     ];
     let opportunities = features.mine.len() + features.theirs.len();
@@ -88,12 +108,9 @@ pub fn rate(features: &Features) -> Rating {
     } else {
         None
     };
-    // Poids égaux. La moyenne de cinq écarts peu liés est bien plus resserrée
-    // que chacun d'eux : sans la ramener à l'échelle d'un écart (ici la valeur
-    // de cinq familles indépendantes, 1/√5, faute de matchs pour la mesurer),
-    // toutes les notes se tasseraient autour de 50.
+    // Poids égaux, puis la moyenne ramenée à l'échelle d'un écart (`SPREAD_FACTOR`).
     let mean = subs.iter().map(|s| s.z).sum::<f64>() / subs.len() as f64;
-    let z = mean * (subs.len() as f64).sqrt();
+    let z = mean * SPREAD_FACTOR;
     let n = opportunities as f64;
     Rating {
         score: reason.is_none().then(|| (100.0 * phi(z)).round()),
@@ -103,7 +120,8 @@ pub fn rate(features: &Features) -> Rating {
         smash_quality: subs[1],
         exposure: subs[2],
         vertical: subs[3],
-        resources: subs[4],
+        height: subs[4],
+        resources: subs[5],
     }
 }
 
@@ -121,6 +139,7 @@ mod tests {
             smash_quality: each,
             exposure: each,
             vertical: each,
+            height: each,
             resources: each,
             smash_charge: None,
         }
@@ -157,9 +176,10 @@ mod tests {
         let weak = rate(&features(20, 120.0, Measure { value: 0.1, count: 20.0 }));
         assert!(strong.score.unwrap() > 90.0 && weak.score.unwrap() < 10.0);
         assert!(rate(&features(20, 120.0, Measure { value: 0.9, count: 20.0 })).confidence > rate(&features(4, 120.0, Measure { value: 0.9, count: 4.0 })).confidence);
-        // Un très bon match sort haut : sans la re-standardisation il plafonnerait vers 70.
-        let good = [2.0, 1.0, 0.0, 0.5, -0.5];
-        let z = good.iter().sum::<f64>() / 5.0 * 5f64.sqrt();
-        assert!(100.0 * phi(z) > 90.0);
+        // La note reste à portée de ses familles : cinq écarts qui valent 52,
+        // 83, 86, 68 et 97 ne font pas un 97 (c'était le cas avec ×√5).
+        let seen = [0.05, 0.95, 1.08, 0.47, 1.88];
+        let combined = 100.0 * phi(seen.iter().sum::<f64>() / 5.0 * SPREAD_FACTOR);
+        assert!(combined > 80.0 && combined < 92.0, "{combined}");
     }
 }

@@ -29,6 +29,9 @@ const HIT_DELAY_TICKS: u64 = 4;
 const REFERENCE_FALL: f64 = 8.0;
 /// Écart de hauteur à partir duquel un joueur « tient la hauteur ».
 const HEIGHT_ADVANTAGE: f64 = 1.5;
+/// Hauteur au-dessus de l'adversaire qui vaut le maximum pour la famille
+/// « prise de hauteur » : au-delà, monter plus haut ne rapporte plus.
+const REFERENCE_HEIGHT: f64 = 12.0;
 /// Une charge de vent est utile si une opportunité s'ouvre dans ce délai (3 s).
 const WIND_USEFUL_TICKS: u64 = 60;
 
@@ -232,6 +235,10 @@ pub struct Features {
     pub exposure: Measure,
     /// Qui tient la hauteur ? Ma part du temps passé avec l'avantage de hauteur.
     pub vertical: Measure,
+    /// Prend-il de la hauteur, et plus que l'adversaire ? Pour moitié la
+    /// hauteur atteinte au-dessus de lui, pour moitié ma part de cette
+    /// hauteur face à la sienne au-dessus de moi.
+    pub height: Measure,
     /// Les ressources servent-elles ? Charges de vent suivies d'une
     /// opportunité, totems forcés face aux totems consommés.
     pub resources: Measure,
@@ -262,6 +269,24 @@ pub fn extract(duel: &Duel) -> Features {
     // que quinze opportunités, pas que mille deux cents.
     let vertical = Measure { count: (above + below) / 80.0, ..Measure::rate(above, above + below) };
 
+    // La hauteur prise : celle qu'on atteint au-dessus de l'adversaire dans
+    // ses meilleurs moments (le neuvième décile, pour qu'un seul envol ne
+    // fasse pas la mesure), et la même chose vue de son côté.
+    let mut gaps: Vec<f64> = engaged.iter().map(height).collect();
+    gaps.sort_by(f64::total_cmp);
+    let decile = |from_top: bool| -> f64 {
+        if gaps.is_empty() {
+            return 0.0;
+        }
+        let index = (gaps.len() - 1) as f64 * 0.9;
+        let index = if from_top { index.round() as usize } else { gaps.len() - 1 - index.round() as usize };
+        if from_top { gaps[index].max(0.0) } else { (-gaps[index]).max(0.0) }
+    };
+    let (mine_high, theirs_high) = (decile(true), decile(false));
+    let share = if mine_high + theirs_high > 0.0 { mine_high / (mine_high + theirs_high) } else { 0.5 };
+    let height_value = 0.5 * (mine_high / REFERENCE_HEIGHT).min(1.0) + 0.5 * share;
+    let height = Measure { value: height_value, count: engaged.len() as f64 / 80.0 };
+
     let winds: Vec<u64> = duel.uses.iter().filter(|(_, item)| item == "wind_charge").map(|(t, _)| *t).collect();
     let useful = winds.iter().filter(|t| mine.iter().any(|o| o.open >= **t && o.open - **t <= WIND_USEFUL_TICKS)).count() as f64;
     let (forced, spent) = (duel.foe_totems.len() as f64, duel.my_totems.len() as f64);
@@ -274,7 +299,7 @@ pub fn extract(duel: &Duel) -> Features {
         .collect();
     let smash_charge = (!charges.is_empty()).then(|| charges.iter().sum::<f64>() / charges.len() as f64);
 
-    Features { engaged_secs: engaged.len() as f64 / 20.0, mine, theirs, conversion, smash_quality, exposure, vertical, resources, smash_charge }
+    Features { engaged_secs: engaged.len() as f64 / 20.0, mine, theirs, conversion, smash_quality, exposure, vertical, height, resources, smash_charge }
 }
 
 #[cfg(test)]

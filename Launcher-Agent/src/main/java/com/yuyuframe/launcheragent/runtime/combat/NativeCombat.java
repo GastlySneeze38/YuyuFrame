@@ -32,7 +32,30 @@ import java.util.UUID;
 public final class NativeCombat {
 
     /** Même valeur que {@code ABI_VERSION} dans combat/bridge.rs. */
-    private static final int ABI_VERSION = 3;
+    private static final int ABI_VERSION = 5;
+
+    /**
+     * Le résumé d'un duel, en nombres — {@code Report::numbers} dans
+     * combat/score/mod.rs, même ordre.
+     */
+    public static final int REPORT_LEN = 16;
+    /** Note sur 100, ou −1 si le duel n'est pas noté. */
+    public static final int REPORT_SCORE = 0;
+    /** De 0 à 1. */
+    public static final int REPORT_CONFIDENCE = 1;
+    /** 0 aucun, 1 victoire, 2 défaite, 3 nul, 4 inconnu. */
+    public static final int REPORT_RESULT = 2;
+    /** Pourquoi il n'y a pas de note : 0 il y en a une, 1 duel trop court, 2 trop peu d'opportunités. */
+    public static final int REPORT_REASON = 3;
+    /** Les six familles sur 100, à la suite : conversion, qualité du smash, exposition, contrôle vertical, prise de hauteur, ressources. */
+    public static final int REPORT_FAMILIES = 4;
+    public static final int FAMILY_COUNT = 6;
+    /** En millisecondes, ou −1 s'il est inconnu. */
+    public static final int REPORT_PING = 10;
+    public static final int REPORT_MY_OPENED = 11;
+    public static final int REPORT_MY_CONVERTED = 12;
+    public static final int REPORT_THEIR_OPENED = 13;
+    public static final int REPORT_THEIR_CONVERTED = 14;
 
     /** Nombres décrivant notre joueur à un tick — {@code ME_LEN} dans combat/record.rs, même ordre. */
     public static final int ME_LEN = 15;
@@ -78,6 +101,7 @@ public final class NativeCombat {
     private static MethodHandle world;
     private static MethodHandle key;
     private static MethodHandle recording;
+    private static MethodHandle report;
     private static MethodHandle tick;
     private static MethodHandle player;
     private static MethodHandle equipment;
@@ -125,6 +149,8 @@ public final class NativeCombat {
             world = linker.downcallHandle(lib.find("yf_combat_world").orElseThrow(), FunctionDescriptor.ofVoid());
             key = linker.downcallHandle(lib.find("yf_combat_key").orElseThrow(), FunctionDescriptor.of(ValueLayout.JAVA_INT));
             recording = linker.downcallHandle(lib.find("yf_combat_recording").orElseThrow(), FunctionDescriptor.of(ValueLayout.JAVA_INT));
+            report = linker.downcallHandle(lib.find("yf_combat_report").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT), heap);
             tick = linker.downcallHandle(lib.find("yf_combat_tick").orElseThrow(),
                 FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT), heap);
             player = linker.downcallHandle(lib.find("yf_combat_player").orElseThrow(),
@@ -193,6 +219,26 @@ public final class NativeCombat {
         } catch (Throwable error) {
             failed(error);
             return false;
+        }
+    }
+
+    /**
+     * Le résumé du dernier duel fermé, calculé par le noyau.
+     *
+     * @param out {@link #REPORT_LEN} nombres, remplis dans l'ordre des
+     *            constantes {@code REPORT_*}
+     * @return le numéro du résumé : 0 tant qu'aucun duel ne s'est fermé depuis
+     *         le lancement, puis 1, 2… — il ne change que pour un nouveau duel
+     */
+    public static int report(double[] out) {
+        if (!READY || out == null || out.length < REPORT_LEN) {
+            return 0;
+        }
+        try {
+            return (int) report.invokeExact(MemorySegment.ofArray(out), out.length);
+        } catch (Throwable error) {
+            failed(error);
+            return 0;
         }
     }
 
