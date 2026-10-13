@@ -32,6 +32,15 @@ pub const TELEMETRY_VERSION: u32 = 1;
 const ENGAGE_BLOCKS: f64 = 16.0;
 /// Lignes gardées avant l'ouverture du duel (10 s d'échantillons).
 const PREROLL: usize = 200;
+/// Une ligne du pré-enregistrement plus vieille que cela (10 s) n'est pas
+/// écrite. Sans cette borne, la touche pressée vingt secondes après un
+/// combat ressortait ce combat-là : vu dans un journal du 2026-10-13.
+const PREROLL_TICKS: u64 = 200;
+/// Un joueur dont Java n'a plus rien dit depuis ce délai (10 s) n'est plus
+/// là. Java redit qui est à portée chaque seconde ; sur un serveur qui ne
+/// change pas de monde entre deux manches, l'adversaire revient à chaque
+/// manche sous un nouvel identifiant, et les anciens s'accumulaient.
+const FORGET_TICKS: u64 = 200;
 
 /// Un ordre pour le fil d'écriture.
 #[derive(Debug, PartialEq)]
@@ -57,7 +66,10 @@ pub struct Journal {
     /// Ce qui a déjà été écrit dans le fichier ouvert.
     written_players: HashMap<i32, (u128, String)>,
     written_equipment: HashMap<i32, String>,
-    preroll: VecDeque<String>,
+    /// Tick où Java a parlé pour la dernière fois de chaque joueur.
+    seen: HashMap<i32, u64>,
+    /// Les dernières lignes hors duel, avec leur tick.
+    preroll: VecDeque<(u64, String)>,
     /// Un duel est ouvert : son fichier aussi.
     recording: bool,
 }
@@ -74,6 +86,7 @@ impl Journal {
             equipment: HashMap::new(),
             written_players: HashMap::new(),
             written_equipment: HashMap::new(),
+            seen: HashMap::new(),
             preroll: VecDeque::new(),
             recording: false,
         }
@@ -96,6 +109,7 @@ impl Journal {
             Record::Player { id, uuid, name } => {
                 if real_player(uuid, &name) {
                     self.players.insert(id, (uuid, name));
+                    self.seen.insert(id, self.tick);
                 } else {
                     self.players.remove(&id);
                 }
@@ -106,6 +120,7 @@ impl Journal {
             Record::Tick { me, others } => {
                 self.tick += 1;
                 self.me = Some(me[ME_ID] as i32);
+                self.forget_absent();
                 // Seuls les vrais joueurs comptent : les personnages d'un lobby
                 // sont des entités « joueur » comme les autres pour le jeu.
                 let others: Vec<_> = others.into_iter().filter(|o| self.players.contains_key(&(o[OTHER_ID] as i32))).collect();
@@ -143,7 +158,18 @@ impl Journal {
         let header = json!({ "k": "h", "v": TELEMETRY_VERSION, "server": self.server, "mc": self.mc, "time": now_ms, "me": self.me, "t": self.tick });
         out.push(Out::Line(header.to_string()));
         self.write_identities(out);
-        out.extend(self.preroll.drain(..).map(Out::Line));
+        let oldest = self.tick.saturating_sub(PREROLL_TICKS);
+        out.extend(self.preroll.drain(..).filter(|(at, _)| *at >= oldest).map(|(_, line)| Out::Line(line)));
+    }
+
+    /// Oublie les joueurs dont Java ne parle plus.
+    fn forget_absent(&mut self) {
+        let tick = self.tick;
+        let seen = &self.seen;
+        self.players.retain(|id, _| seen.get(id).is_some_and(|at| tick - at < FORGET_TICKS));
+        let players = &self.players;
+        self.equipment.retain(|id, _| players.contains_key(id));
+        self.seen.retain(|id, _| players.contains_key(id));
     }
 
     fn end_match(&mut self, out: &mut Vec<Out>) {
@@ -163,7 +189,7 @@ impl Journal {
             if self.preroll.len() == PREROLL {
                 self.preroll.pop_front();
             }
-            self.preroll.push_back(line);
+            self.preroll.push_back((self.tick, line));
             return;
         }
         self.write_identities(out);
@@ -198,6 +224,7 @@ impl Journal {
         self.preroll.clear();
         self.players.clear();
         self.equipment.clear();
+        self.seen.clear();
     }
 }
 
@@ -348,10 +375,40 @@ mod tests {
     fn le_pre_enregistrement_est_borne() {
         let mut journal = started();
         for _ in 0..(PREROLL + 50) {
+            // Comme le jeu, qui redit régulièrement qui est à portée.
+            journal.feed(Record::Player { id: FOE, uuid: FOE_UUID, name: "Rival".into() }, 2000);
             journal.feed(tick(1.0), 2000);
         }
         let out = journal.feed(START, 3000);
         assert_eq!(kinds(&out).matches('s').count(), PREROLL);
+    }
+
+    #[test]
+    fn un_vieux_combat_ne_ressort_pas_a_l_ouverture() {
+        let mut journal = started();
+        journal.feed(tick(1.0), 2000);
+        journal.feed(hit(FOE, ME), 2000);
+        // Vingt secondes passent, l'adversaire au loin : rien de neuf en mémoire.
+        for _ in 0..(PREROLL_TICKS * 2) {
+            journal.feed(Record::Player { id: FOE, uuid: FOE_UUID, name: "Rival".into() }, 2000);
+            journal.feed(tick(100.0), 2000);
+        }
+        assert_eq!(kinds(&journal.feed(START, 3000)), "Ohp");
+    }
+
+    #[test]
+    fn un_joueur_dont_on_ne_parle_plus_est_oublie() {
+        let mut journal = started();
+        // L'adversaire revient sous un nouvel identifiant ; l'ancien n'est plus redit.
+        const AGAIN: i32 = 12;
+        for _ in 0..FORGET_TICKS {
+            journal.feed(Record::Player { id: AGAIN, uuid: FOE_UUID, name: "Rival".into() }, 2000);
+            journal.feed(tick(100.0), 2000);
+        }
+        let out = journal.feed(START, 3000);
+        assert_eq!(kinds(&out), "Ohp", "un seul joueur nommé : celui qui est là");
+        let Out::Line(player) = &out[2] else { panic!() };
+        assert_eq!(serde_json::from_str::<Value>(player).unwrap()["id"], AGAIN);
     }
 
     #[test]
