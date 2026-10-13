@@ -55,6 +55,13 @@ public final class CombatTracker {
         "density", "breach", "wind_burst", "protection", "blast_protection", "projectile_protection", "feather_falling",
     };
 
+    /**
+     * « Pas d'identifiant ». Pas −1 : un identifiant réseau peut être négatif
+     * — les personnages du lobby de Minemen en portent (−1234567…), et le
+     * noyau a besoin de savoir qui ils sont pour les écarter.
+     */
+    private static final int NO_ID = Integer.MIN_VALUE;
+
     private static boolean active;
     /** Le contexte du monde courant a-t-il été envoyé ? Remis à faux à chaque extinction. */
     private static boolean contextSent;
@@ -74,7 +81,7 @@ public final class CombatTracker {
             return false;
         });
         VanillaHookRegistry.register(HookPoint.ENTITY_ATTACK, ctx -> {
-            if (active) NativeCombat.event(NativeCombat.EVENT_ATTACK, AccessorRegistry.getInt(AccessPoint.ENTITY_NETWORK_ID, ctx, -1), 0, 0, null);
+            if (active) NativeCombat.event(NativeCombat.EVENT_ATTACK, AccessorRegistry.getInt(AccessPoint.ENTITY_NETWORK_ID, ctx, NO_ID), 0, 0, null);
             return false;
         });
         VanillaHookRegistry.register(HookPoint.DAMAGE_EVENT, ctx -> {
@@ -158,9 +165,9 @@ public final class CombatTracker {
         if (!contextSent) {
             sendContext();
         }
-        int selfId = AccessorRegistry.getInt(AccessPoint.ENTITY_NETWORK_ID, self, -1);
+        int selfId = AccessorRegistry.getInt(AccessPoint.ENTITY_NETWORK_ID, self, NO_ID);
         double[] at = vector(AccessPoint.ENTITY_POSITION, self);
-        if (selfId < 0 || at == null) {
+        if (selfId == NO_ID || at == null) {
             return;
         }
         fillSelf(self, selfId, at);
@@ -263,7 +270,7 @@ public final class CombatTracker {
     private static void writeOther(int slot, Object other, double[] pos, double distSq) {
         double[] speed = vector(AccessPoint.ENTITY_DELTA_MOVEMENT, other);
         int base = slot * NativeCombat.OTHER_LEN;
-        OTHERS[base] = AccessorRegistry.getInt(AccessPoint.ENTITY_NETWORK_ID, other, -1);
+        OTHERS[base] = AccessorRegistry.getInt(AccessPoint.ENTITY_NETWORK_ID, other, NO_ID);
         OTHERS[base + 1] = pos[0];
         OTHERS[base + 2] = pos[1];
         OTHERS[base + 3] = pos[2];
@@ -277,7 +284,7 @@ public final class CombatTracker {
 
     /** Qui est ce joueur et ce qu'il porte. */
     private static void describe(Object entity, int id) {
-        if (entity == null || id < 0) {
+        if (entity == null || id == NO_ID) {
             return;
         }
         Object uuid = AccessorRegistry.get(AccessPoint.ENTITY_UUID, entity);

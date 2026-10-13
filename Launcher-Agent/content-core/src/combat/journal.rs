@@ -48,7 +48,9 @@ pub struct Journal {
     server: String,
     mc: String,
     tick: u64,
-    me: i32,
+    /// Notre identifiant réseau, connu au premier tick. Pas de valeur
+    /// « absente » parmi les entiers : un identifiant peut être négatif.
+    me: Option<i32>,
     /// Les joueurs connus dans ce monde : identifiant réseau → (UUID, pseudo).
     players: HashMap<i32, (u128, String)>,
     equipment: HashMap<i32, String>,
@@ -68,7 +70,7 @@ impl Journal {
             server: String::new(),
             mc: String::new(),
             tick: 0,
-            me: -1,
+            me: None,
             players: HashMap::new(),
             equipment: HashMap::new(),
             written_players: HashMap::new(),
@@ -92,14 +94,21 @@ impl Journal {
             }
             Record::World | Record::Close => self.end_world(&mut out),
             Record::Player { id, uuid, name } => {
-                self.players.insert(id, (uuid, name));
+                if real_player(uuid, &name) {
+                    self.players.insert(id, (uuid, name));
+                } else {
+                    self.players.remove(&id);
+                }
             }
             Record::Equipment { id, text } => {
                 self.equipment.insert(id, text);
             }
             Record::Tick { me, others } => {
                 self.tick += 1;
-                self.me = me[ME_ID] as i32;
+                self.me = Some(me[ME_ID] as i32);
+                // Seuls les vrais joueurs comptent : les personnages d'un lobby
+                // sont des entités « joueur » comme les autres pour le jeu.
+                let others: Vec<_> = others.into_iter().filter(|o| self.players.contains_key(&(o[OTHER_ID] as i32))).collect();
                 if engaged(&me, &others) {
                     let line = json!({
                         "k": "s", "t": self.tick,
@@ -137,10 +146,11 @@ impl Journal {
     /// Ce paquet de dégâts est-il un coup entre notre joueur et un autre
     /// joueur, dans un sens ou dans l'autre ?
     fn is_exchange(&self, entity: i32, cause: i32) -> bool {
-        if self.me < 0 || entity == cause {
+        let Some(me) = self.me else { return false };
+        if entity == cause {
             return false;
         }
-        (entity == self.me && self.players.contains_key(&cause)) || (cause == self.me && self.players.contains_key(&entity))
+        (entity == me && self.players.contains_key(&cause)) || (cause == me && self.players.contains_key(&entity))
     }
 
     /// Hors combat, la ligne attend dans le pré-enregistrement. En combat,
@@ -192,7 +202,7 @@ impl Journal {
         }
         self.open = false;
         self.tick = 0;
-        self.me = -1;
+        self.me = None;
         self.last_exchange = None;
         self.preroll.clear();
         self.players.clear();
@@ -200,6 +210,20 @@ impl Journal {
         self.written_players.clear();
         self.written_equipment.clear();
     }
+}
+
+/// Un vrai joueur, et non un personnage posé par le serveur (vendeur, file
+/// d'attente, hologramme). Vu sur Minemen le 2026-10-13 : six personnages
+/// immobiles autour du point d'arrivée du lobby comptaient comme adversaires
+/// à portée. Même règle que la présence (`presence/directory.rs`) : un UUID
+/// de compte Microsoft (version 4) ou dérivé du pseudo par un serveur hors
+/// ligne (version 3), et un pseudo qui a la forme d'un pseudo.
+fn real_player(uuid: u128, name: &str) -> bool {
+    let version = (uuid >> 76) & 0xf;
+    (version == 3 || version == 4)
+        && !name.is_empty()
+        && name.len() <= 16
+        && name.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_')
 }
 
 fn engaged(me: &[f64; ME_LEN], others: &[[f64; OTHER_LEN]]) -> bool {
@@ -221,11 +245,13 @@ mod tests {
 
     const ME: i32 = 7;
     const FOE: i32 = 9;
+    /// UUID version 4, comme en porte un compte Microsoft.
+    const FOE_UUID: u128 = 0x4a50fccd83ef44eb842805d66f1dc106;
 
     fn started() -> Journal {
         let mut journal = Journal::new();
         journal.feed(Record::Context { dir: PathBuf::from("instance"), server: "minemen.club:25565".into(), mc: "26.3".into() }, 1000);
-        journal.feed(Record::Player { id: FOE, uuid: 0xabc, name: "Rival".into() }, 1000);
+        journal.feed(Record::Player { id: FOE, uuid: FOE_UUID, name: "Rival".into() }, 1000);
         // Un premier tick, adversaire au loin : le journal sait qui nous sommes.
         journal.feed(tick(100.0), 1000);
         journal
@@ -295,6 +321,19 @@ mod tests {
     }
 
     #[test]
+    fn un_personnage_du_serveur_n_est_pas_un_adversaire() {
+        let mut journal = started();
+        // Même identifiant que l'adversaire, mais un UUID version 2 : un personnage.
+        journal.feed(Record::Player { id: FOE, uuid: 0x4a50fccd83ef24eb842805d66f1dc106, name: "Rival".into() }, 1000);
+        journal.feed(tick(1.0), 2000);
+        // Ses « coups » n'ouvrent aucun combat, et il n'est dans aucun échantillon.
+        assert!(journal.feed(hit(ME, FOE), 3000).is_empty());
+        // Un pseudo qui n'en est pas un non plus.
+        journal.feed(Record::Player { id: FOE, uuid: FOE_UUID, name: "§aDuels".into() }, 3000);
+        assert!(journal.feed(hit(ME, FOE), 3000).is_empty());
+    }
+
+    #[test]
     fn le_pre_enregistrement_est_borne() {
         let mut journal = started();
         for _ in 0..(PREROLL + 50) {
@@ -329,7 +368,7 @@ mod tests {
         // rien, il attend avec le reste du pré-enregistrement.
         assert!(journal.feed(hit(FOE, ME), 5000).is_empty());
         // Le joueur revu dans le nouveau monde, le combat rouvre un fichier.
-        journal.feed(Record::Player { id: FOE, uuid: 0xabc, name: "Rival".into() }, 5000);
+        journal.feed(Record::Player { id: FOE, uuid: FOE_UUID, name: "Rival".into() }, 5000);
         journal.feed(tick(1.0), 5000);
         assert_eq!(kinds(&journal.feed(hit(FOE, ME), 6000)), "Ohpdsd");
     }

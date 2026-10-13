@@ -155,4 +155,18 @@ mod tests {
         assert_eq!(text, "{\"k\":\"h\"}\n{\"k\":\"s\"}\n{\"k\":\"d\"}\n");
         std::fs::remove_dir_all(&dir).unwrap();
     }
+
+    /// Outil de mise au point : décompresse un vrai journal en texte, pour le
+    /// lire sans installer zstd.
+    /// `YF_JOURNAL=<journal.zst> YF_JOURNAL_OUT=<sortie.ndjson> cargo test --lib decompresse_un_journal -- --ignored`
+    #[test]
+    #[ignore]
+    fn decompresse_un_journal() {
+        let source = std::env::var("YF_JOURNAL").expect("YF_JOURNAL : le journal à lire");
+        let target = std::env::var("YF_JOURNAL_OUT").expect("YF_JOURNAL_OUT : le fichier texte à écrire");
+        let mut text = Vec::new();
+        zstd::stream::read::Decoder::new(File::open(&source).unwrap()).unwrap().read_to_end(&mut text).unwrap();
+        std::fs::write(&target, &text).unwrap();
+        println!("{} octets compressés → {} octets, {} lignes", std::fs::metadata(&source).unwrap().len(), text.len(), text.iter().filter(|b| **b == b'\n').count());
+    }
 }
