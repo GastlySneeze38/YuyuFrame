@@ -92,6 +92,16 @@ public class HudElement {
          * soustrait, comme d'habitude). Défaut faux.
          */
         default boolean skipBackground() { return false; }
+
+        /**
+         * Vrai = le fond de cet élément est une CARTE DE VERRE, comme les
+         * panneaux des écrans (flou du décor, teinte du thème, liseré, coins
+         * larges), quel que soit le réglage « Fond flouté (HUD) » — voir
+         * {@code HudPanelRenderer.drawCard}. Pour un élément qui n'apparaît
+         * que par moments et se lit comme une petite fenêtre (résumé de fin
+         * de duel), pas pour une valeur affichée en permanence. Défaut faux.
+         */
+        default boolean glassCard() { return false; }
     }
 
     public final String id;

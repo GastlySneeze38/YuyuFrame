@@ -72,6 +72,34 @@ public final class HudPanelRenderer {
         return USE_GLASS && renderer.isGlassAvailable();
     }
 
+    /** Cet élément a-t-il besoin du flou derrière lui : le réglage du HUD, ou une carte de verre qui l'exige toujours. */
+    public static boolean wantsGlass(HudElement element) {
+        return USE_GLASS || isCard(element);
+    }
+
+    private static boolean isCard(HudElement element) {
+        return element.customRenderer != null && element.customRenderer.glassCard();
+    }
+
+    /** Rayon des coins d'une carte de verre, à l'échelle 1 — celui des panneaux des écrans, pas le {@link #RADIUS} des petits panneaux. */
+    private static final float CARD_RADIUS = 10f;
+    private static final UiColor CARD_SHADOW = new UiColor(0, 0, 0, 110);
+
+    /**
+     * Le fond d'une carte de verre ({@link HudElement.CustomRenderer#glassCard}) :
+     * même recette que les pages des écrans. Sans verre disponible, l'aplat du
+     * thème.
+     */
+    private static void drawCard(UiRenderer renderer, HudElement element, float x, float y, float w, float h, int vpWidth, int vpHeight) {
+        float radius = CARD_RADIUS * element.scale;
+        float[] r = edgeAwareRadii(x, y, w, h, radius, vpWidth, vpHeight);
+        UiColor flat = element.opacity >= 1f ? UiTheme.PANEL_BG : UiTheme.PANEL_BG.multiplyAlpha(element.opacity);
+        renderer.drawShadow(x, y, x + w, y + h, radius, 14f, 0f, CARD_SHADOW, vpWidth, vpHeight);
+        renderer.drawGlassPanel(x, y, x + w, y + h, r[0], r[1], r[2], r[3],
+            UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_CARD, flat,
+            UiTheme.GLASS_BORDER, Math.max(1f, element.scale), vpWidth, vpHeight);
+    }
+
     /**
      * @param regions les rectangles {@code {x1, y1, x2, y2}} des panneaux de
      *        cette frame : le flou n'est calculé que derrière eux (voir
@@ -79,7 +107,10 @@ public final class HudPanelRenderer {
      *        décor bouge derrière le HUD.
      */
     public static void ensureGlassChain(UiRenderer renderer, int vpWidth, int vpHeight, float[][] regions) {
-        if (!USE_GLASS || !renderer.isGlassAvailable()) return;
+        // Plus de test sur USE_GLASS ici : une carte de verre en demande une
+        // même quand le réglage est éteint. C'est l'appelant qui décide, par
+        // les rectangles qu'il relève (voir wantsGlass).
+        if (!renderer.isGlassAvailable()) return;
         // Voie « état de GUI vanilla » : le garde par taille de file ne vaut
         // plus rien (le HUD n'alimente plus cette file, elle reste vide et
         // laisserait CHAQUE panneau recalculer sa chaîne). C'est
@@ -184,7 +215,9 @@ public final class HudPanelRenderer {
         // le background du rendu personnalisé qui reste"). drawRoundedRectHud
         // sauté, mais draw() reste appelé normalement plus bas.
         boolean skipBg = element.customRenderer != null && element.customRenderer.skipBackground();
-        if (!skipBg) {
+        if (!skipBg && isCard(element)) {
+            drawCard(renderer, element, x, y, w, h, vpWidth, vpHeight);
+        } else if (!skipBg) {
             // Coins CARRÉS du côté où le panneau touche un bord d'écran —
             // demande utilisateur : un coin arrondi collé au bord laisse un
             // petit coin de vide entre l'arrondi et le bord, qui se lit comme

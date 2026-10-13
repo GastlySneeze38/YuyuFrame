@@ -48,7 +48,10 @@ public final class HudRenderer {
         // Avec le verre, les rectangles des panneaux sont relevés AVANT : le
         // flou n'est calculé que derrière eux. Leur taille est donc remesurée
         // ici, et pas une seconde fois dans la boucle de dessin.
-        boolean glass = HudPanelRenderer.usesGlass(renderer);
+        // Le réglage « Fond flouté (HUD) » n'est plus seul à en décider : une
+        // carte de verre (HudElement.CustomRenderer.glassCard) demande son
+        // flou même quand il est éteint.
+        boolean glass = renderer.isGlassAvailable();
         if (glass) {
             java.util.List<float[]> regions = new java.util.ArrayList<>();
             for (HudElement element : HudRegistry.elements()) {
@@ -56,11 +59,13 @@ public final class HudRenderer {
                 element.refreshSize();
                 // Un élément qui n'a rien à montrer ne sera pas dessiné : pas de flou à calculer derrière lui.
                 if (!element.hasContent()) continue;
+                if (!HudPanelRenderer.wantsGlass(element)) continue;
                 float x = element.screenX(vpWidth), y = element.screenY(vpHeight);
                 regions.add(new float[]{ x, y, x + element.w, y + element.h });
             }
-            if (regions.isEmpty()) glass = false;
-            else HudPanelRenderer.ensureGlassChain(renderer, vpWidth, vpHeight, regions.toArray(new float[0][]));
+            // Sans rectangle, pas de chaîne — mais les tailles sont mesurées :
+            // la boucle de dessin n'a pas à les refaire.
+            if (!regions.isEmpty()) HudPanelRenderer.ensureGlassChain(renderer, vpWidth, vpHeight, regions.toArray(new float[0][]));
         }        // Tout le texte du HUD en UNE passe par police au lieu d'une par
         // chaîne — voir UiRenderer.beginTextBatch. L'ordre Z convient ici : le
         // texte se retrouve au-dessus de TOUS les fonds de panneaux, ce qui est
