@@ -27,6 +27,14 @@ const ZSTD_LEVEL: i32 = 3;
 
 static SENDER: OnceLock<Option<SyncSender<Record>>> = OnceLock::new();
 
+/// Un duel est-il ouvert ? Tenu à jour par le fil d'écriture après chaque
+/// enregistrement, pour que le fil du jeu puisse le lire sans attendre.
+static RECORDING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn recording() -> bool {
+    RECORDING.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// Dépose un enregistrement pour le fil d'écriture. Ne bloque jamais : file
 /// pleine (disque à l'arrêt), l'enregistrement est perdu plutôt que de figer
 /// le jeu.
@@ -105,6 +113,7 @@ fn run(records: std::sync::mpsc::Receiver<Record>) {
                 Out::Close => close(&mut sink),
             }
         }
+        RECORDING.store(journal.recording(), std::sync::atomic::Ordering::Relaxed);
         if idle || sink.as_ref().is_some_and(|s| s.pending.len() >= BLOCK_BYTES) {
             flush(&mut sink);
         }

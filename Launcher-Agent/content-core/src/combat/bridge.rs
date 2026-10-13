@@ -16,7 +16,9 @@ use super::writer::send;
 /// attend (`NativeCombat.ABI_VERSION`), au lieu de l'appeler de travers.
 /// 2 (2026-10-13) : `yf_combat_match` — le journal ne s'écrit plus qu'entre
 /// l'ouverture et la fermeture d'un duel.
-const ABI_VERSION: u32 = 2;
+/// 3 (2026-10-13) : le noyau reconnaît les duels seul ; `yf_combat_match`
+/// devient `yf_combat_key` (la touche bascule), plus `yf_combat_recording`.
+const ABI_VERSION: u32 = 3;
 
 /// Autres joueurs transmis par tick, au plus.
 const MAX_OTHERS: usize = 16;
@@ -61,12 +63,22 @@ pub extern "C" fn yf_combat_world() {
     send(Record::World);
 }
 
-/// Le joueur ouvre (`start` ≠ 0) ou ferme un duel. Ouvrir crée le fichier du
-/// journal ; rien n'est écrit en dehors d'un duel. Ouvrir alors qu'un duel
-/// est déjà ouvert ferme d'abord celui-ci.
+/// La touche du duel : ouvre un duel s'il n'y en a pas, ferme celui qui est
+/// ouvert sinon (résultat « inconnu »). Rend le nouvel état, 1 = ouvert.
+///
+/// C'est le noyau qui sait si un duel est ouvert — il les ouvre et les ferme
+/// aussi de lui-même (`journal.rs`) ; Java ne tient aucun état.
 #[no_mangle]
-pub extern "C" fn yf_combat_match(start: i32) {
-    send(Record::Match { start: start != 0 });
+pub extern "C" fn yf_combat_key() -> i32 {
+    let start = !super::writer::recording();
+    send(Record::Match { start });
+    start as i32
+}
+
+/// Un duel est-il ouvert ? 1 = oui.
+#[no_mangle]
+pub extern "C" fn yf_combat_recording() -> i32 {
+    super::writer::recording() as i32
 }
 
 /// Un tick du jeu. `me` : `ME_LEN` nombres (`record.rs`). `others` :

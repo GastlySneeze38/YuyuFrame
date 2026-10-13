@@ -32,7 +32,7 @@ import java.util.UUID;
 public final class NativeCombat {
 
     /** Même valeur que {@code ABI_VERSION} dans combat/bridge.rs. */
-    private static final int ABI_VERSION = 2;
+    private static final int ABI_VERSION = 3;
 
     /** Nombres décrivant notre joueur à un tick — {@code ME_LEN} dans combat/record.rs, même ordre. */
     public static final int ME_LEN = 15;
@@ -76,7 +76,8 @@ public final class NativeCombat {
 
     private static MethodHandle context;
     private static MethodHandle world;
-    private static MethodHandle match;
+    private static MethodHandle key;
+    private static MethodHandle recording;
     private static MethodHandle tick;
     private static MethodHandle player;
     private static MethodHandle equipment;
@@ -122,7 +123,8 @@ public final class NativeCombat {
                 FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT,
                     ValueLayout.ADDRESS, ValueLayout.JAVA_INT), heap);
             world = linker.downcallHandle(lib.find("yf_combat_world").orElseThrow(), FunctionDescriptor.ofVoid());
-            match = linker.downcallHandle(lib.find("yf_combat_match").orElseThrow(), FunctionDescriptor.ofVoid(ValueLayout.JAVA_INT));
+            key = linker.downcallHandle(lib.find("yf_combat_key").orElseThrow(), FunctionDescriptor.of(ValueLayout.JAVA_INT));
+            recording = linker.downcallHandle(lib.find("yf_combat_recording").orElseThrow(), FunctionDescriptor.of(ValueLayout.JAVA_INT));
             tick = linker.downcallHandle(lib.find("yf_combat_tick").orElseThrow(),
                 FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT), heap);
             player = linker.downcallHandle(lib.find("yf_combat_player").orElseThrow(),
@@ -176,16 +178,34 @@ public final class NativeCombat {
     }
 
     /**
-     * Le joueur ouvre ou ferme un duel. Rien n'est écrit en dehors d'un duel.
+     * La touche du duel : ouvre un duel s'il n'y en a pas, ferme celui qui
+     * est ouvert sinon. Le noyau ouvre et ferme aussi les duels de lui-même ;
+     * la touche n'est qu'un recours.
+     *
+     * @return vrai si un duel est ouvert après l'appui
      */
-    public static void match(boolean start) {
+    public static boolean key() {
         if (!READY) {
-            return;
+            return false;
         }
         try {
-            match.invokeExact(start ? 1 : 0);
+            return (int) key.invokeExact() == 1;
         } catch (Throwable error) {
             failed(error);
+            return false;
+        }
+    }
+
+    /** Un duel est-il ouvert ? C'est le noyau qui le sait. */
+    public static boolean recording() {
+        if (!READY) {
+            return false;
+        }
+        try {
+            return (int) recording.invokeExact() == 1;
+        } catch (Throwable error) {
+            failed(error);
+            return false;
         }
     }
 
