@@ -83,6 +83,7 @@ impl Sink {
 fn run(records: std::sync::mpsc::Receiver<Record>) {
     let mut journal = Journal::new();
     let mut sink: Option<Sink> = None;
+    let mut last_flush = std::time::Instant::now();
     loop {
         let record = match records.recv_timeout(FLUSH_EVERY) {
             Ok(record) => Some(record),
@@ -114,8 +115,14 @@ fn run(records: std::sync::mpsc::Receiver<Record>) {
             }
         }
         RECORDING.store(journal.recording(), std::sync::atomic::Ordering::Relaxed);
-        if idle || sink.as_ref().is_some_and(|s| s.pending.len() >= BLOCK_BYTES) {
+        // Un bloc par seconde, à l'horloge : les ticks arrivent vingt fois par
+        // seconde, le fil ne connaît donc jamais de silence, et attendre la
+        // taille seule laissait la fin d'un duel en mémoire — perdue si le jeu
+        // se ferme à ce moment (vu le 2026-10-13 : un journal arrêté en plein
+        // combat, sans ligne de résultat).
+        if idle || last_flush.elapsed() >= FLUSH_EVERY || sink.as_ref().is_some_and(|s| s.pending.len() >= BLOCK_BYTES) {
             flush(&mut sink);
+            last_flush = std::time::Instant::now();
         }
     }
     close(&mut sink);

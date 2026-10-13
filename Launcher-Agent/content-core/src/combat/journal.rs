@@ -47,11 +47,11 @@ const PREROLL: usize = 200;
 /// écrite. Sans cette borne, la touche pressée vingt secondes après un
 /// combat ressortait ce combat-là : vu dans un journal du 2026-10-13.
 const PREROLL_TICKS: u64 = 200;
-/// Un joueur dont Java n'a plus rien dit depuis ce délai (10 s) n'est plus
+/// Un joueur dont Java n'a plus rien dit depuis ce délai (2,5 s) n'est plus
 /// là. Java redit qui est à portée chaque seconde ; sur un serveur qui ne
-/// change pas de monde entre deux manches, l'adversaire revient à chaque
-/// manche sous un nouvel identifiant, et les anciens s'accumulaient.
-const FORGET_TICKS: u64 = 200;
+/// change pas de monde entre deux duels, les adversaires précédents
+/// s'accumulaient et se retrouvaient nommés dans le duel suivant.
+const FORGET_TICKS: u64 = 50;
 /// Sans échange de dégâts depuis ce délai (30 s), le duel est tenu pour
 /// arrêté, sans résultat.
 const COMBAT_TICKS: u64 = 600;
@@ -62,6 +62,11 @@ const STRIP_TICKS: u64 = 60;
 /// Après un duel fermé, un échange n'en ouvre pas un autre avant ce délai
 /// (3 s) : un dernier coup part parfois après le verdict.
 const QUIET_TICKS: u64 = 60;
+/// L'adversaire absent des joueurs transmis depuis ce délai (3 s) : il est
+/// parti. Le duel se ferme sur un match nul — il ne s'est pas vraiment battu.
+/// Java transmet les joueurs jusqu'à très loin (`CombatTracker.RANGE`), donc
+/// un adversaire qui s'éloigne dans l'arène reste transmis.
+const LEFT_TICKS: u64 = 60;
 
 /// Un ordre pour le fil d'écriture.
 #[derive(Debug, PartialEq)]
@@ -97,6 +102,8 @@ pub struct Journal {
     foe: Option<i32>,
     /// Tick du dernier échange de dégâts, et qui l'a reçu.
     last_exchange: Option<(u64, i32)>,
+    /// Dernier tick où l'adversaire était parmi les joueurs transmis.
+    foe_seen: u64,
     /// Avant ce tick, un échange n'ouvre pas de duel : celui qui vient de se
     /// terminer laisse parfois partir un dernier coup.
     quiet_until: u64,
@@ -119,6 +126,7 @@ impl Journal {
             recording: false,
             foe: None,
             last_exchange: None,
+            foe_seen: 0,
             quiet_until: 0,
         }
     }
@@ -151,7 +159,15 @@ impl Journal {
             Record::Equipment { id, text } => {
                 // L'armure d'un des deux duellistes vient de disparaître : le
                 // serveur a rendu son verdict (voir `STRIP_TICKS`).
-                let stripped = armor_empty(&text) && self.equipment.get(&id).is_some_and(|old| !armor_empty(old));
+                let old_empty = self.equipment.get(&id).map(|old| armor_empty(old));
+                let stripped = armor_empty(&text) && old_empty == Some(false);
+                // Notre armure vient d'arriver : le serveur nous équipe pour
+                // un nouveau duel. Ce qui précède appartient au précédent ou
+                // au lobby — vu le 2026-10-13, les dix secondes gardées
+                // contenaient la fin du duel d'avant, avec son adversaire.
+                if Some(id) == self.me && !self.recording && !armor_empty(&text) && old_empty == Some(true) {
+                    self.preroll.clear();
+                }
                 self.equipment.insert(id, text);
                 if stripped {
                     self.kit_removed(id, &mut out);
@@ -163,6 +179,15 @@ impl Journal {
                 self.forget_absent();
                 // Seuls les vrais joueurs comptent : les personnages d'un lobby
                 // sont des entités « joueur » comme les autres pour le jeu.
+                // L'adversaire est-il encore là ? Regardé AVANT le filtre : un
+                // joueur parti est aussi oublié, et le filtre le cacherait.
+                if let Some(foe) = self.foe {
+                    if others.iter().any(|o| o[OTHER_ID] as i32 == foe) {
+                        self.foe_seen = self.tick;
+                    } else if self.tick - self.foe_seen >= LEFT_TICKS {
+                        self.finish("draw", "left", &mut out);
+                    }
+                }
                 let others: Vec<_> = others.into_iter().filter(|o| self.players.contains_key(&(o[OTHER_ID] as i32))).collect();
                 if engaged(&me, &others) {
                     let line = json!({
@@ -188,6 +213,7 @@ impl Journal {
                         }
                         if self.recording {
                             self.foe = Some(other);
+                            self.foe_seen = self.tick;
                             self.last_exchange = Some((self.tick, a));
                         }
                     }
@@ -531,6 +557,33 @@ mod tests {
     }
 
     #[test]
+    fn l_adversaire_qui_disparait_donne_un_match_nul() {
+        let mut journal = fighting();
+        let alone = || {
+            let mut me = [0.0; ME_LEN];
+            me[ME_ID] = ME as f64;
+            Record::Tick { me, others: Vec::new() }
+        };
+        let mut out = Vec::new();
+        for _ in 0..LEFT_TICKS {
+            assert!(journal.recording(), "une absence courte ne ferme rien");
+            out = journal.feed(alone(), 4000);
+        }
+        let verdict = result(&out);
+        assert_eq!(verdict["result"], "draw");
+        assert_eq!(verdict["end"], "left");
+        assert!(!journal.recording());
+
+        // Un adversaire seulement loin, lui, est toujours transmis : le duel continue.
+        let mut journal = fighting();
+        for _ in 0..(LEFT_TICKS * 2) {
+            journal.feed(Record::Player { id: FOE, uuid: FOE_UUID, name: "Rival".into() }, 4000);
+            journal.feed(tick(90.0), 4000);
+        }
+        assert!(journal.recording());
+    }
+
+    #[test]
     fn un_dernier_coup_apres_le_verdict_n_ouvre_pas_un_duel() {
         let mut journal = fighting();
         journal.feed(equip(FOE, STRIPPED), 4000);
@@ -541,6 +594,23 @@ mod tests {
         }
         // La manche suivante, elle, ouvre son propre fichier.
         assert!(kinds(&journal.feed(hit(FOE, ME), 5000)).starts_with("Ohp"));
+    }
+
+    #[test]
+    fn notre_armure_qui_arrive_efface_ce_qui_precedait() {
+        let mut journal = started();
+        // Comme le jeu, qui nous décrit aussi nous-mêmes.
+        journal.feed(Record::Player { id: ME, uuid: FOE_UUID, name: "Moi".into() }, 2000);
+        journal.feed(tick(1.0), 2000);
+        journal.feed(equip(ME, STRIPPED), 2000);
+        // La fin du duel précédent traîne en mémoire…
+        journal.feed(tick(1.0), 2000);
+        journal.feed(tick(1.0), 2000);
+        // …puis le serveur nous équipe : un nouveau duel se prépare.
+        journal.feed(equip(ME, ARMOR), 2000);
+        journal.feed(tick(1.0), 2000);
+        let out = journal.feed(hit(FOE, ME), 3000);
+        assert_eq!(kinds(&out).matches('s').count(), 1, "seul l'échantillon d'après l'équipement est écrit");
     }
 
     #[test]

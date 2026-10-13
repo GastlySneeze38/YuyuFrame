@@ -38,13 +38,21 @@ public final class CombatTracker {
     }
 
     /**
-     * Au-delà, un joueur n'est pas transmis. Large exprès : c'est le noyau
-     * qui décide de la distance d'engagement, pas ce filtre, qui ne sert qu'à
-     * ne pas envoyer tout un lobby vingt fois par seconde.
+     * Au-delà, un joueur n'est pas transmis. Très large exprès : c'est le
+     * noyau qui décide de la distance d'engagement, et il tient un adversaire
+     * qui n'est plus transmis pour parti (match nul). Un adversaire qui
+     * s'éloigne dans l'arène — perle, élytres — doit donc rester transmis.
      */
-    private static final double RANGE = 48.0;
+    private static final double RANGE = 128.0;
     /** Identité et équipement : une fois par seconde suffit, le noyau n'écrit que les changements. */
     private static final int IDENTITY_EVERY_TICKS = 20;
+    /**
+     * Sauf pour les joueurs proches, redits quatre fois par seconde : le
+     * noyau lit la fin d'un duel dans l'équipement de l'adversaire, qui peut
+     * disparaître dans la seconde qui suit.
+     */
+    private static final int CLOSE_EVERY_TICKS = 5;
+    private static final double CLOSE_RANGE = 24.0;
 
     /**
      * Les enchantements relevés sur chaque objet porté — ceux qui entrent
@@ -195,10 +203,15 @@ public final class CombatTracker {
         int count = fillOthers(self, at);
         NativeCombat.tick(ME, OTHERS, count);
 
-        if (ticks++ % IDENTITY_EVERY_TICKS == 0) {
+        boolean everyone = ticks % IDENTITY_EVERY_TICKS == 0;
+        boolean close = ticks % CLOSE_EVERY_TICKS == 0;
+        ticks++;
+        if (close) {
             describe(self, selfId);
             for (int i = 0; i < count; i++) {
-                describe(NEAR[i], (int) OTHERS[i * NativeCombat.OTHER_LEN]);
+                if (everyone || DIST_SQ[i] <= CLOSE_RANGE * CLOSE_RANGE) {
+                    describe(NEAR[i], (int) OTHERS[i * NativeCombat.OTHER_LEN]);
+                }
             }
         }
         java.util.Arrays.fill(NEAR, 0, count, null);
