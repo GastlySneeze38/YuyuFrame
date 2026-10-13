@@ -201,6 +201,13 @@ public final class ModuleRegistry {
         // remplace — la souris brute native aujourd'hui, le renderer ensuite.
         if (IS_1_8_9) safeRegister(() -> new OptimizationModule());
         safeRegister(() -> new MumbleLinkModule());
+        // Score PvP (docs/scoring/) : seulement la récolte du combat pour
+        // l'instant, éteint par défaut. Une version s'ajoute à VERSIONS quand
+        // ses mixins de combat existent.
+        if (com.yuyuframe.launcheragent.runtime.module.gameplay.PvpScoreModule.VERSIONS
+                .contains(System.getProperty("launcheragent.mcVersion", ""))) {
+            safeRegister(() -> new com.yuyuframe.launcheragent.runtime.module.gameplay.PvpScoreModule());
+        }
         // Macros + connexion automatique — 26.1.2 ET 1.21.11 depuis le
         // 2026-09-12. La restriction d'origine disait « la détection du login
         // lit l'arbre de commandes via des accessors qui n'existent que sur ce

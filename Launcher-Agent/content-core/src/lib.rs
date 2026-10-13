@@ -7,6 +7,7 @@ pub use self::image::fetch_image_rgba;
 pub use layout::compute_layout_json;
 pub use modrinth::{download_file, get_latest_file, get_project, get_versions, search_modrinth};
 
+mod combat;
 mod image;
 mod layout;
 mod link;
