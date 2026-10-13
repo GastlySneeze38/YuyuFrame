@@ -629,6 +629,13 @@ public final class MixinHookPointRegistry {
         always("26.3", "v26_3.core.ChatComponentAccessor263");
         always("26.3", "v26_3.core.FogRendererAccessor263");
         always("26.3", "v26_3.core.GuiGraphicsExtractorAccessor263");
+        // Entités, piles et paquets de combat (docs/scoring/capture.md).
+        always("26.3", "v26_3.core.EntityAccessor263");
+        always("26.3", "v26_3.core.LivingEntityAccessor263");
+        always("26.3", "v26_3.core.ClientLevelAccessor263");
+        always("26.3", "v26_3.core.ItemStackAccessor263");
+        always("26.3", "v26_3.core.DamageEventPacketAccessor263");
+        always("26.3", "v26_3.core.EntityEventPacketAccessor263");
         // 26.3 (hérité de 26.2) : VertexFormatElement n'a plus de constantes, les formats
         // d'attributs sont lus sur DefaultVertexFormat.
         always("26.3", "v26_3.render.DefaultVertexFormatAccessor263");
@@ -717,6 +724,10 @@ public final class MixinHookPointRegistry {
         gate("26.3", "v26_3.chat.CommandSendMixin263", HookPoint.COMMAND_SEND);
         gate("26.3", "v26_3.chat.CommandTreeMixin263", HookPoint.COMMAND_TREE_RECEIVE);
         gate("26.3", "v26_3.combat.PiercingAttackMixin263", HookPoint.PIERCING_ATTACK);
+        gate("26.3", "v26_3.combat.EntityAttackMixin263", HookPoint.ENTITY_ATTACK);
+        gate("26.3", "v26_3.combat.DamageEventMixin263", HookPoint.DAMAGE_EVENT);
+        gate("26.3", "v26_3.combat.EntityEventMixin263", HookPoint.ENTITY_EVENT);
+        gate("26.3", "v26_3.combat.ItemUseMixin263", HookPoint.ITEM_USE);
 
         // ── Item ───────────────────────────────────────────────────────────
         gate("26.3", "v26_3.item.ItemTooltipMixin263", HookPoint.ITEM_TOOLTIP);
@@ -726,6 +737,7 @@ public final class MixinHookPointRegistry {
         gate("26.3", "v26_3.lifecycle.EntityLoadMixin263", HookPoint.ENTITY_LOAD);
         gate("26.3", "v26_3.lifecycle.EntityUnloadMixin263", HookPoint.ENTITY_UNLOAD);
         gate("26.3", "v26_3.lifecycle.ClientLevelLoadMixin263", HookPoint.CLIENT_LEVEL_LOAD);
+        gate("26.3", "v26_3.lifecycle.ServerConnectMixin263", HookPoint.SERVER_CONNECT);
 
         // ── Horloge ────────────────────────────────────────────────────────
         gate("26.3", "v26_3.clock.ClockTotalTicksMixin263", HookPoint.CLOCK_TOTAL_TICKS);
