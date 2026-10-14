@@ -38,7 +38,13 @@ use serde_json::{json, Value};
 use super::record::*;
 
 /// Version du format du journal (`telemetry_version` de docs/scoring/stockage.md).
-pub const TELEMETRY_VERSION: u32 = 1;
+///
+/// Version 2 (2026-10-14) : les mesures des familles — six nombres de plus
+/// pour notre joueur et deux pour les autres dans les lignes `s`, l'objet et
+/// la case d'un coup dans les lignes `a`, et deux sortes de lignes : `n` (son
+/// du bouclier) et `c` (recharge d'un objet). Un journal de version 1 se lit
+/// toujours (`parse.rs` complète les nombres absents par −1).
+pub const TELEMETRY_VERSION: u32 = 2;
 /// Un autre joueur à moins de cette distance : on est engagé.
 const ENGAGE_BLOCKS: f64 = 16.0;
 /// Lignes gardées avant l'ouverture du duel (10 s d'échantillons).
@@ -231,10 +237,13 @@ impl Journal {
                     }
                 }
                 let line = match kind {
-                    EVENT_ATTACK => json!({ "k": "a", "t": self.tick, "target": a }),
+                    EVENT_ATTACK => json!({ "k": "a", "t": self.tick, "target": a, "slot": b, "item": text }),
                     EVENT_DAMAGE => json!({ "k": "d", "t": self.tick, "entity": a, "cause": b, "direct": c, "type": text }),
                     EVENT_ENTITY => json!({ "k": "v", "t": self.tick, "entity": a, "status": b }),
                     EVENT_ITEM_USE => json!({ "k": "u", "t": self.tick, "item": text, "main": a == 1 }),
+                    // Son du bouclier : la seule trace d'un coup arrêté.
+                    EVENT_SOUND => json!({ "k": "n", "t": self.tick, "entity": a, "sound": text }),
+                    EVENT_COOLDOWN => json!({ "k": "c", "t": self.tick, "group": text, "ticks": a }),
                     _ => return out,
                 };
                 self.emit(line, &mut out);
@@ -476,6 +485,21 @@ mod tests {
         journal.feed(equip(FOE, ARMOR), 2000);
         journal.feed(hit(FOE, ME), 3000);
         journal
+    }
+
+    #[test]
+    fn le_bouclier_la_recharge_et_l_arme_du_coup_s_ecrivent_en_duel() {
+        let mut journal = fighting();
+        let line = |out: Vec<Out>| match out.last() {
+            Some(Out::Line(line)) => serde_json::from_str::<Value>(line).unwrap(),
+            _ => panic!("une ligne attendue"),
+        };
+        let block = line(journal.feed(Record::Event { kind: EVENT_SOUND, a: ME, b: 0, c: 0, text: "item.shield.block".into() }, 3000));
+        assert_eq!((block["k"].as_str(), block["entity"].as_i64(), block["sound"].as_str()), (Some("n"), Some(ME as i64), Some("item.shield.block")));
+        let cooldown = line(journal.feed(Record::Event { kind: EVENT_COOLDOWN, a: 100, b: 0, c: 0, text: "shield".into() }, 3000));
+        assert_eq!((cooldown["k"].as_str(), cooldown["group"].as_str(), cooldown["ticks"].as_i64()), (Some("c"), Some("shield"), Some(100)));
+        let attack = line(journal.feed(Record::Event { kind: EVENT_ATTACK, a: FOE, b: 3, c: 0, text: "mace".into() }, 3000));
+        assert_eq!((attack["k"].as_str(), attack["slot"].as_i64(), attack["item"].as_str()), (Some("a"), Some(3), Some("mace")));
     }
 
     #[test]

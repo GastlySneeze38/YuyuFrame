@@ -65,7 +65,8 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
             // DÉCLARÉS, sinon les mixins correspondants ne sont pas tissés du
             // tout (voir MixinHookPointRegistry).
             HookPoint.CLIENT_TICK, HookPoint.SERVER_CONNECT, HookPoint.CLIENT_LEVEL_LOAD,
-            HookPoint.ENTITY_ATTACK, HookPoint.DAMAGE_EVENT, HookPoint.ENTITY_EVENT, HookPoint.ITEM_USE);
+            HookPoint.ENTITY_ATTACK, HookPoint.DAMAGE_EVENT, HookPoint.ENTITY_EVENT, HookPoint.ITEM_USE,
+            HookPoint.SOUND_PLAYED, HookPoint.ITEM_COOLDOWN);
         iconUrl = icons8("sword");
         CombatTracker.install();
         CombatTracker.setActive(isEnabled());

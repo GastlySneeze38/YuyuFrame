@@ -293,8 +293,10 @@ public enum AccessPoint {
      */
     PLAYER_MAIN_HAND_KIND,
     /**
-     * L'ENTITÉ passée en receveur bloque-t-elle avec une épée ? {@code Boolean}
-     * ({@code false} pour une entité qui n'est pas un joueur).
+     * L'ENTITÉ passée en receveur bloque-t-elle ? {@code Boolean}. En 1.8.9,
+     * avec une épée ({@code false} pour une entité qui n'est pas un joueur) ;
+     * en 26.x, avec un objet bloquant levé et armé — le bouclier
+     * ({@code LivingEntity.isBlocking}, qui tient compte du délai d'armement).
      */
     ENTITY_IS_BLOCKING,
     /**
@@ -678,6 +680,25 @@ public enum AccessPoint {
      * l'objet en main de notre joueur.
      */
     ITEM_ENCHANT_LEVEL,
+    /**
+     * Rotation horizontale de la TÊTE de l'entité, en degrés ({@code Float}) —
+     * c'est elle que le jeu utilise pour savoir si un coup arrive devant un
+     * bouclier levé. Receveur : l'entité ; {@code null} = notre joueur.
+     */
+    ENTITY_HEAD_YAW,
+    /** L'entité plane-t-elle en élytre ? {@code Boolean}. Receveur : l'entité. */
+    ENTITY_IS_GLIDING,
+    /** L'entité utilise-t-elle un objet (bouclier levé, nourriture, arc…) ? {@code Boolean}. Receveur : l'entité. */
+    ENTITY_IS_USING_ITEM,
+    /**
+     * Le bloc à cette position est-il solide (on se tient dessus) ?
+     * {@code Boolean}. Pas de receveur ; arguments : x, y, z entiers. Sert à
+     * lire la hauteur d'un joueur au-dessus du sol — la plupart des arènes
+     * sont en relief (docs/scoring/familles/defense.md).
+     */
+    LEVEL_SOLID_BLOCK,
+    /** La case de la barre d'inventaire sélectionnée par notre joueur, 0 à 8 ({@code Integer}). */
+    PLAYER_SELECTED_SLOT,
 
     // ── Sons d'interface (net.minecraft.client.sounds.SoundManager) ────────
     /**

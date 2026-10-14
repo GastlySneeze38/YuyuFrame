@@ -373,6 +373,38 @@ public final class AccessorBindings263 {
             if (!(r instanceof ItemStack) || a.length < 1 || !(a[0] instanceof String)) return null;
             return Integer.valueOf(enchantLevel((ItemStack) r, (String) a[0]));
         });
+        // Bouclier, regard, élytre, terrain, barre d'inventaire : les mesures
+        // des familles du scoring (docs/scoring/familles/). Tout par accessors.
+        AccessorRegistry.bind(AccessPoint.ENTITY_HEAD_YAW, (r, a) -> {
+            EntityAccessor263 e = entity(r);
+            return e == null ? null : Float.valueOf(e.la$yHeadRot());
+        });
+        AccessorRegistry.bind(AccessPoint.ENTITY_IS_BLOCKING, (r, a) -> {
+            LivingEntityAccessor263 e = living(r);
+            return e == null ? null : Boolean.valueOf(e.la$isBlocking());
+        });
+        AccessorRegistry.bind(AccessPoint.ENTITY_IS_GLIDING, (r, a) -> {
+            LivingEntityAccessor263 e = living(r);
+            return e == null ? null : Boolean.valueOf(e.la$isFallFlying());
+        });
+        AccessorRegistry.bind(AccessPoint.ENTITY_IS_USING_ITEM, (r, a) -> {
+            LivingEntityAccessor263 e = living(r);
+            return e == null ? null : Boolean.valueOf(e.la$isUsingItem());
+        });
+        AccessorRegistry.bind(AccessPoint.LEVEL_SOLID_BLOCK, (r, a) -> {
+            if (a.length < 3 || !(a[0] instanceof Number) || !(a[1] instanceof Number) || !(a[2] instanceof Number)) return null;
+            MinecraftAccessor263 m = mc(null);
+            Object level = m == null ? null : m.la$level();
+            if (!(level instanceof LevelAccessor263)) return null;
+            Object state = ((LevelAccessor263) level).la$blockState(new net.minecraft.core.BlockPos(
+                ((Number) a[0]).intValue(), ((Number) a[1]).intValue(), ((Number) a[2]).intValue()));
+            return state instanceof BlockStateAccessor263 ? Boolean.valueOf(((BlockStateAccessor263) state).la$isSolid()) : null;
+        });
+        AccessorRegistry.bind(AccessPoint.PLAYER_SELECTED_SLOT, (r, a) -> {
+            Object p = r != null ? r : player(null);
+            Object inventory = p instanceof PlayerAccessor263 ? ((PlayerAccessor263) p).la$inventory() : null;
+            return inventory instanceof InventoryAccessor263 ? Integer.valueOf(((InventoryAccessor263) inventory).la$selectedSlot()) : null;
+        });
         AccessorRegistry.bind(AccessPoint.PLAYER_HELD_FOOD, (r, a) -> {
             LocalPlayer p = player(r);
             if (p == null) return null;
@@ -596,6 +628,12 @@ public final class AccessorBindings263 {
     private static EntityAccessor263 entity(Object receiver) {
         Object target = receiver != null ? receiver : player(null);
         return target instanceof EntityAccessor263 ? (EntityAccessor263) target : null;
+    }
+
+    /** Comme {@link #entity}, pour une entité vivante. */
+    private static LivingEntityAccessor263 living(Object receiver) {
+        Object target = receiver != null ? receiver : player(null);
+        return target instanceof LivingEntityAccessor263 ? (LivingEntityAccessor263) target : null;
     }
 
     /**

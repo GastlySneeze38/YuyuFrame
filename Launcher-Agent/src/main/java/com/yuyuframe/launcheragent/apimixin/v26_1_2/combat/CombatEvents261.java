@@ -2,8 +2,12 @@ package com.yuyuframe.launcheragent.apimixin.v26_1_2.combat;
 
 import com.yuyuframe.launcheragent.apimixin.data.DamageEvent;
 import com.yuyuframe.launcheragent.apimixin.data.EntityEvent;
+import com.yuyuframe.launcheragent.apimixin.data.ItemCooldown;
 import com.yuyuframe.launcheragent.apimixin.data.ItemUse;
+import com.yuyuframe.launcheragent.apimixin.data.SoundPlayed;
+import com.yuyuframe.launcheragent.apimixin.v26_1_2.core.CooldownPacketAccessor261;
 import com.yuyuframe.launcheragent.apimixin.v26_1_2.core.DamageEventPacketAccessor261;
+import com.yuyuframe.launcheragent.apimixin.v26_1_2.core.SoundPacketAccessor261;
 import com.yuyuframe.launcheragent.apimixin.v26_1_2.core.EntityEventPacketAccessor261;
 import com.yuyuframe.launcheragent.apimixin.v26_1_2.core.ItemStackAccessor261;
 import com.yuyuframe.launcheragent.apimixin.v26_1_2.core.LivingEntityAccessor261;
@@ -54,6 +58,19 @@ public final class CombatEvents261 {
         if (!(packet instanceof EntityEventPacketAccessor261)) return null;
         EntityEventPacketAccessor261 p = (EntityEventPacketAccessor261) packet;
         return new EntityEvent(p.la$entityId(), p.la$eventId());
+    }
+
+    public static SoundPlayed sound(Object packet) {
+        if (!(packet instanceof SoundPacketAccessor261)) return null;
+        SoundPacketAccessor261 p = (SoundPacketAccessor261) packet;
+        return new SoundPlayed(path(p.la$sound()), p.la$x(), p.la$y(), p.la$z());
+    }
+
+    public static ItemCooldown cooldown(Object packet) {
+        if (!(packet instanceof CooldownPacketAccessor261)) return null;
+        CooldownPacketAccessor261 p = (CooldownPacketAccessor261) packet;
+        net.minecraft.resources.Identifier group = p.la$cooldownGroup();
+        return new ItemCooldown(group == null ? null : group.getPath(), p.la$duration());
     }
 
     public static ItemUse itemUse(Object player, InteractionHand hand) {

@@ -9,7 +9,7 @@ use std::collections::HashMap;
 
 use serde_json::Value;
 
-use super::super::record::{ME_LEN, OTHER_LEN};
+use super::super::record::{ME_LEN, ME_LEN_V1, OTHER_LEN, OTHER_LEN_V1};
 
 /// Code d'événement d'entité : un totem vient d'être consommé.
 const STATUS_TOTEM: i64 = 35;
@@ -85,12 +85,15 @@ fn int(value: &Value) -> Option<i32> {
     value.as_i64().map(|v| v as i32)
 }
 
-fn numbers<const N: usize>(value: &Value) -> Option<[f64; N]> {
+/// Les nombres d'une ligne `s`. Un journal plus ancien en porte moins
+/// (`min`, la longueur de la version 1) : ceux qui manquent valent −1,
+/// « inconnu », comme Java les écrit quand il ne sait pas.
+fn numbers<const N: usize>(value: &Value, min: usize) -> Option<[f64; N]> {
     let list = value.as_array()?;
-    if list.len() != N {
+    if list.len() < min || list.len() > N {
         return None;
     }
-    let mut out = [0.0; N];
+    let mut out = [-1.0; N];
     for (slot, v) in out.iter_mut().zip(list) {
         *slot = v.as_f64()?;
     }
@@ -148,9 +151,9 @@ pub fn parse(text: &str) -> Option<Duel> {
         let t = line["t"].as_u64().unwrap_or(0);
         match line["k"].as_str().unwrap_or("") {
             "s" => {
-                let Some(mine) = numbers::<ME_LEN>(&line["me"]) else { continue };
+                let Some(mine) = numbers::<ME_LEN>(&line["me"], ME_LEN_V1) else { continue };
                 let other = line["o"].as_array().and_then(|list| {
-                    list.iter().filter_map(numbers::<OTHER_LEN>).find(|o| Some(o[0] as i32) == foe)
+                    list.iter().filter_map(|o| numbers::<OTHER_LEN>(o, OTHER_LEN_V1)).find(|o| Some(o[0] as i32) == foe)
                 });
                 duel.samples.push(Sample { t, me: mine, foe: other });
             }
@@ -239,6 +242,20 @@ mod tests {
         let duel = parse(&journal("mace", "mace")).unwrap();
         assert_eq!(duel.foe_uuid.as_deref(), Some("b804a4a4df5d"), "sans tirets, en minuscules");
         assert_eq!(duel.foe_name.as_deref(), Some("Rival"));
+    }
+
+    #[test]
+    fn les_journaux_des_deux_versions_se_lisent() {
+        let v1 = [0.5; ME_LEN_V1];
+        let v2 = [0.5; ME_LEN];
+        let read_v1 = numbers::<ME_LEN>(&serde_json::json!(v1), ME_LEN_V1).expect("version 1");
+        assert_eq!(read_v1[ME_LEN_V1 - 1], 0.5);
+        assert_eq!(read_v1[ME_LEN - 1], -1.0, "les mesures absentes d'un journal de version 1 sont inconnues");
+        assert_eq!(numbers::<ME_LEN>(&serde_json::json!(v2), ME_LEN_V1).unwrap(), v2);
+        assert!(numbers::<ME_LEN>(&serde_json::json!(vec![0.5; 3]), ME_LEN_V1).is_none(), "trop court");
+        assert!(numbers::<ME_LEN>(&serde_json::json!(vec![0.5; ME_LEN + 1]), ME_LEN_V1).is_none(), "trop long");
+        let other = numbers::<OTHER_LEN>(&serde_json::json!(vec![7.0; OTHER_LEN_V1]), OTHER_LEN_V1).unwrap();
+        assert_eq!((other[0], other[OTHER_LEN - 1]), (7.0, -1.0));
     }
 
     #[test]

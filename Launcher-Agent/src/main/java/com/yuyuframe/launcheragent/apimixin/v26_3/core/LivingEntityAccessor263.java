@@ -19,4 +19,14 @@ public interface LivingEntityAccessor263 {
 
     @Invoker("getItemInHand")
     ItemStack la$itemInHand(InteractionHand hand);
+
+    /** Objet bloquant levé ET armé (le délai du bouclier est passé) — javap, jar 26.3, 2026-10-14. */
+    @Invoker("isBlocking")
+    boolean la$isBlocking();
+
+    @Invoker("isFallFlying")
+    boolean la$isFallFlying();
+
+    @Invoker("isUsingItem")
+    boolean la$isUsingItem();
 }

@@ -49,4 +49,8 @@ public interface EntityAccessor261 {
 
     @Invoker("onGround")
     boolean la$onGround();
+
+    /** Déclarée sur {@code Entity}, redéfinie par {@code LivingEntity} (javap, jar 26.1.2, 2026-10-14). */
+    @Invoker("getYHeadRot")
+    float la$yHeadRot();
 }

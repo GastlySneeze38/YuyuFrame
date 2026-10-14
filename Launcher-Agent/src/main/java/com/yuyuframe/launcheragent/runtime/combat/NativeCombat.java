@@ -32,7 +32,7 @@ import java.util.UUID;
 public final class NativeCombat {
 
     /** Même valeur que {@code ABI_VERSION} dans combat/bridge.rs. */
-    private static final int ABI_VERSION = 8;
+    private static final int ABI_VERSION = 9;
 
     /** Place réservée au texte de l'historique : deux cents duels en tiennent bien moins. */
     private static final int HISTORY_BYTES = 256 * 1024;
@@ -90,7 +90,7 @@ public final class NativeCombat {
     public static final int REPORT_MODE = 37;
 
     /** Nombres décrivant notre joueur à un tick — {@code ME_LEN} dans combat/record.rs, même ordre. */
-    public static final int ME_LEN = 15;
+    public static final int ME_LEN = 21;
     public static final int ME_ID = 0;
     public static final int ME_X = 1;
     public static final int ME_Y = 2;
@@ -106,9 +106,28 @@ public final class NativeCombat {
     public static final int ME_ATTACK = 12;
     public static final int ME_FLAGS = 13;
     public static final int ME_PING = 14;
+    /** Barre de faim (0 à 20) et saturation ; −1 si inconnues. */
+    public static final int ME_FOOD = 15;
+    public static final int ME_SATURATION = 16;
+    /** Case sélectionnée de la barre d'inventaire, 0 à 8 ; −1 si inconnue. */
+    public static final int ME_SLOT = 17;
+    /** Hauteur des pieds au-dessus du premier bloc solide en dessous, en blocs ; −1 sans sol à portée. */
+    public static final int ME_GROUND = 18;
+    /** Niveau des effets de force et de vitesse (amplificateur + 1) ; 0 sans l'effet. */
+    public static final int ME_STRENGTH = 19;
+    public static final int ME_SPEED = 20;
 
-    /** Nombres décrivant un autre joueur à un tick — {@code OTHER_LEN} dans combat/record.rs : identifiant, position, vitesse, drapeaux. */
-    public static final int OTHER_LEN = 8;
+    /**
+     * Nombres décrivant un autre joueur à un tick — {@code OTHER_LEN} dans
+     * combat/record.rs : identifiant, position, vitesse, drapeaux, rotation
+     * de la tête, hauteur au-dessus du sol.
+     */
+    public static final int OTHER_LEN = 10;
+    public static final int OTHER_FLAGS = 7;
+    /** Rotation horizontale de la tête, en degrés : de là se lit s'il nous fait face (bouclier). */
+    public static final int OTHER_HEAD_YAW = 8;
+    /** Comme {@link #ME_GROUND}. */
+    public static final int OTHER_GROUND = 9;
     /** Autres joueurs transmis par tick, au plus — {@code MAX_OTHERS} dans combat/bridge.rs. */
     public static final int MAX_OTHERS = 16;
 
@@ -120,12 +139,22 @@ public final class NativeCombat {
     public static final int FLAG_SPECTATOR = 1 << 5;
     public static final int FLAG_CREATIVE = 1 << 6;
     public static final int FLAG_PASSENGER = 1 << 7;
+    /** Objet bloquant levé ET armé (bouclier) — pour notre joueur comme pour les autres. */
+    public static final int FLAG_BLOCKING = 1 << 8;
 
-    /** Sortes d'événements — {@code EVENT_*} dans combat/record.rs. */
+    /**
+     * Sortes d'événements — {@code EVENT_*} dans combat/record.rs.
+     * {@link #EVENT_ATTACK} : a = cible, b = case sélectionnée, texte = objet
+     * en main AU MOMENT du coup (un attribute swap se lit là).
+     */
     public static final int EVENT_ATTACK = 1;
     public static final int EVENT_DAMAGE = 2;
     public static final int EVENT_ENTITY = 3;
     public static final int EVENT_ITEM_USE = 4;
+    /** Son du bouclier : a = joueur sur qui il est joué (le plus proche), texte = son ({@code item.shield.block}, {@code item.shield.break}). */
+    public static final int EVENT_SOUND = 5;
+    /** Recharge d'un groupe de nos objets : a = durée en ticks, texte = groupe ({@code shield}). */
+    public static final int EVENT_COOLDOWN = 6;
 
     private static final byte[] NO_BYTES = new byte[0];
 

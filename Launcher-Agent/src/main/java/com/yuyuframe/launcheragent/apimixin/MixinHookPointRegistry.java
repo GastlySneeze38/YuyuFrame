@@ -145,6 +145,14 @@ public final class MixinHookPointRegistry {
         always("26.1.2", "v26_1_2.core.ItemStackAccessor261");
         always("26.1.2", "v26_1_2.core.DamageEventPacketAccessor261");
         always("26.1.2", "v26_1_2.core.EntityEventPacketAccessor261");
+        // Mesures des familles du scoring (docs/scoring/familles/) : sons et
+        // recharges, terrain, barre d'inventaire.
+        always("26.1.2", "v26_1_2.core.SoundPacketAccessor261");
+        always("26.1.2", "v26_1_2.core.CooldownPacketAccessor261");
+        always("26.1.2", "v26_1_2.core.LevelAccessor261");
+        always("26.1.2", "v26_1_2.core.BlockStateAccessor261");
+        always("26.1.2", "v26_1_2.core.PlayerAccessor261");
+        always("26.1.2", "v26_1_2.core.InventoryAccessor261");
         always("26.1.2", "v26_1_2.render.VertexFormatElementAccessor261");
         always("26.1.2", "v26_1_2.render.GameRendererAccessor261");
         always("26.1.2", "v26_1_2.render.GuiRendererAccessor261");
@@ -243,6 +251,8 @@ public final class MixinHookPointRegistry {
         gate("26.1.2", "v26_1_2.combat.DamageEventMixin261", HookPoint.DAMAGE_EVENT);
         gate("26.1.2", "v26_1_2.combat.EntityEventMixin261", HookPoint.ENTITY_EVENT);
         gate("26.1.2", "v26_1_2.combat.ItemUseMixin261", HookPoint.ITEM_USE);
+        gate("26.1.2", "v26_1_2.combat.SoundEventMixin261", HookPoint.SOUND_PLAYED);
+        gate("26.1.2", "v26_1_2.combat.ItemCooldownMixin261", HookPoint.ITEM_COOLDOWN);
 
         // ── Item ───────────────────────────────────────────────────────────
         gate("26.1.2", "v26_1_2.item.ItemTooltipMixin261", HookPoint.ITEM_TOOLTIP);
@@ -636,6 +646,14 @@ public final class MixinHookPointRegistry {
         always("26.3", "v26_3.core.ItemStackAccessor263");
         always("26.3", "v26_3.core.DamageEventPacketAccessor263");
         always("26.3", "v26_3.core.EntityEventPacketAccessor263");
+        // Mesures des familles du scoring (docs/scoring/familles/) : sons et
+        // recharges, terrain, barre d'inventaire.
+        always("26.3", "v26_3.core.SoundPacketAccessor263");
+        always("26.3", "v26_3.core.CooldownPacketAccessor263");
+        always("26.3", "v26_3.core.LevelAccessor263");
+        always("26.3", "v26_3.core.BlockStateAccessor263");
+        always("26.3", "v26_3.core.PlayerAccessor263");
+        always("26.3", "v26_3.core.InventoryAccessor263");
         // 26.3 (hérité de 26.2) : VertexFormatElement n'a plus de constantes, les formats
         // d'attributs sont lus sur DefaultVertexFormat.
         always("26.3", "v26_3.render.DefaultVertexFormatAccessor263");
@@ -728,6 +746,8 @@ public final class MixinHookPointRegistry {
         gate("26.3", "v26_3.combat.DamageEventMixin263", HookPoint.DAMAGE_EVENT);
         gate("26.3", "v26_3.combat.EntityEventMixin263", HookPoint.ENTITY_EVENT);
         gate("26.3", "v26_3.combat.ItemUseMixin263", HookPoint.ITEM_USE);
+        gate("26.3", "v26_3.combat.SoundEventMixin263", HookPoint.SOUND_PLAYED);
+        gate("26.3", "v26_3.combat.ItemCooldownMixin263", HookPoint.ITEM_COOLDOWN);
 
         // ── Item ───────────────────────────────────────────────────────────
         gate("26.3", "v26_3.item.ItemTooltipMixin263", HookPoint.ITEM_TOOLTIP);

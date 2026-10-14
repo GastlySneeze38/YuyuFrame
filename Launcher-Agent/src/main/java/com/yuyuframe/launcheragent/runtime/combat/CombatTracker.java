@@ -6,8 +6,11 @@ import com.yuyuframe.launcheragent.apimixin.HookPoint;
 import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.apimixin.data.DamageEvent;
 import com.yuyuframe.launcheragent.apimixin.data.EntityEvent;
+import com.yuyuframe.launcheragent.apimixin.data.ItemCooldown;
 import com.yuyuframe.launcheragent.apimixin.data.ItemInfo;
 import com.yuyuframe.launcheragent.apimixin.data.ItemUse;
+import com.yuyuframe.launcheragent.apimixin.data.PlayerEffect;
+import com.yuyuframe.launcheragent.apimixin.data.SoundPlayed;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.game.NetworkData;
 import com.yuyuframe.launcheragent.runtime.game.PlayerData;
@@ -90,7 +93,23 @@ public final class CombatTracker {
             return false;
         });
         VanillaHookRegistry.register(HookPoint.ENTITY_ATTACK, ctx -> {
-            if (active) NativeCombat.event(NativeCombat.EVENT_ATTACK, AccessorRegistry.getInt(AccessPoint.ENTITY_NETWORK_ID, ctx, NO_ID), 0, 0, null);
+            // L'objet en main et la case AU MOMENT du coup : un attribute
+            // swap (changer d'objet et frapper dans le même tick) ne se lit
+            // qu'ici — le relevé du tick, lui, a vu l'objet d'avant.
+            if (active) guarded(() -> NativeCombat.event(NativeCombat.EVENT_ATTACK,
+                AccessorRegistry.getInt(AccessPoint.ENTITY_NETWORK_ID, ctx, NO_ID),
+                AccessorRegistry.getInt(AccessPoint.PLAYER_SELECTED_SLOT, null, -1), 0, heldItem()));
+            return false;
+        });
+        VanillaHookRegistry.register(HookPoint.SOUND_PLAYED, ctx -> {
+            if (active && ctx instanceof SoundPlayed) guarded(() -> shieldSound((SoundPlayed) ctx));
+            return false;
+        });
+        VanillaHookRegistry.register(HookPoint.ITEM_COOLDOWN, ctx -> {
+            if (active && ctx instanceof ItemCooldown) {
+                ItemCooldown c = (ItemCooldown) ctx;
+                NativeCombat.event(NativeCombat.EVENT_COOLDOWN, c.ticks, 0, 0, c.group);
+            }
             return false;
         });
         VanillaHookRegistry.register(HookPoint.DAMAGE_EVENT, ctx -> {
@@ -190,14 +209,18 @@ public final class CombatTracker {
         NativeCombat.tick(ME, OTHERS, count);
 
         boolean everyone = ticks % IDENTITY_EVERY_TICKS == 0;
-        boolean close = ticks % CLOSE_EVERY_TICKS == 0;
+        boolean closeIdentity = ticks % CLOSE_EVERY_TICKS == 0;
         ticks++;
-        if (close) {
-            describe(self, selfId);
-            for (int i = 0; i < count; i++) {
-                if (everyone || DIST_SQ[i] <= CLOSE_RANGE * CLOSE_RANGE) {
-                    describe(NEAR[i], (int) OTHERS[i * NativeCombat.OTHER_LEN]);
-                }
+        // L'équipement de notre joueur et des joueurs proches est relu À
+        // CHAQUE TICK et transmis seulement s'il a changé : un totem remis,
+        // un élytre échangé contre un plastron, un objet sorti au dernier
+        // moment se lisent au tick près (docs/scoring/familles/ressources.md,
+        // bug-use.md). Les autres, une fois par seconde.
+        describe(self, selfId, closeIdentity, true);
+        for (int i = 0; i < count; i++) {
+            boolean near = DIST_SQ[i] <= CLOSE_RANGE * CLOSE_RANGE;
+            if (near || everyone) {
+                describe(NEAR[i], (int) OTHERS[i * NativeCombat.OTHER_LEN], everyone || (near && closeIdentity), true);
             }
         }
         java.util.Arrays.fill(NEAR, 0, count, null);
@@ -218,14 +241,102 @@ public final class CombatTracker {
         ME[NativeCombat.ME_MAX_HEALTH] = PlayerData.maxHealth();
         ME[NativeCombat.ME_FALL] = AccessorRegistry.getDouble(AccessPoint.PLAYER_FALL_DISTANCE, null, 0);
         ME[NativeCombat.ME_ATTACK] = PlayerData.attackStrengthScale(0f, -1f);
-        ME[NativeCombat.ME_FLAGS] = selfFlags();
+        ME[NativeCombat.ME_FLAGS] = selfFlags(self);
         ME[NativeCombat.ME_PING] = AccessorRegistry.getInt(AccessPoint.PLAYER_PING, null, -1);
+        float[] food = PlayerData.food();
+        ME[NativeCombat.ME_FOOD] = food == null ? -1 : food[0];
+        ME[NativeCombat.ME_SATURATION] = food == null ? -1 : food[1];
+        ME[NativeCombat.ME_SLOT] = AccessorRegistry.getInt(AccessPoint.PLAYER_SELECTED_SLOT, null, -1);
+        ME[NativeCombat.ME_GROUND] = groundHeight(at);
+        int strength = 0, speedLevel = 0;
+        for (PlayerEffect effect : PlayerData.activeEffects()) {
+            String path = effect.registryPath();
+            if ("strength".equals(path)) strength = effect.amplifier + 1;
+            else if ("speed".equals(path)) speedLevel = effect.amplifier + 1;
+        }
+        ME[NativeCombat.ME_STRENGTH] = strength;
+        ME[NativeCombat.ME_SPEED] = speedLevel;
     }
 
-    private static int selfFlags() {
+    /**
+     * La hauteur des pieds au-dessus du premier bloc solide en dessous, en
+     * blocs ; −1 sans sol à {@link #GROUND_SCAN} blocs. On lit le terrain : la
+     * plupart des arènes sont en relief, la hauteur depuis le dernier contact
+     * avec le sol y serait fausse (docs/scoring/familles/defense.md).
+     */
+    private static double groundHeight(double[] pos) {
+        int x = (int) Math.floor(pos[0]);
+        int z = (int) Math.floor(pos[2]);
+        int start = (int) Math.floor(pos[1] - 1e-3);
+        for (int dy = 0; dy < GROUND_SCAN; dy++) {
+            int y = start - dy;
+            Object solid = AccessorRegistry.invoke(AccessPoint.LEVEL_SOLID_BLOCK, null, x, y, z);
+            if (solid == null) {
+                return -1; // version sans lecture du terrain, ou pas de monde
+            }
+            if (Boolean.TRUE.equals(solid)) {
+                return Math.max(0, pos[1] - (y + 1));
+            }
+        }
+        return -1;
+    }
+
+    /** Profondeur de la lecture du terrain sous un joueur. */
+    private static final int GROUND_SCAN = 48;
+
+    /** L'objet en main de notre joueur, maintenant ; {@code null} main vide. */
+    private static String heldItem() {
+        Object equipment = AccessorRegistry.get(AccessPoint.ENTITY_EQUIPMENT, null);
+        if (!(equipment instanceof ItemInfo[]) || ((ItemInfo[]) equipment).length < 5) {
+            return null;
+        }
+        ItemInfo hand = ((ItemInfo[]) equipment)[4];
+        if (hand == null || hand.empty || hand.handle == null) {
+            return null;
+        }
+        Object id = AccessorRegistry.get(AccessPoint.ITEM_ID, hand.handle);
+        return id instanceof String ? (String) id : null;
+    }
+
+    /**
+     * Le son du bouclier — blocage ({@code item.shield.block}) ou bouclier
+     * désactivé ({@code item.shield.break}) — rattaché au joueur sur qui il
+     * est joué : le plus proche de sa position, à moins de 2 blocs. Les autres
+     * sons ne sont pas transmis.
+     */
+    private static void shieldSound(SoundPlayed sound) {
+        if (sound.sound == null || !sound.sound.startsWith("item.shield")) {
+            return;
+        }
+        Object players = AccessorRegistry.get(AccessPoint.LEVEL_PLAYERS, null);
+        if (!(players instanceof Object[])) {
+            return;
+        }
+        int nearest = NO_ID;
+        double best = SOUND_MATCH * SOUND_MATCH;
+        for (Object player : (Object[]) players) {
+            double[] pos = vector(AccessPoint.ENTITY_POSITION, player);
+            if (pos == null) {
+                continue;
+            }
+            double dx = pos[0] - sound.x, dy = pos[1] - sound.y, dz = pos[2] - sound.z;
+            double distSq = dx * dx + dy * dy + dz * dz;
+            if (distSq <= best) {
+                best = distSq;
+                nearest = AccessorRegistry.getInt(AccessPoint.ENTITY_NETWORK_ID, player, NO_ID);
+            }
+        }
+        NativeCombat.event(NativeCombat.EVENT_SOUND, nearest, 0, 0, sound.sound);
+    }
+
+    /** Distance au-delà de laquelle un son n'est rattaché à aucun joueur. Le son est joué aux pieds de celui qui bloque. */
+    private static final double SOUND_MATCH = 2.0;
+
+    private static int selfFlags(Object self) {
         boolean[] move = PlayerData.movementFlags();
         boolean[] mode = PlayerData.modeFlags();
         int flags = 0;
+        if (AccessorRegistry.getBoolean(AccessPoint.ENTITY_IS_BLOCKING, self, false)) flags |= NativeCombat.FLAG_BLOCKING;
         if (move[PlayerData.FLAG_ON_GROUND]) flags |= NativeCombat.FLAG_ON_GROUND;
         if (move[PlayerData.FLAG_SPRINTING]) flags |= NativeCombat.FLAG_SPRINTING;
         if (move[PlayerData.FLAG_GLIDING]) flags |= NativeCombat.FLAG_GLIDING;
@@ -297,25 +408,75 @@ public final class CombatTracker {
         OTHERS[base + 4] = speed == null ? 0 : speed[0];
         OTHERS[base + 5] = speed == null ? 0 : speed[1];
         OTHERS[base + 6] = speed == null ? 0 : speed[2];
-        OTHERS[base + 7] = AccessorRegistry.getBoolean(AccessPoint.ENTITY_ON_GROUND, other, false) ? NativeCombat.FLAG_ON_GROUND : 0;
+        int flags = 0;
+        if (AccessorRegistry.getBoolean(AccessPoint.ENTITY_ON_GROUND, other, false)) flags |= NativeCombat.FLAG_ON_GROUND;
+        if (AccessorRegistry.getBoolean(AccessPoint.ENTITY_IS_GLIDING, other, false)) flags |= NativeCombat.FLAG_GLIDING;
+        if (AccessorRegistry.getBoolean(AccessPoint.ENTITY_IS_USING_ITEM, other, false)) flags |= NativeCombat.FLAG_USING_ITEM;
+        if (AccessorRegistry.getBoolean(AccessPoint.ENTITY_IS_BLOCKING, other, false)) flags |= NativeCombat.FLAG_BLOCKING;
+        OTHERS[base + NativeCombat.OTHER_FLAGS] = flags;
+        OTHERS[base + NativeCombat.OTHER_HEAD_YAW] = AccessorRegistry.getFloat(AccessPoint.ENTITY_HEAD_YAW, other, 0f);
+        // Le terrain sous lui, seulement à portée de combat : au-delà, ça ne
+        // sert à rien et la lecture coûte.
+        OTHERS[base + NativeCombat.OTHER_GROUND] = distSq <= CLOSE_RANGE * CLOSE_RANGE ? groundHeight(pos) : -1;
         NEAR[slot] = other;
         DIST_SQ[slot] = distSq;
     }
 
-    /** Qui est ce joueur et ce qu'il porte. */
-    private static void describe(Object entity, int id) {
+    /**
+     * Qui est ce joueur ({@code identity}) et ce qu'il porte. L'équipement
+     * n'est retranscrit en texte — une quarantaine de lectures d'enchantements
+     * — que si l'une des six piles a changé depuis le dernier passage : la
+     * relecture à chaque tick ne coûte presque rien quand rien ne bouge.
+     */
+    private static void describe(Object entity, int id, boolean identity, boolean equipment) {
         if (entity == null || id == NO_ID) {
             return;
         }
-        Object uuid = AccessorRegistry.get(AccessPoint.ENTITY_UUID, entity);
-        Object name = AccessorRegistry.get(AccessPoint.ENTITY_NAME, entity);
-        if (uuid instanceof UUID && name instanceof String) {
-            NativeCombat.player(id, (UUID) uuid, (String) name);
+        if (identity) {
+            Object uuid = AccessorRegistry.get(AccessPoint.ENTITY_UUID, entity);
+            Object name = AccessorRegistry.get(AccessPoint.ENTITY_NAME, entity);
+            if (uuid instanceof UUID && name instanceof String) {
+                NativeCombat.player(id, (UUID) uuid, (String) name);
+            }
         }
-        Object equipment = AccessorRegistry.get(AccessPoint.ENTITY_EQUIPMENT, entity);
-        if (equipment instanceof ItemInfo[]) {
-            NativeCombat.equipment(id, equipmentText((ItemInfo[]) equipment));
+        if (!equipment) {
+            return;
         }
+        Object slots = AccessorRegistry.get(AccessPoint.ENTITY_EQUIPMENT, entity);
+        if (!(slots instanceof ItemInfo[])) {
+            return;
+        }
+        ItemInfo[] items = (ItemInfo[]) slots;
+        Object[] handles = new Object[items.length + 1];
+        for (int i = 0; i < items.length; i++) {
+            handles[i] = items[i] == null ? null : items[i].handle;
+        }
+        // Le nombre d'objets de la main : une pile qui se vide garde la même poignée.
+        handles[items.length] = items.length > 4 && items[4] != null ? items[4].count : 0;
+        Object[] last = LAST_EQUIPMENT.get(id);
+        if (last != null && sameEquipment(last, handles) && !identity) {
+            return;
+        }
+        LAST_EQUIPMENT.put(id, handles);
+        NativeCombat.equipment(id, equipmentText(items));
+    }
+
+    /** Les dernières piles vues pour chaque joueur, pour ne retranscrire que ce qui change. Vidé quand il grossit trop. */
+    private static final java.util.Map<Integer, Object[]> LAST_EQUIPMENT = new java.util.HashMap<>();
+
+    private static boolean sameEquipment(Object[] a, Object[] b) {
+        if (a.length != b.length) {
+            return false;
+        }
+        for (int i = 0; i < a.length; i++) {
+            if (i == a.length - 1 ? !java.util.Objects.equals(a[i], b[i]) : a[i] != b[i]) {
+                return false;
+            }
+        }
+        if (LAST_EQUIPMENT.size() > 256) {
+            LAST_EQUIPMENT.clear();
+        }
+        return true;
     }
 
     /**

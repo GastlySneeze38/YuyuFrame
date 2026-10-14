@@ -251,6 +251,24 @@ public enum HookPoint {
      * qui vient de partir.
      */
     ITEM_USE,
+    /**
+     * Le serveur joue un son à une position —
+     * {@code ClientPacketListener.handleSoundEvent}, à la sortie. Contexte :
+     * un {@code apimixin.data.SoundPlayed} (son, position).
+     *
+     * <p>Pour le scoring : un coup arrêté au bouclier n'envoie aucun paquet
+     * de dégâts, seulement le son du blocage ({@code item.shield.block}) à la
+     * position de celui qui bloque ; une hache qui désactive un bouclier
+     * joue {@code item.shield.break}.
+     */
+    SOUND_PLAYED,
+    /**
+     * Le serveur met un groupe d'objets de NOTRE joueur en recharge —
+     * {@code ClientPacketListener.handleItemCooldown}, à la sortie. Contexte :
+     * un {@code apimixin.data.ItemCooldown} (groupe, durée). Pour le scoring :
+     * un bouclier désactivé par une hache est mis en recharge.
+     */
+    ITEM_COOLDOWN,
 
     // ── Raccourcis clavier (fabric-key-mapping-api-v1) ────────────────────────
     /** Voir {@code OptionsMixin} — enregistrement de {@code KeyMapping} custom. */
