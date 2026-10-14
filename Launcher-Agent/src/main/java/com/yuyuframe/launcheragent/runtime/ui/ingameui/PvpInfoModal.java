@@ -9,7 +9,6 @@ import com.yuyuframe.launcheragent.apigraphic.widget.UiWidget;
 import com.yuyuframe.launcheragent.runtime.combat.NativeCombat;
 import com.yuyuframe.launcheragent.runtime.i18n.Lang;
 import com.yuyuframe.launcheragent.runtime.module.gameplay.PvpScoreModule;
-import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiButton;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -48,26 +47,54 @@ final class PvpInfoModal {
     static final int[] FAMILY_TOPICS = { 2, 3, 4, 5, 6, 7 };
 
     private final List<Topic> topics;
-    private final Runnable onClose;
     private final List<UiWidget> widgets = new ArrayList<UiWidget>();
+    /** Position de chaque widget fenêtre posée : la fenêtre monte en s'ouvrant, ils montent avec elle. */
+    private final List<Float> widgetBaseY = new ArrayList<Float>();
     private int selected;
     private float px, py, pw, ph, listRight;
     private int lastW = -1, lastH = -1;
     private float lastScale = -1f;
 
+    /** Ouverture, fermeture (0 tant qu'elle est ouverte), et dernier changement de sujet : les trois animations de la fenêtre. */
+    private final long openedAt = System.nanoTime();
+    private long closingAt;
+    private long topicAt = openedAt;
+    private static final float OPEN_SECS = 0.35f;
+    private static final float CLOSE_SECS = 0.2f;
+
     /**
      * @param report le résumé du duel dont on vient, ou {@code null} depuis l'historique
      * @param topic  le sujet ouvert d'abord
      */
-    PvpInfoModal(double[] report, int topic, Runnable onClose) {
+    PvpInfoModal(double[] report, int topic) {
         this.topics = topics(report);
         this.selected = Math.max(0, Math.min(topics.size() - 1, topic));
-        this.onClose = onClose;
     }
 
-    /** Les widgets de la fenêtre : tant qu'elle est ouverte, eux seuls reçoivent les clics. */
+    /** Les widgets de la fenêtre : tant qu'elle est là, eux seuls reçoivent les clics. */
     List<UiWidget> widgets() {
         return widgets;
+    }
+
+    /** Lance la fermeture : la fenêtre s'efface, puis {@link #closed} le dit à l'écran, qui la retire. */
+    void close() {
+        if (closingAt == 0L) closingAt = System.nanoTime();
+    }
+
+    boolean closed() {
+        return closingAt != 0L && (System.nanoTime() - closingAt) / 1e9f >= CLOSE_SECS;
+    }
+
+    /** 0 fermée, 1 ouverte : monte à l'ouverture, redescend à la fermeture. */
+    private float presence() {
+        if (closingAt != 0L) return 1f - PvpScoreUi.ease(closingAt, 0f, CLOSE_SECS);
+        return PvpScoreUi.ease(openedAt, 0f, OPEN_SECS);
+    }
+
+    private void select(int index) {
+        if (index == selected) return;
+        selected = index;
+        topicAt = System.nanoTime();
     }
 
     private void layout(int vw, int vh) {
@@ -90,30 +117,78 @@ final class PvpInfoModal {
             widgets.add(new TopicItem(px + pad, y, listW, rowH, index));
         }
         float closeW = UiTheme.scaled(140f);
-        widgets.add(new UiButton(px + pw - pad - closeW, py + pad, closeW, closeH, Lang.tr("Fermer"), onClose));
+        widgets.add(new CloseButton(px + pw - pad - closeW, py + pad, closeW, closeH));
+        widgetBaseY.clear();
+        for (UiWidget w : widgets) widgetBaseY.add(w.y);
     }
 
+    /**
+     * La fenêtre : le voile s'assombrit, le panneau monte en fondu ; à la
+     * fermeture, l'inverse. Tout ce qu'elle contient suit son opacité
+     * ({@link PvpScoreUi#alpha}).
+     */
     void draw(UiRenderer r, double mouseX, double mouseY, int vw, int vh) {
         if (vw != lastW || vh != lastH || UiTheme.UI_SCALE != lastScale) {
             layout(vw, vh);
             lastW = vw; lastH = vh; lastScale = UiTheme.UI_SCALE;
         }
-        r.drawRoundedRect(0f, 0f, vw, vh, 0f, UiTheme.GLASS_SCRIM, vw, vh);
-        r.drawGlassPanel(px, py, px + pw, py + ph, UiTheme.scaled(14f),
-            UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_MODAL, UiTheme.PANEL_BG,
-            UiTheme.GLASS_BORDER, Math.max(1f, UiTheme.scaled(1f)), vw, vh);
+        float p = presence();
+        float dy = -(1f - p) * UiTheme.scaled(36f);
+        for (int i = 0; i < widgets.size(); i++) widgets.get(i).y = widgetBaseY.get(i) + dy;
 
-        float pad = UiTheme.scaled(20f);
-        PvpScoreUi.left(r, UiFont.BOLD, Lang.tr("COMMENT ÇA MARCHE"), px + pad, py + ph - pad - UiTheme.scaled(18f),
-            listRight - px - pad, UiTheme.TEXT_MUTED, UiTheme.scaled(0.4f), vw, vh);
-        // La liste des sujets sur un fond un peu plus sombre, séparée du texte.
-        r.drawRoundedRect(listRight + pad / 2f, py + pad, listRight + pad / 2f + Math.max(1f, UiTheme.scaled(1f)), py + ph - pad,
-            0f, UiTheme.GLASS_BORDER, vw, vh);
-        for (UiWidget w : widgets) {
-            w.draw(r, mouseX, mouseY, vw, vh);
+        r.drawRoundedRect(0f, 0f, vw, vh, 0f, UiTheme.GLASS_SCRIM.multiplyAlpha(p), vw, vh);
+        float y1 = py + dy, y2 = py + ph + dy;
+        // L'opacité du repli pilote aussi celle du verre (voir UiRenderer.drawGlassPanel).
+        r.drawGlassPanel(px, y1, px + pw, y2, UiTheme.scaled(14f),
+            UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_MODAL, UiTheme.PANEL_BG.multiplyAlpha(p),
+            UiTheme.GLASS_BORDER.multiplyAlpha(p), Math.max(1f, UiTheme.scaled(1f)), vw, vh);
+
+        PvpScoreUi.alpha = p;
+        try {
+            float pad = UiTheme.scaled(20f);
+            PvpScoreUi.left(r, UiFont.BOLD, Lang.tr("COMMENT ÇA MARCHE"), px + pad, y2 - pad - UiTheme.scaled(18f),
+                listRight - px - pad, UiTheme.TEXT_MUTED, UiTheme.scaled(0.4f), vw, vh);
+            // Un trait entre la liste des sujets et le texte.
+            PvpScoreUi.rect(r, listRight + pad / 2f, y1 + pad, listRight + pad / 2f + Math.max(1f, UiTheme.scaled(1f)), y2 - pad,
+                0f, UiTheme.GLASS_BORDER, vw, vh);
+            for (UiWidget w : widgets) {
+                w.draw(r, mouseX, mouseY, vw, vh);
+            }
+            // Le texte d'un sujet entre en glissant un peu, à chaque changement.
+            float t = PvpScoreUi.ease(topicAt, 0f, 0.3f);
+            PvpScoreUi.alpha = p * t;
+            float slide = (1f - t) * UiTheme.scaled(18f);
+            drawTopic(r, topics.get(selected), listRight + pad * 1.6f + slide, px + pw - pad * 1.4f + slide,
+                y2 - pad, y1 + pad + UiTheme.scaled(48f), vw, vh);
+        } finally {
+            PvpScoreUi.alpha = 1f;
         }
-        drawTopic(r, topics.get(selected), listRight + pad * 1.6f, px + pw - pad * 1.4f,
-            py + ph - pad, py + pad + UiTheme.scaled(48f), vw, vh);
+    }
+
+    /** « Fermer » : un bouton à nous, pour qu'il suive le fondu de la fenêtre. */
+    private final class CloseButton extends UiWidget {
+        private final UiAnimatedFloat hover = new UiAnimatedFloat(0f, 16f);
+
+        CloseButton(float x, float y, float w, float h) {
+            super(x, y, w, h);
+        }
+
+        @Override
+        public void draw(UiRenderer r, double mouseX, double mouseY, int vw, int vh) {
+            hover.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
+            float t = hover.get();
+            float radius = UiTheme.scaled(8f);
+            PvpScoreUi.rect(r, x - 1f, y - 1f, x + w + 1f, y + h + 1f, radius + 1f, UiColor.lerp(UiTheme.GLASS_BORDER, UiTheme.ACCENT, t), vw, vh);
+            PvpScoreUi.rect(r, x, y, x + w, y + h, radius, UiColor.lerp(UiTheme.CARD_BG, UiTheme.ACCENT.withAlpha(0.5f), t), vw, vh);
+            float scale = UiTheme.scaled(0.46f);
+            PvpScoreUi.centered(r, UiFont.BOLD, Lang.tr("Fermer"), x + w / 2f, PvpScoreUi.middle(y + h / 2f, scale), w,
+                UiTheme.TEXT_PRIMARY, scale, vw, vh);
+        }
+
+        @Override
+        public void onClick() {
+            close();
+        }
     }
 
     /**
@@ -162,41 +237,53 @@ final class PvpInfoModal {
                 paragraphStart = false;
             }
             y -= lineH;
-            r.drawText((UiFont) line[1], (String) line[0], left, y + lineH * 0.25f,
+            PvpScoreUi.text(r, (UiFont) line[1], (String) line[0], left, y + lineH * 0.25f,
                 heading ? HEADING : UiTheme.TEXT_SECONDARY, (Float) line[2], vw, vh);
         }
     }
 
-    /** Une ligne de la liste des sujets ; celle qui est ouverte est surlignée. */
+    /**
+     * Une ligne de la liste des sujets. Celle qui est ouverte est surlignée :
+     * le surlignage et la barre d'accent s'allument en fondu, et le titre se
+     * décale un peu vers la droite.
+     */
     private final class TopicItem extends UiWidget {
         private final int index;
         private final UiAnimatedFloat hover = new UiAnimatedFloat(0f, 16f);
+        private final UiAnimatedFloat on;
 
         TopicItem(float x, float y, float w, float h, int index) {
             super(x, y, w, h);
             this.index = index;
+            this.on = new UiAnimatedFloat(index == selected ? 1f : 0f, 14f);
         }
 
         @Override
         public void draw(UiRenderer r, double mouseX, double mouseY, int vw, int vh) {
             hover.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
-            boolean on = index == selected;
+            on.setTarget(index == selected ? 1f : 0f);
+            float s = on.get();
+            float hv = hover.get() * (1f - s);
             float radius = UiTheme.scaled(8f);
-            if (on) {
-                r.drawRoundedRect(x, y, x + w, y + h, radius, UiTheme.ACCENT.withAlpha(0.28f), vw, vh);
-                r.drawRoundedRect(x, y + h * 0.2f, x + UiTheme.scaled(3f), y + h * 0.8f, UiTheme.scaled(1.5f), UiTheme.ACCENT, vw, vh);
-            } else if (hover.get() > 0.01f) {
-                r.drawRoundedRect(x, y, x + w, y + h, radius, new UiColor(255, 255, 255, 18).multiplyAlpha(hover.get()), vw, vh);
+            if (hv > 0.01f) {
+                PvpScoreUi.rect(r, x, y, x + w, y + h, radius, new UiColor(255, 255, 255, 18).multiplyAlpha(hv), vw, vh);
+            }
+            if (s > 0.01f) {
+                PvpScoreUi.rect(r, x, y, x + w, y + h, radius, UiTheme.ACCENT.withAlpha(0.28f * s), vw, vh);
+                float bar = h * 0.3f * (1f - s);
+                PvpScoreUi.rect(r, x, y + h * 0.2f + bar, x + UiTheme.scaled(3f), y + h * 0.8f - bar, UiTheme.scaled(1.5f),
+                    UiTheme.ACCENT.multiplyAlpha(s), vw, vh);
             }
             float scale = UiTheme.scaled(0.44f);
-            PvpScoreUi.left(r, on ? UiFont.BOLD : UiFont.REGULAR, Lang.tr(topics.get(index).title),
-                x + UiTheme.scaled(14f), PvpScoreUi.middle(y + h / 2f, scale), w - UiTheme.scaled(20f),
-                on ? UiTheme.TEXT_PRIMARY : UiTheme.TEXT_SECONDARY, scale, vw, vh);
+            boolean selectedNow = index == selected;
+            PvpScoreUi.left(r, selectedNow ? UiFont.BOLD : UiFont.REGULAR, Lang.tr(topics.get(index).title),
+                x + UiTheme.scaled(14f) + s * UiTheme.scaled(4f), PvpScoreUi.middle(y + h / 2f, scale), w - UiTheme.scaled(24f),
+                UiColor.lerp(UiTheme.TEXT_SECONDARY, UiTheme.TEXT_PRIMARY, Math.max(s, hover.get())), scale, vw, vh);
         }
 
         @Override
         public void onClick() {
-            selected = index;
+            select(index);
         }
     }
 

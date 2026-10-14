@@ -2,6 +2,8 @@ package com.yuyuframe.launcheragent.runtime.ui.ingameui;
 
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.anim.UiAnimatedFloat;
+import com.yuyuframe.launcheragent.apigraphic.anim.UiEasing;
+import com.yuyuframe.launcheragent.apigraphic.platform.UiInputPoller;
 import com.yuyuframe.launcheragent.apigraphic.widget.UiWidget;
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
@@ -162,11 +164,58 @@ public final class PvpScoreUi {
             UiTheme.TEXT_PRIMARY, scale, screenWidth, screenHeight);
     }
 
+    // ── Animations ───────────────────────────────────────────────────────────
+
+    /**
+     * Opacité appliquée par tous les dessins de cette classe — {@link #card},
+     * {@link #bar}, {@link #left}… — et par {@link #a}. Une page la pose avant
+     * de dessiner un bloc qui apparaît en fondu, puis la remet à 1 : c'est ce
+     * qui fait entrer un bloc entier d'un coup sans passer son opacité à
+     * chaque appel. Fil de rendu seulement.
+     */
+    static float alpha = 1f;
+
+    /** Une couleur à l'opacité courante. */
+    static UiColor a(UiColor color) {
+        return alpha >= 1f ? color : color.multiplyAlpha(Math.max(0f, alpha));
+    }
+
+    /**
+     * L'avancement d'une animation partie à {@code startNanos}, après
+     * {@code delay} secondes et sur {@code duration} secondes, de 0 à 1, en
+     * ralentissant sur la fin.
+     */
+    static float ease(long startNanos, float delay, float duration) {
+        float t = ((System.nanoTime() - startNanos) / 1e9f - delay) / duration;
+        return UiEasing.CUBIC_OUT.apply(Math.max(0f, Math.min(1f, t)));
+    }
+
+    /** Comme {@link #ease}, avec un léger dépassement avant de se poser : pour ce qui « saute » à sa place. */
+    static float pop(long startNanos, float delay, float duration) {
+        float t = ((System.nanoTime() - startNanos) / 1e9f - delay) / duration;
+        return UiEasing.BACK_OUT.apply(Math.max(0f, Math.min(1f, t)));
+    }
+
+    /** Un nombre qui monte de 0 à sa valeur pendant que {@code progress} va de 0 à 1. */
+    static long count(double value, float progress) {
+        return Math.round(value * progress);
+    }
+
     // ── Surfaces ─────────────────────────────────────────────────────────────
+
+    /** Un rectangle arrondi à l'opacité courante. */
+    static void rect(UiRenderer r, float x1, float y1, float x2, float y2, float radius, UiColor color, int vw, int vh) {
+        r.drawRoundedRect(x1, y1, x2, y2, radius, a(color), vw, vh);
+    }
+
+    /** Un texte à l'opacité courante. */
+    static void text(UiRenderer r, UiFont font, String text, float x, float y, UiColor color, float scale, int vw, int vh) {
+        r.drawText(font, text, x, y, a(color), scale, vw, vh);
+    }
 
     /** Une carte grise, comme partout dans le client. */
     static void card(UiRenderer r, float x1, float y1, float x2, float y2, int vw, int vh) {
-        r.drawRoundedRect(x1, y1, x2, y2, UiTheme.scaled(10f), UiTheme.CARD_BG, vw, vh);
+        r.drawRoundedRect(x1, y1, x2, y2, UiTheme.scaled(10f), a(UiTheme.CARD_BG), vw, vh);
     }
 
     /**
@@ -176,16 +225,19 @@ public final class PvpScoreUi {
      */
     static void tintedCard(UiRenderer r, float x1, float y1, float x2, float y2, UiColor tone, float strength, int vw, int vh) {
         float radius = UiTheme.scaled(10f);
-        r.drawRoundedRect(x1, y1, x2, y2, radius, UiTheme.CARD_BG, vw, vh);
-        UiColor strong = tone.withAlpha(strength);
-        UiColor faint = tone.withAlpha(strength * 0.25f);
+        r.drawRoundedRect(x1, y1, x2, y2, radius, a(UiTheme.CARD_BG), vw, vh);
+        UiColor strong = a(tone.withAlpha(strength));
+        UiColor faint = a(tone.withAlpha(strength * 0.25f));
         r.drawGradientRect2D(x1, y1, x2, y2, radius, strong, faint, strong, faint, vw, vh);
     }
+
+    private static final UiColor TRACK = new UiColor(0, 0, 0, 90);
 
     /** Une barre de 0 à 100 dans sa couleur, sur un rail sombre. */
     static void bar(UiRenderer r, float x1, float y, float x2, float height, double value, UiColor tone, int vw, int vh) {
         float radius = height / 2f;
-        r.drawRoundedRect(x1, y, x2, y + height, radius, new UiColor(0, 0, 0, 90), vw, vh);
+        tone = a(tone);
+        r.drawRoundedRect(x1, y, x2, y + height, radius, a(TRACK), vw, vh);
         float filled = x1 + (x2 - x1) * (float) (Math.max(0, Math.min(100, value)) / 100.0);
         if (filled > x1 + height) {
             r.drawGradientRect2D(x1, y, filled, y + height, radius, tone.multiplyAlpha(0.7f), tone, tone.multiplyAlpha(0.7f), tone, vw, vh);
@@ -195,7 +247,8 @@ public final class PvpScoreUi {
     /** Une barre qui part de la droite vers la gauche : le côté « vous » d'un face-à-face. */
     static void barLeftward(UiRenderer r, float x1, float y, float x2, float height, double value, UiColor tone, int vw, int vh) {
         float radius = height / 2f;
-        r.drawRoundedRect(x1, y, x2, y + height, radius, new UiColor(0, 0, 0, 90), vw, vh);
+        tone = a(tone);
+        r.drawRoundedRect(x1, y, x2, y + height, radius, a(TRACK), vw, vh);
         float filled = x2 - (x2 - x1) * (float) (Math.max(0, Math.min(100, value)) / 100.0);
         if (filled < x2 - height) {
             r.drawGradientRect2D(filled, y, x2, y + height, radius, tone, tone.multiplyAlpha(0.7f), tone, tone.multiplyAlpha(0.7f), vw, vh);
@@ -220,19 +273,160 @@ public final class PvpScoreUi {
 
     /** Un texte posé à gauche, rétréci s'il dépasse. */
     static void left(UiRenderer r, UiFont font, String text, float x, float y, float maxWidth, UiColor color, float scale, int vw, int vh) {
-        r.drawText(font, text, x, y, color, fit(r, font, text, scale, maxWidth), vw, vh);
+        r.drawText(font, text, x, y, a(color), fit(r, font, text, scale, maxWidth), vw, vh);
     }
 
     /** Un texte centré sur {@code center}, rétréci s'il dépasse : une traduction plus longue ne sort pas de sa case. */
     static void centered(UiRenderer r, UiFont font, String text, float center, float y, float maxWidth, UiColor color, float scale, int vw, int vh) {
         float s = fit(r, font, text, scale, maxWidth);
-        r.drawText(font, text, center - r.textWidth(font, text, s) / 2f, y, color, s, vw, vh);
+        r.drawText(font, text, center - r.textWidth(font, text, s) / 2f, y, a(color), s, vw, vh);
     }
 
     /** Un texte calé à droite sur {@code right}, rétréci s'il dépasse. */
     static void right(UiRenderer r, UiFont font, String text, float right, float y, float maxWidth, UiColor color, float scale, int vw, int vh) {
         float s = fit(r, font, text, scale, maxWidth);
-        r.drawText(font, text, right - r.textWidth(font, text, s), y, color, s, vw, vh);
+        r.drawText(font, text, right - r.textWidth(font, text, s), y, a(color), s, vw, vh);
+    }
+
+    // ── Le choix du mode ─────────────────────────────────────────────────────
+
+    /**
+     * Les modes de jeu notés, dans l'ordre de la liste déroulante. Seule la
+     * masse l'est pour l'instant ; un mode s'ajoute ici le jour où le noyau
+     * sait le noter (et où l'historique dit de quel mode est chaque duel).
+     */
+    static final String[] MODES = { "Masse" };
+
+    /**
+     * La liste déroulante du mode affiché. Le bouton est un widget de l'écran ;
+     * la liste ouverte est dessinée par l'écran après tout le reste
+     * ({@link #drawPanel}), pour passer par-dessus l'historique. Elle s'ouvre en
+     * se dépliant, et dit sous les modes que d'autres arrivent.
+     */
+    static final class ModeDropdown extends UiWidget {
+        private final java.util.function.IntConsumer onChange;
+        private int selected;
+        private boolean expanded;
+        private final UiAnimatedFloat hover = new UiAnimatedFloat(0f, 16f);
+        private final UiAnimatedFloat unfold = new UiAnimatedFloat(0f, 14f);
+        /** Le clic qui choisit un mode referme la liste : on s'en souvient un instant (voir {@code UiDropdown}). */
+        private long clickTakenAtNanos;
+
+        ModeDropdown(float x, float y, float w, float h, int selected, java.util.function.IntConsumer onChange) {
+            super(x, y, w, h);
+            this.selected = Math.max(0, Math.min(MODES.length - 1, selected));
+            this.onChange = onChange;
+        }
+
+        private float gap() { return UiTheme.scaled(6f); }
+        private float noteHeight() { return UiTheme.scaled(30f); }
+        private float panelTop() { return y - gap(); }
+        private float panelBottom() { return panelTop() - MODES.length * h - noteHeight(); }
+
+        @Override
+        public void draw(UiRenderer r, double mouseX, double mouseY, int vw, int vh) {
+            hover.setTarget(contains(mouseX, mouseY) || expanded ? 1f : 0f);
+            float t = hover.get();
+            float radius = UiTheme.scaled(9f);
+            r.drawRoundedRect(x - 1f, y - 1f, x + w + 1f, y + h + 1f, radius + 1f,
+                UiColor.lerp(UiTheme.GLASS_BORDER, UiTheme.ACCENT, t), vw, vh);
+            r.drawRoundedRect(x, y, x + w, y + h, radius, UiColor.lerp(UiTheme.CARD_BG, new UiColor(40, 36, 64, 255), t), vw, vh);
+            float pad = UiTheme.scaled(14f);
+            float small = UiTheme.scaled(0.36f);
+            float value = UiTheme.scaled(0.5f);
+            float mid = y + h / 2f;
+            r.drawText(UiFont.BOLD, Lang.tr("MODE"), x + pad, middle(mid, small), UiTheme.TEXT_MUTED, small, vw, vh);
+            float labelW = r.textWidth(UiFont.BOLD, Lang.tr("MODE"), small) + UiTheme.scaled(12f);
+            left(r, UiFont.BOLD, Lang.tr(MODES[selected]), x + pad + labelW, middle(mid, value), w - pad * 3f - labelW,
+                UiTheme.TEXT_PRIMARY, value, vw, vh);
+            // Le chevron se retourne en s'ouvrant : il descend d'un cran en se fondant, et l'autre arrive.
+            float open = unfold.get();
+            float chevron = UiTheme.scaled(0.5f);
+            float cx = x + w - pad - r.textWidth(UiFont.BOLD, "v", chevron);
+            r.drawText(UiFont.BOLD, "v", cx, middle(mid, chevron) - open * UiTheme.scaled(4f),
+                UiTheme.TEXT_SECONDARY.multiplyAlpha(1f - open), chevron, vw, vh);
+            r.drawText(UiFont.BOLD, "^", cx, middle(mid, chevron) + (1f - open) * UiTheme.scaled(4f) - UiTheme.scaled(3f),
+                UiTheme.ACCENT.multiplyAlpha(open), chevron, vw, vh);
+        }
+
+        /** La liste ouverte : elle se déplie vers le bas, ses lignes apparaissent à mesure. */
+        void drawPanel(UiRenderer r, double mouseX, double mouseY, int vw, int vh) {
+            unfold.setTarget(expanded ? 1f : 0f);
+            float open = unfold.get();
+            if (open < 0.02f) return;
+            float top = panelTop();
+            float fullBottom = panelBottom();
+            float bottom = top - (top - fullBottom) * open;
+            float radius = UiTheme.scaled(9f);
+            r.drawShadow(x, bottom, x + w, top, radius, 14f, 0f, new UiColor(0, 0, 0, (int) (120 * open)), vw, vh);
+            r.drawRoundedRect(x - 1f, bottom - 1f, x + w + 1f, top + 1f, radius + 1f, UiTheme.GLASS_BORDER.multiplyAlpha(open), vw, vh);
+            r.drawRoundedRect(x, bottom, x + w, top, radius, UiTheme.PANEL_BG_ALT.multiplyAlpha(open), vw, vh);
+
+            float pad = UiTheme.scaled(14f);
+            float value = UiTheme.scaled(0.5f);
+            for (int i = 0; i < MODES.length; i++) {
+                float rowTop = top - i * h;
+                float rowBottom = rowTop - h;
+                // Une ligne n'apparaît qu'une fois dépliée en entier.
+                if (rowBottom < bottom) break;
+                boolean hovered = mouseX >= x && mouseX <= x + w && mouseY >= rowBottom && mouseY <= rowTop;
+                if (i == selected || hovered) {
+                    r.drawRoundedRect(x + UiTheme.scaled(4f), rowBottom + UiTheme.scaled(3f), x + w - UiTheme.scaled(4f), rowTop - UiTheme.scaled(3f),
+                        UiTheme.scaled(7f), (i == selected ? UiTheme.ACCENT.withAlpha(0.3f) : new UiColor(255, 255, 255, 16)).multiplyAlpha(open), vw, vh);
+                }
+                r.drawText(i == selected ? UiFont.BOLD : UiFont.REGULAR, Lang.tr(MODES[i]), x + pad, middle((rowTop + rowBottom) / 2f, value),
+                    UiTheme.TEXT_PRIMARY.multiplyAlpha(open), value, vw, vh);
+            }
+            float noteTop = top - MODES.length * h;
+            if (noteTop - noteHeight() >= bottom) {
+                float small = UiTheme.scaled(0.36f);
+                left(r, UiFont.REGULAR, Lang.tr("D'autres modes arrivent bientôt"), x + pad, middle(noteTop - noteHeight() / 2f, small),
+                    w - pad * 2f, UiTheme.TEXT_MUTED.multiplyAlpha(open), small, vw, vh);
+            }
+        }
+
+        @Override
+        public void onClick() {
+            expanded = !expanded;
+        }
+
+        /** La liste est ouverte, ou vient de prendre un clic : ce qu'elle recouvre ne doit pas le recevoir aussi. */
+        boolean busy(double mouseX, double mouseY) {
+            return expanded || overlayContains(mouseX, mouseY);
+        }
+
+        private boolean overPanel(double mx, double my) {
+            return mx >= x && mx <= x + w && my >= panelBottom() && my <= panelTop();
+        }
+
+        @Override
+        public boolean overlayContains(double mouseX, double mouseY) {
+            boolean justTaken = clickTakenAtNanos != 0L && System.nanoTime() - clickTakenAtNanos < 200_000_000L;
+            return (expanded || justTaken) && overPanel(mouseX, mouseY);
+        }
+
+        @Override
+        public void pollContinuous(UiInputPoller input) {
+            if (!expanded || !input.leftClicked) return;
+            for (int i = 0; i < MODES.length; i++) {
+                float rowTop = panelTop() - i * h;
+                if (input.mouseX >= x && input.mouseX <= x + w && input.mouseY >= rowTop - h && input.mouseY <= rowTop) {
+                    expanded = false;
+                    clickTakenAtNanos = System.nanoTime();
+                    if (i != selected) {
+                        selected = i;
+                        if (onChange != null) onChange.accept(i);
+                    }
+                    return;
+                }
+            }
+            // Ailleurs que sur le bouton (qui se gère lui-même) : la liste se referme.
+            if (overPanel(input.mouseX, input.mouseY)) {
+                clickTakenAtNanos = System.nanoTime();
+                return;
+            }
+            if (!contains(input.mouseX, input.mouseY)) expanded = false;
+        }
     }
 
     /** Un paragraphe coupé en lignes de {@code maxWidth} au plus, aux espaces. */
