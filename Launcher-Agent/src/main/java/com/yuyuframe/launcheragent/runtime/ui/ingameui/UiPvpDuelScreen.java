@@ -23,8 +23,10 @@ import java.util.List;
  *       chaque famille avec ma valeur à gauche et celle de l'adversaire à
  *       droite, mon jeu seul et son niveau en tête. Un clic sur une famille
  *       ouvre son explication, avec ce qu'elle valait dans ce duel ;</li>
- *   <li>les chiffres du duel : opportunités, dégâts de smash, temps au
- *       contact, charge au smash, ping ;</li>
+ *   <li>les chiffres du duel, sur deux rangées : opportunités, grosses et
+ *       petites ouvertures, dégâts évités, dégâts de smash, charge au smash,
+ *       bonus bug use (le mien, et ce qu'on voit du sien), temps au contact,
+ *       ping ;</li>
  *   <li>l'analyse — points forts, points faibles, à améliorer. <b>La place
  *       est réservée, le contenu n'existe pas encore</b> : il viendra du
  *       noyau natif, comme le reste ({@link #ANALYSIS}).</li>
@@ -96,6 +98,9 @@ public final class UiPvpDuelScreen extends UiScreenBase {
     private static float rowHeight() { return UiTheme.scaled(46f); }
     private static float faceHeader() { return UiTheme.scaled(62f); }
     private static float figuresHeight() { return UiTheme.scaled(96f); }
+    /** Les chiffres tiennent sur deux rangées. */
+    private static final int FIGURE_ROWS = 2;
+    private static float figuresBlock() { return FIGURE_ROWS * figuresHeight() + (FIGURE_ROWS - 1) * UiTheme.scaled(12f); }
 
     private void buildLayout() {
         widgets.clear();
@@ -111,7 +116,7 @@ public final class UiPvpDuelScreen extends UiScreenBase {
         float mainTop = bannerBottom - gap();
         mainBottom = mainTop - faceHeader() - ROWS * rowHeight() - UiTheme.scaled(16f);
         scoreRight = left + UiTheme.scaled(330f);
-        figuresBottom = mainBottom - gap() - figuresHeight();
+        figuresBottom = mainBottom - gap() - figuresBlock();
 
         // Une zone cliquable par ligne du face-à-face, et une sur l'en-tête de l'adversaire.
         float faceLeft = scoreRight + gap();
@@ -266,6 +271,12 @@ public final class UiPvpDuelScreen extends UiScreenBase {
             PvpScoreUi.centered(r, UiFont.BOLD, shown, center, top - UiTheme.scaled(160f), width, tone, big, vw, vh);
             PvpScoreUi.centered(r, UiFont.REGULAR, Lang.tr("sur 100"), center, top - UiTheme.scaled(200f), width,
                 UiTheme.TEXT_SECONDARY, body, vw, vh);
+            // Le bonus bug use, à part : il ne fait que monter la note.
+            double bonus = duel.report[NativeCombat.REPORT_BUG_USE];
+            if (bonus >= 0.5) {
+                PvpScoreUi.centered(r, UiFont.BOLD, PvpScoreUi.bugUseText(duel.report[NativeCombat.REPORT_BASE_SCORE], bonus), center,
+                    top - UiTheme.scaled(236f), width, PvpScoreUi.BUG_USE, body, vw, vh);
+            }
 
             double confidence = duel.report[NativeCombat.REPORT_CONFIDENCE];
             float grow = progress(0.4f, 0.9f);
@@ -390,28 +401,45 @@ public final class UiPvpDuelScreen extends UiScreenBase {
         PvpScoreUi.alpha = 1f;
     }
 
-    /** Les chiffres du duel, en cases égales qui arrivent l'une après l'autre : la valeur, son nom dessous. */
+    /** « 3 / 7 » : convertis sur ouverts, qui défilent. */
+    private static String ratio(double[] report, int done, int of, float n) {
+        return PvpScoreUi.count(report[done], n) + " / " + PvpScoreUi.count(report[of], n);
+    }
+
+    /**
+     * Les chiffres du duel, en cases égales sur deux rangées, qui arrivent
+     * l'une après l'autre : la valeur, son nom dessous. Tous hors note sauf
+     * le bonus bug use ; ceux de l'adversaire sont affichés, jamais comptés.
+     */
     private void drawFigures(UiRenderer r, float top) {
         int vw = screenWidth, vh = screenHeight;
         double[] report = duel.report;
         double charge = report[NativeCombat.REPORT_SMASH_CHARGE];
+        double avoided = report[NativeCombat.REPORT_AVOIDED];
         float n = progress(0.5f, 1f);
         String[][] figures = {
-            { "OPPORTUNITÉS CONVERTIES", PvpScoreUi.count(report[NativeCombat.REPORT_MY_CONVERTED], n) + " / " + PvpScoreUi.count(report[NativeCombat.REPORT_MY_OPENED], n) },
-            { "OPPORTUNITÉS SUBIES", PvpScoreUi.count(report[NativeCombat.REPORT_THEIR_CONVERTED], n) + " / " + PvpScoreUi.count(report[NativeCombat.REPORT_THEIR_OPENED], n) },
-            { "DÉGÂTS DE SMASH PORTÉS", PvpScoreUi.count(report[NativeCombat.REPORT_MY_SMASH_DEALT], n) + " / " + PvpScoreUi.count(report[NativeCombat.REPORT_MY_SMASH_POSSIBLE], n) },
-            { "DÉGÂTS DE SMASH SUBIS", PvpScoreUi.count(report[NativeCombat.REPORT_THEIR_SMASH_DEALT], n) + " / " + PvpScoreUi.count(report[NativeCombat.REPORT_THEIR_SMASH_POSSIBLE], n) },
-            { "TEMPS AU CONTACT", PvpScoreUi.duration(report[NativeCombat.REPORT_ENGAGED_SECS] * n) },
+            { "OPPORTUNITÉS CONVERTIES", ratio(report, NativeCombat.REPORT_MY_CONVERTED, NativeCombat.REPORT_MY_OPENED, n) },
+            { "GROSSES OUVERTURES", ratio(report, NativeCombat.REPORT_BIG_CONVERTED, NativeCombat.REPORT_BIG_OPENED, n) },
+            { "PETITES OUVERTURES", ratio(report, NativeCombat.REPORT_SMALL_CONVERTED, NativeCombat.REPORT_SMALL_OPENED, n) },
+            { "OPPORTUNITÉS SUBIES", ratio(report, NativeCombat.REPORT_THEIR_CONVERTED, NativeCombat.REPORT_THEIR_OPENED, n) },
+            { "DÉGÂTS ÉVITÉS", avoided >= 0 ? PvpScoreUi.count(avoided, n) + " %" : PvpScoreUi.NO_SCORE },
             { "CHARGE AU SMASH", charge >= 0 ? PvpScoreUi.count(charge * 100, n) + " %" : PvpScoreUi.NO_SCORE },
+            { "DÉGÂTS DE SMASH PORTÉS", ratio(report, NativeCombat.REPORT_MY_SMASH_DEALT, NativeCombat.REPORT_MY_SMASH_POSSIBLE, n) },
+            { "DÉGÂTS DE SMASH SUBIS", ratio(report, NativeCombat.REPORT_THEIR_SMASH_DEALT, NativeCombat.REPORT_THEIR_SMASH_POSSIBLE, n) },
+            { "BUG USE", "+" + PvpScoreUi.count(report[NativeCombat.REPORT_BUG_USE], n) },
+            { "BUG USE ADVERSE", PvpScoreUi.count(report[NativeCombat.REPORT_FOE_BUG_USE], n) + " " + Lang.tr("pts") },
+            { "TEMPS AU CONTACT", PvpScoreUi.duration(report[NativeCombat.REPORT_ENGAGED_SECS] * n) },
             // Le ping est affiché, jamais corrigé.
             { "PING", report[NativeCombat.REPORT_PING] >= 0 ? PvpScoreUi.count(report[NativeCombat.REPORT_PING], n) + " ms" : PvpScoreUi.NO_SCORE },
         };
         float gap = UiTheme.scaled(12f);
-        float cell = (right - left - gap * (figures.length - 1)) / figures.length;
+        int perRow = (figures.length + FIGURE_ROWS - 1) / FIGURE_ROWS;
+        float cell = (right - left - gap * (perRow - 1)) / perRow;
         for (int i = 0; i < figures.length; i++) {
-            float dy = enter(0.42f + 0.05f * i);
-            float x = left + i * (cell + gap);
-            float cellTop = top + dy, cellBottom = top - figuresHeight() + dy;
+            float dy = enter(0.42f + 0.04f * i);
+            float x = left + (i % perRow) * (cell + gap);
+            float rowTop = top - (i / perRow) * (figuresHeight() + gap);
+            float cellTop = rowTop + dy, cellBottom = rowTop - figuresHeight() + dy;
             PvpScoreUi.card(r, x, cellBottom, x + cell, cellTop, vw, vh);
             float center = x + cell / 2f;
             float width = cell - UiTheme.scaled(16f);

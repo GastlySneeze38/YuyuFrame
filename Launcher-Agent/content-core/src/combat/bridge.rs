@@ -21,7 +21,9 @@ use super::writer::send;
 /// 4 (2026-10-13) : `yf_combat_report`, le résumé du dernier duel.
 /// 5 (2026-10-13) : six familles dans le résumé au lieu de cinq.
 /// 6 (2026-10-13) : `yf_combat_history`, l'historique des duels.
-const ABI_VERSION: u32 = 9;
+/// 10 (2026-10-14) : le résumé passe à 46 nombres (note avant bonus, bug
+/// use, grosses et petites ouvertures, dégâts évités).
+const ABI_VERSION: u32 = 10;
 
 /// Autres joueurs transmis par tick, au plus.
 const MAX_OTHERS: usize = 16;

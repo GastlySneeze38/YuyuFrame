@@ -294,7 +294,8 @@ final class PvpInfoModal {
         list.add(new Topic("Vue d'ensemble",
             "La note résume un duel à la masse sur 100. 50, c'est le joueur de référence : au-dessus, vous avez mieux joué que lui ; en dessous, moins bien.",
             "Tout est calculé sur votre PC, à partir de ce que votre jeu voit pendant le duel. Rien n'est envoyé à un serveur et il n'y a pas de classement.",
-            "La note est faite de six familles qui pèsent autant les unes que les autres : vos cinq familles (conversion, qualité du smash, défense, contrôle vertical, ressources) et la force de votre adversaire, telle que vos duels précédents contre lui la font connaître.",
+            "La note est faite de six familles qui pèsent autant les unes que les autres : vos cinq familles (conversion, qualité du smash, défense, contrôle vertical et horizontal, ressources) et la force de votre adversaire, telle que vos duels précédents contre lui la font connaître.",
+            "S'y ajoute un bonus, le bug use, pour les techniques les plus dures : il ne fait jamais baisser la note et s'affiche à part, par exemple 62 + 4 bug use.",
             "# Les couleurs",
             "Vert à partir de 65 : un bon duel. Ambre de 45 à 64 : dans la moyenne. Rouge en dessous de 45 : un duel difficile. Gris : pas de note. Les barres bleues sont celles de l'adversaire.",
             "# Quand un duel est reconnu",
@@ -303,39 +304,51 @@ final class PvpInfoModal {
         list.add(new Topic("Opportunités",
             "Une opportunité, c'est un moment où un smash est possible : vous tombez d'au moins 1,5 bloc, vous êtes en train de descendre, vous êtes au-dessus de l'adversaire et à moins de 3,5 blocs de lui à l'horizontale.",
             "Elle est convertie si un coup de masse touche pendant ce moment. Les mêmes règles valent pour l'adversaire : ses opportunités sont celles que vous lui laissez.",
+            "# Ce qui n'en est pas une",
+            "Un passage de moins de 3 ticks au-dessus de lui, sans coup : il ne fait que traverser la zone. Et une chute face à son bouclier levé : le coup ne pouvait pas passer, ne pas frapper n'est pas un raté. Dans son dos, en revanche, c'est une opportunité, et une difficile.",
             "# Le bonus du smash",
-            "Le smash ajoute des dégâts selon la hauteur de chute : 4 par bloc pour les 3 premiers, 2 par bloc jusqu'à 8, puis 1 par bloc au-delà, plus l'enchantement Densité. La charge de l'attaque ne change pas ce bonus.",
-            "Les dégâts de smash d'un duel comparent la somme des bonus réellement portés à celle qu'auraient donnée toutes les opportunités."));
+            "Le smash ajoute des dégâts selon la hauteur de chute : 4 par bloc pour les 3 premiers, 2 par bloc jusqu'à 8, puis 1 par bloc au-delà, plus l'enchantement Densité.",
+            "Les dégâts de smash d'un duel comparent la somme des bonus réellement portés à celle qu'auraient donnée toutes les opportunités. Les grosses ouvertures (8 blocs de chute et plus) et les petites sont comptées à part, hors note."));
         list.add(family(report, 0, "Conversion",
-            "Exploitez-vous vos ouvertures ? C'est la part de vos opportunités qui se terminent par un smash.",
-            "Le joueur de référence en convertit environ 35 %.",
-            "Pour la monter : frappez pendant la chute sans attendre d'être trop bas, et restez à moins de 3,5 blocs de lui."));
+            "Exploitez-vous vos ouvertures, compte tenu de leur difficulté et de leur valeur ? Chaque opportunité a une chance de réussite, celle d'un joueur moyen sur la même situation, et un poids, son bonus de smash possible.",
+            "La chance baisse quand vous êtes loin de lui à l'ouverture, quand il bouge vite, quand la fenêtre est courte, quand la chute est grande (on arrive vite, il a le temps de se replacer) et quand il faut passer dans le dos de son bouclier.",
+            "La famille compare ce que vous avez converti à ce qu'un joueur moyen aurait converti sur ces mêmes opportunités : 50 si vous faites pareil. Réussir une ouverture difficile rapporte, rater une ouverture facile coûte, et une grosse chute pèse plus qu'une petite.",
+            "Les chances sont posées à la main en attendant d'être apprises sur vos duels.",
+            "Pour la monter : ne laissez pas passer les ouvertures faciles, collé à lui et sur une chute courte."));
         list.add(family(report, 1, "Qualité du smash",
-            "Quand vous frappez, le coup est-il bon ? C'est le bonus moyen de vos smashs, rapporté à celui d'une chute de référence. Un smash porté de haut vaut plus qu'un smash porté juste au-dessus de sa tête.",
-            "La valeur de référence est 78 %.",
-            "Pour la monter : prenez plus de hauteur avant de frapper."));
+            "Ce que vous tirez de vos gros coups. Pour chaque smash réussi : les dégâts portés divisés par les dégâts possibles. Possibles : masse chargée à fond, coup critique, et la plus grosse chute de la fenêtre.",
+            "Deux erreurs y coûtent : frapper trop tôt, avec moins de chute que la fenêtre ne le permettait, et frapper mal chargé (moins de dégâts de base, pas de critique). La charge est celle que le jeu compte au coup : un attribute swap qui garde la charge de l'arme d'avant compte comme un coup bien chargé.",
+            "La charge de la lance compte aussi : les dégâts à la vitesse de l'impact divisés par ceux que permettait la plus grande vitesse de l'approche.",
+            "La hauteur elle-même n'y compte pas : elle est déjà dans la conversion et le contrôle. Les coups ordinaires ne rapportent rien. La valeur de référence est 75 %.",
+            "Pour la monter : attendez le bas de la chute pour frapper, avec la barre d'attaque pleine et sans sprinter."));
         list.add(family(report, 2, "Défense",
-            "Laissez-vous des ouvertures ? C'est la part des opportunités de l'adversaire qu'il ne convertit pas : plus il rate, ou plus vous esquivez, plus elle monte.",
-            "Le joueur de référence n'en laisse convertir qu'environ 18 %, soit une défense de 82 %.",
-            "Pour la monter : ne restez pas sous lui quand il tombe, sortez de sa zone ou reprenez de la hauteur à votre tour."));
-        list.add(family(report, 3, "Contrôle vertical",
-            "Qui domine la hauteur ? Trois mesures : pour moitié, la part du temps où vous êtes plus haut que lui ; pour un quart, la hauteur que vous prenez au-dessus de lui, jusqu'à 12 blocs ; pour le dernier quart, votre part de la hauteur prise face à la sienne.",
-            "La valeur de référence est 50 % : chacun domine la moitié du temps.",
-            "Pour la monter : reprenez de la hauteur dès que vous touchez le sol, avec vos charges de vent."));
+            "Empêchez-vous l'adversaire de vous mettre ses gros coups ? Six mesures : le bouclier (30 %), les ouvertures laissées (25 %), le temps vulnérable (15 %), l'esquive (15 %), atterrir proprement (10 %) et la reprise après un coup (5 %).",
+            "Bouclier : chaque smash arrêté rapporte selon ce qu'il valait, dix fois plus si vous étiez à 4 blocs ou plus au-dessus du sol. Une garde cassée par une hache coûte autant qu'un smash de 8 blocs arrêté. Rester au sol bouclier levé sous lui coûte un peu.",
+            "Ouvertures laissées : l'envers exact de la conversion, sur ses opportunités. Temps vulnérable : au sol pendant qu'il est au-dessus de vous et à portée. Esquive : sortir de sa zone pendant ses descentes. Atterrir proprement : les dégâts de chute après un de vos smashs ratés. Reprise : vous dégager après un coup reçu.",
+            "Les dégâts évités, affichés à part, résument ce qu'il pouvait vous mettre et qu'il n'a pas mis. Ils ne comptent pas dans la note.",
+            "Pour la monter : levez le bouclier quand il tombe sur vous en l'air, pas au sol en permanence, et ne restez pas sous lui."));
+        list.add(family(report, 3, "Contrôle vertical et horizontal",
+            "Vous déplacez-vous pour mettre le coup ? On juge le déplacement obtenu, pas la technique : un combo qui ne vous amène nulle part ne rapporte rien.",
+            "Suivre pendant la chute (35 %) : vos descentes qui arrivent à portée, la distance rattrapée quand il fuit, et les gros coups qui passent du premier coup. Prendre la hauteur (20 %) : vitesse de montée, temps pour repasser au-dessus de lui, hauteur gagnée par charge de vent ou par combo perle et charge de vent, et la domination de la hauteur.",
+            "Se placer au sommet (15 %) : être juste au-dessus de lui quand vous commencez à redescendre. Se déplacer à l'horizontale (15 %) : vitesse de rapprochement face à sa fuite, élans de Lunge qui vous mettent à portée, vols en élytre qui finissent en opportunité. Enchaîner (15 %) : un smash suivi d'une nouvelle opportunité sans toucher le sol, et le temps pour reconstruire après chaque engagement.",
+            "Une armure en netherite ou la protection contre les explosions font monter moins haut : la hauteur attendue en tient compte. La valeur de référence est 50 %.",
+            "Pour la monter : suivez-le pendant votre chute pour que le coup passe du premier coup."));
         list.add(family(report, 4, "Ressources",
-            "Vos ressources servent-elles ? On compte les charges de vent suivies d'une opportunité, et les totems que vous forcez chez l'adversaire face à ceux que vous consommez.",
-            "La valeur de référence est 65 %.",
-            "Pour la monter : utilisez une charge de vent pour vous mettre au-dessus de lui, pas pour fuir."));
+            "Utilisez-vous vos objets au bon moment, pour une bonne raison ? Charges de vent et perles (30 %), barre d'inventaire (20 %), nourriture et vie (20 %), totems (15 %), potions (10 %), fusées d'élytre (5 %). Une partie absente du duel ne compte pas.",
+            "Chaque charge de vent ou perle doit avoir une raison : monter pour attaquer, casser son smash, fuir quand vous êtes bas ou sous lui, le toucher, annuler une chute qui allait faire mal, ou une perle qui vous place. Sans raison, elle est gâchée.",
+            "Barre d'inventaire : le délai pour avoir le bon objet en main quand il sert (la masse à l'ouverture, la charge de vent après l'atterrissage, la pomme quand vous passez sous 4 cœurs). Pomme d'or : sous 4 cœurs ou juste après un totem. Potions : force et vitesse seulement. Totems : le délai pour en remettre un.",
+            "La valeur de référence est 55 %.",
+            "Pour la monter : une charge de vent sert à quelque chose, pas à attendre."));
 
         Topic opponent = new Topic("Niveau adverse",
             "# Pendant le duel",
-            "Le niveau de votre adversaire, tel qu'on peut le lire de ce qu'il a fait contre vous : ses quatre familles mesurables (conversion, qualité du smash, défense, contrôle vertical), jugées avec les mêmes références que les vôtres, puis combinées comme une note. C'est ce que montre le face-à-face.",
+            "Le niveau de votre adversaire, tel qu'on peut le lire de ce qu'il a fait contre vous : ses quatre familles mesurables (conversion, qualité du smash, défense, contrôle vertical et horizontal), jugées avec les mêmes références que les vôtres, puis combinées comme une note. C'est ce que montre le face-à-face.",
             "Il n'entre pas dans la note de ce duel. On ne le voit jouer que contre vous : sa conversion est l'envers de votre défense, sa défense l'envers de votre conversion. Ce niveau est donc en grande partie le miroir de votre jeu ; le compter reviendrait à vous enlever une partie de ce que vous avez bien fait.",
             "# Avant le duel",
             "Ce qui compte dans la note, c'est sa force connue avant le duel : la moyenne de son niveau dans vos duels précédents contre lui, reconnu à son compte même s'il change de pseudo. Elle est tirée vers 50 tant que vous l'avez peu affronté : un duel passé compte pour un tiers, deux pour la moitié, huit pour les quatre cinquièmes.",
             "Elle entre dans votre note comme une sixième famille : bien jouer contre un adversaire connu pour être fort vaut plus, contre un adversaire connu pour être faible vaut moins. Contre un inconnu, elle vaut 50 et ne change rien.",
             "# Ce qu'il faut savoir",
-            "Ses ressources ne sont pas mesurées. Ce niveau ne vaut que sur votre PC et face à vous : ce n'est pas un classement.");
+            "Ses ressources ne sont pas mesurées : ses objets ne se voient pas d'ici. Ce niveau ne vaut que sur votre PC et face à vous : ce n'est pas un classement.");
         if (report != null) {
             opponent.paragraphs.add("# Dans ce duel");
             int met = (int) report[NativeCombat.REPORT_FOE_KNOWN_DUELS];
@@ -354,6 +367,21 @@ final class PvpInfoModal {
         }
         list.add(opponent);
 
+        Topic bugUse = new Topic("Bug use",
+            "Un bonus pour les techniques les plus dures du PvP à la masse. Il ne fait jamais baisser la note : il s'y ajoute, jusqu'à 10 points, et la note reste plafonnée à 100. Une tentative ratée ne coûte rien.",
+            "# Les techniques",
+            "La famille de l'attribute swap, où l'on change d'objet dans le tick du coup : cooldown swap (1 point), lunge swap (1), breach swap (2), density swap (2), reach swap (2). Et les techniques au tick près : elytra swap (2), deux totems coup sur coup (3), stun slam (4), instant pearl catch (4).",
+            "Une technique ne compte que réussie : le coup confirmé par le serveur, ou l'effet obtenu. Un breach ou density swap qui porte un smash compte double, un stun slam vaut plus selon le smash qui passe, un instant pearl catch plus selon la hauteur gagnée quand il mène à une opportunité.",
+            "# L'adversaire",
+            "Ce qu'on voit de ses techniques est affiché, jamais compté : ni dans sa force, ni dans votre note.",
+            "Les points sont posés au jugé et seront ajustés avec plus de duels.");
+        if (report != null) {
+            bugUse.paragraphs.add("# Dans ce duel");
+            bugUse.paragraphs.add(Lang.tr("Votre bonus :") + " +" + Math.round(report[NativeCombat.REPORT_BUG_USE]) + ". "
+                + Lang.tr("Ses techniques :") + " " + Math.round(report[NativeCombat.REPORT_FOE_BUG_USE]) + " " + Lang.tr("points, non comptés."));
+        }
+        list.add(bugUse);
+
         list.add(new Topic("Du chiffre à la note",
             "# 1. Lissage",
             "Une famille mesurée sur peu d'événements est tirée vers la référence : on compte la référence comme 5 événements de plus. Deux smashs réussis sur deux ne valent donc pas 100 %.",
@@ -362,7 +390,9 @@ final class PvpInfoModal {
             "# 3. Combinaison",
             "Les six écarts sont moyennés, puis élargis de 1,3 fois : une moyenne est plus resserrée qu'une famille seule.",
             "# 4. Note",
-            "L'écart devient une note par la loi normale : 50 au niveau de la référence, environ 84 un écart au-dessus, environ 16 un écart en dessous. Une note de 90, ou de 10, est donc rare. Chaque barre de famille suit la même échelle."));
+            "L'écart devient une note par la loi normale : 50 au niveau de la référence, environ 84 un écart au-dessus, environ 16 un écart en dessous. Une note de 90, ou de 10, est donc rare. Chaque barre de famille suit la même échelle.",
+            "# 5. Bonus",
+            "Le bonus bug use s'ajoute ensuite à la note, sans jamais la faire baisser."));
         list.add(new Topic("Confiance et seuils",
             "La confiance dit sur combien d'opportunités la note repose : n / (n + 5), où n compte les opportunités des deux joueurs. 5 opportunités donnent 50 %, 20 en donnent 80 %.",
             "Un duel n'est pas noté s'il a duré moins de 20 secondes au contact, s'il compte moins de 3 opportunités en tout, ou s'il n'est pas à la masse. Il reste enregistré, mais l'historique ne montre que les duels notés.",
@@ -371,7 +401,8 @@ final class PvpInfoModal {
             "La note n'est pas encore calibrée : les références ont été posées à la main à partir de quelques duels. Elles seront ajustées avec plus de matchs, et les notes pourront bouger.",
             "Elle est pensée pour la masse en 1 contre 1. Un duel à l'épée est reconnu à l'arme en main et n'est pas noté.",
             "Le ping est affiché, jamais corrigé. Un ping élevé peut faire baisser la conversion.",
-            "La note ne regarde que ce que votre jeu voit : positions, chutes, coups confirmés. Elle ne sait rien de ce qui se passe hors de vue.",
+            "La note ne regarde que ce que votre jeu voit : positions, chutes, coups confirmés, sons du bouclier, objets en main. Elle ne sait rien de ce qui se passe hors de vue.",
+            "Les duels enregistrés avant l'arrivée de ces mesures n'ont ni les coups arrêtés au bouclier ni l'objet en main au moment du coup : les parties qui en dépendent (bouclier, charge, barre d'inventaire, bug use) n'y comptent pas.",
             "Les journaux de vos duels sont dans le dossier de l'instance, sous yuyuframe/matches."));
         return list;
     }

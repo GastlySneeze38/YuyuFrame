@@ -49,6 +49,13 @@ public final class PvpScoreUi {
      * une bonne prête à confusion. Une seule couleur, la sienne.
      */
     public static final UiColor FOE = new UiColor(104, 158, 255, 255);
+    /** Le bonus bug use : à part des familles, qui ne fait que monter la note. */
+    public static final UiColor BUG_USE = new UiColor(196, 140, 255, 255);
+
+    /** « 62 + 4 bug use » : la note des familles et le bonus, à part. */
+    public static String bugUseText(double baseScore, double bonus) {
+        return Math.round(baseScore) + " + " + Math.round(bonus) + " " + Lang.tr("bug use");
+    }
 
     /** À partir de là, une note est bonne ; en dessous de l'autre seuil, elle est mauvaise. */
     public static final double GOOD_FROM = 65;

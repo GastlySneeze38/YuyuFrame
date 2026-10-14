@@ -45,7 +45,11 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
 
     /** Libellés des six familles, dans l'ordre de {@link NativeCombat#REPORT_FAMILIES}. */
     public static final String[] FAMILIES = {
-        "Conversion", "Qualité du smash", "Défense", "Contrôle vertical", "Ressources", "Niveau adverse",
+        "Conversion", "Qualité du smash", "Défense", "Contrôle vertical et horizontal", "Ressources", "Niveau adverse",
+    };
+    /** Les mêmes, en court, pour les colonnes étroites du panneau de fin de duel. */
+    public static final String[] SHORT_FAMILIES = {
+        "Conversion", "Qualité du smash", "Défense", "Contrôle", "Ressources", "Niveau adverse",
     };
     /** Libellés des résultats, par code ({@link NativeCombat#REPORT_RESULT}). */
     public static final String[] RESULTS = { "", "Victoire", "Défaite", "Match nul", "" };
@@ -133,6 +137,8 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
             System.arraycopy(head, 0, report, 0, head.length);
             for (int i = 0; i < NativeCombat.FAMILY_COUNT - 1; i++) report[NativeCombat.REPORT_MY_COUNTS + i] = 10;
             report[NativeCombat.REPORT_MODE] = 1;
+            report[NativeCombat.REPORT_BASE_SCORE] = 69;
+            report[NativeCombat.REPORT_BUG_USE] = 3;
             return report;
         }
 
@@ -206,9 +212,16 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
             tinted(r, left, bottom, boxRight, top, RADIUS * s, tone, 0.24f, vw, vh);
             centered(r, UiFont.BOLD, Lang.tr("NOTE"), center, top - 18f * s, fit, UiTheme.TEXT_MUTED, 0.3f * s, vw, vh);
             if (score >= 0) {
-                centered(r, UiFont.BOLD, PvpScoreUi.scoreText(score), center, bottom + 38f * s, fit, tone, 1.25f * s, vw, vh);
+                // Le bonus bug use, à part : « 62 + 4 bug use » sous la note.
+                double bonus = report[NativeCombat.REPORT_BUG_USE];
+                boolean withBonus = bonus >= 0.5;
+                centered(r, UiFont.BOLD, PvpScoreUi.scoreText(score), center, bottom + (withBonus ? 46f : 38f) * s, fit, tone, 1.25f * s, vw, vh);
+                if (withBonus) {
+                    centered(r, UiFont.BOLD, PvpScoreUi.bugUseText(report[NativeCombat.REPORT_BASE_SCORE], bonus), center, bottom + 27f * s, fit,
+                        PvpScoreUi.BUG_USE, 0.3f * s, vw, vh);
+                }
                 String confidence = Lang.tr("Confiance") + " " + Math.round(report[NativeCombat.REPORT_CONFIDENCE] * 100) + " %";
-                centered(r, UiFont.REGULAR, confidence, center, bottom + 14f * s, fit, UiTheme.TEXT_SECONDARY, 0.3f * s, vw, vh);
+                centered(r, UiFont.REGULAR, confidence, center, bottom + (withBonus ? 11f : 14f) * s, fit, UiTheme.TEXT_SECONDARY, 0.3f * s, vw, vh);
             } else {
                 centered(r, UiFont.BOLD, PvpScoreUi.NO_SCORE, center, bottom + 46f * s, fit, tone, 1.1f * s, vw, vh);
                 String[] reason = PvpScoreUi.reasonLines(report[NativeCombat.REPORT_REASON]);
@@ -237,7 +250,7 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
                 if (!measured) family = 0;
                 UiColor familyTone = opponent ? PvpScoreUi.FOE : measured ? PvpScoreUi.scoreColor(family) : PvpScoreUi.NEUTRAL;
                 float baseline = middle - HALF_CAP * label;
-                r.drawText(Lang.tr(FAMILIES[i]), cardLeft + inner, baseline,
+                r.drawText(Lang.tr(SHORT_FAMILIES[i]), cardLeft + inner, baseline,
                     opponent ? UiTheme.TEXT_MUTED : UiTheme.TEXT_SECONDARY, label, vw, vh);
                 float barY = middle - 2.5f * s;
                 float barTop = middle + 2.5f * s;

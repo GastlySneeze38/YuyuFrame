@@ -20,7 +20,8 @@ pub use rating::Prior;
 
 /// Version de l'extraction des features. Changer la définition d'une
 /// opportunité ou d'une famille l'incrémente.
-pub const EXTRACTOR_VERSION: u32 = 2;
+// Version 3 (2026-10-14) : les familles de docs/scoring/familles/.
+pub const EXTRACTOR_VERSION: u32 = 3;
 
 /// Le décompte des opportunités d'un joueur.
 #[derive(Debug, Serialize)]
@@ -63,8 +64,15 @@ pub struct Report {
     pub engaged_secs: f64,
     pub mine: Opportunities,
     pub theirs: Opportunities,
-    /// Charge d'attaque moyenne à mes smashs (relevée, pas notée).
+    /// Charge d'attaque moyenne à mes smashs, telle que le jeu la compte au coup.
     pub smash_charge: Option<f64>,
+    /// Mes grosses et mes petites ouvertures, à part (hors note).
+    pub split: features::Split,
+    /// Part des dégâts adverses neutralisés : ouvertures ratées et smashs
+    /// arrêtés, face à tout ce qu'il pouvait mettre (hors note).
+    pub avoided: Option<f64>,
+    /// Les techniques du bonus bug use, les miennes et ce qu'on voit des siennes.
+    pub bug_use: features::BugUse,
     /// Ping moyen pendant le duel, en millisecondes (affiché, pas corrigé).
     pub ping: Option<f64>,
     #[serde(flatten)]
@@ -72,7 +80,7 @@ pub struct Report {
 }
 
 /// Nombre de valeurs de [`Report::numbers`].
-pub const REPORT_LEN: usize = 38;
+pub const REPORT_LEN: usize = 46;
 
 impl Report {
     /// Ce qui reconnaît l'adversaire d'un duel à l'autre : son UUID, à
@@ -110,6 +118,13 @@ impl Report {
     /// ([`Mode::code`]). La raison de l'absence de note peut valoir 3 : le
     /// duel n'est pas à la masse. Et la sixième famille (index 9) reste le
     /// niveau de l'adversaire mesuré PENDANT le duel — affiché, hors note.
+    ///
+    /// Puis (ABI 10, familles de docs/scoring/familles/) : la note des six
+    /// familles avant le bonus (−1 si le duel n'est pas noté) ; le bonus bug
+    /// use ; les points de ses techniques à lui (affichés, jamais comptés) ;
+    /// mes grosses ouvertures ouvertes puis converties, mes petites ; la part
+    /// des dégâts adverses évités sur 100 (−1 si rien à éviter). La note
+    /// (index 0) comprend le bonus.
     pub fn numbers(&self) -> [f64; REPORT_LEN] {
         let result = match self.result.as_deref() {
             Some("win") => 1.0,
@@ -165,6 +180,14 @@ impl Report {
             r.opponent_known.score,
             r.opponent_known.count,
             self.mode.code(),
+            r.base_score.unwrap_or(-1.0),
+            r.bug_use,
+            self.bug_use.foe_points,
+            self.split.big_opened as f64,
+            self.split.big_converted as f64,
+            self.split.small_opened as f64,
+            self.split.small_converted as f64,
+            self.avoided.map(|a| (100.0 * a).round()).unwrap_or(-1.0),
         ]
     }
 }
@@ -219,6 +242,7 @@ pub fn score_with(journal: &Journal, prior: &Prior) -> Report {
     // raison-là, plus parlante.
     if duel.mode != Mode::Mace && rating.score.is_some() {
         rating.score = None;
+        rating.base_score = None;
         rating.reason = Some(UNSCORED_MODE);
     }
     Report {
@@ -234,6 +258,9 @@ pub fn score_with(journal: &Journal, prior: &Prior) -> Report {
         mine: Opportunities::of(&features.mine),
         theirs: Opportunities::of(&features.theirs),
         smash_charge: features.smash_charge,
+        split: features.split,
+        avoided: features.avoided,
+        bug_use: features.bug_use,
         rating,
     }
 }

@@ -32,7 +32,7 @@ import java.util.UUID;
 public final class NativeCombat {
 
     /** Même valeur que {@code ABI_VERSION} dans combat/bridge.rs. */
-    private static final int ABI_VERSION = 9;
+    private static final int ABI_VERSION = 10;
 
     /** Place réservée au texte de l'historique : deux cents duels en tiennent bien moins. */
     private static final int HISTORY_BYTES = 256 * 1024;
@@ -41,8 +41,8 @@ public final class NativeCombat {
      * Le résumé d'un duel, en nombres — {@code Report::numbers} dans
      * combat/score/mod.rs, même ordre.
      */
-    public static final int REPORT_LEN = 38;
-    /** Note sur 100, ou −1 si le duel n'est pas noté. */
+    public static final int REPORT_LEN = 46;
+    /** Note sur 100, bonus bug use compris, ou −1 si le duel n'est pas noté. */
     public static final int REPORT_SCORE = 0;
     /** De 0 à 1. */
     public static final int REPORT_CONFIDENCE = 1;
@@ -88,6 +88,19 @@ public final class NativeCombat {
     public static final int REPORT_FOE_KNOWN_DUELS = 36;
     /** Le mode, reconnu à l'arme en main : 1 masse, 2 épée, 3 autre. Seuls les duels à la masse sont notés. */
     public static final int REPORT_MODE = 37;
+    /** La note des six familles avant le bonus bug use, ou −1 si le duel n'est pas noté. */
+    public static final int REPORT_BASE_SCORE = 38;
+    /** Le bonus bug use ajouté à la note (0 à 10) : il ne la fait jamais baisser. */
+    public static final int REPORT_BUG_USE = 39;
+    /** Les points des techniques de l'adversaire (0 à 10) : affichés, jamais comptés. */
+    public static final int REPORT_FOE_BUG_USE = 40;
+    /** Mes grosses ouvertures (8 blocs de chute et plus) ouvertes puis converties, mes petites. */
+    public static final int REPORT_BIG_OPENED = 41;
+    public static final int REPORT_BIG_CONVERTED = 42;
+    public static final int REPORT_SMALL_OPENED = 43;
+    public static final int REPORT_SMALL_CONVERTED = 44;
+    /** Part des dégâts adverses évités sur 100 (ouvertures ratées, smashs arrêtés), −1 si rien à éviter. Hors note. */
+    public static final int REPORT_AVOIDED = 45;
 
     /** Nombres décrivant notre joueur à un tick — {@code ME_LEN} dans combat/record.rs, même ordre. */
     public static final int ME_LEN = 21;

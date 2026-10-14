@@ -12,7 +12,9 @@ use super::features::{Features, Measure};
 /// l'incrémente.
 // Version 4 (2026-10-14) : la sixième famille est la force de l'adversaire
 // connue avant le duel, et non plus son niveau mesuré pendant.
-pub const SCORE_VERSION: u32 = 4;
+// Version 5 (2026-10-14) : les familles refaites d'après docs/scoring/familles/
+// et le bonus bug use, hors de la moyenne.
+pub const SCORE_VERSION: u32 = 5;
 
 /// Poids du lissage : une famille observée sur `K` événements compte autant
 /// que sa référence.
@@ -28,17 +30,16 @@ struct Reference {
     spread: f64,
 }
 
-// Version 2 (2026-10-13) : les premières valeurs étaient trop basses — sur
-// quatre vrais duels, la qualité du smash sortait entre 0,71 et 0,81, la
-// défense à 0,88 deux fois, les ressources à 0,68 et 0,80, donc ces trois
-// familles affichaient 85 à 97 à chaque duel. Les moyennes sont remontées
-// vers ce qui a été observé. Quatre duels du même joueur : c'est un repère,
-// pas une calibration.
-const CONVERSION: Reference = Reference { mean: 0.35, spread: 0.15 };
-const SMASH_QUALITY: Reference = Reference { mean: 0.78, spread: 0.12 };
-const EXPOSURE: Reference = Reference { mean: 0.82, spread: 0.12 };
+// Version 5 (2026-10-14) : posées à la main en attendant la série de 50
+// duels. La conversion et les ouvertures laissées de la défense valent 0,5
+// par construction quand le joueur fait comme un joueur moyen sur ses
+// opportunités : la référence est déjà propre au duel. Les autres sont des
+// repères, pas une calibration.
+const CONVERSION: Reference = Reference { mean: 0.50, spread: 0.15 };
+const SMASH_QUALITY: Reference = Reference { mean: 0.75, spread: 0.15 };
+const EXPOSURE: Reference = Reference { mean: 0.50, spread: 0.15 };
 const VERTICAL: Reference = Reference { mean: 0.50, spread: 0.15 };
-const RESOURCES: Reference = Reference { mean: 0.65, spread: 0.15 };
+const RESOURCES: Reference = Reference { mean: 0.55, spread: 0.15 };
 
 /// De la moyenne des écarts à l'écart de la note. Une moyenne de familles
 /// est plus resserrée qu'une famille seule, il faut donc l'élargir — mais
@@ -69,8 +70,14 @@ fn sub(measure: Measure, reference: &Reference) -> Sub {
 
 #[derive(Debug, serde::Serialize)]
 pub struct Rating {
-    /// De 0 à 100 ; absente si le duel n'est pas noté (`reason` dit pourquoi).
+    /// De 0 à 100, bonus bug use compris ; absente si le duel n'est pas noté
+    /// (`reason` dit pourquoi).
     pub score: Option<f64>,
+    /// La note des six familles, avant le bonus (« 62 » dans « 62 + 4 bug use »).
+    pub base_score: Option<f64>,
+    /// Le bonus bug use : il ne fait jamais baisser la note, et reste hors
+    /// de la moyenne des familles (docs/scoring/familles/bug-use.md).
+    pub bug_use: f64,
     pub reason: Option<&'static str>,
     /// De 0 à 1 : à quel point la note repose sur assez d'opportunités.
     pub confidence: f64,
@@ -162,8 +169,14 @@ pub fn rate(features: &Features, prior: &Prior) -> Rating {
     let z = mean * SPREAD_FACTOR;
     let n = opportunities as f64;
     let own = combined(&subs, n);
+    let base_score = reason.is_none().then(|| (100.0 * phi(z)).round());
+    // Le bonus s'ajoute à la note des six familles, plafonné à +10 (déjà
+    // fait à l'extraction), la note restant plafonnée à 100.
+    let bug_use = features.bug_use.points;
     Rating {
-        score: reason.is_none().then(|| (100.0 * phi(z)).round()),
+        score: base_score.map(|base| (base + bug_use).min(100.0).round()),
+        base_score,
+        bug_use,
         reason,
         confidence: n / (n + K),
         conversion: subs[0],
@@ -219,19 +232,48 @@ mod tests {
     }
 
     fn against(opps: usize, secs: f64, each: Measure, foe: Measure) -> Features {
-        let one = super::super::features::Opportunity { open: 0, close: 0, converted: false, expected: 0.0, realized: 0.0, offset: 0.0, target_speed: 0.0 };
+        let one = super::super::features::Opportunity {
+            open: 0,
+            close: 0,
+            converted: false,
+            hit: None,
+            expected: 0.0,
+            realized: 0.0,
+            fall: 0.0,
+            hit_fall: 0.0,
+            offset: 0.0,
+            target_speed: 0.0,
+            behind_shield: false,
+            chance: 0.5,
+        };
         Features {
             mine: vec![one; opps],
             theirs: Vec::new(),
             engaged_secs: secs,
             conversion: each,
+            split: Default::default(),
             smash_quality: each,
             exposure: each,
+            avoided: None,
             vertical: each,
             foe: super::super::features::FoeMeasures { conversion: foe, smash_quality: foe, exposure: foe, vertical: foe },
             resources: each,
+            bug_use: Default::default(),
             smash_charge: None,
         }
+    }
+
+    #[test]
+    fn le_bonus_bug_use_ne_fait_que_monter_la_note() {
+        let mut played = features(20, 120.0, Measure { value: 0.5, count: 20.0 });
+        let without = unknown(&played);
+        played.bug_use.points = 4.0;
+        let with = unknown(&played);
+        assert_eq!(with.base_score, without.score, "la note des familles ne bouge pas");
+        assert_eq!(with.score, without.score.map(|s| s + 4.0));
+        let mut strong = features(20, 120.0, Measure { value: 1.0, count: 200.0 });
+        strong.bug_use.points = 10.0;
+        assert_eq!(unknown(&strong).score, Some(100.0), "plafonnée à 100");
     }
 
     #[test]
@@ -244,8 +286,8 @@ mod tests {
     #[test]
     fn peu_d_evenements_ramene_vers_la_reference() {
         let perfect_on_two = sub(Measure { value: 1.0, count: 2.0 }, &CONVERSION);
-        assert!((perfect_on_two.smoothed - (2.0 + K * 0.35) / (2.0 + K)).abs() < 1e-12);
-        assert!(perfect_on_two.smoothed < 0.6, "un 100 % sur deux opportunités ne vaut pas 100 %");
+        assert!((perfect_on_two.smoothed - (2.0 + K * CONVERSION.mean) / (2.0 + K)).abs() < 1e-12);
+        assert!(perfect_on_two.smoothed < 0.7, "un 100 % sur deux opportunités ne vaut pas 100 %");
         let nothing = sub(Measure { value: 0.0, count: 0.0 }, &CONVERSION);
         assert_eq!(nothing.z, 0.0, "aucun événement : la famille ne pèse rien");
     }
