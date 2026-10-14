@@ -82,6 +82,13 @@ pub struct Rating {
     /// sixième famille — bien jouer contre un adversaire fort vaut plus, et
     /// dominer un adversaire faible vaut moins.
     pub opponent: Sub,
+    /// Les quatre familles dont le niveau de l'adversaire est fait, dans
+    /// l'ordre : conversion, qualité du smash, défense, contrôle vertical.
+    pub opponent_families: [Sub; 4],
+    /// Mon jeu seul : mes cinq familles combinées comme la note, sans le
+    /// niveau de l'adversaire. À lire à côté de `opponent` — c'est la
+    /// comparaison des deux que la note résume.
+    pub own: Sub,
 }
 
 /// Fonction de répartition de la loi normale (Abramowitz et Stegun 7.1.26,
@@ -102,7 +109,7 @@ pub fn rate(features: &Features) -> Rating {
         sub(features.vertical, &VERTICAL),
         sub(features.resources, &RESOURCES),
     ];
-    let opponent = opponent_level(features);
+    let (opponent, opponent_families) = opponent_level(features);
     let opportunities = features.mine.len() + features.theirs.len();
     let reason = if features.engaged_secs < MIN_ENGAGED_SECS {
         Some("too_short")
@@ -116,6 +123,7 @@ pub fn rate(features: &Features) -> Rating {
     let mean = (subs.iter().map(|s| s.z).sum::<f64>() + opponent.z) / (subs.len() + 1) as f64;
     let z = mean * SPREAD_FACTOR;
     let n = opportunities as f64;
+    let own = combined(&subs, n);
     Rating {
         score: reason.is_none().then(|| (100.0 * phi(z)).round()),
         reason,
@@ -126,7 +134,17 @@ pub fn rate(features: &Features) -> Rating {
         vertical: subs[3],
         resources: subs[4],
         opponent,
+        opponent_families,
+        own,
     }
+}
+
+/// Des familles combinées comme une note : moyenne des écarts, élargie par
+/// `SPREAD_FACTOR`, ramenée sur l'échelle d'une famille.
+fn combined(subs: &[Sub], count: f64) -> Sub {
+    let z = subs.iter().map(|s| s.z).sum::<f64>() / subs.len() as f64 * SPREAD_FACTOR;
+    let level = phi(z);
+    Sub { value: level, count, smoothed: level, z, score: (100.0 * level).round() }
 }
 
 /// Le niveau de l'adversaire, sur l'échelle d'une famille.
@@ -139,7 +157,7 @@ pub fn rate(features: &Features) -> Rating {
 /// nous, donc sa conversion est l'envers de notre défense. C'est voulu ici —
 /// perdre contre quelqu'un qui convertit tout baisse notre défense et monte
 /// son niveau, et les deux se compensent en partie dans la note.
-fn opponent_level(features: &Features) -> Sub {
+fn opponent_level(features: &Features) -> (Sub, [Sub; 4]) {
     let foe = &features.foe;
     let subs = [
         sub(foe.conversion, &CONVERSION),
@@ -147,9 +165,7 @@ fn opponent_level(features: &Features) -> Sub {
         sub(foe.exposure, &EXPOSURE),
         sub(foe.vertical, &VERTICAL),
     ];
-    let z = subs.iter().map(|s| s.z).sum::<f64>() / subs.len() as f64 * SPREAD_FACTOR;
-    let level = phi(z);
-    Sub { value: level, count: (features.mine.len() + features.theirs.len()) as f64, smoothed: level, z, score: (100.0 * level).round() }
+    (combined(&subs, (features.mine.len() + features.theirs.len()) as f64), subs)
 }
 
 #[cfg(test)]
@@ -199,6 +215,7 @@ mod tests {
     fn un_duel_sans_evenement_vaut_cinquante_et_un_duel_court_n_est_pas_note() {
         let empty = Measure { value: 0.0, count: 0.0 };
         assert_eq!(rate(&features(5, 60.0, empty)).score, Some(50.0));
+        assert_eq!(rate(&features(5, 60.0, empty)).own.score, 50.0, "mon jeu seul, sans rien mesurer : moyen");
         assert_eq!(rate(&features(5, 10.0, empty)).reason, Some("too_short"));
         assert_eq!(rate(&features(5, 10.0, empty)).score, None);
         assert_eq!(rate(&features(2, 60.0, empty)).reason, Some("too_few_opportunities"));

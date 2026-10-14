@@ -1,0 +1,299 @@
+package com.yuyuframe.launcheragent.runtime.ui.ingameui;
+
+import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
+import com.yuyuframe.launcheragent.apigraphic.anim.UiAnimatedFloat;
+import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
+import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
+import com.yuyuframe.launcheragent.apigraphic.value.UiTheme;
+import com.yuyuframe.launcheragent.apigraphic.widget.UiWidget;
+import com.yuyuframe.launcheragent.runtime.combat.NativeCombat;
+import com.yuyuframe.launcheragent.runtime.i18n.Lang;
+import com.yuyuframe.launcheragent.runtime.module.gameplay.PvpScoreModule;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiButton;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * « Comment ça marche ? » : la fenêtre qui explique la note, un sujet à la
+ * fois — la liste des sujets à gauche, le texte à droite.
+ *
+ * <p>Ouverte depuis les deux pages du Score PvP. Depuis la page d'un duel,
+ * elle reçoit le résumé de ce duel et chaque famille y dit en plus ce qu'elle
+ * valait ce jour-là ; un clic sur une famille de la page ouvre directement son
+ * sujet ({@link #FAMILY_TOPICS}).
+ *
+ * <p><b>Chaque phrase décrit ce que fait le code</b> ({@code content-core/src/combat/}) :
+ * un seuil, une référence ou une règle qui change s'y reporte. Pas de tiret
+ * long ni de symbole mathématique : la police ne les a pas.
+ */
+final class PvpInfoModal {
+
+    /** Un sujet : son titre dans la liste, et ses paragraphes ; un paragraphe qui commence par « # » est un intertitre. */
+    private static final class Topic {
+        final String title;
+        final List<String> paragraphs = new ArrayList<String>();
+
+        Topic(String title, String... paragraphs) {
+            this.title = title;
+            for (String p : paragraphs) this.paragraphs.add(p);
+        }
+    }
+
+    /** Les intertitres : l'accent du thème, éclairci pour se lire sur le verre sombre. */
+    private static final UiColor HEADING = new UiColor(168, 152, 255, 255);
+
+    static final int OVERVIEW = 0;
+    /** Le sujet de chacune de mes cinq familles, dans l'ordre de {@link NativeCombat#REPORT_FAMILIES} ; puis celui du niveau adverse. */
+    static final int[] FAMILY_TOPICS = { 2, 3, 4, 5, 6, 7 };
+
+    private final List<Topic> topics;
+    private final Runnable onClose;
+    private final List<UiWidget> widgets = new ArrayList<UiWidget>();
+    private int selected;
+    private float px, py, pw, ph, listRight;
+    private int lastW = -1, lastH = -1;
+    private float lastScale = -1f;
+
+    /**
+     * @param report le résumé du duel dont on vient, ou {@code null} depuis l'historique
+     * @param topic  le sujet ouvert d'abord
+     */
+    PvpInfoModal(double[] report, int topic, Runnable onClose) {
+        this.topics = topics(report);
+        this.selected = Math.max(0, Math.min(topics.size() - 1, topic));
+        this.onClose = onClose;
+    }
+
+    /** Les widgets de la fenêtre : tant qu'elle est ouverte, eux seuls reçoivent les clics. */
+    List<UiWidget> widgets() {
+        return widgets;
+    }
+
+    private void layout(int vw, int vh) {
+        widgets.clear();
+        pw = Math.min(UiTheme.scaled(1040f), vw - UiTheme.scaled(80f));
+        ph = Math.min(UiTheme.scaled(660f), vh - UiTheme.scaled(80f));
+        px = (vw - pw) / 2f;
+        py = (vh - ph) / 2f;
+
+        float pad = UiTheme.scaled(20f);
+        float listW = UiTheme.scaled(250f);
+        listRight = px + pad + listW;
+        float closeH = UiTheme.scaled(38f);
+        float top = py + ph - pad - UiTheme.scaled(36f);
+        float rowGap = UiTheme.scaled(4f);
+        float rowH = Math.min(UiTheme.scaled(38f), (top - (py + pad + closeH + pad)) / topics.size() - rowGap);
+        for (int i = 0; i < topics.size(); i++) {
+            float y = top - (i + 1) * (rowH + rowGap);
+            final int index = i;
+            widgets.add(new TopicItem(px + pad, y, listW, rowH, index));
+        }
+        float closeW = UiTheme.scaled(140f);
+        widgets.add(new UiButton(px + pw - pad - closeW, py + pad, closeW, closeH, Lang.tr("Fermer"), onClose));
+    }
+
+    void draw(UiRenderer r, double mouseX, double mouseY, int vw, int vh) {
+        if (vw != lastW || vh != lastH || UiTheme.UI_SCALE != lastScale) {
+            layout(vw, vh);
+            lastW = vw; lastH = vh; lastScale = UiTheme.UI_SCALE;
+        }
+        r.drawRoundedRect(0f, 0f, vw, vh, 0f, UiTheme.GLASS_SCRIM, vw, vh);
+        r.drawGlassPanel(px, py, px + pw, py + ph, UiTheme.scaled(14f),
+            UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_MODAL, UiTheme.PANEL_BG,
+            UiTheme.GLASS_BORDER, Math.max(1f, UiTheme.scaled(1f)), vw, vh);
+
+        float pad = UiTheme.scaled(20f);
+        PvpScoreUi.left(r, UiFont.BOLD, Lang.tr("COMMENT ÇA MARCHE"), px + pad, py + ph - pad - UiTheme.scaled(18f),
+            listRight - px - pad, UiTheme.TEXT_MUTED, UiTheme.scaled(0.4f), vw, vh);
+        // La liste des sujets sur un fond un peu plus sombre, séparée du texte.
+        r.drawRoundedRect(listRight + pad / 2f, py + pad, listRight + pad / 2f + Math.max(1f, UiTheme.scaled(1f)), py + ph - pad,
+            0f, UiTheme.GLASS_BORDER, vw, vh);
+        for (UiWidget w : widgets) {
+            w.draw(r, mouseX, mouseY, vw, vh);
+        }
+        drawTopic(r, topics.get(selected), listRight + pad * 1.6f, px + pw - pad * 1.4f,
+            py + ph - pad, py + pad + UiTheme.scaled(48f), vw, vh);
+    }
+
+    /**
+     * Le texte d'un sujet. Il doit tenir sans défiler (le découpage aux bords
+     * d'une zone ne marche pas sur toutes les versions du jeu) : s'il dépasse,
+     * il est redessiné un peu plus petit jusqu'à tenir.
+     */
+    private void drawTopic(UiRenderer r, Topic topic, float left, float right, float top, float bottom, int vw, int vh) {
+        float width = right - left;
+        float body = UiTheme.scaled(0.5f);
+        List<Object[]> lines = null;
+        float lineH = 0f;
+        for (int attempt = 0; attempt < 12; attempt++) {
+            lineH = body * 46f;
+            lines = new ArrayList<Object[]>();
+            float height = body * 1.6f * 52f;
+            for (String paragraph : topic.paragraphs) {
+                boolean heading = paragraph.startsWith("# ");
+                String text = heading ? paragraph.substring(2) : paragraph;
+                UiFont font = heading ? UiFont.BOLD : UiFont.REGULAR;
+                float scale = heading ? body * 1.08f : body;
+                height += heading ? lineH * 0.7f : lineH * 0.45f;
+                for (String line : PvpScoreUi.wrap(r, font, text, scale, width)) {
+                    lines.add(new Object[]{ line, font, scale, heading });
+                    height += lineH;
+                }
+                lines.add(null);
+            }
+            if (height <= top - bottom) break;
+            body *= 0.92f;
+        }
+
+        float titleScale = body * 1.6f;
+        float y = top - titleScale * 32f;
+        PvpScoreUi.left(r, UiFont.BOLD, Lang.tr(topic.title), left, y, width, UiTheme.TEXT_PRIMARY, titleScale, vw, vh);
+        y -= titleScale * 22f;
+        boolean paragraphStart = true;
+        for (Object[] line : lines) {
+            if (line == null) {
+                paragraphStart = true;
+                continue;
+            }
+            boolean heading = (Boolean) line[3];
+            if (paragraphStart) {
+                y -= heading ? lineH * 0.7f : lineH * 0.45f;
+                paragraphStart = false;
+            }
+            y -= lineH;
+            r.drawText((UiFont) line[1], (String) line[0], left, y + lineH * 0.25f,
+                heading ? HEADING : UiTheme.TEXT_SECONDARY, (Float) line[2], vw, vh);
+        }
+    }
+
+    /** Une ligne de la liste des sujets ; celle qui est ouverte est surlignée. */
+    private final class TopicItem extends UiWidget {
+        private final int index;
+        private final UiAnimatedFloat hover = new UiAnimatedFloat(0f, 16f);
+
+        TopicItem(float x, float y, float w, float h, int index) {
+            super(x, y, w, h);
+            this.index = index;
+        }
+
+        @Override
+        public void draw(UiRenderer r, double mouseX, double mouseY, int vw, int vh) {
+            hover.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
+            boolean on = index == selected;
+            float radius = UiTheme.scaled(8f);
+            if (on) {
+                r.drawRoundedRect(x, y, x + w, y + h, radius, UiTheme.ACCENT.withAlpha(0.28f), vw, vh);
+                r.drawRoundedRect(x, y + h * 0.2f, x + UiTheme.scaled(3f), y + h * 0.8f, UiTheme.scaled(1.5f), UiTheme.ACCENT, vw, vh);
+            } else if (hover.get() > 0.01f) {
+                r.drawRoundedRect(x, y, x + w, y + h, radius, new UiColor(255, 255, 255, 18).multiplyAlpha(hover.get()), vw, vh);
+            }
+            float scale = UiTheme.scaled(0.44f);
+            PvpScoreUi.left(r, on ? UiFont.BOLD : UiFont.REGULAR, Lang.tr(topics.get(index).title),
+                x + UiTheme.scaled(14f), PvpScoreUi.middle(y + h / 2f, scale), w - UiTheme.scaled(20f),
+                on ? UiTheme.TEXT_PRIMARY : UiTheme.TEXT_SECONDARY, scale, vw, vh);
+        }
+
+        @Override
+        public void onClick() {
+            selected = index;
+        }
+    }
+
+    // ── Les sujets ───────────────────────────────────────────────────────────
+
+    private static List<Topic> topics(double[] report) {
+        List<Topic> list = new ArrayList<Topic>();
+        list.add(new Topic("Vue d'ensemble",
+            "La note résume un duel à la masse sur 100. 50, c'est le joueur de référence : au-dessus, vous avez mieux joué que lui ; en dessous, moins bien.",
+            "Tout est calculé sur votre PC, à partir de ce que votre jeu voit pendant le duel. Rien n'est envoyé à un serveur et il n'y a pas de classement.",
+            "La note est faite de six familles qui pèsent autant les unes que les autres : vos cinq familles (conversion, qualité du smash, défense, contrôle vertical, ressources) et le niveau de votre adversaire.",
+            "# Les couleurs",
+            "Vert à partir de 65 : un bon duel. Ambre de 45 à 64 : dans la moyenne. Rouge en dessous de 45 : un duel difficile. Gris : pas de note. Les barres bleues sont celles de l'adversaire.",
+            "# Quand un duel est reconnu",
+            "Un duel commence au premier échange de coups avec un vrai joueur. Il se termine quand l'un des deux perd son équipement à la fin de la manche. Un adversaire qui quitte le duel compte comme un match nul : il ne s'est pas vraiment battu."));
+        list.add(new Topic("Opportunités",
+            "Une opportunité, c'est un moment où un smash est possible : vous tombez d'au moins 1,5 bloc, vous êtes en train de descendre, vous êtes au-dessus de l'adversaire et à moins de 3,5 blocs de lui à l'horizontale.",
+            "Elle est convertie si un coup de masse touche pendant ce moment. Les mêmes règles valent pour l'adversaire : ses opportunités sont celles que vous lui laissez.",
+            "# Le bonus du smash",
+            "Le smash ajoute des dégâts selon la hauteur de chute : 4 par bloc pour les 3 premiers, 2 par bloc jusqu'à 8, puis 1 par bloc au-delà, plus l'enchantement Densité. La charge de l'attaque ne change pas ce bonus.",
+            "Les dégâts de smash d'un duel comparent la somme des bonus réellement portés à celle qu'auraient donnée toutes les opportunités."));
+        list.add(family(report, 0, "Conversion",
+            "Exploitez-vous vos ouvertures ? C'est la part de vos opportunités qui se terminent par un smash.",
+            "Le joueur de référence en convertit environ 35 %.",
+            "Pour la monter : frappez pendant la chute sans attendre d'être trop bas, et restez à moins de 3,5 blocs de lui."));
+        list.add(family(report, 1, "Qualité du smash",
+            "Quand vous frappez, le coup est-il bon ? C'est le bonus moyen de vos smashs, rapporté à celui d'une chute de référence. Un smash porté de haut vaut plus qu'un smash porté juste au-dessus de sa tête.",
+            "La valeur de référence est 78 %.",
+            "Pour la monter : prenez plus de hauteur avant de frapper."));
+        list.add(family(report, 2, "Défense",
+            "Laissez-vous des ouvertures ? C'est la part des opportunités de l'adversaire qu'il ne convertit pas : plus il rate, ou plus vous esquivez, plus elle monte.",
+            "Le joueur de référence n'en laisse convertir qu'environ 18 %, soit une défense de 82 %.",
+            "Pour la monter : ne restez pas sous lui quand il tombe, sortez de sa zone ou reprenez de la hauteur à votre tour."));
+        list.add(family(report, 3, "Contrôle vertical",
+            "Qui domine la hauteur ? Trois mesures : pour moitié, la part du temps où vous êtes plus haut que lui ; pour un quart, la hauteur que vous prenez au-dessus de lui, jusqu'à 12 blocs ; pour le dernier quart, votre part de la hauteur prise face à la sienne.",
+            "La valeur de référence est 50 % : chacun domine la moitié du temps.",
+            "Pour la monter : reprenez de la hauteur dès que vous touchez le sol, avec vos charges de vent."));
+        list.add(family(report, 4, "Ressources",
+            "Vos ressources servent-elles ? On compte les charges de vent suivies d'une opportunité, et les totems que vous forcez chez l'adversaire face à ceux que vous consommez.",
+            "La valeur de référence est 65 %.",
+            "Pour la monter : utilisez une charge de vent pour vous mettre au-dessus de lui, pas pour fuir."));
+
+        Topic opponent = new Topic("Niveau adverse",
+            "Le niveau de votre adversaire, tel qu'on peut le lire de ce qu'il a fait contre vous. Ce sont ses quatre familles mesurables (conversion, qualité du smash, défense, contrôle vertical), jugées avec les mêmes références que les vôtres, puis combinées comme une note.",
+            "Il entre dans votre note comme une sixième famille : bien jouer contre un adversaire fort vaut plus, dominer un adversaire faible vaut moins.",
+            "# Ce qu'il faut savoir",
+            "On ne le voit jouer que contre vous : sa conversion est l'envers de votre défense. Bien défendre fait donc aussi baisser son niveau. Ses ressources ne sont pas mesurées.",
+            "Ce niveau ne vaut que sur votre PC et face à vous : ce n'est pas un classement.");
+        if (report != null) {
+            opponent.paragraphs.add("# Dans ce duel");
+            StringBuilder detail = new StringBuilder(Lang.tr("Niveau") + " " + Math.round(report[NativeCombat.REPORT_FAMILIES + 5]) + " : ");
+            for (int i = 0; i < NativeCombat.FOE_FAMILY_COUNT; i++) {
+                if (i > 0) detail.append(", ");
+                detail.append(Lang.tr(PvpScoreModule.FAMILIES[i]).toLowerCase(java.util.Locale.ROOT)).append(" ")
+                    .append(Math.round(report[NativeCombat.REPORT_FOE_FAMILIES + i]));
+            }
+            detail.append(". ").append(Lang.tr("Votre jeu seul, sans son niveau :")).append(" ").append(Math.round(report[NativeCombat.REPORT_OWN])).append(".");
+            opponent.paragraphs.add(detail.toString());
+        }
+        list.add(opponent);
+
+        list.add(new Topic("Du chiffre à la note",
+            "# 1. Lissage",
+            "Une famille mesurée sur peu d'événements est tirée vers la référence : on compte la référence comme 5 événements de plus. Deux smashs réussis sur deux ne valent donc pas 100 %.",
+            "# 2. Écart",
+            "La valeur lissée est comparée à la référence, en nombre d'écarts habituels entre joueurs. Un écart de 0, c'est exactement la référence.",
+            "# 3. Combinaison",
+            "Les six écarts sont moyennés, puis élargis de 1,3 fois : une moyenne est plus resserrée qu'une famille seule.",
+            "# 4. Note",
+            "L'écart devient une note par la loi normale : 50 au niveau de la référence, environ 84 un écart au-dessus, environ 16 un écart en dessous. Une note de 90, ou de 10, est donc rare. Chaque barre de famille suit la même échelle."));
+        list.add(new Topic("Confiance et seuils",
+            "La confiance dit sur combien d'opportunités la note repose : n / (n + 5), où n compte les opportunités des deux joueurs. 5 opportunités donnent 50 %, 20 en donnent 80 %.",
+            "Un duel n'est pas noté s'il a duré moins de 20 secondes au contact, ou s'il compte moins de 3 opportunités en tout. Il apparaît quand même dans l'historique, sans note.",
+            "La note moyenne de l'historique ne compte que les duels notés."));
+        list.add(new Topic("Limites",
+            "La note n'est pas encore calibrée : les références ont été posées à la main à partir de quelques duels. Elles seront ajustées avec plus de matchs, et les notes pourront bouger.",
+            "Elle est pensée pour la masse en 1 contre 1. Un duel à l'épée est reconnu, mais sa note ne veut pas dire grand-chose.",
+            "Le ping est affiché, jamais corrigé. Un ping élevé peut faire baisser la conversion.",
+            "La note ne regarde que ce que votre jeu voit : positions, chutes, coups confirmés. Elle ne sait rien de ce qui se passe hors de vue.",
+            "Les journaux de vos duels sont dans le dossier de l'instance, sous yuyuframe/matches."));
+        return list;
+    }
+
+    /** Le sujet d'une de mes familles ; depuis un duel, ce qu'elle y valait. */
+    private static Topic family(double[] report, int index, String title, String... paragraphs) {
+        Topic topic = new Topic(title, paragraphs);
+        if (report != null) {
+            long value = Math.round(report[NativeCombat.REPORT_FAMILIES + index]);
+            long events = Math.round(report[NativeCombat.REPORT_MY_COUNTS + index]);
+            topic.paragraphs.add("# Dans ce duel");
+            topic.paragraphs.add(value + " " + Lang.tr("sur 100, mesurée sur") + " " + events + " "
+                + Lang.tr(events > 1 ? "événements." : "événement.")
+                + (events < 5 ? " " + Lang.tr("C'est peu : la valeur reste proche de la référence.") : ""));
+            if (index < NativeCombat.FOE_FAMILY_COUNT) {
+                topic.paragraphs.add(Lang.tr("Votre adversaire :") + " " + Math.round(report[NativeCombat.REPORT_FOE_FAMILIES + index]) + ".");
+            }
+        }
+        return topic;
+    }
+}

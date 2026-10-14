@@ -32,7 +32,7 @@ import java.util.UUID;
 public final class NativeCombat {
 
     /** Même valeur que {@code ABI_VERSION} dans combat/bridge.rs. */
-    private static final int ABI_VERSION = 6;
+    private static final int ABI_VERSION = 7;
 
     /** Place réservée au texte de l'historique : deux cents duels en tiennent bien moins. */
     private static final int HISTORY_BYTES = 256 * 1024;
@@ -41,7 +41,7 @@ public final class NativeCombat {
      * Le résumé d'un duel, en nombres — {@code Report::numbers} dans
      * combat/score/mod.rs, même ordre.
      */
-    public static final int REPORT_LEN = 16;
+    public static final int REPORT_LEN = 35;
     /** Note sur 100, ou −1 si le duel n'est pas noté. */
     public static final int REPORT_SCORE = 0;
     /** De 0 à 1. */
@@ -61,6 +61,22 @@ public final class NativeCombat {
     public static final int REPORT_THEIR_CONVERTED = 14;
     /** Secondes passées avec l'adversaire à portée. */
     public static final int REPORT_ENGAGED_SECS = 15;
+    /** Les quatre familles du niveau de l'adversaire sur 100 : conversion, qualité du smash, défense, contrôle vertical. */
+    public static final int REPORT_FOE_FAMILIES = 16;
+    public static final int FOE_FAMILY_COUNT = 4;
+    /** Nombre d'événements derrière chacune de mes cinq familles (dans l'ordre de {@link #REPORT_FAMILIES}). */
+    public static final int REPORT_MY_COUNTS = 20;
+    /** Nombre d'événements derrière chacune des quatre familles de l'adversaire. */
+    public static final int REPORT_FOE_COUNTS = 25;
+    /** Bonus de smash : les miens portés puis possibles, les siens portés puis possibles (points de dégâts). */
+    public static final int REPORT_MY_SMASH_DEALT = 29;
+    public static final int REPORT_MY_SMASH_POSSIBLE = 30;
+    public static final int REPORT_THEIR_SMASH_DEALT = 31;
+    public static final int REPORT_THEIR_SMASH_POSSIBLE = 32;
+    /** Charge d'attaque moyenne à mes smashs, de 0 à 1 ; −1 sans smash. */
+    public static final int REPORT_SMASH_CHARGE = 33;
+    /** Mon jeu seul sur 100 : mes cinq familles combinées, sans le niveau de l'adversaire. */
+    public static final int REPORT_OWN = 34;
 
     /** Nombres décrivant notre joueur à un tick — {@code ME_LEN} dans combat/record.rs, même ordre. */
     public static final int ME_LEN = 15;

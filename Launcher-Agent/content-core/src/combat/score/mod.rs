@@ -65,7 +65,7 @@ pub struct Report {
 }
 
 /// Nombre de valeurs de [`Report::numbers`].
-pub const REPORT_LEN: usize = 16;
+pub const REPORT_LEN: usize = 35;
 
 impl Report {
     /// Le résumé en nombres, pour l'interface en jeu — contrat avec
@@ -77,6 +77,13 @@ impl Report {
     /// smash, exposition, contrôle vertical, ressources, niveau de l'adversaire) ;
     /// ping (−1 si inconnu) ; mes opportunités ouvertes puis converties ;
     /// celles de l'adversaire ; secondes au contact.
+    ///
+    /// Puis, pour le détail (ABI 7) : les quatre familles du niveau de
+    /// l'adversaire sur 100 (conversion, qualité du smash, défense, contrôle
+    /// vertical) ; le nombre d'événements derrière chacune de mes cinq
+    /// familles, puis derrière chacune des quatre siennes ; mes bonus de
+    /// smash portés puis possibles, les siens ; la charge d'attaque moyenne à
+    /// mes smashs (−1 si aucun) ; mon jeu seul sur 100.
     pub fn numbers(&self) -> [f64; REPORT_LEN] {
         let result = match self.result.as_deref() {
             Some("win") => 1.0,
@@ -90,6 +97,8 @@ impl Report {
             Some(_) => 2.0,
             None => 0.0,
         };
+        let r = &self.rating;
+        let foe = &r.opponent_families;
         [
             self.rating.score.unwrap_or(-1.0),
             self.rating.confidence,
@@ -107,6 +116,25 @@ impl Report {
             self.theirs.opened as f64,
             self.theirs.converted as f64,
             self.engaged_secs,
+            foe[0].score,
+            foe[1].score,
+            foe[2].score,
+            foe[3].score,
+            r.conversion.count,
+            r.smash_quality.count,
+            r.exposure.count,
+            r.vertical.count,
+            r.resources.count,
+            foe[0].count,
+            foe[1].count,
+            foe[2].count,
+            foe[3].count,
+            self.mine.realized,
+            self.mine.expected,
+            self.theirs.realized,
+            self.theirs.expected,
+            self.smash_charge.unwrap_or(-1.0),
+            r.own.score,
         ]
     }
 }
@@ -160,6 +188,9 @@ mod tests {
         assert!(numbers[4..10].iter().all(|family| (0.0..=100.0).contains(family)));
         assert!(numbers[10] > 0.0, "ping connu");
         assert_eq!((numbers[11], numbers[12]), (report.mine.opened as f64, 3.0));
+        assert!(numbers[16..20].iter().all(|family| (0.0..=100.0).contains(family)), "familles de l'adversaire");
+        assert_eq!(numbers[29], report.mine.realized);
+        assert!((0.0..=100.0).contains(&numbers[34]), "mon jeu seul");
     }
 
     #[test]

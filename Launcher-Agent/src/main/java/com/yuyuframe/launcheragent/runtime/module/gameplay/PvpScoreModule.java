@@ -13,7 +13,7 @@ import com.yuyuframe.launcheragent.runtime.combat.NativeCombat;
 import com.yuyuframe.launcheragent.runtime.i18n.Lang;
 import com.yuyuframe.launcheragent.runtime.ui.HudElementOwner;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
-import com.yuyuframe.launcheragent.runtime.ui.ingameui.UiPvpScoreScreen;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.PvpScoreUi;
 
 /**
  * Score PvP (docs/scoring/) : allumé, le module relève les duels à la masse,
@@ -97,7 +97,7 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
      * Le panneau de fin de duel. Trois bandes, de haut en bas : le résultat ;
      * la note dans son cadre, à côté des six familles ; les chiffres du duel.
      * Mêmes couleurs que les pages de l'historique — la note et chaque barre
-     * dans la couleur de leur valeur ({@code UiPvpScoreScreen.scoreColor}), le
+     * dans la couleur de leur valeur ({@code PvpScoreUi.scoreColor}), le
      * niveau adverse en gris parce qu'il parle de l'autre.
      *
      * <p>Le fond est la carte de verre du HUD ({@link #glassCard}). Toutes les
@@ -166,14 +166,14 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
         private float drawHeader(UiRenderer r, double[] report, float left, float right, float top, float s, int vw, int vh) {
             float bottom = top - HEADER_H * s;
             int result = (int) report[NativeCombat.REPORT_RESULT];
-            UiColor tone = UiPvpScoreScreen.resultColor(result);
-            r.drawRoundedRect(left, bottom, right, top, RADIUS * s, UiColor.lerp(UiTheme.CARD_BG, tone, 0.16f), vw, vh);
+            UiColor tone = PvpScoreUi.resultColor(result);
+            tinted(r, left, bottom, right, top, RADIUS * s, tone, 0.3f, vw, vh);
             r.drawRoundedRect(left, bottom, left + 3f * s, top, 1.5f * s, tone, vw, vh);
 
             float center = (top + bottom) / 2f;
             float small = 0.32f * s;
             r.drawText(UiFont.BOLD, Lang.tr("SCORE PVP"), left + 12f * s, center - HALF_CAP * small, UiTheme.TEXT_SECONDARY, small, vw, vh);
-            String text = UiPvpScoreScreen.resultText(result).toUpperCase(java.util.Locale.ROOT);
+            String text = PvpScoreUi.resultText(result).toUpperCase(java.util.Locale.ROOT);
             if (!text.isEmpty()) {
                 float scale = 0.46f * s;
                 r.drawText(UiFont.BOLD, text, right - 12f * s - r.textWidth(UiFont.BOLD, text, scale), center - HALF_CAP * scale,
@@ -191,15 +191,15 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
             float center = (left + boxRight) / 2f;
             float fit = (SCORE_W - 14f) * s;
             double score = report[NativeCombat.REPORT_SCORE];
-            UiColor tone = UiPvpScoreScreen.scoreColor(score);
-            r.drawRoundedRect(left, bottom, boxRight, top, RADIUS * s, UiColor.lerp(UiTheme.CARD_BG, tone, 0.12f), vw, vh);
+            UiColor tone = PvpScoreUi.scoreColor(score);
+            tinted(r, left, bottom, boxRight, top, RADIUS * s, tone, 0.24f, vw, vh);
             centered(r, UiFont.BOLD, Lang.tr("NOTE"), center, top - 18f * s, fit, UiTheme.TEXT_MUTED, 0.3f * s, vw, vh);
             if (score >= 0) {
-                centered(r, UiFont.BOLD, UiPvpScoreScreen.scoreText(score), center, bottom + 38f * s, fit, tone, 1.25f * s, vw, vh);
+                centered(r, UiFont.BOLD, PvpScoreUi.scoreText(score), center, bottom + 38f * s, fit, tone, 1.25f * s, vw, vh);
                 String confidence = Lang.tr("Confiance") + " " + Math.round(report[NativeCombat.REPORT_CONFIDENCE] * 100) + " %";
                 centered(r, UiFont.REGULAR, confidence, center, bottom + 14f * s, fit, UiTheme.TEXT_SECONDARY, 0.3f * s, vw, vh);
             } else {
-                centered(r, UiFont.BOLD, UiPvpScoreScreen.NO_SCORE, center, bottom + 46f * s, fit, tone, 1.1f * s, vw, vh);
+                centered(r, UiFont.BOLD, PvpScoreUi.NO_SCORE, center, bottom + 46f * s, fit, tone, 1.1f * s, vw, vh);
                 boolean tooShort = report[NativeCombat.REPORT_REASON] == 1;
                 centered(r, UiFont.REGULAR, Lang.tr(tooShort ? "Duel trop court" : "Trop peu d'opportunités"), center, bottom + 26f * s, fit,
                     UiTheme.TEXT_SECONDARY, 0.3f * s, vw, vh);
@@ -221,7 +221,7 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
                 // Le niveau de l'adversaire parle de lui, pas de nous : gris,
                 // pour qu'il ne se lise pas comme une de nos familles.
                 boolean opponent = i == NativeCombat.FAMILY_COUNT - 1;
-                UiColor familyTone = opponent ? UiTheme.TEXT_MUTED : UiPvpScoreScreen.scoreColor(family);
+                UiColor familyTone = opponent ? PvpScoreUi.FOE : PvpScoreUi.scoreColor(family);
                 float baseline = middle - HALF_CAP * label;
                 r.drawText(Lang.tr(FAMILIES[i]), cardLeft + inner, baseline,
                     opponent ? UiTheme.TEXT_MUTED : UiTheme.TEXT_SECONDARY, label, vw, vh);
@@ -247,7 +247,7 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
                 { "SUBIES", (int) report[NativeCombat.REPORT_THEIR_CONVERTED] + " / " + (int) report[NativeCombat.REPORT_THEIR_OPENED] },
                 { "AU CONTACT", seconds >= 60 ? (seconds / 60) + " min " + (seconds % 60) + " s" : seconds + " s" },
                 // Le ping est affiché, jamais corrigé.
-                { "PING", report[NativeCombat.REPORT_PING] >= 0 ? Math.round(report[NativeCombat.REPORT_PING]) + " ms" : UiPvpScoreScreen.NO_SCORE },
+                { "PING", report[NativeCombat.REPORT_PING] >= 0 ? Math.round(report[NativeCombat.REPORT_PING]) + " ms" : PvpScoreUi.NO_SCORE },
             };
             float gap = 6f * s;
             float cell = (right - left - gap * (figures.length - 1)) / figures.length;
@@ -259,6 +259,15 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
                 centered(r, UiFont.BOLD, figures[i][1], center, bottom + 17f * s, fit, UiTheme.TEXT_PRIMARY, 0.42f * s, vw, vh);
                 centered(r, UiFont.REGULAR, Lang.tr(figures[i][0]), center, bottom + 6f * s, fit, UiTheme.TEXT_MUTED, 0.25f * s, vw, vh);
             }
+        }
+
+        /** Une carte teintée comme sur les pages : la carte grise, puis la couleur en transparence, plus franche à gauche. */
+        private static void tinted(UiRenderer r, float x1, float y1, float x2, float y2, float radius, UiColor tone, float strength,
+                                   int vw, int vh) {
+            r.drawRoundedRect(x1, y1, x2, y2, radius, UiTheme.CARD_BG, vw, vh);
+            UiColor strong = tone.withAlpha(strength);
+            UiColor faint = tone.withAlpha(strength * 0.25f);
+            r.drawGradientRect2D(x1, y1, x2, y2, radius, strong, faint, strong, faint, vw, vh);
         }
 
         /** Un texte centré sur {@code center}, rétréci s'il dépasse {@code maxWidth} : une traduction plus longue ne sort pas de sa case. */
