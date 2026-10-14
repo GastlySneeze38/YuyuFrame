@@ -15,6 +15,9 @@ mod rating;
 
 use serde::Serialize;
 
+pub use parse::Mode;
+pub use rating::Prior;
+
 /// Version de l'extraction des features. Changer la définition d'une
 /// opportunité ou d'une famille l'incrémente.
 pub const EXTRACTOR_VERSION: u32 = 2;
@@ -52,7 +55,11 @@ pub struct Report {
     /// Le pseudo de l'adversaire et l'heure d'ouverture du duel (millisecondes
     /// depuis 1970), pour l'historique.
     pub foe_name: Option<String>,
+    /// Son UUID sans tirets : ce qui le reconnaît d'un duel à l'autre.
+    pub foe_uuid: Option<String>,
     pub time: Option<u64>,
+    /// Reconnu à l'arme en main ; seuls les duels à la masse sont notés.
+    pub mode: Mode,
     pub engaged_secs: f64,
     pub mine: Opportunities,
     pub theirs: Opportunities,
@@ -65,9 +72,22 @@ pub struct Report {
 }
 
 /// Nombre de valeurs de [`Report::numbers`].
-pub const REPORT_LEN: usize = 35;
+pub const REPORT_LEN: usize = 38;
 
 impl Report {
+    /// Ce qui reconnaît l'adversaire d'un duel à l'autre : son UUID, à
+    /// défaut son pseudo en minuscules. `None` s'il n'est pas connu.
+    pub fn foe_key(&self) -> Option<String> {
+        self.foe_uuid.clone().or_else(|| self.foe_name.as_ref().map(|n| n.to_lowercase()))
+    }
+
+    /// Ce duel peut-il servir à connaître la force de son adversaire pour
+    /// les suivants ? Un duel noté — assez long, assez d'opportunités, à la
+    /// masse : sinon son niveau mesuré ne veut rien dire.
+    pub fn informs_prior(&self) -> bool {
+        self.rating.score.is_some()
+    }
+
     /// Le résumé en nombres, pour l'interface en jeu — contrat avec
     /// `runtime/combat/NativeCombat.java` (constantes `REPORT_*`). Dans
     /// l'ordre : note (−1 si le duel n'est pas noté) ; confiance ; résultat
@@ -84,6 +104,12 @@ impl Report {
     /// familles, puis derrière chacune des quatre siennes ; mes bonus de
     /// smash portés puis possibles, les siens ; la charge d'attaque moyenne à
     /// mes smashs (−1 si aucun) ; mon jeu seul sur 100.
+    ///
+    /// Puis (ABI 8) : la force de l'adversaire connue avant le duel sur 100,
+    /// le nombre de duels passés sur lesquels elle repose, et le mode
+    /// ([`Mode::code`]). La raison de l'absence de note peut valoir 3 : le
+    /// duel n'est pas à la masse. Et la sixième famille (index 9) reste le
+    /// niveau de l'adversaire mesuré PENDANT le duel — affiché, hors note.
     pub fn numbers(&self) -> [f64; REPORT_LEN] {
         let result = match self.result.as_deref() {
             Some("win") => 1.0,
@@ -94,6 +120,7 @@ impl Report {
         };
         let reason = match self.rating.reason {
             Some("too_short") => 1.0,
+            Some(UNSCORED_MODE) => 3.0,
             Some(_) => 2.0,
             None => 0.0,
         };
@@ -135,29 +162,80 @@ impl Report {
             self.theirs.expected,
             self.smash_charge.unwrap_or(-1.0),
             r.own.score,
+            r.opponent_known.score,
+            r.opponent_known.count,
+            self.mode.code(),
         ]
     }
 }
 
-/// Note un journal. `None` si le texte n'en est pas un.
+/// La raison donnée à un duel qui n'est pas à la masse : il n'est pas noté.
+const UNSCORED_MODE: &str = "not_mace";
+
+/// Le journal d'un duel déjà lu, avant sa note : de quoi savoir contre qui
+/// il a été joué, et donc quelle force connue lui donner ([`score_with`]).
+pub struct Journal {
+    duel: parse::Duel,
+}
+
+impl Journal {
+    /// `None` si le texte n'est pas un journal.
+    pub fn read(text: &str) -> Option<Self> {
+        parse::parse(text).map(|duel| Self { duel })
+    }
+
+    /// Voir [`Report::foe_key`].
+    pub fn foe_key(&self) -> Option<String> {
+        self.duel.foe_uuid.clone().or_else(|| self.duel.foe_name.as_ref().map(|n| n.to_lowercase()))
+    }
+
+    pub fn time(&self) -> Option<u64> {
+        self.duel.time
+    }
+
+    pub fn foe_uuid(&self) -> Option<&str> {
+        self.duel.foe_uuid.as_deref()
+    }
+
+    pub fn foe_name(&self) -> Option<&str> {
+        self.duel.foe_name.as_deref()
+    }
+}
+
+/// Note un journal contre un adversaire inconnu. `None` si le texte n'en est pas un.
 pub fn score_journal(text: &str) -> Option<Report> {
-    let duel = parse::parse(text)?;
-    let features = features::extract(&duel);
+    Journal::read(text).map(|journal| score_with(&journal, &Prior::default()))
+}
+
+/// Note un duel, avec la force de son adversaire connue avant lui.
+pub fn score_with(journal: &Journal, prior: &Prior) -> Report {
+    let duel = &journal.duel;
+    let features = features::extract(duel);
     // Le ping est le quinzième nombre de chaque tick ; −1 quand le jeu ne le connaît pas.
     let pings: Vec<f64> = duel.samples.iter().map(|s| s.me[14]).filter(|p| *p >= 0.0).collect();
-    Some(Report {
+    let mut rating = rating::rate(&features, prior);
+    // La note est faite pour la masse : un duel sans masse (à l'épée) est
+    // reconnu et gardé, mais pas noté. Un duel déjà trop court garde cette
+    // raison-là, plus parlante.
+    if duel.mode != Mode::Mace && rating.score.is_some() {
+        rating.score = None;
+        rating.reason = Some(UNSCORED_MODE);
+    }
+    Report {
         ping: (!pings.is_empty()).then(|| (pings.iter().sum::<f64>() / pings.len() as f64).round()),
         extractor_version: EXTRACTOR_VERSION,
         score_version: rating::SCORE_VERSION,
         result: duel.result.clone(),
         foe_name: duel.foe_name.clone(),
+        foe_uuid: duel.foe_uuid.clone(),
         time: duel.time,
+        mode: duel.mode,
         engaged_secs: features.engaged_secs,
         mine: Opportunities::of(&features.mine),
         theirs: Opportunities::of(&features.theirs),
         smash_charge: features.smash_charge,
-        rating: rating::rate(&features),
-    })
+        rating,
+    }
 }
 
 #[cfg(test)]
@@ -191,6 +269,19 @@ mod tests {
         assert!(numbers[16..20].iter().all(|family| (0.0..=100.0).contains(family)), "familles de l'adversaire");
         assert_eq!(numbers[29], report.mine.realized);
         assert!((0.0..=100.0).contains(&numbers[34]), "mon jeu seul");
+        assert_eq!((numbers[35], numbers[36]), (50.0, 0.0), "un adversaire jamais affronté");
+        assert_eq!(numbers[37], 1.0, "un duel à la masse");
+        assert_eq!(report.mode, Mode::Mace);
+    }
+
+    #[test]
+    fn un_adversaire_connu_pour_etre_fort_monte_la_note_du_meme_duel() {
+        let journal = Journal::read(DEFEAT).unwrap();
+        let first = score_with(&journal, &Prior::default());
+        let known = score_with(&journal, &Prior::from_levels(&[1.5, 1.5]));
+        assert!(known.rating.score.unwrap() > first.rating.score.unwrap());
+        assert_eq!(known.numbers()[36], 2.0, "deux duels passés contre lui");
+        assert_eq!(first.foe_key(), journal.foe_key(), "le même adversaire, lu au journal ou au résumé");
     }
 
     #[test]

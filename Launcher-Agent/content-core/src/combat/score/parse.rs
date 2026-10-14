@@ -44,8 +44,41 @@ pub struct Duel {
     pub result: Option<String>,
     /// Le pseudo de l'adversaire, s'il est nommé dans le journal.
     pub foe_name: Option<String>,
+    /// Son UUID, sans tirets : ce qui le reconnaît d'un duel à l'autre même s'il change de pseudo.
+    pub foe_uuid: Option<String>,
+    /// Le mode du duel, reconnu à l'arme en main ([`Mode`]).
+    pub mode: Mode,
     /// L'heure d'ouverture du duel, en millisecondes depuis 1970.
     pub time: Option<u64>,
+}
+
+/// Le mode d'un duel, reconnu à l'arme en main des deux duellistes : une
+/// masse vue une seule fois dans une main suffit — on la sort pour frapper,
+/// on tient une charge de vent ou une élytre le reste du temps. Sans masse,
+/// une épée fait un duel à l'épée ; sinon, c'est autre chose.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Mode {
+    Mace,
+    Sword,
+    Other,
+}
+
+impl Mode {
+    /// Le code du mode dans le résumé en nombres (`Report::numbers`).
+    pub fn code(self) -> f64 {
+        match self {
+            Mode::Mace => 1.0,
+            Mode::Sword => 2.0,
+            Mode::Other => 3.0,
+        }
+    }
+}
+
+/// L'objet en main dans un texte d'équipement : le cinquième emplacement
+/// (tête, torse, jambes, pieds, main, autre main), sans ses enchantements.
+fn main_hand(equipment: &str) -> &str {
+    equipment.split(';').nth(4).and_then(|slot| slot.split(',').next()).unwrap_or("")
 }
 
 fn int(value: &Value) -> Option<i32> {
@@ -95,7 +128,10 @@ pub fn parse(text: &str) -> Option<Duel> {
         partners.into_iter().max_by_key(|(_, count)| *count).map(|(id, _)| id)
     });
 
+    let foe_line = lines.iter().find(|l| l["k"] == "p" && foe.is_some() && int(&l["id"]) == foe);
     let mut duel = Duel {
+        foe_uuid: foe_line.and_then(|l| l["uuid"].as_str()).map(|u| u.replace('-', "").to_lowercase()),
+        mode: Mode::Other,
         samples: Vec::new(),
         hits: Vec::new(),
         my_totems: Vec::new(),
@@ -104,12 +140,10 @@ pub fn parse(text: &str) -> Option<Duel> {
         my_density: 0.0,
         foe_density: 0.0,
         result: None,
-        foe_name: lines
-            .iter()
-            .filter(|l| l["k"] == "p" && int(&l["id"]) == foe && foe.is_some())
-            .find_map(|l| l["name"].as_str().map(str::to_string)),
+        foe_name: foe_line.and_then(|l| l["name"].as_str()).map(str::to_string),
         time: lines.iter().find(|l| l["k"] == "h").and_then(|l| l["time"].as_u64()),
     };
+    let (mut saw_mace, mut saw_sword) = (false, false);
     for line in &lines {
         let t = line["t"].as_u64().unwrap_or(0);
         match line["k"].as_str().unwrap_or("") {
@@ -139,17 +173,30 @@ pub fn parse(text: &str) -> Option<Duel> {
                 }
             }
             "e" => {
-                let level = density(line["eq"].as_str().unwrap_or(""));
-                match int(&line["id"]) {
-                    Some(id) if id == me => duel.my_density = duel.my_density.max(level),
-                    Some(id) if Some(id) == foe => duel.foe_density = duel.foe_density.max(level),
-                    _ => {}
+                let equipment = line["eq"].as_str().unwrap_or("");
+                let level = density(equipment);
+                let duellist = match int(&line["id"]) {
+                    Some(id) if id == me => {
+                        duel.my_density = duel.my_density.max(level);
+                        true
+                    }
+                    Some(id) if Some(id) == foe => {
+                        duel.foe_density = duel.foe_density.max(level);
+                        true
+                    }
+                    _ => false,
+                };
+                if duellist {
+                    let hand = main_hand(equipment);
+                    saw_mace |= hand == "mace";
+                    saw_sword |= hand.ends_with("_sword");
                 }
             }
             "r" => duel.result = line["result"].as_str().map(str::to_string),
             _ => {}
         }
     }
+    duel.mode = if saw_mace { Mode::Mace } else if saw_sword { Mode::Sword } else { Mode::Other };
     duel.samples.sort_by_key(|s| s.t);
     duel.hits.sort_by_key(|h| h.t);
     duel.uses.sort_by_key(|u| u.0);
@@ -165,6 +212,33 @@ mod tests {
         assert_eq!(density("netherite_helmet,protection=4;;;;mace,density=5,wind_burst=1;totem_of_undying"), 5.0);
         assert_eq!(density(";;;;netherite_sword;"), 0.0);
         assert_eq!(density(";;;;mace;"), 0.0);
+    }
+
+    #[test]
+    fn l_arme_en_main_se_lit_au_cinquieme_emplacement() {
+        assert_eq!(main_hand("netherite_helmet,protection=4;;;;mace,density=5,wind_burst=1;totem_of_undying"), "mace");
+        assert_eq!(main_hand("diamond_helmet;diamond_chestplate;diamond_leggings;diamond_boots;diamond_sword;"), "diamond_sword");
+        assert_eq!(main_hand(";;;;;"), "");
+        assert_eq!(main_hand(""), "");
+    }
+
+    #[test]
+    fn le_mode_suit_l_arme_des_duellistes() {
+        let journal = |me_hand: &str, foe_hand: &str| {
+            format!(
+                "{{\"k\":\"h\",\"me\":1,\"t\":0}}\n{{\"k\":\"p\",\"id\":7,\"name\":\"Rival\",\"uuid\":\"B804A4A4-DF5D\",\"t\":0}}\n\
+                 {{\"k\":\"r\",\"foe\":7,\"result\":\"win\",\"t\":9}}\n\
+                 {{\"k\":\"e\",\"id\":1,\"eq\":\";;;;{me_hand};\",\"t\":1}}\n{{\"k\":\"e\",\"id\":7,\"eq\":\";;;;{foe_hand};\",\"t\":1}}\n\
+                 {{\"k\":\"e\",\"id\":99,\"eq\":\";;;;mace;\",\"t\":1}}\n"
+            )
+        };
+        assert_eq!(parse(&journal("wind_charge", "mace")).unwrap().mode, Mode::Mace, "une masse dans une main suffit");
+        assert_eq!(parse(&journal("diamond_sword", "netherite_sword")).unwrap().mode, Mode::Sword);
+        // La masse d'un spectateur (id 99) ne compte pas.
+        assert_eq!(parse(&journal("bow", "")).unwrap().mode, Mode::Other);
+        let duel = parse(&journal("mace", "mace")).unwrap();
+        assert_eq!(duel.foe_uuid.as_deref(), Some("b804a4a4df5d"), "sans tirets, en minuscules");
+        assert_eq!(duel.foe_name.as_deref(), Some("Rival"));
     }
 
     #[test]

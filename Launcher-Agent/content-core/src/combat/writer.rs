@@ -97,7 +97,14 @@ impl Sink {
     /// Note le duel et écrit son résumé à côté du journal. Le journal reste
     /// la source : ce fichier se recalcule à volonté.
     fn summarize(&self) {
-        let Some(report) = super::score::score_journal(&self.text) else { return };
+        let Some(journal) = super::score::Journal::read(&self.text) else { return };
+        // La force de l'adversaire connue avant ce duel : nos duels précédents
+        // contre lui, lus dans les résumés du même dossier.
+        let prior = match (self.summary.parent(), journal.time()) {
+            (Some(dir), Some(time)) => super::history::prior_from_summaries(dir, journal.foe_uuid(), journal.foe_name(), time),
+            _ => super::score::Prior::default(),
+        };
+        let report = super::score::score_with(&journal, &prior);
         publish(report.numbers());
         let written = serde_json::to_string_pretty(&report).map_err(|e| e.to_string()).and_then(|json| std::fs::write(&self.summary, json).map_err(|e| e.to_string()));
         if let Err(e) = written {

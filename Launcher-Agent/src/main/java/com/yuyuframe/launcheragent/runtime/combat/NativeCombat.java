@@ -32,7 +32,7 @@ import java.util.UUID;
 public final class NativeCombat {
 
     /** Même valeur que {@code ABI_VERSION} dans combat/bridge.rs. */
-    private static final int ABI_VERSION = 7;
+    private static final int ABI_VERSION = 8;
 
     /** Place réservée au texte de l'historique : deux cents duels en tiennent bien moins. */
     private static final int HISTORY_BYTES = 256 * 1024;
@@ -41,14 +41,14 @@ public final class NativeCombat {
      * Le résumé d'un duel, en nombres — {@code Report::numbers} dans
      * combat/score/mod.rs, même ordre.
      */
-    public static final int REPORT_LEN = 35;
+    public static final int REPORT_LEN = 38;
     /** Note sur 100, ou −1 si le duel n'est pas noté. */
     public static final int REPORT_SCORE = 0;
     /** De 0 à 1. */
     public static final int REPORT_CONFIDENCE = 1;
     /** 0 aucun, 1 victoire, 2 défaite, 3 nul, 4 inconnu. */
     public static final int REPORT_RESULT = 2;
-    /** Pourquoi il n'y a pas de note : 0 il y en a une, 1 duel trop court, 2 trop peu d'opportunités. */
+    /** Pourquoi il n'y a pas de note : 0 il y en a une, 1 duel trop court, 2 trop peu d'opportunités, 3 pas de masse. */
     public static final int REPORT_REASON = 3;
     /** Les six familles sur 100, à la suite : conversion, qualité du smash, exposition, contrôle vertical, ressources, niveau de l'adversaire. */
     public static final int REPORT_FAMILIES = 4;
@@ -77,6 +77,17 @@ public final class NativeCombat {
     public static final int REPORT_SMASH_CHARGE = 33;
     /** Mon jeu seul sur 100 : mes cinq familles combinées, sans le niveau de l'adversaire. */
     public static final int REPORT_OWN = 34;
+    /**
+     * La force de l'adversaire connue AVANT le duel, sur 100 : son niveau
+     * moyen dans nos duels précédents contre lui, tiré vers 50 tant qu'on l'a
+     * peu vu. C'est elle — et non le niveau mesuré pendant le duel, à
+     * {@code REPORT_FAMILIES + 5} — qui entre dans la note.
+     */
+    public static final int REPORT_FOE_KNOWN = 35;
+    /** Le nombre de duels passés contre lui sur lesquels elle repose ; 0 pour un inconnu. */
+    public static final int REPORT_FOE_KNOWN_DUELS = 36;
+    /** Le mode, reconnu à l'arme en main : 1 masse, 2 épée, 3 autre. Seuls les duels à la masse sont notés. */
+    public static final int REPORT_MODE = 37;
 
     /** Nombres décrivant notre joueur à un tick — {@code ME_LEN} dans combat/record.rs, même ordre. */
     public static final int ME_LEN = 15;

@@ -294,11 +294,12 @@ final class PvpInfoModal {
         list.add(new Topic("Vue d'ensemble",
             "La note résume un duel à la masse sur 100. 50, c'est le joueur de référence : au-dessus, vous avez mieux joué que lui ; en dessous, moins bien.",
             "Tout est calculé sur votre PC, à partir de ce que votre jeu voit pendant le duel. Rien n'est envoyé à un serveur et il n'y a pas de classement.",
-            "La note est faite de six familles qui pèsent autant les unes que les autres : vos cinq familles (conversion, qualité du smash, défense, contrôle vertical, ressources) et le niveau de votre adversaire.",
+            "La note est faite de six familles qui pèsent autant les unes que les autres : vos cinq familles (conversion, qualité du smash, défense, contrôle vertical, ressources) et la force de votre adversaire, telle que vos duels précédents contre lui la font connaître.",
             "# Les couleurs",
             "Vert à partir de 65 : un bon duel. Ambre de 45 à 64 : dans la moyenne. Rouge en dessous de 45 : un duel difficile. Gris : pas de note. Les barres bleues sont celles de l'adversaire.",
             "# Quand un duel est reconnu",
-            "Un duel commence au premier échange de coups avec un vrai joueur. Il se termine quand l'un des deux perd son équipement à la fin de la manche. Un adversaire qui quitte le duel compte comme un match nul : il ne s'est pas vraiment battu."));
+            "Un duel commence au premier échange de coups avec un vrai joueur. Il se termine quand l'un des deux perd son équipement à la fin de la manche. Un adversaire qui quitte le duel compte comme un match nul : il ne s'est pas vraiment battu.",
+            "Le mode se reconnaît à l'arme en main : dès qu'une masse apparaît dans la main de l'un des deux, c'est un duel à la masse. Les autres (à l'épée par exemple) sont enregistrés, mais pas notés."));
         list.add(new Topic("Opportunités",
             "Une opportunité, c'est un moment où un smash est possible : vous tombez d'au moins 1,5 bloc, vous êtes en train de descendre, vous êtes au-dessus de l'adversaire et à moins de 3,5 blocs de lui à l'horizontale.",
             "Elle est convertie si un coup de masse touche pendant ce moment. Les mêmes règles valent pour l'adversaire : ses opportunités sont celles que vous lui laissez.",
@@ -327,14 +328,22 @@ final class PvpInfoModal {
             "Pour la monter : utilisez une charge de vent pour vous mettre au-dessus de lui, pas pour fuir."));
 
         Topic opponent = new Topic("Niveau adverse",
-            "Le niveau de votre adversaire, tel qu'on peut le lire de ce qu'il a fait contre vous. Ce sont ses quatre familles mesurables (conversion, qualité du smash, défense, contrôle vertical), jugées avec les mêmes références que les vôtres, puis combinées comme une note.",
-            "Il entre dans votre note comme une sixième famille : bien jouer contre un adversaire fort vaut plus, dominer un adversaire faible vaut moins.",
+            "# Pendant le duel",
+            "Le niveau de votre adversaire, tel qu'on peut le lire de ce qu'il a fait contre vous : ses quatre familles mesurables (conversion, qualité du smash, défense, contrôle vertical), jugées avec les mêmes références que les vôtres, puis combinées comme une note. C'est ce que montre le face-à-face.",
+            "Il n'entre pas dans la note de ce duel. On ne le voit jouer que contre vous : sa conversion est l'envers de votre défense, sa défense l'envers de votre conversion. Ce niveau est donc en grande partie le miroir de votre jeu ; le compter reviendrait à vous enlever une partie de ce que vous avez bien fait.",
+            "# Avant le duel",
+            "Ce qui compte dans la note, c'est sa force connue avant le duel : la moyenne de son niveau dans vos duels précédents contre lui, reconnu à son compte même s'il change de pseudo. Elle est tirée vers 50 tant que vous l'avez peu affronté : un duel passé compte pour un tiers, deux pour la moitié, huit pour les quatre cinquièmes.",
+            "Elle entre dans votre note comme une sixième famille : bien jouer contre un adversaire connu pour être fort vaut plus, contre un adversaire connu pour être faible vaut moins. Contre un inconnu, elle vaut 50 et ne change rien.",
             "# Ce qu'il faut savoir",
-            "On ne le voit jouer que contre vous : sa conversion est l'envers de votre défense. Bien défendre fait donc aussi baisser son niveau. Ses ressources ne sont pas mesurées.",
-            "Ce niveau ne vaut que sur votre PC et face à vous : ce n'est pas un classement.");
+            "Ses ressources ne sont pas mesurées. Ce niveau ne vaut que sur votre PC et face à vous : ce n'est pas un classement.");
         if (report != null) {
             opponent.paragraphs.add("# Dans ce duel");
-            StringBuilder detail = new StringBuilder(Lang.tr("Niveau") + " " + Math.round(report[NativeCombat.REPORT_FAMILIES + 5]) + " : ");
+            int met = (int) report[NativeCombat.REPORT_FOE_KNOWN_DUELS];
+            opponent.paragraphs.add(met > 0
+                ? Lang.tr("Force connue avant le duel :") + " " + Math.round(report[NativeCombat.REPORT_FOE_KNOWN]) + ", " + Lang.tr("sur") + " " + met + " "
+                    + Lang.tr(met > 1 ? "duels passés contre lui." : "duel passé contre lui.")
+                : Lang.tr("Premier duel contre lui : sa force connue vaut 50 et ne change pas la note."));
+            StringBuilder detail = new StringBuilder(Lang.tr("Niveau pendant le duel") + " " + Math.round(report[NativeCombat.REPORT_FAMILIES + 5]) + " : ");
             for (int i = 0; i < NativeCombat.FOE_FAMILY_COUNT; i++) {
                 if (i > 0) detail.append(", ");
                 detail.append(Lang.tr(PvpScoreModule.FAMILIES[i]).toLowerCase(java.util.Locale.ROOT)).append(" ")
@@ -356,11 +365,11 @@ final class PvpInfoModal {
             "L'écart devient une note par la loi normale : 50 au niveau de la référence, environ 84 un écart au-dessus, environ 16 un écart en dessous. Une note de 90, ou de 10, est donc rare. Chaque barre de famille suit la même échelle."));
         list.add(new Topic("Confiance et seuils",
             "La confiance dit sur combien d'opportunités la note repose : n / (n + 5), où n compte les opportunités des deux joueurs. 5 opportunités donnent 50 %, 20 en donnent 80 %.",
-            "Un duel n'est pas noté s'il a duré moins de 20 secondes au contact, ou s'il compte moins de 3 opportunités en tout. Il apparaît quand même dans l'historique, sans note.",
+            "Un duel n'est pas noté s'il a duré moins de 20 secondes au contact, s'il compte moins de 3 opportunités en tout, ou s'il n'est pas à la masse. Il reste enregistré, mais l'historique ne montre que les duels notés.",
             "La note moyenne de l'historique ne compte que les duels notés."));
         list.add(new Topic("Limites",
             "La note n'est pas encore calibrée : les références ont été posées à la main à partir de quelques duels. Elles seront ajustées avec plus de matchs, et les notes pourront bouger.",
-            "Elle est pensée pour la masse en 1 contre 1. Un duel à l'épée est reconnu, mais sa note ne veut pas dire grand-chose.",
+            "Elle est pensée pour la masse en 1 contre 1. Un duel à l'épée est reconnu à l'arme en main et n'est pas noté.",
             "Le ping est affiché, jamais corrigé. Un ping élevé peut faire baisser la conversion.",
             "La note ne regarde que ce que votre jeu voit : positions, chutes, coups confirmés. Elle ne sait rien de ce qui se passe hors de vue.",
             "Les journaux de vos duels sont dans le dossier de l'instance, sous yuyuframe/matches."));

@@ -211,8 +211,26 @@ public final class UiPvpDuelScreen extends UiScreenBase {
         PvpScoreUi.text(r, UiFont.BOLD, Lang.tr("CONTRE"), left + inner, top - UiTheme.scaled(34f), UiTheme.TEXT_SECONDARY,
             UiTheme.scaled(0.42f), vw, vh);
         String opponent = duel.opponent.isEmpty() ? Lang.tr("Adversaire inconnu") : duel.opponent;
+        float nameScale = PvpScoreUi.fit(r, UiFont.BOLD, opponent, UiTheme.scaled(1.05f), half * 0.55f);
         PvpScoreUi.left(r, UiFont.BOLD, opponent, left + inner, bottom + UiTheme.scaled(24f), half - inner,
-            UiTheme.TEXT_PRIMARY, UiTheme.scaled(1.05f), vw, vh);
+            UiTheme.TEXT_PRIMARY, nameScale, vw, vh);
+
+        // Ce qu'on savait de lui avant ce duel : c'est cela qui compte dans la note.
+        int met = (int) duel.report[NativeCombat.REPORT_FOE_KNOWN_DUELS];
+        float known = UiTheme.scaled(0.42f);
+        float knownX = left + inner + r.textWidth(UiFont.BOLD, opponent, nameScale) + UiTheme.scaled(22f);
+        float knownY = bottom + UiTheme.scaled(30f);
+        if (met > 0) {
+            String before = Lang.tr("Force connue avant ce duel :") + " ";
+            String value = String.valueOf(Math.round(duel.report[NativeCombat.REPORT_FOE_KNOWN]));
+            String basis = " (" + met + " " + Lang.tr(met > 1 ? "duels passés" : "duel passé") + ")";
+            PvpScoreUi.text(r, UiFont.REGULAR, before, knownX, knownY, UiTheme.TEXT_SECONDARY, known, vw, vh);
+            float x = knownX + r.textWidth(UiFont.REGULAR, before, known);
+            PvpScoreUi.text(r, UiFont.BOLD, value, x, knownY, PvpScoreUi.FOE, known, vw, vh);
+            PvpScoreUi.text(r, UiFont.REGULAR, basis, x + r.textWidth(UiFont.BOLD, value, known), knownY, UiTheme.TEXT_MUTED, known, vw, vh);
+        } else {
+            PvpScoreUi.text(r, UiFont.REGULAR, Lang.tr("Premier duel contre lui"), knownX, knownY, UiTheme.TEXT_MUTED, known, vw, vh);
+        }
 
         // Le résultat arrive de la droite, un peu après le reste.
         float arrive = progress(0.12f, 0.55f);
@@ -260,10 +278,10 @@ public final class UiPvpDuelScreen extends UiScreenBase {
                 new UiColor(168, 152, 255, 255), vw, vh);
         } else {
             PvpScoreUi.centered(r, UiFont.BOLD, PvpScoreUi.NO_SCORE, center, top - UiTheme.scaled(150f), width, tone, UiTheme.scaled(3f), vw, vh);
-            boolean tooShort = duel.report[NativeCombat.REPORT_REASON] == 1;
-            PvpScoreUi.centered(r, UiFont.REGULAR, Lang.tr(tooShort ? "Duel trop court" : "Trop peu d'opportunités"), center,
+            String[] reason = PvpScoreUi.reasonLines(duel.report[NativeCombat.REPORT_REASON]);
+            PvpScoreUi.centered(r, UiFont.REGULAR, Lang.tr(reason[0]), center,
                 bottom + UiTheme.scaled(64f), width, UiTheme.TEXT_PRIMARY, body, vw, vh);
-            PvpScoreUi.centered(r, UiFont.REGULAR, Lang.tr("pour être noté"), center, bottom + UiTheme.scaled(36f), width,
+            PvpScoreUi.centered(r, UiFont.REGULAR, Lang.tr(reason[1]), center, bottom + UiTheme.scaled(36f), width,
                 UiTheme.TEXT_SECONDARY, body, vw, vh);
         }
         PvpScoreUi.alpha = 1f;
@@ -340,10 +358,16 @@ public final class UiPvpDuelScreen extends UiScreenBase {
                     mid + hit.h / 2f - UiTheme.scaled(3f), UiTheme.scaled(8f), new UiColor(255, 255, 255, (int) (18 * hv)), vw, vh);
             }
             float grow = progress(0.4f + 0.07f * i, 0.8f);
+            // Une famille mesurée sur aucun événement (aucun smash porté, par
+            // exemple) vaut la référence dans la note — elle n'y pèse rien —
+            // mais afficher 50 se lisait comme une note moyenne gagnée : on
+            // montre « - » et un rail vide.
             double mine = duel.report[NativeCombat.REPORT_FAMILIES + i];
-            UiColor tone = PvpScoreUi.scoreColor(mine);
-            PvpScoreUi.text(r, UiFont.BOLD, String.valueOf(PvpScoreUi.count(mine, grow)), cardLeft + inner, PvpScoreUi.middle(mid, value), tone, value, vw, vh);
-            PvpScoreUi.barLeftward(r, myBarLeft, mid - barH / 2f, myBarRight - UiTheme.scaled(12f), barH, mine * grow, tone, vw, vh);
+            boolean measured = duel.report[NativeCombat.REPORT_MY_COUNTS + i] > 0;
+            UiColor tone = measured ? PvpScoreUi.scoreColor(mine) : PvpScoreUi.NEUTRAL;
+            PvpScoreUi.text(r, UiFont.BOLD, measured ? String.valueOf(PvpScoreUi.count(mine, grow)) : PvpScoreUi.NO_SCORE,
+                cardLeft + inner, PvpScoreUi.middle(mid, value), tone, value, vw, vh);
+            PvpScoreUi.barLeftward(r, myBarLeft, mid - barH / 2f, myBarRight - UiTheme.scaled(12f), barH, measured ? mine * grow : 0, tone, vw, vh);
 
             float nameScale = name * (1f + 0.06f * hv);
             PvpScoreUi.centered(r, hv > 0.5f ? UiFont.BOLD : UiFont.REGULAR, Lang.tr(PvpScoreModule.FAMILIES[i]), center,
@@ -352,9 +376,11 @@ public final class UiPvpDuelScreen extends UiScreenBase {
 
             if (i < NativeCombat.FOE_FAMILY_COUNT) {
                 double his = duel.report[NativeCombat.REPORT_FOE_FAMILIES + i];
-                PvpScoreUi.bar(r, hisBarLeft + UiTheme.scaled(12f), mid - barH / 2f, hisBarRight, barH, his * grow, PvpScoreUi.FOE, vw, vh);
-                PvpScoreUi.right(r, UiFont.BOLD, String.valueOf(PvpScoreUi.count(his, grow)), right - inner, PvpScoreUi.middle(mid, value), valueW,
-                    PvpScoreUi.FOE, value, vw, vh);
+                boolean hisMeasured = duel.report[NativeCombat.REPORT_FOE_COUNTS + i] > 0;
+                UiColor hisTone = hisMeasured ? PvpScoreUi.FOE : PvpScoreUi.NEUTRAL;
+                PvpScoreUi.bar(r, hisBarLeft + UiTheme.scaled(12f), mid - barH / 2f, hisBarRight, barH, hisMeasured ? his * grow : 0, hisTone, vw, vh);
+                PvpScoreUi.right(r, UiFont.BOLD, hisMeasured ? String.valueOf(PvpScoreUi.count(his, grow)) : PvpScoreUi.NO_SCORE,
+                    right - inner, PvpScoreUi.middle(mid, value), valueW, hisTone, value, vw, vh);
             } else {
                 // Ses ressources ne sont pas mesurées : on le dit plutôt que de laisser un trou.
                 PvpScoreUi.centered(r, UiFont.REGULAR, Lang.tr("non mesuré"), (hisBarLeft + right - inner) / 2f,

@@ -73,18 +73,17 @@ public final class UiPvpScoreScreen extends UiScreenBase {
     }
 
     /**
-     * Les duels notés d'un mode, et ce qu'on en compte. Tous les duels notés
-     * sont à la masse — le seul mode que le noyau note — donc le filtre ne
-     * garde pour l'instant que la note ; le jour où l'historique dira le mode
-     * de chaque duel, c'est ici qu'il se lira.
+     * Les duels notés d'un mode, et ce qu'on en compte. Le mode de chaque
+     * duel vient du noyau, qui le reconnaît à l'arme en main.
      */
     private void selectMode(int index) {
         mode = index;
         scored.clear();
         int w = 0, l = 0, d = 0;
         double top = -1;
+        int code = PvpScoreUi.MODE_CODES[Math.max(0, Math.min(PvpScoreUi.MODE_CODES.length - 1, index))];
         for (DuelHistory.Duel duel : history.duels) {
-            if (duel.score() < 0) continue;
+            if (duel.score() < 0 || duel.mode() != code) continue;
             scored.add(duel);
             if (duel.result() == 1) w++;
             else if (duel.result() == 2) l++;

@@ -296,6 +296,15 @@ public final class PvpScoreUi {
      * sait le noter (et où l'historique dit de quel mode est chaque duel).
      */
     static final String[] MODES = { "Masse" };
+    /** Le code de chaque mode dans le résumé du noyau ({@code NativeCombat.REPORT_MODE}), dans l'ordre de {@link #MODES}. */
+    static final int[] MODE_CODES = { 1 };
+
+    /** Pourquoi un duel n'a pas de note, en deux lignes ({@code NativeCombat.REPORT_REASON}). */
+    public static String[] reasonLines(double reason) {
+        if (reason == 1) return new String[]{ "Duel trop court", "pour être noté" };
+        if (reason == 3) return new String[]{ "Pas de masse :", "ce mode n'est pas noté" };
+        return new String[]{ "Trop peu d'opportunités", "pour être noté" };
+    }
 
     /**
      * La liste déroulante du mode affiché. Le bouton est un widget de l'écran ;

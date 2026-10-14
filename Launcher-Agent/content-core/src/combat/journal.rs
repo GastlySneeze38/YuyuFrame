@@ -52,8 +52,14 @@ const PREROLL_TICKS: u64 = 200;
 /// change pas de monde entre deux duels, les adversaires précédents
 /// s'accumulaient et se retrouvaient nommés dans le duel suivant.
 const FORGET_TICKS: u64 = 50;
-/// Sans échange de dégâts depuis ce délai (30 s), le duel est tenu pour
-/// arrêté, sans résultat.
+/// Sans échange de dégâts ET sans l'adversaire à portée (`ENGAGE_BLOCKS`)
+/// depuis ce délai (30 s), le duel est tenu pour arrêté, sans résultat.
+///
+/// La portée compte depuis le 2026-10-14 : à la masse, deux joueurs en pleine
+/// armure passent volontiers plus de 30 s à se tourner autour sans se
+/// toucher (vu deux fois le 2026-10-14, à 2 à 12 blocs l'un de l'autre). Le
+/// duel était fermé « sans résultat », donc absent de l'historique, et la
+/// suite ouvrait un second duel contre le même adversaire.
 const COMBAT_TICKS: u64 = 600;
 /// L'armure du vaincu disparaît dans ce délai après le dernier coup. Mesuré
 /// entre 3 et 14 ticks ; Java ne redit l'équipement qu'une fois par seconde,
@@ -104,6 +110,8 @@ pub struct Journal {
     last_exchange: Option<(u64, i32)>,
     /// Dernier tick où l'adversaire était parmi les joueurs transmis.
     foe_seen: u64,
+    /// Dernier tick où l'adversaire était à portée (`ENGAGE_BLOCKS`).
+    foe_near: u64,
     /// Avant ce tick, un échange n'ouvre pas de duel : celui qui vient de se
     /// terminer laisse parfois partir un dernier coup.
     quiet_until: u64,
@@ -127,6 +135,7 @@ impl Journal {
             foe: None,
             last_exchange: None,
             foe_seen: 0,
+            foe_near: 0,
             quiet_until: 0,
         }
     }
@@ -182,8 +191,11 @@ impl Journal {
                 // L'adversaire est-il encore là ? Regardé AVANT le filtre : un
                 // joueur parti est aussi oublié, et le filtre le cacherait.
                 if let Some(foe) = self.foe {
-                    if others.iter().any(|o| o[OTHER_ID] as i32 == foe) {
+                    if let Some(o) = others.iter().find(|o| o[OTHER_ID] as i32 == foe) {
                         self.foe_seen = self.tick;
+                        if engaged(&me, std::slice::from_ref(o)) {
+                            self.foe_near = self.tick;
+                        }
                     } else if self.tick - self.foe_seen >= LEFT_TICKS {
                         self.finish("draw", "left", &mut out);
                     }
@@ -197,9 +209,9 @@ impl Journal {
                     });
                     self.emit(line, &mut out);
                 }
-                // Plus aucun échange depuis longtemps : le duel s'est arrêté
-                // sans que le serveur ne désigne de perdant.
-                if self.last_exchange.is_some_and(|(at, _)| self.tick - at >= COMBAT_TICKS) {
+                // Plus aucun échange depuis longtemps, et l'adversaire loin :
+                // le duel s'est arrêté sans que le serveur ne désigne de perdant.
+                if self.last_exchange.is_some_and(|(at, _)| self.tick - at.max(self.foe_near) >= COMBAT_TICKS) {
                     self.finish("unknown", "timeout", &mut out);
                 }
             }
@@ -543,12 +555,23 @@ mod tests {
     }
 
     #[test]
+    fn deux_joueurs_qui_se_tournent_autour_sans_se_toucher_sont_encore_en_duel() {
+        let mut journal = fighting();
+        for _ in 0..(COMBAT_TICKS * 3) {
+            journal.feed(Record::Player { id: FOE, uuid: FOE_UUID, name: "Rival".into() }, 3000);
+            assert!(journal.feed(tick(8.0), 3000).is_empty() || journal.recording());
+        }
+        assert!(journal.recording(), "une minute et demie à 8 blocs sans coup : le duel continue");
+    }
+
+    #[test]
     fn sans_echange_le_duel_se_ferme_sans_resultat() {
         let mut journal = fighting();
         let mut out = Vec::new();
+        // Encore transmis, mais hors de portée : il ne se bat plus.
         for _ in 0..COMBAT_TICKS {
             journal.feed(Record::Player { id: FOE, uuid: FOE_UUID, name: "Rival".into() }, 3000);
-            out = journal.feed(tick(1.0), 3000);
+            out = journal.feed(tick(ENGAGE_BLOCKS + 10.0), 3000);
         }
         let verdict = result(&out);
         assert_eq!(verdict["result"], "unknown");

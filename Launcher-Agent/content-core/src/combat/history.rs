@@ -11,10 +11,11 @@
 //! nul) : un journal coupé en plein combat ou fermé sans résultat n'est pas
 //! un match à montrer.
 
+use std::collections::HashMap;
 use std::io::Read;
 use std::path::Path;
 
-use super::score::{score_journal, Report};
+use super::score::{score_with, Journal, Prior, Report};
 
 /// Duels rendus au plus : les plus récents.
 const MAX_DUELS: usize = 200;
@@ -29,7 +30,12 @@ fn read_journal(path: &Path) -> Option<String> {
     Some(text)
 }
 
-/// Les duels notés du dossier `matches`, du plus récent au plus ancien.
+/// Les duels terminés du dossier `matches`, du plus récent au plus ancien.
+///
+/// Les journaux sont notés dans l'ORDRE OÙ ILS ONT ÉTÉ JOUÉS : la note d'un
+/// duel dépend de la force de son adversaire connue avant lui, c'est-à-dire
+/// de son niveau dans nos duels précédents contre lui ([`Prior`]). Tous sont
+/// donc relus, pas seulement les derniers listés.
 fn duels(matches: &Path) -> Vec<Report> {
     let Ok(entries) = std::fs::read_dir(matches) else { return Vec::new() };
     let mut journals: Vec<_> = entries
@@ -39,26 +45,72 @@ fn duels(matches: &Path) -> Vec<Report> {
         .collect();
     // Le nom d'un journal est son heure d'ouverture : trié, c'est l'ordre des duels.
     journals.sort();
-    journals.reverse();
 
+    let mut known: HashMap<String, Vec<f64>> = HashMap::new();
     let mut out = Vec::new();
-    for journal in journals {
-        if out.len() == MAX_DUELS {
-            break;
+    for path in journals {
+        let Some(journal) = read_journal(&path).and_then(|text| Journal::read(&text)) else { continue };
+        let key = journal.foe_key();
+        let prior = key.as_ref().and_then(|k| known.get(k)).map(|levels| Prior::from_levels(levels)).unwrap_or_default();
+        let report = score_with(&journal, &prior);
+        if let (Some(key), true) = (key, report.informs_prior()) {
+            known.entry(key).or_default().push(report.rating.opponent.z);
         }
-        let Some(report) = read_journal(&journal).and_then(|text| score_journal(&text)) else { continue };
         if !matches!(report.result.as_deref(), Some("win" | "loss" | "draw")) {
             continue;
         }
         // Le résumé suit la formule courante. Un échec d'écriture n'empêche pas de lister.
         if let Ok(json) = serde_json::to_string_pretty(&report) {
-            if let Err(e) = std::fs::write(super::writer::summary_path(&journal), json) {
-                eprintln!("[YuyuFrame] résumé du duel {} non mis à jour : {e}", journal.display());
+            if let Err(e) = std::fs::write(super::writer::summary_path(&path), json) {
+                eprintln!("[YuyuFrame] résumé du duel {} non mis à jour : {e}", path.display());
             }
         }
         out.push(report);
     }
+    out.reverse();
+    out.truncate(MAX_DUELS);
     out
+}
+
+/// La force connue d'un adversaire, pour un duel qui vient de se terminer :
+/// lue dans les résumés des duels précédents du même dossier (les fichiers
+/// `.json` à côté des journaux, que [`history`] remet à la formule courante).
+///
+/// `uuid` et `name` : l'adversaire du duel qu'on note ; `before` : son heure
+/// d'ouverture — lui-même et les suivants ne comptent pas.
+pub fn prior_from_summaries(matches: &Path, uuid: Option<&str>, name: Option<&str>, before: u64) -> Prior {
+    let name = name.map(str::to_lowercase);
+    if uuid.is_none() && name.is_none() {
+        return Prior::default();
+    }
+    let Ok(entries) = std::fs::read_dir(matches) else { return Prior::default() };
+    let mut levels = Vec::new();
+    for path in entries.filter_map(|e| e.ok()).map(|e| e.path()) {
+        let is_summary = path.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.ends_with(".json"));
+        if !is_summary {
+            continue;
+        }
+        let Some(summary) = std::fs::read_to_string(&path).ok().and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok()) else {
+            continue;
+        };
+        if summary["time"].as_u64().unwrap_or(u64::MAX) >= before || summary["score"].is_null() {
+            continue;
+        }
+        let their_uuid = summary["foe_uuid"].as_str();
+        let their_name = summary["foe_name"].as_str().map(|n| n.to_lowercase());
+        // L'UUID quand les deux l'ont ; sinon le pseudo (un résumé d'avant le
+        // 2026-10-14 n'a pas d'UUID).
+        let same = match (uuid, their_uuid) {
+            (Some(a), Some(b)) => a == b,
+            _ => name.is_some() && their_name == name,
+        };
+        if same {
+            if let Some(z) = summary["opponent"]["z"].as_f64() {
+                levels.push(z);
+            }
+        }
+    }
+    Prior::from_levels(&levels)
 }
 
 /// Le texte rendu à Java : une ligne d'en-tête, puis une ligne par duel,
@@ -122,8 +174,14 @@ mod tests {
         assert_eq!(duel[2], "Rival", "le pseudo de l'adversaire");
         let numbers: Vec<f64> = duel[3].split(',').map(|n| n.parse().unwrap()).collect();
         assert_eq!(numbers.len(), super::super::score::REPORT_LEN);
-        assert_eq!(numbers[0], average, "deux fois le même duel : la moyenne est sa note");
         assert_eq!(numbers[2], 2.0, "défaite");
+        // Le même adversaire deux fois : le premier duel le découvre, le
+        // second le connaît par le premier.
+        let older: Vec<f64> = lines[2].split('\t').nth(3).unwrap().split(',').map(|n| n.parse().unwrap()).collect();
+        assert_eq!((older[35], older[36]), (50.0, 0.0), "premier duel contre lui : inconnu");
+        assert_eq!(numbers[36], 1.0, "second duel : connu par le premier");
+        assert_ne!(numbers[35], 50.0);
+        assert_eq!(average, ((numbers[0] + older[0]) / 2.0).round(), "la moyenne des deux notes");
 
         // Le résumé à côté du journal suit la formule courante.
         let summary: serde_json::Value =

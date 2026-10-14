@@ -10,7 +10,9 @@ use super::features::{Features, Measure};
 
 /// Version de la formule. Tout changement de coefficient ou de référence
 /// l'incrémente.
-pub const SCORE_VERSION: u32 = 3;
+// Version 4 (2026-10-14) : la sixième famille est la force de l'adversaire
+// connue avant le duel, et non plus son niveau mesuré pendant.
+pub const SCORE_VERSION: u32 = 4;
 
 /// Poids du lissage : une famille observée sur `K` événements compte autant
 /// que sa référence.
@@ -77,11 +79,18 @@ pub struct Rating {
     pub exposure: Sub,
     pub vertical: Sub,
     pub resources: Sub,
-    /// Le niveau de l'adversaire : les mêmes familles, mesurées de son côté
-    /// et jugées avec les mêmes références. Il entre dans la note comme une
-    /// sixième famille — bien jouer contre un adversaire fort vaut plus, et
-    /// dominer un adversaire faible vaut moins.
+    /// Le niveau de l'adversaire PENDANT ce duel : les mêmes familles,
+    /// mesurées de son côté et jugées avec les mêmes références. Affiché,
+    /// mais il n'entre plus dans la note (2026-10-14) : on ne le voit jouer
+    /// que contre nous, donc il est en grande partie le miroir de notre jeu —
+    /// sa conversion est l'envers de notre défense, sa défense l'envers de
+    /// notre conversion. Dans la note, il annulait une partie de notre propre
+    /// jeu : dominer faisait paraître l'adversaire faible et plafonnait la note.
     pub opponent: Sub,
+    /// La force de l'adversaire connue AVANT ce duel ([`Prior`]) : c'est elle
+    /// qui entre dans la note comme sixième famille. Contre un inconnu, elle
+    /// vaut la référence et ne pèse rien.
+    pub opponent_known: Sub,
     /// Les quatre familles dont le niveau de l'adversaire est fait, dans
     /// l'ordre : conversion, qualité du smash, défense, contrôle vertical.
     pub opponent_families: [Sub; 4],
@@ -101,7 +110,34 @@ fn phi(z: f64) -> f64 {
     if z >= 0.0 { 0.5 * (1.0 + erf) } else { 0.5 * (1.0 - erf) }
 }
 
-pub fn rate(features: &Features) -> Rating {
+/// Poids du lissage de la force connue : un adversaire vu dans `K_PRIOR`
+/// duels compte pour moitié ce qu'on en a mesuré, pour moitié la référence.
+/// Un seul duel passé compte pour un tiers.
+pub const K_PRIOR: f64 = 2.0;
+
+/// La force d'un adversaire telle que nos duels précédents contre lui la
+/// font connaître : la moyenne de son niveau dans ces duels (en écarts à la
+/// référence), tirée vers la référence tant qu'on l'a peu vu.
+///
+/// Elle ne vient jamais du duel qu'on note : c'est ce qui la rend
+/// indépendante de notre jeu ce jour-là.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct Prior {
+    /// En écarts à la référence ; 0 pour un inconnu.
+    pub z: f64,
+    /// Duels passés contre lui.
+    pub duels: usize,
+}
+
+impl Prior {
+    /// `levels` : son niveau (`Rating::opponent.z`) dans chacun de nos duels précédents contre lui.
+    pub fn from_levels(levels: &[f64]) -> Self {
+        let n = levels.len() as f64;
+        Prior { z: levels.iter().sum::<f64>() / (n + K_PRIOR), duels: levels.len() }
+    }
+}
+
+pub fn rate(features: &Features, prior: &Prior) -> Rating {
     let subs = [
         sub(features.conversion, &CONVERSION),
         sub(features.smash_quality, &SMASH_QUALITY),
@@ -118,9 +154,11 @@ pub fn rate(features: &Features) -> Rating {
     } else {
         None
     };
-    // Poids égaux — mes cinq familles et le niveau de l'adversaire — puis la
-    // moyenne ramenée à l'échelle d'un écart (`SPREAD_FACTOR`).
-    let mean = (subs.iter().map(|s| s.z).sum::<f64>() + opponent.z) / (subs.len() + 1) as f64;
+    // Poids égaux — mes cinq familles et la force connue de l'adversaire —
+    // puis la moyenne ramenée à l'échelle d'un écart (`SPREAD_FACTOR`).
+    let known = phi(prior.z);
+    let opponent_known = Sub { value: known, count: prior.duels as f64, smoothed: known, z: prior.z, score: (100.0 * known).round() };
+    let mean = (subs.iter().map(|s| s.z).sum::<f64>() + opponent_known.z) / (subs.len() + 1) as f64;
     let z = mean * SPREAD_FACTOR;
     let n = opportunities as f64;
     let own = combined(&subs, n);
@@ -134,6 +172,7 @@ pub fn rate(features: &Features) -> Rating {
         vertical: subs[3],
         resources: subs[4],
         opponent,
+        opponent_known,
         opponent_families,
         own,
     }
@@ -154,9 +193,9 @@ fn combined(subs: &[Sub], count: f64) -> Sub {
 /// 0 et 1, `count` le nombre d'opportunités sur lequel il repose.
 ///
 /// Il n'est pas indépendant de notre jeu : on ne le voit jouer que contre
-/// nous, donc sa conversion est l'envers de notre défense. C'est voulu ici —
-/// perdre contre quelqu'un qui convertit tout baisse notre défense et monte
-/// son niveau, et les deux se compensent en partie dans la note.
+/// nous, donc sa conversion est l'envers de notre défense. C'est pourquoi il
+/// n'entre pas dans la note de CE duel ; moyenné sur nos duels précédents
+/// contre lui, il devient sa force connue ([`Prior`]), qui y entre.
 fn opponent_level(features: &Features) -> (Sub, [Sub; 4]) {
     let foe = &features.foe;
     let subs = [
@@ -214,19 +253,19 @@ mod tests {
     #[test]
     fn un_duel_sans_evenement_vaut_cinquante_et_un_duel_court_n_est_pas_note() {
         let empty = Measure { value: 0.0, count: 0.0 };
-        assert_eq!(rate(&features(5, 60.0, empty)).score, Some(50.0));
-        assert_eq!(rate(&features(5, 60.0, empty)).own.score, 50.0, "mon jeu seul, sans rien mesurer : moyen");
-        assert_eq!(rate(&features(5, 10.0, empty)).reason, Some("too_short"));
-        assert_eq!(rate(&features(5, 10.0, empty)).score, None);
-        assert_eq!(rate(&features(2, 60.0, empty)).reason, Some("too_few_opportunities"));
+        assert_eq!(unknown(&features(5, 60.0, empty)).score, Some(50.0));
+        assert_eq!(unknown(&features(5, 60.0, empty)).own.score, 50.0, "mon jeu seul, sans rien mesurer : moyen");
+        assert_eq!(unknown(&features(5, 10.0, empty)).reason, Some("too_short"));
+        assert_eq!(unknown(&features(5, 10.0, empty)).score, None);
+        assert_eq!(unknown(&features(2, 60.0, empty)).reason, Some("too_few_opportunities"));
     }
 
     #[test]
     fn la_note_monte_avec_les_familles_et_la_confiance_avec_les_opportunites() {
-        let strong = rate(&features(20, 120.0, Measure { value: 0.9, count: 20.0 }));
-        let weak = rate(&features(20, 120.0, Measure { value: 0.1, count: 20.0 }));
+        let strong = unknown(&features(20, 120.0, Measure { value: 0.9, count: 20.0 }));
+        let weak = unknown(&features(20, 120.0, Measure { value: 0.1, count: 20.0 }));
         assert!(strong.score.unwrap() > 90.0 && weak.score.unwrap() < 10.0);
-        assert!(rate(&features(20, 120.0, Measure { value: 0.9, count: 20.0 })).confidence > rate(&features(4, 120.0, Measure { value: 0.9, count: 4.0 })).confidence);
+        assert!(unknown(&features(20, 120.0, Measure { value: 0.9, count: 20.0 })).confidence > unknown(&features(4, 120.0, Measure { value: 0.9, count: 4.0 })).confidence);
         // La note reste à portée de ses familles : cinq écarts qui valent 52,
         // 83, 86, 68 et 97 ne font pas un 97 (c'était le cas avec ×√5).
         let seen = [0.05, 0.95, 1.08, 0.47, 1.88];
@@ -234,16 +273,40 @@ mod tests {
         assert!(combined > 80.0 && combined < 92.0, "{combined}");
     }
 
+    /// Contre un adversaire jamais affronté.
+    fn unknown(features: &Features) -> Rating {
+        rate(features, &Prior::default())
+    }
+
     #[test]
-    fn le_niveau_de_l_adversaire_pese_dans_la_note() {
+    fn le_niveau_mesure_pendant_le_duel_est_affiche_mais_ne_compte_pas() {
         let mine = Measure { value: 0.5, count: 20.0 };
-        let strong = rate(&against(20, 120.0, mine, Measure { value: 0.9, count: 20.0 }));
-        let unknown = rate(&against(20, 120.0, mine, UNKNOWN_FOE));
-        let weak = rate(&against(20, 120.0, mine, Measure { value: 0.1, count: 20.0 }));
-        // Le même jeu vaut plus contre un adversaire fort, moins contre un faible.
-        assert!(strong.score.unwrap() > unknown.score.unwrap());
-        assert!(unknown.score.unwrap() > weak.score.unwrap());
-        assert!(strong.opponent.score > 90.0 && weak.opponent.score < 10.0);
-        assert_eq!(unknown.opponent.score, 50.0, "sans rien savoir de lui, il est moyen");
+        let strong = unknown(&against(20, 120.0, mine, Measure { value: 0.9, count: 20.0 }));
+        let weak = unknown(&against(20, 120.0, mine, Measure { value: 0.1, count: 20.0 }));
+        assert!(strong.opponent.score > 90.0 && weak.opponent.score < 10.0, "il est bien mesuré");
+        assert_eq!(strong.score, weak.score, "mais c'est le miroir de notre jeu : il ne touche pas la note");
+        assert_eq!(strong.opponent_known.score, 50.0, "un inconnu vaut la référence");
+    }
+
+    #[test]
+    fn la_force_connue_avant_le_duel_pese_dans_la_note() {
+        let mine = Measure { value: 0.5, count: 20.0 };
+        let features = features(20, 120.0, mine);
+        let strong = rate(&features, &Prior::from_levels(&[1.5, 1.2, 1.8]));
+        let weak = rate(&features, &Prior::from_levels(&[-1.5, -1.2, -1.8]));
+        let first = unknown(&features);
+        // Le même jeu vaut plus contre un adversaire connu pour être fort.
+        assert!(strong.score.unwrap() > first.score.unwrap());
+        assert!(first.score.unwrap() > weak.score.unwrap());
+        assert_eq!(strong.opponent_known.count, 3.0);
+    }
+
+    #[test]
+    fn un_adversaire_peu_vu_reste_proche_de_la_reference() {
+        let once = Prior::from_levels(&[1.5]);
+        assert!((once.z - 0.5).abs() < 1e-12, "un duel passé compte pour un tiers");
+        let often = Prior::from_levels(&[1.5; 8]);
+        assert!((often.z - 1.2).abs() < 1e-12, "huit duels passés : quatre cinquièmes");
+        assert_eq!(Prior::from_levels(&[]), Prior::default());
     }
 }

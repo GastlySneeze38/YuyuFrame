@@ -36,6 +36,11 @@ public final class DuelHistory {
         public int result() {
             return (int) report[NativeCombat.REPORT_RESULT];
         }
+
+        /** 1 masse, 2 épée, 3 autre — voir {@link NativeCombat#REPORT_MODE}. */
+        public int mode() {
+            return (int) report[NativeCombat.REPORT_MODE];
+        }
     }
 
     /** Moyenne des notes, ou −1 s'il n'y a aucun duel noté. */

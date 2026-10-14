@@ -123,7 +123,17 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
         private static final float HALF_CAP = 11f;
 
         /** Le duel d'exemple de l'éditeur de HUD, dans l'ordre du résumé du noyau. */
-        private static final double[] SAMPLE = { 72, 0.8, 1, 0, 68, 74, 55, 81, 62, 58, 34, 12, 7, 11, 4, 96 };
+        private static final double[] SAMPLE = sample();
+
+        /** Un résumé complet (toute la longueur du contrat) : le panneau lit aussi le nombre d'événements de chaque famille. */
+        private static double[] sample() {
+            double[] report = new double[NativeCombat.REPORT_LEN];
+            double[] head = { 72, 0.8, 1, 0, 68, 74, 55, 81, 62, 58, 34, 12, 7, 11, 4, 96 };
+            System.arraycopy(head, 0, report, 0, head.length);
+            for (int i = 0; i < NativeCombat.FAMILY_COUNT - 1; i++) report[NativeCombat.REPORT_MY_COUNTS + i] = 10;
+            report[NativeCombat.REPORT_MODE] = 1;
+            return report;
+        }
 
         private final double[] shown = new double[NativeCombat.REPORT_LEN];
         private boolean received;
@@ -200,10 +210,10 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
                 centered(r, UiFont.REGULAR, confidence, center, bottom + 14f * s, fit, UiTheme.TEXT_SECONDARY, 0.3f * s, vw, vh);
             } else {
                 centered(r, UiFont.BOLD, PvpScoreUi.NO_SCORE, center, bottom + 46f * s, fit, tone, 1.1f * s, vw, vh);
-                boolean tooShort = report[NativeCombat.REPORT_REASON] == 1;
-                centered(r, UiFont.REGULAR, Lang.tr(tooShort ? "Duel trop court" : "Trop peu d'opportunités"), center, bottom + 26f * s, fit,
+                String[] reason = PvpScoreUi.reasonLines(report[NativeCombat.REPORT_REASON]);
+                centered(r, UiFont.REGULAR, Lang.tr(reason[0]), center, bottom + 26f * s, fit,
                     UiTheme.TEXT_SECONDARY, 0.3f * s, vw, vh);
-                centered(r, UiFont.REGULAR, Lang.tr("pour être noté"), center, bottom + 13f * s, fit, UiTheme.TEXT_MUTED, 0.3f * s, vw, vh);
+                centered(r, UiFont.REGULAR, Lang.tr(reason[1]), center, bottom + 13f * s, fit, UiTheme.TEXT_MUTED, 0.3f * s, vw, vh);
             }
 
             // Les familles : libellé, barre dans la couleur de sa valeur, valeur.
@@ -221,7 +231,10 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
                 // Le niveau de l'adversaire parle de lui, pas de nous : gris,
                 // pour qu'il ne se lise pas comme une de nos familles.
                 boolean opponent = i == NativeCombat.FAMILY_COUNT - 1;
-                UiColor familyTone = opponent ? PvpScoreUi.FOE : PvpScoreUi.scoreColor(family);
+                // Aucune mesure (aucun smash porté…) : « - », pas un 50 qui se lirait comme une note.
+                boolean measured = opponent || report[NativeCombat.REPORT_MY_COUNTS + i] > 0;
+                if (!measured) family = 0;
+                UiColor familyTone = opponent ? PvpScoreUi.FOE : measured ? PvpScoreUi.scoreColor(family) : PvpScoreUi.NEUTRAL;
                 float baseline = middle - HALF_CAP * label;
                 r.drawText(Lang.tr(FAMILIES[i]), cardLeft + inner, baseline,
                     opponent ? UiTheme.TEXT_MUTED : UiTheme.TEXT_SECONDARY, label, vw, vh);
@@ -232,7 +245,7 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
                 if (filled > barLeft + 1f) {
                     r.drawRoundedRect(barLeft, barY, filled, barTop, 2.5f * s, familyTone, vw, vh);
                 }
-                String value = String.valueOf(Math.round(family));
+                String value = measured ? String.valueOf(Math.round(family)) : PvpScoreUi.NO_SCORE;
                 r.drawText(UiFont.BOLD, value, right - inner - r.textWidth(UiFont.BOLD, value, label), baseline, familyTone, label, vw, vh);
             }
             return bottom;
