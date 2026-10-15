@@ -452,6 +452,24 @@ fn blend(parts: &[(f64, Part)]) -> Part {
     (weight > 0.0).then(|| (present.iter().map(|(w, v, _)| w * v).sum::<f64>() / weight, present.iter().map(|(_, _, n)| n).sum()))
 }
 
+/// Recentre une partie sur ce que font en moyenne les joueurs observés :
+/// `center` y vaut 0,5, et 0 et 1 restent en place (deux droites).
+///
+/// Calibration provisoire du 2026-10-15 (`SCORE_VERSION` 6) : certaines
+/// parties valaient 0,2 ou 0,8 pour TOUS les joueurs, adversaires compris —
+/// ce n'était pas un niveau, c'était leur échelle. Sans recentrage, leur
+/// seule présence déplaçait la famille (le bouclier faisait baisser la
+/// défense des deux joueurs dès qu'il existait). Les centres sont les
+/// moyennes relevées sur 26 duels notés, nous et nos adversaires réunis
+/// quand la partie se mesure des deux côtés ; *à recalculer* avec la série
+/// de 50 duels.
+fn centered(part: Part, center: f64) -> Part {
+    part.map(|(v, n)| {
+        let v = v.clamp(0.0, 1.0);
+        (if v <= center { 0.5 * v / center } else { 0.5 + 0.5 * (v - center) / (1.0 - center) }, n)
+    })
+}
+
 fn measure(part: Part) -> Measure {
     part.map(|(value, count)| Measure { value, count }).unwrap_or(Measure::NONE)
 }
@@ -676,5 +694,14 @@ mod tests {
         assert_eq!(blend(&[(0.5, Some((1.0, 1.0))), (0.5, Some((0.0, 3.0)))]), Some((0.5, 4.0)));
         assert_eq!(blend(&[(1.0, None)]), None);
         assert_eq!(mean([]), None);
+    }
+
+    #[test]
+    fn le_recentrage_met_la_moyenne_observee_a_cinquante() {
+        let at = |v: f64, c: f64| centered(Some((v, 1.0)), c).unwrap().0;
+        assert!((at(0.2, 0.2) - 0.5).abs() < 1e-12);
+        assert_eq!((at(0.0, 0.2), at(1.0, 0.2)), (0.0, 1.0), "les bouts restent en place");
+        assert!((at(0.6, 0.2) - 0.75).abs() < 1e-12);
+        assert_eq!(centered(None, 0.2), None);
     }
 }

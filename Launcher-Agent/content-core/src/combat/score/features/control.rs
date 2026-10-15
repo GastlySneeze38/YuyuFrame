@@ -10,7 +10,7 @@
 //! reconstruire. Chez l'adversaire, A, B, C et E se mesurent en miroir.
 
 use super::super::parse::{gear_at, Duel, Gear, SLOT_HAND};
-use super::{blend, descents, mean, measure, Measure, Opportunity, Part, View, BIG_FALL, GAP_TICKS, HEIGHT_ADVANTAGE, HIT_DELAY_TICKS, MIN_FALL, REACH, Y};
+use super::{blend, centered, descents, mean, measure, Measure, Opportunity, Part, View, BIG_FALL, GAP_TICKS, HEIGHT_ADVANTAGE, HIT_DELAY_TICKS, MIN_FALL, REACH, Y};
 
 // Poids des groupes (décision du 2026-10-14), *à calibrer*.
 const W_FOLLOW: f64 = 0.35;
@@ -18,6 +18,15 @@ const W_CLIMB: f64 = 0.20;
 const W_PEAK: f64 = 0.15;
 const W_HORIZONTAL: f64 = 0.15;
 const W_CHAIN: f64 = 0.15;
+
+// Ce que valent les groupes en moyenne (calibration provisoire du
+// 2026-10-15, voir `centered`) : nous et nos adversaires réunis sur 52
+// relevés ; le déplacement horizontal, mesuré chez nous seuls, sur 26.
+const FOLLOW_CENTER: f64 = 0.43;
+const CLIMB_CENTER: f64 = 0.71;
+const PEAK_CENTER: f64 = 0.82;
+const HORIZONTAL_CENTER: f64 = 0.39;
+const CHAIN_CENTER: f64 = 0.34;
 
 /// Une descente qui commence plus loin ne vise personne (*à calibrer*).
 const NEAR_DESCENT: f64 = 10.0;
@@ -300,7 +309,13 @@ fn chain(views: &[View], opportunities: &[Opportunity]) -> Part {
 }
 
 fn family(parts: [Part; 5], views: &[View]) -> Measure {
-    let combined = blend(&[(W_FOLLOW, parts[0]), (W_CLIMB, parts[1]), (W_PEAK, parts[2]), (W_HORIZONTAL, parts[3]), (W_CHAIN, parts[4])]);
+    let combined = blend(&[
+        (W_FOLLOW, centered(parts[0], FOLLOW_CENTER)),
+        (W_CLIMB, centered(parts[1], CLIMB_CENTER)),
+        (W_PEAK, centered(parts[2], PEAK_CENTER)),
+        (W_HORIZONTAL, centered(parts[3], HORIZONTAL_CENTER)),
+        (W_CHAIN, centered(parts[4], CHAIN_CENTER)),
+    ]);
     // Compté en tranches de quatre secondes de duel : une minute pèse autant
     // que quinze opportunités.
     measure(combined.map(|(value, _)| (value, views.len() as f64 / 80.0)))

@@ -9,7 +9,7 @@
 
 use super::super::parse::{gear_at, Duel, SLOT_CHEST, SLOT_HAND, SLOT_OFFHAND};
 use super::{
-    blend, flag, mean, measure, sample_at, view_at, Measure, Opportunity, Part, View, GAP_TICKS, HEIGHT_ADVANTAGE, HIT_DELAY_TICKS, LOW_HEALTH, ME_FALL, ME_FLAGS, ME_FOOD,
+    blend, centered, flag, mean, measure, sample_at, view_at, Measure, Opportunity, Part, View, GAP_TICKS, HEIGHT_ADVANTAGE, HIT_DELAY_TICKS, LOW_HEALTH, ME_FALL, ME_FLAGS, ME_FOOD,
     ME_HEALTH, ME_MAX_HEALTH, ME_SPEED, ME_STRENGTH, ON_GROUND, REACH, X, Y, Z,
 };
 
@@ -20,6 +20,17 @@ const W_FOOD_AND_LIFE: f64 = 0.20;
 const W_TOTEMS: f64 = 0.15;
 const W_POTIONS: f64 = 0.10;
 const W_ROCKETS: f64 = 0.05;
+
+// Ce que valent ces mesures en moyenne (calibration provisoire du
+// 2026-10-15, voir `centered`). Rien ne se mesure chez l'adversaire : les
+// centres viennent de NOS duels seuls (26 notés, 4 en version 2 pour la
+// barre d'inventaire et le délai des totems). Tant que d'autres joueurs ne
+// sont pas mesurés, 50 veut dire « comme d'habitude », pas « comme un
+// joueur moyen ».
+const WIND_AND_PEARLS_CENTER: f64 = 0.38;
+const HOTBAR_CENTER: f64 = 0.53;
+const FOOD_AND_LIFE_CENTER: f64 = 0.68;
+const TOTEM_REFILL_CENTER: f64 = 0.15;
 
 /// Masse en main : au-delà de 10 ticks après l'ouverture, c'est trop tard.
 const MACE_LATE_TICKS: f64 = 10.0;
@@ -181,10 +192,11 @@ fn food_and_life(duel: &Duel, theirs: &[View]) -> Part {
 
 fn potions(duel: &Duel, mine: &[View], theirs: &[View]) -> Part {
     let effect = |s: &super::super::parse::Sample| s.me[ME_STRENGTH] > 0.0 || s.me[ME_SPEED] > 0.0;
-    let drank = duel.uses.iter().any(|(_, i)| is_potion(i));
-    let affected = duel.detailed() && duel.samples.iter().any(effect);
-    // Un kit sans potions n'est pas pénalisé.
-    if !drank && !affected {
+    // Si aucune potion n'est utilisée, la partie ne compte pas : un kit sans
+    // potions n'est pas pénalisé. Des effets sans potion bue viennent du
+    // serveur (vu sur Minemen le 2026-10-15 : force et vitesse II données
+    // par le kit, effacées par chaque totem) et ne disent rien du joueur.
+    if !duel.uses.iter().any(|(_, i)| is_potion(i)) {
         return None;
     }
     let contact: Vec<_> = if duel.detailed() { mine.iter().filter(|v| v.horizontal <= CONTACT).filter_map(|v| sample_at(&duel.samples, v.t)).collect() } else { Vec::new() };
@@ -219,7 +231,8 @@ fn totems(duel: &Duel) -> Part {
     };
     let (forced, spent) = (duel.foe_totems.len() as f64, duel.my_totems.len() as f64);
     let balance = (forced + spent > 0.0).then(|| (forced / (forced + spent), forced + spent));
-    blend(&[(1.0, refill), (1.0, balance)])
+    // Le bilan forcés / consommés vaut 0,5 en moyenne par nature : seul le délai est recentré.
+    blend(&[(1.0, centered(refill, TOTEM_REFILL_CENTER)), (1.0, balance)])
 }
 
 // --- 5. Les charges de vent et les perles --------------------------------------------------------
@@ -307,9 +320,9 @@ fn rockets(duel: &Duel, mine: &[Opportunity]) -> Part {
 
 pub fn mine(duel: &Duel, mine_views: &[View], theirs: &[View], mine: &[Opportunity]) -> Measure {
     measure(blend(&[
-        (W_WIND_AND_PEARLS, wind_and_pearls(duel, mine_views, theirs, mine)),
-        (W_HOTBAR, hotbar(duel, mine)),
-        (W_FOOD_AND_LIFE, food_and_life(duel, theirs)),
+        (W_WIND_AND_PEARLS, centered(wind_and_pearls(duel, mine_views, theirs, mine), WIND_AND_PEARLS_CENTER)),
+        (W_HOTBAR, centered(hotbar(duel, mine), HOTBAR_CENTER)),
+        (W_FOOD_AND_LIFE, centered(food_and_life(duel, theirs), FOOD_AND_LIFE_CENTER)),
         (W_TOTEMS, totems(duel)),
         (W_POTIONS, potions(duel, mine_views, theirs)),
         (W_ROCKETS, rockets(duel, mine)),

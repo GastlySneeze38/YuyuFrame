@@ -297,7 +297,11 @@ pub fn parse(text: &str) -> Option<Duel> {
                     duel.shield_sounds.push(ShieldSound { t, on_me, broke: sound.ends_with("break") });
                 }
             }
-            "c" if line["group"].as_str().is_some_and(|g| g.ends_with("shield")) => duel.shield_cooldowns.push(t),
+            // Le jeu envoie la recharge à son début (sa durée) et à sa fin
+            // (0) : seule la première est une garde cassée.
+            "c" if line["group"].as_str().is_some_and(|g| g.ends_with("shield")) && line["ticks"].as_i64().is_some_and(|d| d > 0) => {
+                duel.shield_cooldowns.push(t)
+            }
             "v" => {
                 let status = line["status"].as_i64();
                 let list = match int(&line["entity"]) {
@@ -427,6 +431,7 @@ mod tests {
                     {\"k\":\"n\",\"t\":8,\"entity\":1,\"sound\":\"item.shield.block\"}\n\
                     {\"k\":\"n\",\"t\":8,\"entity\":42,\"sound\":\"item.shield.block\"}\n\
                     {\"k\":\"c\",\"t\":9,\"group\":\"minecraft:shield\",\"ticks\":100}\n\
+                    {\"k\":\"c\",\"t\":109,\"group\":\"minecraft:shield\",\"ticks\":0}\n\
                     {\"k\":\"d\",\"t\":12,\"entity\":1,\"cause\":-1,\"direct\":-1,\"type\":\"fall\"}\n\
                     {\"k\":\"d\",\"t\":13,\"entity\":7,\"cause\":1,\"direct\":55,\"type\":\"wind_charge\"}\n\
                     {\"k\":\"v\",\"t\":14,\"entity\":7,\"status\":35}\n{\"k\":\"v\",\"t\":15,\"entity\":1,\"status\":3}\n";

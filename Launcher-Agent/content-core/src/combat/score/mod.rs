@@ -72,7 +72,8 @@ pub struct Report {
     /// arrêtés, face à tout ce qu'il pouvait mettre (hors note).
     pub avoided: Option<f64>,
     /// Les techniques du bonus bug use, les miennes et ce qu'on voit des siennes.
-    pub bug_use: features::BugUse,
+    /// Pas `bug_use` : la note (aplatie dans ce résumé) porte déjà ce nom pour le bonus.
+    pub techniques: features::BugUse,
     /// Ping moyen pendant le duel, en millisecondes (affiché, pas corrigé).
     pub ping: Option<f64>,
     #[serde(flatten)]
@@ -182,7 +183,7 @@ impl Report {
             self.mode.code(),
             r.base_score.unwrap_or(-1.0),
             r.bug_use,
-            self.bug_use.foe_points,
+            self.techniques.foe_points,
             self.split.big_opened as f64,
             self.split.big_converted as f64,
             self.split.small_opened as f64,
@@ -260,7 +261,7 @@ pub fn score_with(journal: &Journal, prior: &Prior) -> Report {
         smash_charge: features.smash_charge,
         split: features.split,
         avoided: features.avoided,
-        bug_use: features.bug_use,
+        techniques: features.bug_use,
         rating,
     }
 }

@@ -12,7 +12,7 @@
 //! trois premières : affichés, hors note.
 
 use super::super::parse::{Duel, SLOT_HAND, SLOT_OFFHAND};
-use super::{blend, conversion, descents, mean, measure, sample_at, smash_bonus, Measure, Opportunity, Part, View, HEIGHT_ADVANTAGE, HIT_DELAY_TICKS, ME_HEALTH, MIN_FALL, REACH};
+use super::{blend, centered, conversion, descents, mean, measure, sample_at, smash_bonus, Measure, Opportunity, Part, View, HEIGHT_ADVANTAGE, HIT_DELAY_TICKS, ME_HEALTH, MIN_FALL, REACH};
 
 // Poids des mesures, posés au jugé (décision du 2026-10-14), *à calibrer*.
 const W_SHIELD: f64 = 0.30;
@@ -27,6 +27,14 @@ const W_RECOVERY: f64 = 0.05;
 const W_BLOCKED: f64 = 0.75;
 const W_GROUND_SHIELD: f64 = 0.10;
 const W_EFFICIENCY: f64 = 0.15;
+
+// Ce que valent ces mesures en moyenne, nous et nos adversaires réunis
+// (calibration provisoire du 2026-10-15, voir `centered`) : bouclier sur 6
+// relevés (journaux de version 2), le reste sur 52.
+const SHIELD_CENTER: f64 = 0.20;
+const VULNERABLE_CENTER: f64 = 0.52;
+const DODGE_CENTER: f64 = 0.26;
+const RECOVERY_CENTER: f64 = 0.88;
 
 /// « En l'air » : 4 blocs et plus au-dessus du sol. Un blocage en l'air vaut
 /// ×1, au sol ×0,1, sans rampe entre les deux (décision du 2026-10-14).
@@ -148,13 +156,16 @@ impl Defender<'_> {
     }
 
     fn family(&self, landing: Part) -> Measure {
+        // Les ouvertures laissées sont déjà centrées par construction (0,5 :
+        // comme un joueur moyen), atterrir proprement ne mesure qu'une erreur
+        // (1 : aucune) : ni l'une ni l'autre n'est recentrée.
         measure(blend(&[
-            (W_SHIELD, self.shield()),
+            (W_SHIELD, centered(self.shield(), SHIELD_CENTER)),
             (W_OPENINGS, self.openings()),
-            (W_VULNERABLE, self.vulnerable()),
-            (W_DODGE, self.dodge()),
+            (W_VULNERABLE, centered(self.vulnerable(), VULNERABLE_CENTER)),
+            (W_DODGE, centered(self.dodge(), DODGE_CENTER)),
             (W_LANDING, landing),
-            (W_RECOVERY, self.recovery()),
+            (W_RECOVERY, centered(self.recovery(), RECOVERY_CENTER)),
         ]))
     }
 

@@ -14,7 +14,9 @@ use super::features::{Features, Measure};
 // connue avant le duel, et non plus son niveau mesuré pendant.
 // Version 5 (2026-10-14) : les familles refaites d'après docs/scoring/familles/
 // et le bonus bug use, hors de la moyenne.
-pub const SCORE_VERSION: u32 = 5;
+// Version 6 (2026-10-15) : les parties des familles recentrées sur ce que
+// font en moyenne les joueurs observés (`features::centered`).
+pub const SCORE_VERSION: u32 = 6;
 
 /// Poids du lissage : une famille observée sur `K` événements compte autant
 /// que sa référence.
@@ -39,7 +41,9 @@ const CONVERSION: Reference = Reference { mean: 0.50, spread: 0.15 };
 const SMASH_QUALITY: Reference = Reference { mean: 0.75, spread: 0.15 };
 const EXPOSURE: Reference = Reference { mean: 0.50, spread: 0.15 };
 const VERTICAL: Reference = Reference { mean: 0.50, spread: 0.15 };
-const RESOURCES: Reference = Reference { mean: 0.55, spread: 0.15 };
+// Version 6 : ses parties sont recentrées (`features::centered`), sa
+// référence devient 0,5 comme celle des autres familles recentrées.
+const RESOURCES: Reference = Reference { mean: 0.50, spread: 0.15 };
 
 /// De la moyenne des écarts à l'écart de la note. Une moyenne de familles
 /// est plus resserrée qu'une famille seule, il faut donc l'élargir — mais
