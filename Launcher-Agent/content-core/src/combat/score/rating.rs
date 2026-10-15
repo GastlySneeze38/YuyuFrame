@@ -29,7 +29,9 @@ use super::features::{Features, Measure};
 // Version 11 (2026-10-15) : critiques rattachés au coup et non à la position
 // du son ; référence de la qualité du smash à 0,63 ; swap de l'adversaire
 // reconnu à la masse qui apparaît après son smash.
-pub const SCORE_VERSION: u32 = 11;
+// Version 12 (2026-10-15) : centres recalés sur 23 duels, grosse chute à 14
+// blocs, « atterrir proprement » seulement quand une chute a fait mal.
+pub const SCORE_VERSION: u32 = 12;
 
 /// Poids du lissage : une famille observée sur `K` événements compte autant
 /// que sa référence.

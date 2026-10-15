@@ -22,10 +22,12 @@ const W_CHAIN: f64 = 0.15;
 // Ce que valent les groupes en moyenne (calibration provisoire du
 // 2026-10-15, voir `centered`) : nous et nos adversaires réunis sur 52
 // relevés ; le déplacement horizontal, mesuré chez nous seuls, sur 26.
-const FOLLOW_CENTER: f64 = 0.43;
-const CLIMB_CENTER: f64 = 0.71;
+// Recalés le même soir sur 23 duels : suivre 0,50 (40 relevés), prendre la
+// hauteur 0,63 (46), se déplacer 0,46 (23, nous seuls).
+const FOLLOW_CENTER: f64 = 0.50;
+const CLIMB_CENTER: f64 = 0.63;
 const PEAK_CENTER: f64 = 0.82;
-const HORIZONTAL_CENTER: f64 = 0.39;
+const HORIZONTAL_CENTER: f64 = 0.46;
 const CHAIN_CENTER: f64 = 0.34;
 
 /// Une descente qui commence plus loin ne vise personne (*à calibrer*).
@@ -87,7 +89,7 @@ struct Follow {
     reached: Vec<(u64, bool)>,
     /// La distance rattrapée, pondérée par sa fuite.
     caught: Part,
-    /// Les descentes de plus de 8 blocs : (tick, chute, smash du premier coup ?).
+    /// Les grosses descentes (`BIG_FALL`) : (tick, chute, smash du premier coup ?).
     first_time: Vec<(u64, f64, bool)>,
 }
 

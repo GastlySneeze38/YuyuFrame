@@ -94,7 +94,7 @@ public final class NativeCombat {
     public static final int REPORT_BUG_USE = 39;
     /** Les points des techniques de l'adversaire (0 à 10) : affichés, jamais comptés. */
     public static final int REPORT_FOE_BUG_USE = 40;
-    /** Mes grosses ouvertures (8 blocs de chute et plus) ouvertes puis converties, mes petites. */
+    /** Mes grosses ouvertures (14 blocs de chute et plus) ouvertes puis converties, mes petites. */
     public static final int REPORT_BIG_OPENED = 41;
     public static final int REPORT_BIG_CONVERTED = 42;
     public static final int REPORT_SMALL_OPENED = 43;

@@ -309,7 +309,7 @@ final class PvpInfoModal {
             "Un passage de moins de 3 ticks au-dessus de lui, sans coup : il ne fait que traverser la zone. Et une chute face à son bouclier levé : le coup ne pouvait pas passer, ne pas frapper n'est pas un raté. Dans son dos, en revanche, c'est une opportunité, et une difficile.",
             "# Le bonus du smash",
             "Le smash ajoute des dégâts selon la hauteur de chute : 4 par bloc pour les 3 premiers, 2 par bloc jusqu'à 8, puis 1 par bloc au-delà, plus l'enchantement Densité.",
-            "Les dégâts de smash d'un duel comparent la somme des bonus réellement portés à celle qu'auraient donnée toutes les opportunités. Les grosses ouvertures (8 blocs de chute et plus) et les petites sont comptées à part, hors note."));
+            "Les dégâts de smash d'un duel comparent la somme des bonus réellement portés à celle qu'auraient donnée toutes les opportunités. Les grosses ouvertures (14 blocs de chute et plus) et les petites sont comptées à part, hors note."));
         list.add(family(report, 0, "Conversion",
             "Exploitez-vous vos ouvertures, compte tenu de leur difficulté et de leur valeur ? Chaque opportunité a une chance de réussite, celle d'un joueur moyen sur la même situation, et un poids, son bonus de smash possible.",
             "La chance baisse quand vous êtes loin de lui à l'ouverture, quand il bouge vite, quand la fenêtre est courte, quand la chute est grande (on arrive vite, il a le temps de se replacer) et quand il faut passer dans le dos de son bouclier.",

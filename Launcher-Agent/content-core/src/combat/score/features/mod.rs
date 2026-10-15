@@ -47,9 +47,13 @@ const GAP_TICKS: u64 = 2;
 const HIT_DELAY_TICKS: u64 = 4;
 /// Écart de hauteur à partir duquel un joueur « tient la hauteur ».
 const HEIGHT_ADVANTAGE: f64 = 1.5;
-/// Hauteur de chute qui sépare les grosses ouvertures des petites : là où le
-/// bonus de la masse change de rythme (conversion, *à calibrer*).
-const BIG_FALL: f64 = 8.0;
+/// Hauteur de chute qui fait une « grosse » ouverture, et un gros coup du
+/// premier coup (contrôle). Posée d'abord à 8 blocs, là où le bonus de la
+/// masse change de rythme ; relevée le 2026-10-15 sur 346 ouvertures : la
+/// médiane est à 6,8 blocs, 90 % sont sous 11,8 — 12 blocs n'est pas une
+/// grosse chute. 14 blocs : les 5 % les plus hautes. *À recalculer* avec la
+/// série de 50 duels.
+const BIG_FALL: f64 = 14.0;
 /// Vie sous laquelle un joueur est « bas » : environ 4 cœurs (ressources).
 const LOW_HEALTH: f64 = 8.0;
 /// Une fenêtre plus courte n'est pas une vraie ouverture : la cible ne fait

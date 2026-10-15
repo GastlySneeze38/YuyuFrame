@@ -26,11 +26,12 @@ const W_ROCKETS: f64 = 0.05;
 // centres viennent de NOS duels seuls (26 notés, 4 en version 2 pour la
 // barre d'inventaire et le délai des totems). Tant que d'autres joueurs ne
 // sont pas mesurés, 50 veut dire « comme d'habitude », pas « comme un
-// joueur moyen ».
-const WIND_AND_PEARLS_CENTER: f64 = 0.38;
+// joueur moyen ». Recalés le même soir sur 23 duels : charges de vent et
+// perles 0,32 (20), nourriture et vie 0,80 (23), délai des totems 0,10 (16).
+const WIND_AND_PEARLS_CENTER: f64 = 0.32;
 const HOTBAR_CENTER: f64 = 0.53;
-const FOOD_AND_LIFE_CENTER: f64 = 0.68;
-const TOTEM_REFILL_CENTER: f64 = 0.15;
+const FOOD_AND_LIFE_CENTER: f64 = 0.80;
+const TOTEM_REFILL_CENTER: f64 = 0.10;
 
 /// Masse en main : au-delà de 10 ticks après l'ouverture, c'est trop tard.
 const MACE_LATE_TICKS: f64 = 10.0;

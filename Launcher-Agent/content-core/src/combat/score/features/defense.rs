@@ -30,9 +30,11 @@ const W_EFFICIENCY: f64 = 0.15;
 
 // Ce que valent ces mesures en moyenne, nous et nos adversaires réunis
 // (calibration provisoire du 2026-10-15, voir `centered`) : bouclier sur 6
-// relevés (journaux de version 2), le reste sur 52.
-const SHIELD_CENTER: f64 = 0.20;
-const VULNERABLE_CENTER: f64 = 0.52;
+// relevés (journaux de version 2), le reste sur 52. Bouclier et temps
+// vulnérable recalés le même soir sur 23 duels : bouclier 0,29 sur 28
+// relevés (nous 0,21, nos adversaires 0,38), temps vulnérable 0,38 sur 43.
+const SHIELD_CENTER: f64 = 0.29;
+const VULNERABLE_CENTER: f64 = 0.38;
 const DODGE_CENTER: f64 = 0.26;
 const RECOVERY_CENTER: f64 = 0.88;
 
@@ -214,8 +216,16 @@ impl Defender<'_> {
 /// Atterrir proprement : les dégâts de chute subis après une de ses propres
 /// opportunités ratées (un smash raté ne remet pas la chute à zéro). Le
 /// montant se lit dans la vie juste avant et juste après le paquet.
+///
+/// Ne rien subir est le cas de presque tous les duels (1 dans les 18 duels
+/// relevés le 2026-10-15) : ça ne dit rien, et une partie toujours à 1
+/// remontait la défense de tout le monde. La partie n'existe donc que
+/// quand une chute a fait mal ; elle vaut alors moins que la moyenne (0,5),
+/// d'autant moins que la chute a coûté, sur le nombre de chutes qui ont fait mal.
 fn landing(duel: &Duel, mine: &[Opportunity]) -> Part {
-    mean(landing_damage(duel, mine).into_iter().map(|(_, damage)| 1.0 - (damage / LANDING_WORST).min(1.0)))
+    let hurt: Vec<f64> = landing_damage(duel, mine).into_iter().map(|(_, damage)| damage).filter(|d| *d > 0.0).collect();
+    let total: f64 = hurt.iter().sum();
+    (!hurt.is_empty()).then(|| (0.5 * (1.0 - (total / LANDING_WORST).min(1.0)), hurt.len() as f64))
 }
 
 /// Pour chacune de nos opportunités ratées : (tick, points de vie perdus en
