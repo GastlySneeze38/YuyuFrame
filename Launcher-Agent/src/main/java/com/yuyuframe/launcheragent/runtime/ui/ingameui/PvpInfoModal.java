@@ -320,6 +320,7 @@ final class PvpInfoModal {
             "Ce que vous tirez de vos gros coups. Pour chaque smash réussi : les dégâts portés divisés par les dégâts possibles. Possibles : masse chargée à fond, coup critique, et la chute qu'aurait eue le coup en attendant que vos pieds arrivent à la hauteur de sa tête.",
             "Deux erreurs y coûtent : frapper trop tôt, avec moins de chute que vous pouviez en prendre, et frapper mal chargé (moins de dégâts de base, pas de critique). La charge est celle que le jeu compte au coup : un attribute swap qui garde la charge de l'arme d'avant compte comme un coup bien chargé.",
             "La charge de la lance compte aussi : les dégâts à la vitesse de l'impact divisés par ceux que permettait la plus grande vitesse de l'approche.",
+            "Aucun smash réussi alors que des ouvertures se sont présentées, c'est 0. Sans aucune ouverture, il n'y a rien à juger.",
             "La hauteur elle-même n'y compte pas : elle est déjà dans la conversion et le contrôle. Les coups ordinaires ne rapportent rien. La valeur de référence est 75 %.",
             "Pour la monter : attendez le bas de la chute pour frapper, avec la barre d'attaque pleine et sans sprinter."));
         list.add(family(report, 2, "Défense",

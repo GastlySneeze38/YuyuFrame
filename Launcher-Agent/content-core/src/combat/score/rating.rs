@@ -24,7 +24,9 @@ use super::features::{Features, Measure};
 // qui visent l'adversaire, et pas celles ratées face à son bouclier levé.
 // Version 9 (2026-10-15) : bug use sans l'elytra swap, au quart de ses
 // points, et de moins en moins pour une même technique répétée.
-pub const SCORE_VERSION: u32 = 9;
+// Version 10 (2026-10-15) : aucun smash réussi sur des ouvertures vaut 0 en
+// qualité du smash, au lieu de ne rien peser.
+pub const SCORE_VERSION: u32 = 10;
 
 /// Poids du lissage : une famille observée sur `K` événements compte autant
 /// que sa référence.

@@ -309,6 +309,7 @@ final class PvpFamilyModal {
         FACTS.put("conversion.converted", "{0} ouverture{s0} convertie{s0} sur {1}, un joueur moyen en aurait converti {2}");
         FACTS.put("conversion.easy_missed", "{0} ouverture{s0} facile{s0} ratée{s0}");
         FACTS.put("conversion.hard_landed", "{0} ouverture{s0} difficile{s0} réussie{s0}");
+        FACTS.put("smash.none", "Aucun smash réussi sur {0} ouverture{s0}");
         FACTS.put("smash.on_time", "{0} smash{s0} sur {1} au bas de la chute");
         FACTS.put("smash.crit", "{0} critique{s0} sur {1} smashs");
         FACTS.put("smash.sprint", "En sprint au moment du coup : {0} fois");
@@ -332,6 +333,7 @@ final class PvpFamilyModal {
         FACTS.put("resources.totem_refill", "{0} s en moyenne pour remettre un totem");
 
         VERSUS.put("conversion.converted", "{0} ouverture{s0} sur {1}");
+        VERSUS.put("smash.landed", "{0} smash{s0} réussi{s0}");
         VERSUS.put("smash.crit", "{0} critique{s0} sur {1}");
         VERSUS.put("defense.dodge", "{0} descente{s0} esquivée{s0} sur {1}");
         VERSUS.put("defense.blocked_air", "{0} smash{s0} arrêté{s0} en l'air");
@@ -340,6 +342,7 @@ final class PvpFamilyModal {
         VERSUS.put("resources.totem_refill", "Totem remis en {0} s");
 
         ADVICE.put("conversion.easy_missed", "Une ouverture facile, c'est collé à lui sur une chute courte : frappez-la sans attendre.");
+        ADVICE.put("smash.none", "Une ouverture qui passe sans coup ne rapporte rien : frappez pendant la chute, même trop tôt plutôt que jamais.");
         ADVICE.put("smash.crit", "Un smash critique fait 1,5 fois ses dégâts : la barre d'attaque pleine, et pas de sprint au moment du coup.");
         ADVICE.put("smash.sprint", "Le sprint empêche le critique : relâchez-le avant de frapper.");
         ADVICE.put("smash.charge", "La barre d'attaque de la masse se remplit lentement : attendez-la avant de frapper.");

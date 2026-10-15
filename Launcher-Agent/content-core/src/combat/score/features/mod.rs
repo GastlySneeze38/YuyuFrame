@@ -655,7 +655,7 @@ pub fn extract(duel: &Duel) -> Features {
     // Le détail de chaque famille, dans l'ordre du résumé.
     let mut details: [Detail; 5] = Default::default();
     conversion::detail(&mine, &theirs, &mut details[0]);
-    smash::detail(duel, &smashes, &mut details[1]);
+    smash::detail(duel, &smashes, mine.len(), &mut details[1]);
     defense::detail(duel, &my_views, &their_views, &mine, &theirs, &mut details[2]);
     control::detail(&my_views, &their_views, &mine, &theirs, &mut details[3]);
     resources::detail(duel, &my_views, &their_views, &mine, &mut details[4]);

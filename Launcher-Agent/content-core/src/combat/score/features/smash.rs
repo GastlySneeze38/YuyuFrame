@@ -123,7 +123,19 @@ pub fn mine(duel: &Duel, mine: &[Opportunity], views: &[View], ping: u64) -> (Me
     if duel.detailed() {
         ratios.extend(spear_charges(duel, views, true, ping));
     }
-    (Measure::rate(ratios.iter().sum(), ratios.len() as f64), smashes)
+    (judged(&ratios, mine), smashes)
+}
+
+/// La famille sur les gros coups portés. Aucun gros coup alors que des
+/// ouvertures se sont présentées, c'est 0, compté sur ces ouvertures
+/// (2026-10-15) : avant, la famille ne mesurait rien et ne pesait rien —
+/// un duel sans un seul coup y valait la moyenne. Sans aucune ouverture,
+/// il n'y a rien à juger.
+fn judged(ratios: &[f64], opportunities: &[Opportunity]) -> Measure {
+    if ratios.is_empty() && !opportunities.is_empty() {
+        return Measure { value: 0.0, count: opportunities.len() as f64 };
+    }
+    Measure::rate(ratios.iter().sum(), ratios.len() as f64)
 }
 
 /// Ses gros coups. Sa charge ne se voit pas, son critique si (version 3 :
@@ -153,7 +165,7 @@ pub fn foe(duel: &Duel, theirs: &[Opportunity], views: &[View]) -> (Measure, Vec
     if duel.detailed() {
         ratios.extend(spear_charges(duel, views, false, 0));
     }
-    (Measure::rate(ratios.iter().sum(), ratios.len() as f64), smashes)
+    (judged(&ratios, theirs), smashes)
 }
 
 /// Frappé « au bon moment » : à un demi-bloc près de la chute possible.
@@ -161,10 +173,16 @@ const ON_TIME_MARGIN: f64 = 0.5;
 
 /// Le détail de la qualité du smash : au bon moment, critiques, sprint au
 /// coup, barre pas pleine ; chaque smash comme moment ; ses critiques en face.
-pub fn detail(duel: &Duel, smashes: &[Smash], d: &mut super::Detail) {
+/// Aucun smash réussi sur des ouvertures : c'est le fait, et ses smashs en face.
+pub fn detail(duel: &Duel, smashes: &[Smash], opened: usize, d: &mut super::Detail) {
     let mine: Vec<&Smash> = smashes.iter().filter(|s| s.by_me).collect();
     let n = mine.len() as f64;
     if n == 0.0 {
+        if opened > 0 {
+            d.fact("smash.none", false, 1.0, &[opened as f64]);
+            let theirs = smashes.iter().filter(|s| !s.by_me).count() as f64;
+            d.versus("smash.landed", &[0.0], &[theirs]);
+        }
         return;
     }
     let on_time = |s: &Smash| s.hit_fall + ON_TIME_MARGIN >= s.possible_fall;
@@ -248,6 +266,29 @@ mod tests {
         assert!((charge_factor(1.0) - 1.0).abs() < 1e-12);
         assert!((charge_factor(0.0) - 0.2).abs() < 1e-12);
         assert!((charge_factor(0.5) - 0.4).abs() < 1e-12);
+    }
+
+    #[test]
+    fn aucun_smash_sur_des_ouvertures_vaut_zero() {
+        let missed = super::super::Opportunity {
+            open: 0,
+            close: 5,
+            converted: false,
+            hit: None,
+            expected: 20.0,
+            realized: 0.0,
+            fall: 6.0,
+            hit_fall: 6.0,
+            possible_fall: 6.0,
+            offset: 1.0,
+            target_speed: 0.0,
+            behind_shield: false,
+            chance: 0.4,
+        };
+        let none = judged(&[], &[missed.clone(), missed]);
+        assert_eq!((none.value, none.count), (0.0, 2.0), "deux ouvertures, aucun smash : 0 sur deux");
+        assert_eq!(judged(&[], &[]).count, 0.0, "sans ouverture, rien à juger");
+        assert_eq!(judged(&[0.8], &[]).value, 0.8);
     }
 
     #[test]
