@@ -75,6 +75,8 @@ pub struct Report {
     /// Part des dégâts adverses neutralisés : ouvertures ratées et smashs
     /// arrêtés, face à tout ce qu'il pouvait mettre (hors note).
     pub avoided: Option<f64>,
+    /// Les coups et les totems échangés (hors note).
+    pub exchanges: Exchanges,
     /// Les techniques du bonus bug use, les miennes et ce qu'on voit des siennes.
     /// Pas `bug_use` : la note (aplatie dans ce résumé) porte déjà ce nom pour le bonus.
     pub techniques: features::BugUse,
@@ -85,7 +87,32 @@ pub struct Report {
 }
 
 /// Nombre de valeurs de [`Report::numbers`].
-pub const REPORT_LEN: usize = 46;
+pub const REPORT_LEN: usize = 50;
+
+/// Ce qui s'est échangé entre les deux duellistes, tel quel : les coups
+/// confirmés par le serveur dans un sens et dans l'autre, toutes armes
+/// confondues, et les totems qui ont sauté. Affiché, hors note — c'est ce
+/// que le joueur a vécu, et ce que les cases de bonus de smash ne disaient
+/// pas (2026-10-15 : « 78 subis contre 48 portés » alors qu'il avait reçu
+/// quinze coups d'épée en plus).
+#[derive(Debug, Clone, Copy, Default, Serialize)]
+pub struct Exchanges {
+    pub hits_dealt: usize,
+    pub hits_taken: usize,
+    pub totems_forced: usize,
+    pub totems_lost: usize,
+}
+
+impl Exchanges {
+    fn of(duel: &parse::Duel) -> Self {
+        Exchanges {
+            hits_dealt: duel.hits.iter().filter(|h| h.by_me).count(),
+            hits_taken: duel.hits.iter().filter(|h| !h.by_me).count(),
+            totems_forced: duel.foe_totems.len(),
+            totems_lost: duel.my_totems.len(),
+        }
+    }
+}
 
 impl Report {
     /// Ce qui reconnaît l'adversaire d'un duel à l'autre : son UUID, à
@@ -130,6 +157,10 @@ impl Report {
     /// mes grosses ouvertures ouvertes puis converties, mes petites ; la part
     /// des dégâts adverses évités sur 100 (−1 si rien à éviter). La note
     /// (index 0) comprend le bonus.
+    ///
+    /// Puis (ABI 12) : les coups portés et reçus entre les deux duellistes,
+    /// toutes armes confondues ; les totems que je lui ai fait sauter, et
+    /// les miens qui ont sauté. Des comptes, hors note.
     pub fn numbers(&self) -> [f64; REPORT_LEN] {
         let result = match self.result.as_deref() {
             Some("win") => 1.0,
@@ -193,6 +224,10 @@ impl Report {
             self.split.small_opened as f64,
             self.split.small_converted as f64,
             self.avoided.map(|a| (100.0 * a).round()).unwrap_or(-1.0),
+            self.exchanges.hits_dealt as f64,
+            self.exchanges.hits_taken as f64,
+            self.exchanges.totems_forced as f64,
+            self.exchanges.totems_lost as f64,
         ]
     }
 }
@@ -299,6 +334,7 @@ pub fn score_with(journal: &Journal, prior: &Prior) -> Report {
         smash_charge: features.smash_charge,
         split: features.split,
         avoided: features.avoided,
+        exchanges: Exchanges::of(duel),
         techniques: features.bug_use,
         rating,
     }

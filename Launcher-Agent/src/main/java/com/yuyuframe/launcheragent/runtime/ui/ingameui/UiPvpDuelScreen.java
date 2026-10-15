@@ -26,7 +26,7 @@ import java.util.List;
  *       ouvre son détail dans ce duel ({@link PvpFamilyModal}) : des faits,
  *       des moments, lui en face ; un clic sur son niveau, l'explication ;</li>
  *   <li>les chiffres du duel, sur deux rangées : opportunités, grosses et
- *       petites ouvertures, dégâts évités, dégâts de smash, charge au smash,
+ *       petites ouvertures, dégâts évités, coups et totems échangés, charge au smash,
  *       bonus bug use (le mien, et ce qu'on voit du sien), temps au contact,
  *       ping ;</li>
  *   <li>l'analyse — points forts, points faibles, à améliorer. <b>La place
@@ -441,8 +441,10 @@ public final class UiPvpDuelScreen extends UiScreenBase {
             { "OPPORTUNITÉS SUBIES", ratio(report, NativeCombat.REPORT_THEIR_CONVERTED, NativeCombat.REPORT_THEIR_OPENED, n) },
             { "DÉGÂTS ÉVITÉS", avoided >= 0 ? PvpScoreUi.count(avoided, n) + " %" : PvpScoreUi.NO_SCORE },
             { "CHARGE AU SMASH", charge >= 0 ? PvpScoreUi.count(charge * 100, n) + " %" : PvpScoreUi.NO_SCORE },
-            { "DÉGÂTS DE SMASH PORTÉS", ratio(report, NativeCombat.REPORT_MY_SMASH_DEALT, NativeCombat.REPORT_MY_SMASH_POSSIBLE, n) },
-            { "DÉGÂTS DE SMASH SUBIS", ratio(report, NativeCombat.REPORT_THEIR_SMASH_DEALT, NativeCombat.REPORT_THEIR_SMASH_POSSIBLE, n) },
+            // Ce qui s'est échangé, toutes armes : le bonus des seuls smashs
+            // cachait les coups d'épée, qui décident souvent du duel.
+            { "COUPS PORTÉS / REÇUS", ratio(report, NativeCombat.REPORT_HITS_DEALT, NativeCombat.REPORT_HITS_TAKEN, n) },
+            { "TOTEMS FORCÉS / PERDUS", ratio(report, NativeCombat.REPORT_TOTEMS_FORCED, NativeCombat.REPORT_TOTEMS_LOST, n) },
             { "BUG USE", "+" + PvpScoreUi.count(report[NativeCombat.REPORT_BUG_USE], n) },
             { "BUG USE ADVERSE", PvpScoreUi.count(report[NativeCombat.REPORT_FOE_BUG_USE], n) + " " + Lang.tr("pts") },
             { "TEMPS AU CONTACT", PvpScoreUi.duration(report[NativeCombat.REPORT_ENGAGED_SECS] * n) },

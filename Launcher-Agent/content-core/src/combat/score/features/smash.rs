@@ -78,10 +78,14 @@ pub struct Smash {
     pub ratio: f64,
 }
 
-/// Un critique joué sur ce joueur près du paquet de dégâts : le son part du
-/// serveur au moment du coup, avec le paquet (deux ticks de marge).
+/// Un critique entendu avec ce coup : le son part du serveur au moment du
+/// coup, avec le paquet de dégâts (deux ticks de marge). C'est le coup qui
+/// dit qui a frappé — pas la position du son (voir `Duel::crits`). Si un
+/// coup de l'autre tombe dans les mêmes ticks, le son reste ambigu : il
+/// n'est donné à personne.
 fn crit_heard(duel: &Duel, hit: u64, by_me: bool) -> bool {
-    duel.crits.iter().any(|(t, on_me)| *on_me == by_me && t.abs_diff(hit) <= CRIT_SOUND_TICKS)
+    let near = |t: u64| t.abs_diff(hit) <= CRIT_SOUND_TICKS;
+    duel.crits.iter().any(|t| near(*t)) && !duel.hits.iter().any(|h| h.by_me != by_me && near(h.t))
 }
 
 /// Mes gros coups : la famille, et chaque smash jugé.

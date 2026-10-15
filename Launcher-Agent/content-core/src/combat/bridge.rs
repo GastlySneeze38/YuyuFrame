@@ -24,7 +24,8 @@ use super::writer::send;
 /// 10 (2026-10-14) : le résumé passe à 46 nombres (note avant bonus, bug
 /// use, grosses et petites ouvertures, dégâts évités).
 /// 11 (2026-10-15) : `yf_combat_detail`, le détail des familles d'un duel.
-const ABI_VERSION: u32 = 11;
+/// 12 (2026-10-15) : le résumé passe à 50 nombres (coups et totems échangés).
+const ABI_VERSION: u32 = 12;
 
 /// Autres joueurs transmis par tick, au plus.
 const MAX_OTHERS: usize = 16;

@@ -26,7 +26,10 @@ use super::features::{Features, Measure};
 // points, et de moins en moins pour une même technique répétée.
 // Version 10 (2026-10-15) : aucun smash réussi sur des ouvertures vaut 0 en
 // qualité du smash, au lieu de ne rien peser.
-pub const SCORE_VERSION: u32 = 10;
+// Version 11 (2026-10-15) : critiques rattachés au coup et non à la position
+// du son ; référence de la qualité du smash à 0,63 ; swap de l'adversaire
+// reconnu à la masse qui apparaît après son smash.
+pub const SCORE_VERSION: u32 = 11;
 
 /// Poids du lissage : une famille observée sur `K` événements compte autant
 /// que sa référence.
@@ -48,7 +51,13 @@ struct Reference {
 // opportunités : la référence est déjà propre au duel. Les autres sont des
 // repères, pas une calibration.
 const CONVERSION: Reference = Reference { mean: 0.50, spread: 0.15 };
-const SMASH_QUALITY: Reference = Reference { mean: 0.75, spread: 0.15 };
+// Version 11 (2026-10-15) : recentrée sur ce que font les joueurs observés —
+// 0,63 sur 89 smashs depuis la capture des critiques, nous 0,61 et nos
+// adversaires 0,66. Un smash part presque toujours en sprint (gardé en l'air
+// après le saut ou la charge de vent), et le sprint empêche le critique :
+// 8 critiques sur 89. À 0,75, la famille demandait un critique que presque
+// personne ne fait. *À recalculer* avec la série de 50 duels.
+const SMASH_QUALITY: Reference = Reference { mean: 0.63, spread: 0.15 };
 const EXPOSURE: Reference = Reference { mean: 0.50, spread: 0.15 };
 const VERTICAL: Reference = Reference { mean: 0.50, spread: 0.15 };
 // Version 6 : ses parties sont recentrées (`features::centered`), sa

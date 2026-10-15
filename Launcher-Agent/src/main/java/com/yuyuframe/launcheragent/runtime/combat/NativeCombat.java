@@ -32,7 +32,7 @@ import java.util.UUID;
 public final class NativeCombat {
 
     /** Même valeur que {@code ABI_VERSION} dans combat/bridge.rs. */
-    private static final int ABI_VERSION = 11;
+    private static final int ABI_VERSION = 12;
 
     /** Place réservée au texte de l'historique : deux cents duels en tiennent bien moins. */
     private static final int HISTORY_BYTES = 256 * 1024;
@@ -41,7 +41,7 @@ public final class NativeCombat {
      * Le résumé d'un duel, en nombres — {@code Report::numbers} dans
      * combat/score/mod.rs, même ordre.
      */
-    public static final int REPORT_LEN = 46;
+    public static final int REPORT_LEN = 50;
     /** Note sur 100, bonus bug use compris, ou −1 si le duel n'est pas noté. */
     public static final int REPORT_SCORE = 0;
     /** De 0 à 1. */
@@ -101,6 +101,12 @@ public final class NativeCombat {
     public static final int REPORT_SMALL_CONVERTED = 44;
     /** Part des dégâts adverses évités sur 100 (ouvertures ratées, smashs arrêtés), −1 si rien à éviter. Hors note. */
     public static final int REPORT_AVOIDED = 45;
+    /** Coups portés et reçus entre les deux duellistes, toutes armes confondues (hors note). */
+    public static final int REPORT_HITS_DEALT = 46;
+    public static final int REPORT_HITS_TAKEN = 47;
+    /** Totems que je lui ai fait sauter, et les miens qui ont sauté (hors note). */
+    public static final int REPORT_TOTEMS_FORCED = 48;
+    public static final int REPORT_TOTEMS_LOST = 49;
 
     /** Nombres décrivant notre joueur à un tick — {@code ME_LEN} dans combat/record.rs, même ordre. */
     public static final int ME_LEN = 21;

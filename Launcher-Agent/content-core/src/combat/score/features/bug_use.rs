@@ -46,7 +46,7 @@ const STUN_SLAM_TICKS: u64 = 2;
 const PEARL_CATCH_TICKS: u64 = 2;
 /// D-hand : deux totems qui sautent coup sur coup.
 const D_HAND_TICKS: u64 = 40;
-/// Son swap : son objet en main change au plus ce nombre de ticks avant que son coup nous arrive.
+/// Son swap : la masse apparaît dans sa main au plus ce nombre de ticks après que son smash nous arrive.
 const FOE_SWAP_TICKS: u64 = 6;
 /// Hauteur qui double les points d'un instant pearl catch quand elle mène à une opportunité.
 const PEARL_CATCH_HEIGHT: f64 = 20.0;
@@ -221,11 +221,17 @@ fn mine(duel: &Duel, my_views: &[View], mine: &[Opportunity], lunges: &[Lunge], 
 /// vent ne se voient pas.
 fn foe(duel: &Duel) -> Tally {
     let mut tally = Tally::default();
-    for hit in duel.hits.iter().filter(|h| !h.by_me) {
-        // Son objet en main a changé dans les ticks qui précèdent le paquet (ping compris).
-        let change = duel.foe_gear.windows(2).find(|w| w[1].t + FOE_SWAP_TICKS >= hit.t && w[1].t <= hit.t && w[0].item(SLOT_HAND) != w[1].item(SLOT_HAND));
-        if let Some(w) = change {
-            attack_swap(&mut tally, &duel.foe_gear, w[1].t, w[0].item(SLOT_HAND), w[1].item(SLOT_HAND), hit.smash);
+    // Son swap, vu de chez nous : le serveur nous envoie son changement
+    // d'objet APRÈS le coup. On le voit donc tenir l'épée jusqu'au paquet
+    // « smash de masse », et la masse n'apparaît qu'ensuite (vu le
+    // 2026-10-15, sept fois dans un même duel). Un smash de masse reçu alors
+    // qu'on le voit tenir autre chose qu'une masse, c'est le swap : le coup
+    // est parti avec la masse, sur les attributs de l'objet d'avant.
+    for hit in duel.hits.iter().filter(|h| !h.by_me && h.smash) {
+        let seen = gear_at(&duel.foe_gear, hit.t).map(|g| g.item(SLOT_HAND)).unwrap_or("");
+        let mace_after = duel.foe_gear.iter().any(|g| g.t > hit.t && g.t <= hit.t + FOE_SWAP_TICKS && g.item(SLOT_HAND) == "mace");
+        if seen != "mace" && mace_after {
+            attack_swap(&mut tally, &duel.foe_gear, hit.t, seen, "mace", true);
         }
     }
     for broke in duel.shield_sounds.iter().filter(|s| s.on_me && s.broke) {

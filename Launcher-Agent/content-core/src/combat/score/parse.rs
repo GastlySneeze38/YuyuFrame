@@ -133,10 +133,17 @@ pub struct Duel {
     pub shield_sounds: Vec<ShieldSound>,
     /// Ticks où notre bouclier a été mis en recharge (hache, version 2).
     pub shield_cooldowns: Vec<u64>,
-    /// Coups critiques, par leur son : (tick, frappé par nous). Capturés
-    /// depuis le 2026-10-15 : un journal plus ancien n'en a aucun
-    /// ([`Duel::sees_crits`]).
-    pub crits: Vec<(u64, bool)>,
+    /// Ticks des coups critiques, par leur son. Capturés depuis le
+    /// 2026-10-15 : un journal plus ancien n'en a aucun ([`Duel::sees_crits`]).
+    ///
+    /// Le joueur sur qui Java a rattaché le son n'est PAS gardé : le son est
+    /// joué aux pieds de celui qui frappe, mais rattaché au joueur le plus
+    /// proche, et vu le 2026-10-15 ça ne tient pas — collé à nous,
+    /// l'adversaire nous faisait porter ses critiques (notre position est
+    /// exacte, la sienne a du retard) ; en chute rapide, ses critiques
+    /// n'étaient rattachés à personne. Un critique part avec un coup : c'est
+    /// au coup confirmé du même tick qu'il est rattaché (`smash::crit_heard`).
+    pub crits: Vec<u64>,
     /// Objets que notre joueur a utilisés : (tick, identifiant).
     pub uses: Vec<(u64, String)>,
     /// L'équipement de chacun, à chaque changement.
@@ -307,14 +314,13 @@ pub fn parse(text: &str) -> Option<Duel> {
                 item: line["item"].as_str().unwrap_or("").to_string(),
             }),
             "n" => {
+                let sound = line["sound"].as_str().unwrap_or("");
                 let on_me = int(&line["entity"]) == Some(me);
-                if on_me || (foe.is_some() && int(&line["entity"]) == foe) {
-                    let sound = line["sound"].as_str().unwrap_or("");
-                    if sound == CRIT_SOUND {
-                        duel.crits.push((t, on_me));
-                    } else if sound.starts_with("item.shield") {
-                        duel.shield_sounds.push(ShieldSound { t, on_me, broke: sound.ends_with("break") });
-                    }
+                if sound == CRIT_SOUND {
+                    // Quel que soit le joueur sur qui Java l'a rattaché (voir `crits`).
+                    duel.crits.push(t);
+                } else if sound.starts_with("item.shield") && (on_me || (foe.is_some() && int(&line["entity"]) == foe)) {
+                    duel.shield_sounds.push(ShieldSound { t, on_me, broke: sound.ends_with("break") });
                 }
             }
             // Le jeu envoie la recharge à son début (sa durée) et à sa fin
@@ -461,7 +467,7 @@ mod tests {
         assert!(duel.detailed());
         assert_eq!((duel.attacks.len(), duel.attacks[0].on_foe, duel.attacks[0].item.as_str()), (1, true, "mace"));
         assert_eq!(duel.shield_sounds.len(), 2, "le son sur un spectateur ne compte pas, le critique est rangé à part");
-        assert_eq!(duel.crits, vec![(10, false)]);
+        assert_eq!(duel.crits, vec![10]);
         assert!(!duel.sees_crits(), "version 2 : les critiques n'étaient pas capturés");
         assert!(duel.shield_sounds[0].broke && !duel.shield_sounds[0].on_me);
         assert!(!duel.shield_sounds[1].broke && duel.shield_sounds[1].on_me);
