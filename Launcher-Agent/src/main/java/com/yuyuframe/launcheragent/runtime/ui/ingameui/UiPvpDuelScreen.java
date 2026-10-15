@@ -7,6 +7,7 @@ import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
 import com.yuyuframe.launcheragent.apigraphic.value.UiTheme;
 import com.yuyuframe.launcheragent.apigraphic.widget.UiWidget;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
+import com.yuyuframe.launcheragent.runtime.combat.DuelDetail;
 import com.yuyuframe.launcheragent.runtime.combat.DuelHistory;
 import com.yuyuframe.launcheragent.runtime.combat.NativeCombat;
 import com.yuyuframe.launcheragent.runtime.i18n.Lang;
@@ -22,7 +23,8 @@ import java.util.List;
  *   <li>la note en grand et sa confiance ; à côté, le <b>face-à-face</b> :
  *       chaque famille avec ma valeur à gauche et celle de l'adversaire à
  *       droite, mon jeu seul et son niveau en tête. Un clic sur une famille
- *       ouvre son explication, avec ce qu'elle valait dans ce duel ;</li>
+ *       ouvre son détail dans ce duel ({@link PvpFamilyModal}) : des faits,
+ *       des moments, lui en face ; un clic sur son niveau, l'explication ;</li>
  *   <li>les chiffres du duel, sur deux rangées : opportunités, grosses et
  *       petites ouvertures, dégâts évités, dégâts de smash, charge au smash,
  *       bonus bug use (le mien, et ce qu'on voit du sien), temps au contact,
@@ -52,6 +54,10 @@ public final class UiPvpDuelScreen extends UiScreenBase {
     private final Object lastScreen;
     private final DuelHistory.Duel duel;
     private PvpInfoModal info;
+    /** Le détail d'une famille, ouvert au clic sur sa ligne. */
+    private PvpFamilyModal familyDetail;
+    /** Le détail des familles, lu au premier clic : il relit le journal du duel. */
+    private DuelDetail detail;
     private int lastW = -1, lastH = -1;
     private float lastScale = -1f;
     private final long openedAt = System.nanoTime();
@@ -79,16 +85,24 @@ public final class UiPvpDuelScreen extends UiScreenBase {
 
     @Override
     protected List<UiWidget> modalWidgets() {
-        return info == null ? null : info.widgets();
+        if (info != null) return info.widgets();
+        return familyDetail == null ? null : familyDetail.widgets();
     }
 
     @Override
     protected void onModalEscape() {
         if (info != null) info.close();
+        else if (familyDetail != null) familyDetail.close();
     }
 
     private void openInfo(int topic) {
         info = new PvpInfoModal(duel.report, topic);
+    }
+
+    /** Le détail d'une de mes familles : des faits de ce duel ; « Comment c'est compté » mène à son explication. */
+    private void openFamily(int family) {
+        if (detail == null) detail = DuelDetail.load(duel.time);
+        familyDetail = new PvpFamilyModal(family, duel.report, detail, () -> openInfo(PvpInfoModal.FAMILY_TOPICS[family]));
     }
 
     // ── Mise en page ─────────────────────────────────────────────────────────
@@ -124,7 +138,7 @@ public final class UiPvpDuelScreen extends UiScreenBase {
         for (int i = 0; i < ROWS; i++) {
             final int family = i;
             familyHits[i] = new Hit(faceLeft, rowTop - (i + 1) * rowHeight(), right - faceLeft, rowHeight(),
-                () -> openInfo(PvpInfoModal.FAMILY_TOPICS[family]));
+                () -> openFamily(family));
             widgets.add(familyHits[i]);
         }
         float half = (right - faceLeft) / 2f;
@@ -175,6 +189,7 @@ public final class UiPvpDuelScreen extends UiScreenBase {
             lastW = screenWidth; lastH = screenHeight; lastScale = UiTheme.UI_SCALE;
         }
         if (info != null && info.closed()) info = null;
+        if (familyDetail != null && familyDetail.closed()) familyDetail = null;
         UiRenderer renderer = UiRenderer.get(getClass().getClassLoader());
         renderer.beginGlassFrame(GLASS_PASSES, screenWidth, screenHeight);
         try {
@@ -184,13 +199,15 @@ public final class UiPvpDuelScreen extends UiScreenBase {
         }
         super.uiDraw(mouseX, mouseY);
         try {
-            boolean hover = info == null;
+            boolean hover = info == null && familyDetail == null;
             drawBanner(renderer);
             drawScore(renderer, bannerBottom - gap());
             drawFaceToFace(renderer, bannerBottom - gap(), hover ? mouseX : -1, hover ? mouseY : -1);
             drawFigures(renderer, mainBottom - gap());
             drawAnalysis(renderer, figuresBottom - gap(), contentBottom);
             PvpScoreUi.alpha = 1f;
+            // « Comment c'est compté » ouvre l'explication pendant que le détail se ferme : l'une passe sur l'autre.
+            if (familyDetail != null) familyDetail.draw(renderer, info == null ? mouseX : -1, info == null ? mouseY : -1, screenWidth, screenHeight);
             if (info != null) info.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
             drawRevealVeil(renderer);
         } catch (Throwable t) {

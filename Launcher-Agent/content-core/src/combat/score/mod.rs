@@ -24,7 +24,8 @@ pub use rating::Prior;
 /// opportunité ou d'une famille l'incrémente.
 // Version 3 (2026-10-14) : les familles de docs/scoring/familles/.
 // Version 4 (2026-10-15) : chute possible prolongée, critique au son, nombre d'événements.
-pub const EXTRACTOR_VERSION: u32 = 4;
+// Version 5 (2026-10-15) : chutes après un raté, grosses descentes, détail des familles.
+pub const EXTRACTOR_VERSION: u32 = 5;
 
 /// Le décompte des opportunités d'un joueur.
 #[derive(Debug, Serialize)]
@@ -229,6 +230,40 @@ impl Journal {
     }
 }
 
+/// Le détail des cinq familles d'un duel, pour la fenêtre qui s'ouvre au
+/// clic sur une famille (`features::Detail`) : des faits, des moments, la
+/// même mesure chez l'adversaire. Une ligne par élément, champs séparés par
+/// des tabulations, nombres par des virgules ; la famille est son rang dans
+/// le résumé (0 conversion … 4 ressources) :
+///
+/// ```text
+/// fact   ⇥ <famille> ⇥ <code> ⇥ <1 a fait monter, 0 baisser> ⇥ <poids> ⇥ <nombres>
+/// moment ⇥ <famille> ⇥ <secondes depuis l'ouverture> ⇥ <code> ⇥ <1 bon, 0 mauvais> ⇥ <poids> ⇥ <nombres>
+/// versus ⇥ <famille> ⇥ <code> ⇥ <mes nombres> ⇥ <ses nombres>
+/// ```
+///
+/// `None` si le texte n'est pas un journal.
+pub fn detail_text(text: &str) -> Option<String> {
+    let duel = parse::parse(text)?;
+    let features = features::extract(&duel);
+    // Deux décimales au plus : l'écran n'en montre jamais plus.
+    let join = |values: &[f64]| values.iter().map(|v| ((v * 100.0).round() / 100.0).to_string()).collect::<Vec<_>>().join(",");
+    let mut out = String::new();
+    for (family, detail) in features.details.iter().enumerate() {
+        for f in &detail.facts {
+            out.push_str(&format!("fact\t{family}\t{}\t{}\t{:.4}\t{}\n", f.code, f.up as u8, f.weight, join(&f.values)));
+        }
+        for m in &detail.moments {
+            let seconds = (m.t as f64 - duel.start as f64) / 20.0;
+            out.push_str(&format!("moment\t{family}\t{seconds:.1}\t{}\t{}\t{:.4}\t{}\n", m.code, m.good as u8, m.weight, join(&m.values)));
+        }
+        for v in &detail.versus {
+            out.push_str(&format!("versus\t{family}\t{}\t{}\t{}\n", v.code, join(&v.mine), join(&v.theirs)));
+        }
+    }
+    Some(out)
+}
+
 /// Note un journal contre un adversaire inconnu. `None` si le texte n'en est pas un.
 pub fn score_journal(text: &str) -> Option<Report> {
     Journal::read(text).map(|journal| score_with(&journal, &Prior::default()))
@@ -327,6 +362,29 @@ mod tests {
     #[test]
     fn un_texte_qui_n_est_pas_un_journal_ne_donne_rien() {
         assert!(score_journal("pas un journal").is_none());
+    }
+
+    #[test]
+    fn le_detail_d_un_vrai_duel_parle_de_chaque_famille() {
+        let text = detail_text(DEFEAT).expect("un journal");
+        let lines: Vec<Vec<&str>> = text.lines().map(|l| l.split('\t').collect()).collect();
+        for kind_and_width in [("fact", 6), ("moment", 7), ("versus", 5)] {
+            assert!(lines.iter().filter(|l| l[0] == kind_and_width.0).all(|l| l.len() == kind_and_width.1), "{}", kind_and_width.0);
+        }
+        // Trois smashs réussis : un fait et trois moments dans la qualité du smash.
+        assert!(lines.iter().any(|l| l[0] == "fact" && l[1] == "1" && l[2] == "smash.on_time"));
+        assert_eq!(lines.iter().filter(|l| l[0] == "moment" && l[1] == "1").count(), 3);
+        assert!(lines.iter().any(|l| l[0] == "versus" && l[1] == "0" && l[2] == "conversion.converted"), "ses ouvertures, toujours mesurées");
+        assert!(detail_text("pas un journal").is_none());
+    }
+
+    /// Outil de mise au point : le détail d'un journal déjà décompressé.
+    /// `YF_JOURNAL_TEXT=<journal.ndjson> cargo test --lib detail_d_un_journal -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn detail_d_un_journal() {
+        let path = std::env::var("YF_JOURNAL_TEXT").expect("YF_JOURNAL_TEXT : le journal décompressé");
+        println!("{}", detail_text(&std::fs::read_to_string(path).unwrap()).expect("un journal"));
     }
 
     /// Outil de mise au point : note un journal déjà décompressé.

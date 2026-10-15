@@ -81,34 +81,65 @@ fn horizontal_dir(v: &View) -> Option<(f64, f64)> {
 
 // --- C. Suivre pendant la chute -------------------------------------------
 
-/// Descentes qui arrivent à portée, distance rattrapée, gros coup du premier coup.
-fn follow(views: &[View], smashes: &[u64]) -> Part {
+/// Suivre pendant la chute, descente par descente.
+struct Follow {
+    /// Les descentes qui commencent au-dessus de lui et pas trop loin : (tick, arrivée à portée ?).
+    reached: Vec<(u64, bool)>,
+    /// La distance rattrapée, pondérée par sa fuite.
+    caught: Part,
+    /// Les descentes de plus de 8 blocs : (tick, chute, smash du premier coup ?).
+    first_time: Vec<(u64, f64, bool)>,
+}
+
+impl Follow {
+    /// Descentes qui arrivent à portée, distance rattrapée, gros coup du premier coup.
+    fn part(&self) -> Part {
+        let share = |list: Vec<bool>| mean(list.into_iter().map(|b| b as u8 as f64));
+        blend(&[
+            (1.0, share(self.reached.iter().map(|r| r.1).collect())),
+            (1.0, self.caught),
+            (1.0, share(self.first_time.iter().map(|f| f.2).collect())),
+        ])
+    }
+}
+
+fn follow(views: &[View], smashes: &[u64]) -> Follow {
     let mut reached = Vec::new();
     let (mut caught, mut caught_weight, mut caught_n) = (0.0, 0.0, 0.0);
     let mut first_time = Vec::new();
     for d in descents(views) {
         let span = &views[d.start..=d.end];
         let (s, e) = (&views[d.start], &views[d.end]);
-        if s.above > 0.0 && s.horizontal < NEAR_DESCENT {
-            let arrived = span.iter().any(|v| v.above > 0.0 && v.horizontal <= REACH && v.fall >= MIN_FALL);
-            reached.push(arrived as u8 as f64);
-            if s.horizontal > REACH {
-                // Rattraper compte surtout quand l'adversaire fuit.
-                let flee = horizontal_dir(s).map(|(x, z)| s.target_vel[0] * x + s.target_vel[2] * z).unwrap_or(0.0);
-                let weight = 1.0 + 10.0 * flee.max(0.0);
-                let score = ((s.horizontal - e.horizontal) / (s.horizontal - REACH)).clamp(0.0, 1.0);
-                caught += weight * score;
-                caught_weight += weight;
-                caught_n += 1.0;
-            }
+        // Seules les descentes qui le visent : au-dessus de lui et pas trop loin.
+        if s.above <= 0.0 || s.horizontal >= NEAR_DESCENT {
+            continue;
         }
+        let arrived = span.iter().any(|v| v.above > 0.0 && v.horizontal <= REACH && v.fall >= MIN_FALL);
+        reached.push((s.t, arrived));
+        if s.horizontal > REACH {
+            // Rattraper compte surtout quand l'adversaire fuit.
+            let flee = horizontal_dir(s).map(|(x, z)| s.target_vel[0] * x + s.target_vel[2] * z).unwrap_or(0.0);
+            let weight = 1.0 + 10.0 * flee.max(0.0);
+            let score = ((s.horizontal - e.horizontal) / (s.horizontal - REACH)).clamp(0.0, 1.0);
+            caught += weight * score;
+            caught_weight += weight;
+            caught_n += 1.0;
+        }
+        // Un gros coup du premier coup : vu le 2026-10-15, compter aussi les
+        // grosses descentes loin de lui donnait « 4 sur 26 » à un joueur
+        // dont la plupart ne le visaient pas.
+        // Une descente ratée qui finit face à son bouclier levé ne pouvait pas
+        // passer : ce n'est pas un raté (même règle que la conversion). Une
+        // réussie compte toujours — le bouclier était baissé au coup.
         let biggest = span.iter().map(|v| v.fall).fold(0.0, f64::max);
-        if biggest > BIG_FALL {
-            first_time.push(smashes.iter().any(|t| *t >= s.t && *t <= e.t + HIT_DELAY_TICKS) as u8 as f64);
+        let landed = smashes.iter().any(|t| *t >= s.t && *t <= e.t + HIT_DELAY_TICKS);
+        let blocked = span.iter().rev().take(3).any(|v| v.shielded && v.front);
+        if biggest > BIG_FALL && (landed || !blocked) {
+            first_time.push((s.t, biggest, landed));
         }
     }
     let caught = (caught_weight > 0.0).then(|| (caught / caught_weight, caught_n));
-    blend(&[(1.0, mean(reached)), (1.0, caught), (1.0, mean(first_time))])
+    Follow { reached, caught, first_time }
 }
 
 // --- A. Prendre la hauteur ------------------------------------------------
@@ -308,6 +339,77 @@ fn chain(views: &[View], opportunities: &[Opportunity]) -> Part {
     blend(&[(0.25, mean(follow_up)), (0.25, lengths), (0.5, rebuild)])
 }
 
+/// Les smashs enchaînés sans toucher le sol, et le nombre de smashs.
+fn chained(views: &[View], opportunities: &[Opportunity]) -> (f64, f64) {
+    let touched_ground = |from: u64, to: u64| views.iter().any(|v| v.t > from && v.t < to && v.grounded);
+    let mut linked = 0.0;
+    let mut smashes = 0.0;
+    for (index, o) in opportunities.iter().enumerate() {
+        let Some(hit) = o.hit else { continue };
+        smashes += 1.0;
+        let next = opportunities[index + 1..].iter().find(|n| n.open > hit);
+        if next.is_some_and(|n| n.open - hit <= CHAIN_TICKS && !touched_ground(hit, n.open)) {
+            linked += 1.0;
+        }
+    }
+    (linked, smashes)
+}
+
+/// Le détail du contrôle : descentes arrivées à portée, gros coups du
+/// premier coup, temps pour repasser au-dessus, distance à lui au sommet,
+/// enchaînements, temps pour reconstruire ; les grosses descentes comme
+/// moments ; ses descentes et ses gros coups en face.
+pub fn detail(views: &[View], their_views: &[View], mine: &[Opportunity], theirs: &[Opportunity], d: &mut super::Detail) {
+    // Le poids d'un fait : l'écart de sa mesure à ce que fait en moyenne un joueur, fois le poids du groupe.
+    let weight = |value: f64, center: f64, w: f64| (centered(Some((value, 1.0)), center).map(|(v, _)| v).unwrap_or(0.5) - 0.5) * w;
+    let me = follow(views, &hits(mine));
+    let them = follow(their_views, &hits(theirs));
+    let count = |list: &[(u64, bool)]| (list.iter().filter(|r| r.1).count() as f64, list.len() as f64);
+    if !me.reached.is_empty() {
+        let (k, n) = count(&me.reached);
+        let w = weight(k / n, FOLLOW_CENTER, W_FOLLOW);
+        d.fact("control.reached", w >= 0.0, w, &[k, n]);
+        if !them.reached.is_empty() {
+            let (hk, hn) = count(&them.reached);
+            d.versus("control.reached", &[k, n], &[hk, hn]);
+        }
+    }
+    if !me.first_time.is_empty() {
+        let k = me.first_time.iter().filter(|f| f.2).count() as f64;
+        let n = me.first_time.len() as f64;
+        let w = weight(k / n, FOLLOW_CENTER, W_FOLLOW);
+        d.fact("control.first_time", w >= 0.0, w, &[k, n]);
+        for (t, fall, landed) in &me.first_time {
+            d.moment(*t, "control.big_descent", *landed, *fall, &[*fall]);
+        }
+        if !them.first_time.is_empty() {
+            let hk = them.first_time.iter().filter(|f| f.2).count() as f64;
+            d.versus("control.first_time", &[k, n], &[hk, them.first_time.len() as f64]);
+        }
+    }
+    if let Some((score, _)) = retake(views) {
+        let w = weight(score, 0.5, W_CLIMB);
+        d.fact("control.retake", w >= 0.0, w, &[((1.0 - score) * RETAKE_TICKS / 20.0 * 10.0).round() / 10.0]);
+    }
+    let tops: Vec<f64> = views.windows(2).filter(|w| !w[0].falling && w[1].falling && !w[0].grounded && w[0].above > 0.0).map(|w| w[0].horizontal).collect();
+    if let Some((score, _)) = peaks(views) {
+        let w = weight(score, PEAK_CENTER, W_PEAK);
+        let distance = tops.iter().sum::<f64>() / tops.len().max(1) as f64;
+        d.fact("control.peak", w >= 0.0, w, &[(distance * 10.0).round() / 10.0]);
+    }
+    let (linked, smashes) = chained(views, mine);
+    if smashes > 0.0 {
+        let w = weight(linked / smashes, CHAIN_CENTER, W_CHAIN / 2.0);
+        d.fact("control.chained", w >= 0.0, w, &[linked, smashes]);
+    }
+    if mine.len() > 1 {
+        let gaps: Vec<f64> = mine.windows(2).map(|w| w[1].open.saturating_sub(w[0].close) as f64 / 20.0).collect();
+        let seconds = gaps.iter().sum::<f64>() / gaps.len() as f64;
+        let w = weight(1.0 - (seconds * 20.0 / REBUILD_TICKS).min(1.0), CHAIN_CENTER, W_CHAIN / 2.0);
+        d.fact("control.rebuild", w >= 0.0, w, &[(seconds * 10.0).round() / 10.0]);
+    }
+}
+
 fn groups(parts: [Part; 5], views: &[View], raw: &mut Raw) -> Measure {
     let combined = blend(&[
         (W_FOLLOW, centered(raw.put("control.follow", parts[0]), FOLLOW_CENTER)),
@@ -331,7 +433,7 @@ pub fn mine(duel: &Duel, views: &[View], opportunities: &[Opportunity], lunges: 
     let resources = height_per_resource(duel, armor);
     groups(
         [
-            follow(views, &hits(opportunities)),
+            follow(views, &hits(opportunities)).part(),
             climb(views, armor, resources),
             peaks(views),
             horizontal(views, opportunities, lunges),
@@ -346,7 +448,7 @@ pub fn mine(duel: &Duel, views: &[View], opportunities: &[Opportunity], lunges: 
 /// objets ne se voient pas) ni la hauteur par ressource.
 pub fn foe(duel: &Duel, views: &[View], opportunities: &[Opportunity], raw: &mut Raw) -> Measure {
     let armor = armor_factor(duel.foe_gear.last());
-    groups([follow(views, &hits(opportunities)), climb(views, armor, None), peaks(views), None, chain(views, opportunities)], views, raw)
+    groups([follow(views, &hits(opportunities)).part(), climb(views, armor, None), peaks(views), None, chain(views, opportunities)], views, raw)
 }
 
 #[cfg(test)]
@@ -364,9 +466,9 @@ mod tests {
                 v
             })
             .collect();
-        let (value, _) = follow(&ticks, &[9]).unwrap();
+        let (value, _) = follow(&ticks, &[9]).part().unwrap();
         assert!(value > 0.9, "{value}");
-        let (missed, _) = follow(&ticks[..2], &[]).unwrap();
+        let (missed, _) = follow(&ticks[..2], &[]).part().unwrap();
         assert!(missed < 0.5, "{missed}");
     }
 

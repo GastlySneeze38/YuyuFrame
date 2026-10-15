@@ -113,6 +113,14 @@ pub fn prior_from_summaries(matches: &Path, uuid: Option<&str>, name: Option<&st
     Prior::from_levels(&levels)
 }
 
+/// Le détail des familles d'un duel de l'instance, reconnu à son heure
+/// d'ouverture (le nom de son journal) : format dans `score::detail_text`.
+/// Vide si le journal n'existe pas ou ne se lit pas.
+pub fn detail(instance_dir: &Path, time: u64) -> String {
+    let path = instance_dir.join("yuyuframe").join("matches").join(format!("{time}.events.ndjson.zst"));
+    read_journal(&path).and_then(|text| super::score::detail_text(&text)).unwrap_or_default()
+}
+
 /// Le texte rendu à Java : une ligne d'en-tête, puis une ligne par duel,
 /// champs séparés par des tabulations.
 ///

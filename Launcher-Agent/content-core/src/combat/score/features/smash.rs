@@ -156,6 +156,48 @@ pub fn foe(duel: &Duel, theirs: &[Opportunity], views: &[View]) -> (Measure, Vec
     (Measure::rate(ratios.iter().sum(), ratios.len() as f64), smashes)
 }
 
+/// Frappé « au bon moment » : à un demi-bloc près de la chute possible.
+const ON_TIME_MARGIN: f64 = 0.5;
+
+/// Le détail de la qualité du smash : au bon moment, critiques, sprint au
+/// coup, barre pas pleine ; chaque smash comme moment ; ses critiques en face.
+pub fn detail(duel: &Duel, smashes: &[Smash], d: &mut super::Detail) {
+    let mine: Vec<&Smash> = smashes.iter().filter(|s| s.by_me).collect();
+    let n = mine.len() as f64;
+    if n == 0.0 {
+        return;
+    }
+    let on_time = |s: &Smash| s.hit_fall + ON_TIME_MARGIN >= s.possible_fall;
+    let timed = mine.iter().filter(|s| on_time(s)).count() as f64;
+    d.fact("smash.on_time", timed / n >= 0.75, timed / n - 0.75, &[timed, n]);
+    let crits: Vec<bool> = mine.iter().filter_map(|s| s.crit).collect();
+    if crits.len() == mine.len() {
+        let k = crits.iter().filter(|c| **c).count() as f64;
+        d.fact("smash.crit", k / n >= 0.5, 2.0 * (k / n - 0.5), &[k, n]);
+    }
+    let sprinting = mine.iter().filter(|s| s.sprinting == Some(true)).count() as f64;
+    if sprinting > 0.0 {
+        d.fact("smash.sprint", false, sprinting / n, &[sprinting]);
+    }
+    let weak = mine.iter().filter(|s| s.charge.is_some_and(|c| c <= CRIT_CHARGE)).count() as f64;
+    if weak > 0.0 {
+        d.fact("smash.charge", false, weak / n, &[weak]);
+    }
+    for s in &mine {
+        let flag = |b: Option<bool>| b.map(|b| b as u8 as f64).unwrap_or(-1.0);
+        let good = s.crit.unwrap_or(true) && on_time(s);
+        let charge = s.charge.map(|c| (100.0 * c).round()).unwrap_or(-1.0);
+        // Les smashs ratés d'abord, puis les meilleurs.
+        d.moment(s.t, "smash.hit", good, if good { s.ratio } else { 2.0 - s.ratio }, &[s.hit_fall, charge, flag(s.sprinting), flag(s.crit)]);
+    }
+    let theirs: Vec<&Smash> = smashes.iter().filter(|s| !s.by_me).collect();
+    if duel.sees_crits() && !theirs.is_empty() && crits.len() == mine.len() {
+        let mine_crits = crits.iter().filter(|c| **c).count() as f64;
+        let their_crits = theirs.iter().filter(|s| s.crit == Some(true)).count() as f64;
+        d.versus("smash.crit", &[mine_crits, n], &[their_crits, theirs.len() as f64]);
+    }
+}
+
 /// Les charges de lance qui ont touché, chacune en dégâts tirés ÷ dégâts
 /// permis par la plus grande vitesse de l'approche. Une charge se reconnaît
 /// à un paquet de dégâts de lance (`spear`) que ne précède aucun coup donné

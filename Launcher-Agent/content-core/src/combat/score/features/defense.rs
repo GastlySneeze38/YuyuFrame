@@ -123,36 +123,65 @@ impl Defender<'_> {
 
     /// Au sol pendant qu'il est au-dessus et à portée : la position où on se fait smasher.
     fn vulnerable(&self) -> Part {
-        let threat: Vec<&View> = self.views.iter().filter(|v| v.above > HEIGHT_ADVANTAGE && v.horizontal <= REACH).collect();
-        let grounded = threat.iter().filter(|v| v.target_grounded).count() as f64;
-        (!threat.is_empty()).then(|| (1.0 - grounded / threat.len() as f64, threat.len() as f64 / 80.0))
+        let (grounded, threat) = self.exposure_ticks();
+        (threat > 0.0).then(|| (1.0 - grounded / threat, threat / 80.0))
+    }
+
+    /// Ses descentes menaçantes : (tick de début, esquivée ?).
+    fn dodges(&self) -> Vec<(u64, bool)> {
+        let smashes: Vec<u64> = self.attacks.iter().filter_map(|o| o.hit).collect();
+        descents(self.views)
+            .into_iter()
+            .filter_map(|d| {
+                let (s, e) = (&self.views[d.start], &self.views[d.end]);
+                if s.above <= 0.0 || s.horizontal > DODGE_THREAT {
+                    return None;
+                }
+                // Un smash arrêté au bouclier compte dans le bouclier, pas ici.
+                if self.blocks.iter().any(|t| *t >= s.t && *t <= e.t + HIT_DELAY_TICKS) {
+                    return None;
+                }
+                let smashed = smashes.iter().any(|t| *t >= s.t && *t <= e.t + HIT_DELAY_TICKS);
+                let moved = ((e.target[0] - s.target[0]).powi(2) + (e.target[2] - s.target[2]).powi(2)).sqrt();
+                Some((s.t, !smashed && e.horizontal > REACH && moved >= DODGE_MOVE))
+            })
+            .collect()
     }
 
     /// Pendant ses descentes, sortir de sa zone à temps.
     fn dodge(&self) -> Part {
-        let smashes: Vec<u64> = self.attacks.iter().filter_map(|o| o.hit).collect();
-        let scores = descents(self.views).into_iter().filter_map(|d| {
-            let (s, e) = (&self.views[d.start], &self.views[d.end]);
-            if s.above <= 0.0 || s.horizontal > DODGE_THREAT {
-                return None;
-            }
-            // Un smash arrêté au bouclier compte dans le bouclier, pas ici.
-            if self.blocks.iter().any(|t| *t >= s.t && *t <= e.t + HIT_DELAY_TICKS) {
-                return None;
-            }
-            let smashed = smashes.iter().any(|t| *t >= s.t && *t <= e.t + HIT_DELAY_TICKS);
-            let moved = ((e.target[0] - s.target[0]).powi(2) + (e.target[2] - s.target[2]).powi(2)).sqrt();
-            Some((!smashed && e.horizontal > REACH && moved >= DODGE_MOVE) as u8 as f64)
-        });
-        mean(scores)
+        mean(self.dodges().into_iter().map(|(_, dodged)| dodged as u8 as f64))
+    }
+
+    /// Après chaque coup reçu, les ticks pour se dégager (`None` : jamais).
+    fn recoveries(&self) -> Vec<Option<u64>> {
+        self.hits_taken
+            .iter()
+            .map(|t| self.views.iter().find(|v| v.t >= *t && (v.above < 0.0 || v.horizontal > REACH + 1.0)).map(|v| v.t - t))
+            .collect()
     }
 
     /// Après un coup reçu, reprendre la hauteur ou se remettre hors de portée.
     fn recovery(&self) -> Part {
-        mean(self.hits_taken.iter().map(|t| {
-            let out = self.views.iter().find(|v| v.t >= *t && (v.above < 0.0 || v.horizontal > REACH + 1.0));
-            out.map(|v| 1.0 - ((v.t - t) as f64 / RECOVERY_TICKS).min(1.0)).unwrap_or(0.0)
-        }))
+        mean(self.recoveries().into_iter().map(|d| d.map(|d| 1.0 - (d as f64 / RECOVERY_TICKS).min(1.0)).unwrap_or(0.0)))
+    }
+
+    /// Les smashs arrêtés : (tick, chute du smash, en l'air ?).
+    fn blocked(&self) -> Vec<(u64, f64, bool)> {
+        self.blocks
+            .iter()
+            .filter_map(|t| {
+                let recent: Vec<&View> = self.views.iter().filter(|v| v.t <= *t && t - v.t <= BLOCK_LOOKBACK_TICKS && v.above > 0.0).collect();
+                let fall = recent.iter().map(|v| v.fall).fold(0.0, f64::max);
+                self.blocked_smash(*t).map(|(_, weight)| (*t, fall, weight == 1.0))
+            })
+            .collect()
+    }
+
+    /// Ticks passés au sol pendant qu'il est au-dessus et à portée, et ticks où il l'était.
+    fn exposure_ticks(&self) -> (f64, f64) {
+        let threat: Vec<&View> = self.views.iter().filter(|v| v.above > HEIGHT_ADVANTAGE && v.horizontal <= REACH).collect();
+        (threat.iter().filter(|v| v.target_grounded).count() as f64, threat.len() as f64)
     }
 
     fn family(&self, landing: Part, raw: &mut Raw) -> Measure {
@@ -186,33 +215,35 @@ impl Defender<'_> {
 /// opportunités ratées (un smash raté ne remet pas la chute à zéro). Le
 /// montant se lit dans la vie juste avant et juste après le paquet.
 fn landing(duel: &Duel, mine: &[Opportunity]) -> Part {
-    let scores = mine.iter().filter(|o| !o.converted).map(|o| {
-        let damage: f64 = duel
-            .my_falls
-            .iter()
-            .filter(|t| **t > o.close && **t <= o.close + LANDING_TICKS)
-            .map(|t| {
-                let before = sample_at(&duel.samples, t - 1).map(|s| s.me[ME_HEALTH]);
-                let after = duel.samples.iter().find(|s| s.t > *t).map(|s| s.me[ME_HEALTH]);
-                match (before, after) {
-                    (Some(b), Some(a)) => (b - a).max(0.0),
-                    _ => 0.0,
-                }
-            })
-            .sum();
-        1.0 - (damage / LANDING_WORST).min(1.0)
-    });
-    mean(scores)
+    mean(landing_damage(duel, mine).into_iter().map(|(_, damage)| 1.0 - (damage / LANDING_WORST).min(1.0)))
+}
+
+/// Pour chacune de nos opportunités ratées : (tick, points de vie perdus en
+/// chute ensuite). Une chute n'est rattachée qu'à la dernière opportunité
+/// ratée qui la précède : deux ratés d'affilée avant le même atterrissage
+/// ne la comptent pas deux fois (corrigé le 2026-10-15).
+fn landing_damage(duel: &Duel, mine: &[Opportunity]) -> Vec<(u64, f64)> {
+    let missed: Vec<&Opportunity> = mine.iter().filter(|o| !o.converted).collect();
+    let mut out: Vec<(u64, f64)> = missed.iter().map(|o| (o.close, 0.0)).collect();
+    for t in &duel.my_falls {
+        let Some(index) = missed.iter().rposition(|o| *t > o.close && *t <= o.close + LANDING_TICKS) else { continue };
+        let before = sample_at(&duel.samples, t - 1).map(|s| s.me[ME_HEALTH]);
+        let after = duel.samples.iter().find(|s| s.t > *t).map(|s| s.me[ME_HEALTH]);
+        if let (Some(b), Some(a)) = (before, after) {
+            out[index] = (*t, out[index].1 + (b - a).max(0.0));
+        }
+    }
+    out
 }
 
 fn holds_shield(gear: &[super::super::parse::Gear]) -> bool {
     gear.iter().any(|g| g.item(SLOT_HAND) == "shield" || g.item(SLOT_OFFHAND) == "shield")
 }
 
-/// Notre défense, et les dégâts évités.
-pub fn mine(duel: &Duel, their_views: &[View], mine: &[Opportunity], theirs: &[Opportunity], raw: &mut Raw) -> (Measure, Option<f64>) {
+/// Notre joueur en défense, vu depuis les vues de l'adversaire.
+fn me_defending<'a>(duel: &Duel, their_views: &'a [View], theirs: &'a [Opportunity]) -> Defender<'a> {
     let sounds = |broke: bool| duel.shield_sounds.iter().filter(move |s| s.on_me && s.broke == broke).map(|s| s.t);
-    let defender = Defender {
+    Defender {
         views: their_views,
         attacks: theirs,
         density: duel.foe_density,
@@ -222,16 +253,14 @@ pub fn mine(duel: &Duel, their_views: &[View], mine: &[Opportunity], theirs: &[O
         has_shield: holds_shield(&duel.my_gear),
         sees_blocks: duel.detailed(),
         hits_taken: duel.hits.iter().filter(|h| !h.by_me).map(|h| h.t).collect(),
-    };
-    (defender.family(landing(duel, mine), raw), defender.avoided())
+    }
 }
 
-/// La sienne, en miroir. Atterrir proprement ne se mesure pas : on ne voit
-/// pas sa vie. Ses gardes cassées : le son seulement, sa recharge ne nous
-/// est pas envoyée.
-pub fn foe(duel: &Duel, my_views: &[View], mine: &[Opportunity], raw: &mut Raw) -> Measure {
+/// L'adversaire en défense. Ses gardes cassées : le son seulement, sa
+/// recharge ne nous est pas envoyée.
+fn foe_defending<'a>(duel: &Duel, my_views: &'a [View], mine: &'a [Opportunity]) -> Defender<'a> {
     let sounds = |broke: bool| duel.shield_sounds.iter().filter(move |s| !s.on_me && s.broke == broke).map(|s| s.t);
-    let defender = Defender {
+    Defender {
         views: my_views,
         attacks: mine,
         density: duel.my_density,
@@ -240,8 +269,85 @@ pub fn foe(duel: &Duel, my_views: &[View], mine: &[Opportunity], raw: &mut Raw) 
         has_shield: holds_shield(&duel.foe_gear),
         sees_blocks: duel.detailed(),
         hits_taken: duel.hits.iter().filter(|h| h.by_me).map(|h| h.t).collect(),
-    };
-    defender.family(None, raw)
+    }
+}
+
+/// Notre défense, et les dégâts évités.
+pub fn mine(duel: &Duel, their_views: &[View], mine: &[Opportunity], theirs: &[Opportunity], raw: &mut Raw) -> (Measure, Option<f64>) {
+    let defender = me_defending(duel, their_views, theirs);
+    (defender.family(landing(duel, mine), raw), defender.avoided())
+}
+
+/// La sienne, en miroir. Atterrir proprement ne se mesure pas : on ne voit
+/// pas sa vie.
+pub fn foe(duel: &Duel, my_views: &[View], mine: &[Opportunity], raw: &mut Raw) -> Measure {
+    foe_defending(duel, my_views, mine).family(None, raw)
+}
+
+/// Le détail de la défense : smashs arrêtés, gardes cassées, ses smashs
+/// passés, temps au sol sous lui, descentes esquivées, chutes après un raté,
+/// reprise après un coup. Chaque fait monte ou baisse selon la même mesure
+/// que la note, comparée à ce que font en moyenne les joueurs.
+pub fn detail(duel: &Duel, my_views: &[View], their_views: &[View], mine: &[Opportunity], theirs: &[Opportunity], d: &mut super::Detail) {
+    let me = me_defending(duel, their_views, theirs);
+    let them = foe_defending(duel, my_views, mine);
+    // Le poids d'un fait : l'écart de sa mesure à la moyenne, fois le poids de la mesure.
+    let weight = |part: Part, center: f64, w: f64| centered(part, center).map(|(v, _)| (v - 0.5) * w);
+
+    if let Some(shield) = weight(me.shield(), SHIELD_CENTER, W_SHIELD) {
+        let blocked = me.blocked();
+        let air = blocked.iter().filter(|b| b.2).count() as f64;
+        d.fact("defense.blocked", shield >= 0.0, shield, &[air, blocked.len() as f64 - air]);
+        if me.breaks > 0 {
+            d.fact("defense.broken", false, me.breaks as f64 * W_SHIELD / 4.0, &[me.breaks as f64]);
+        }
+        for (t, fall, in_air) in &blocked {
+            d.moment(*t, "defense.blocked", true, fall * if *in_air { 1.0 } else { 0.1 }, &[*fall, *in_air as u8 as f64]);
+        }
+        let breaks = duel.shield_sounds.iter().filter(|s| s.on_me && s.broke);
+        for s in breaks {
+            d.moment(s.t, "defense.broken", false, BREAK_FALL, &[]);
+        }
+    }
+    if let Some(openings) = me.openings() {
+        let landed = theirs.iter().filter(|o| o.converted).count() as f64;
+        d.fact("defense.openings", openings.0 >= 0.5, (openings.0 - 0.5) * W_OPENINGS, &[landed, theirs.len() as f64]);
+        for o in theirs.iter().filter(|o| o.converted) {
+            d.moment(o.hit.unwrap_or(o.open), "defense.smashed", false, o.realized, &[o.hit_fall]);
+        }
+    }
+    if let Some(w) = weight(me.vulnerable(), VULNERABLE_CENTER, W_VULNERABLE) {
+        let (grounded, _) = me.exposure_ticks();
+        d.fact("defense.vulnerable", w >= 0.0, w, &[(grounded / 2.0).round() / 10.0]);
+    }
+    if let Some(w) = weight(me.dodge(), DODGE_CENTER, W_DODGE) {
+        let dodges = me.dodges();
+        let dodged = dodges.iter().filter(|(_, ok)| *ok).count() as f64;
+        d.fact("defense.dodge", w >= 0.0, w, &[dodged, dodges.len() as f64]);
+        let theirs_dodges = them.dodges();
+        if !theirs_dodges.is_empty() {
+            let their_dodged = theirs_dodges.iter().filter(|(_, ok)| *ok).count() as f64;
+            d.versus("defense.dodge", &[dodged, dodges.len() as f64], &[their_dodged, theirs_dodges.len() as f64]);
+        }
+    }
+    let falls = landing_damage(duel, mine);
+    let lost: f64 = falls.iter().map(|(_, dmg)| dmg).sum();
+    if lost > 0.0 {
+        d.fact("defense.landing", false, (lost / LANDING_WORST).min(1.0) * W_LANDING, &[(lost / 2.0 * 10.0).round() / 10.0]);
+        for (t, dmg) in falls.iter().filter(|(_, dmg)| *dmg > 0.0) {
+            d.moment(*t, "defense.landing", false, *dmg, &[(dmg / 2.0 * 10.0).round() / 10.0]);
+        }
+    }
+    if let Some(w) = weight(me.recovery(), RECOVERY_CENTER, W_RECOVERY) {
+        let delays: Vec<f64> = me.recoveries().into_iter().map(|d| d.map(|d| d as f64).unwrap_or(RECOVERY_TICKS)).collect();
+        let seconds = delays.iter().sum::<f64>() / delays.len() as f64 / 20.0;
+        d.fact("defense.recovery", w >= 0.0, w, &[(seconds * 10.0).round() / 10.0]);
+    }
+    // Ses smashs arrêtés, s'il avait un bouclier et que le journal les voit.
+    if me.shield().is_some() && them.shield().is_some() {
+        let air = |b: &[(u64, f64, bool)]| b.iter().filter(|x| x.2).count() as f64;
+        d.versus("defense.blocked_air", &[air(&me.blocked())], &[air(&them.blocked())]);
+    }
 }
 
 #[cfg(test)]

@@ -19,8 +19,9 @@ import java.util.List;
  *
  * <p>Ouverte depuis les deux pages du Score PvP. Depuis la page d'un duel,
  * elle reçoit le résumé de ce duel et chaque famille y dit en plus ce qu'elle
- * valait ce jour-là ; un clic sur une famille de la page ouvre directement son
- * sujet ({@link #FAMILY_TOPICS}).
+ * valait ce jour-là. Le bouton « Comment c'est compté » du détail d'une
+ * famille ({@link PvpFamilyModal}) ouvre directement son sujet
+ * ({@link #FAMILY_TOPICS}).
  *
  * <p><b>Chaque phrase décrit ce que fait le code</b> ({@code content-core/src/combat/}) :
  * un seuil, une référence ou une règle qui change s'y reporte. Pas de tiret
@@ -370,8 +371,10 @@ final class PvpInfoModal {
         Topic bugUse = new Topic("Bug use",
             "Un bonus pour les techniques les plus dures du PvP à la masse. Il ne fait jamais baisser la note : il s'y ajoute, jusqu'à 10 points, et la note reste plafonnée à 100. Une tentative ratée ne coûte rien.",
             "# Les techniques",
-            "La famille de l'attribute swap, où l'on change d'objet dans le tick du coup : cooldown swap (1 point), lunge swap (1), breach swap (2), density swap (2), reach swap (2). Et les techniques au tick près : elytra swap (2), deux totems coup sur coup (3), stun slam (4), instant pearl catch (4).",
+            "La famille de l'attribute swap, où l'on change d'objet dans le tick du coup : cooldown swap et lunge swap, les plus courants ; breach swap, density swap et reach swap. Et les techniques au tick près : deux totems coup sur coup, stun slam et instant pearl catch, les plus rares, qui rapportent le plus.",
+            "Le bonus monte lentement : une technique rare réussie rapporte environ 1 point, une courante un quart de point, et répéter la même technique rapporte chaque fois moitié moins. Il faut plusieurs techniques rares dans un même duel pour approcher quelques points.",
             "Une technique ne compte que réussie : le coup confirmé par le serveur, ou l'effet obtenu. Un breach ou density swap qui porte un smash compte double, un stun slam vaut plus selon le smash qui passe, un instant pearl catch plus selon la hauteur gagnée quand il mène à une opportunité.",
+            "Passer de l'élytre au plastron en vol n'en fait pas partie : c'est un simple clic droit, que tout le monde fait.",
             "# L'adversaire",
             "Ce qu'on voit de ses techniques est affiché, jamais compté : ni dans sa force, ni dans votre note.",
             "Les points sont posés au jugé et seront ajustés avec plus de duels.");

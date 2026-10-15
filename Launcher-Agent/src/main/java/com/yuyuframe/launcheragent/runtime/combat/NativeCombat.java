@@ -32,7 +32,7 @@ import java.util.UUID;
 public final class NativeCombat {
 
     /** Même valeur que {@code ABI_VERSION} dans combat/bridge.rs. */
-    private static final int ABI_VERSION = 10;
+    private static final int ABI_VERSION = 11;
 
     /** Place réservée au texte de l'historique : deux cents duels en tiennent bien moins. */
     private static final int HISTORY_BYTES = 256 * 1024;
@@ -174,6 +174,7 @@ public final class NativeCombat {
     private static MethodHandle context;
     private static MethodHandle world;
     private static MethodHandle history;
+    private static MethodHandle detail;
     private static MethodHandle recording;
     private static MethodHandle report;
     private static MethodHandle tick;
@@ -224,6 +225,9 @@ public final class NativeCombat {
             // Pas « critical » : cet appel relit des fichiers. Mémoire native, donc.
             history = linker.downcallHandle(lib.find("yf_combat_history").orElseThrow(),
                 FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT));
+            detail = linker.downcallHandle(lib.find("yf_combat_detail").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG,
+                    ValueLayout.ADDRESS, ValueLayout.JAVA_INT));
             recording = linker.downcallHandle(lib.find("yf_combat_recording").orElseThrow(), FunctionDescriptor.of(ValueLayout.JAVA_INT));
             report = linker.downcallHandle(lib.find("yf_combat_report").orElseThrow(),
                 FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT), heap);
@@ -300,6 +304,40 @@ public final class NativeCombat {
             MemorySegment.copy(d, 0, in, ValueLayout.JAVA_BYTE, 0, d.length);
             MemorySegment out = arena.allocate(HISTORY_BYTES);
             int written = (int) history.invokeExact(in, d.length, out, HISTORY_BYTES);
+            if (written <= 0) {
+                return written == 0 ? "" : null;
+            }
+            byte[] bytes = new byte[written];
+            MemorySegment.copy(out, ValueLayout.JAVA_BYTE, 0, bytes, 0, written);
+            return new String(bytes, StandardCharsets.UTF_8);
+        } catch (Throwable error) {
+            failed(error);
+            return null;
+        }
+    }
+
+    /** Place réservée au détail d'un duel : quelques centaines de lignes au plus. */
+    private static final int DETAIL_BYTES = 64 * 1024;
+
+    /**
+     * Le détail des familles d'un duel, calculé par le noyau — format dans
+     * {@code content-core/src/combat/score/mod.rs} ({@code detail_text}).
+     * Relit un journal : à appeler à l'ouverture de la page du duel.
+     *
+     * @param dir  le dossier de l'instance
+     * @param time l'heure d'ouverture du duel, en millisecondes
+     * @return le texte (vide si le journal n'existe plus), ou {@code null} si le noyau n'est pas disponible
+     */
+    public static String detail(String dir, long time) {
+        if (!READY || dir == null || dir.isEmpty() || time <= 0) {
+            return null;
+        }
+        try (Arena arena = Arena.ofConfined()) {
+            byte[] d = utf8(dir);
+            MemorySegment in = arena.allocate(Math.max(1, d.length));
+            MemorySegment.copy(d, 0, in, ValueLayout.JAVA_BYTE, 0, d.length);
+            MemorySegment out = arena.allocate(DETAIL_BYTES);
+            int written = (int) detail.invokeExact(in, d.length, time, out, DETAIL_BYTES);
             if (written <= 0) {
                 return written == 0 ? "" : null;
             }

@@ -7,7 +7,7 @@
 //! justifiée et utile. Mesurée du côté du joueur : les objets de
 //! l'adversaire ne se voient pas.
 
-use super::super::parse::{gear_at, Duel, SLOT_CHEST, SLOT_HAND, SLOT_OFFHAND};
+use super::super::parse::{gear_at, Duel, Gear, SLOT_CHEST, SLOT_HAND, SLOT_OFFHAND};
 use super::{
     blend, centered, family, flag, mean, sample_at, Raw, view_at, Measure, Opportunity, Part, View, GAP_TICKS, HEIGHT_ADVANTAGE, HIT_DELAY_TICKS, LOW_HEALTH, ME_FALL, ME_FLAGS, ME_FOOD,
     ME_HEALTH, ME_MAX_HEALTH, ME_SPEED, ME_STRENGTH, ON_GROUND, REACH, X, Y, Z,
@@ -88,10 +88,29 @@ fn is_potion(item: &str) -> bool {
 
 /// Le premier tick de `[from, to]` où la case tient un objet qui convient.
 fn first_held(duel: &Duel, slot: usize, from: u64, to: u64, wanted: impl Fn(&str) -> bool) -> Option<u64> {
-    if gear_at(&duel.my_gear, from).is_some_and(|g| wanted(g.item(slot))) {
+    first_held_in(&duel.my_gear, slot, from, to, wanted)
+}
+
+fn first_held_in(gear: &[Gear], slot: usize, from: u64, to: u64, wanted: impl Fn(&str) -> bool) -> Option<u64> {
+    if gear_at(gear, from).is_some_and(|g| wanted(g.item(slot))) {
         return Some(from);
     }
-    duel.my_gear.iter().filter(|g| g.t > from && g.t <= to).find(|g| wanted(g.item(slot))).map(|g| g.t)
+    gear.iter().filter(|g| g.t > from && g.t <= to).find(|g| wanted(g.item(slot))).map(|g| g.t)
+}
+
+/// Après chaque totem qui saute (sans mourir juste après) : (tick, ticks
+/// pour en remettre un dans l'autre main, `None` s'il n'est jamais revenu).
+/// La main secondaire se vide d'abord — un totem tenu dans la main
+/// principale ne laisse pas de trou, il n'est pas compté.
+fn refills(gear: &[Gear], totems: &[u64], deaths: &[u64]) -> Vec<(u64, Option<u64>)> {
+    totems
+        .iter()
+        .filter(|t| !deaths.iter().any(|d| *d >= **t && *d - **t <= 10))
+        .filter_map(|t| {
+            let emptied = gear.iter().find(|g| g.t >= *t && g.t <= t + 20 && g.item(SLOT_OFFHAND) != "totem_of_undying")?.t;
+            Some((*t, first_held_in(gear, SLOT_OFFHAND, emptied, t + 200, |i| i == "totem_of_undying").map(|r| r - t)))
+        })
+        .collect()
 }
 
 fn late(ticks: u64, limit: f64) -> f64 {
@@ -221,11 +240,7 @@ fn potions(duel: &Duel, mine: &[View], theirs: &[View]) -> Part {
 
 fn totems(duel: &Duel, raw: &mut Raw) -> Part {
     let refill = if duel.detailed() {
-        mean(duel.my_totems.iter().filter(|t| !duel.my_deaths.iter().any(|d| *d >= **t && *d - **t <= 10)).filter_map(|t| {
-            // La main secondaire se vide (un totem tenu dans la main principale ne laisse pas de trou), puis se remplit.
-            let emptied = duel.my_gear.iter().find(|g| g.t >= *t && g.t <= t + 20 && g.item(SLOT_OFFHAND) != "totem_of_undying")?.t;
-            Some(first_held(duel, SLOT_OFFHAND, emptied, t + 200, |i| i == "totem_of_undying").map(|r| late(r - t, TOTEM_LATE_TICKS)).unwrap_or(0.0))
-        }))
+        mean(refills(&duel.my_gear, &duel.my_totems, &duel.my_deaths).into_iter().map(|(_, delay)| delay.map(|d| late(d, TOTEM_LATE_TICKS)).unwrap_or(0.0)))
     } else {
         None
     };
@@ -316,6 +331,66 @@ fn rockets(duel: &Duel, mine: &[Opportunity]) -> Part {
         return None;
     }
     mean(duel.uses.iter().filter(|(_, i)| i == "firework_rocket").map(|(t, _)| mine.iter().any(|o| o.open > *t && o.open - t <= USEFUL_TICKS) as u8 as f64))
+}
+
+/// Le détail des ressources : charges de vent et perles utiles ou gâchées,
+/// masse en main à temps, pommes au bon moment, délai pour remettre un totem ;
+/// les charges gâchées et les totems remis comme moments ; ses totems en face.
+pub fn detail(duel: &Duel, mine_views: &[View], theirs: &[View], mine: &[Opportunity], d: &mut super::Detail) {
+    let weight = |part: Part, center: f64, w: f64| centered(part, center).map(|(v, _)| (v - 0.5) * w);
+    let uses: Vec<&(u64, String)> = duel.uses.iter().filter(|(_, i)| i == "wind_charge" || i == "ender_pearl").collect();
+    if let Some(w) = weight(wind_and_pearls(duel, mine_views, theirs, mine), WIND_AND_PEARLS_CENTER, W_WIND_AND_PEARLS) {
+        let reasons: Vec<bool> = uses.iter().map(|(t, item)| reason(duel, *t, item, mine_views, theirs, mine).0).collect();
+        let useful = reasons.iter().filter(|r| **r).count() as f64;
+        d.fact("resources.useful", w >= 0.0, w, &[useful, reasons.len() as f64]);
+        for ((t, item), useful) in uses.iter().zip(&reasons) {
+            if !useful {
+                d.moment(*t, "resources.wasted", false, 1.0, &[(item == "ender_pearl") as u8 as f64]);
+            }
+        }
+    }
+    if let Some(w) = weight(hotbar(duel, mine), HOTBAR_CENTER, W_HOTBAR) {
+        // À temps : la masse en main au plus tard à mi-chemin du délai qui ne vaut plus rien.
+        let ready = mine
+            .iter()
+            .filter(|o| first_held(duel, SLOT_HAND, o.open, o.close + HIT_DELAY_TICKS, |i| i == "mace").is_some_and(|t| t - o.open <= (MACE_LATE_TICKS / 2.0) as u64))
+            .count() as f64;
+        if !mine.is_empty() {
+            d.fact("resources.mace_ready", w >= 0.0, w, &[ready, mine.len() as f64]);
+        }
+    }
+    let apples: Vec<bool> = duel
+        .uses
+        .iter()
+        .filter(|(_, i)| is_golden_apple(i))
+        .filter_map(|(t, _)| {
+            let hp = sample_at(&duel.samples, *t)?.me[ME_HEALTH];
+            Some(hp < LOW_HEALTH || duel.my_totems.iter().any(|p| *p <= *t && t - p <= AFTER_TOTEM_TICKS))
+        })
+        .collect();
+    if !apples.is_empty() {
+        let good = apples.iter().filter(|a| **a).count() as f64;
+        let share = good / apples.len() as f64;
+        d.fact("resources.apples", share >= 0.5, (share - 0.5) * W_FOOD_AND_LIFE, &[good, apples.len() as f64]);
+    }
+    if duel.detailed() {
+        let mine_refills = refills(&duel.my_gear, &duel.my_totems, &duel.my_deaths);
+        let seconds = |list: &[(u64, Option<u64>)]| {
+            let delays: Vec<f64> = list.iter().filter_map(|(_, d)| *d).map(|d| d as f64 / 20.0).collect();
+            (!delays.is_empty()).then(|| (delays.iter().sum::<f64>() / delays.len() as f64 * 10.0).round() / 10.0)
+        };
+        if let (Some(s), Some(w)) = (seconds(&mine_refills), weight(mean(mine_refills.iter().map(|(_, d)| d.map(|d| late(d, TOTEM_LATE_TICKS)).unwrap_or(0.0))), TOTEM_REFILL_CENTER, W_TOTEMS)) {
+            d.fact("resources.totem_refill", w >= 0.0, w, &[s]);
+            for (t, delay) in &mine_refills {
+                let s = delay.map(|d| (d as f64 / 2.0).round() / 10.0).unwrap_or(-1.0);
+                d.moment(*t, "resources.totem", delay.is_some_and(|d| d <= TOTEM_LATE_TICKS as u64 / 2), delay.map(|d| d as f64).unwrap_or(200.0), &[s]);
+            }
+            // Ses totems se voient aussi : son équipement à chaque changement.
+            if let Some(theirs_s) = seconds(&refills(&duel.foe_gear, &duel.foe_totems, &duel.foe_deaths)) {
+                d.versus("resources.totem_refill", &[s], &[theirs_s]);
+            }
+        }
+    }
 }
 
 pub fn mine(duel: &Duel, mine_views: &[View], theirs: &[View], mine: &[Opportunity], raw: &mut Raw) -> Measure {

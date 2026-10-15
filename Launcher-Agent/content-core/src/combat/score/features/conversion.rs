@@ -72,6 +72,39 @@ pub fn measure(list: &[Opportunity], attacker: bool) -> Measure {
     }
 }
 
+/// Une ouverture « facile » : un joueur moyen la convertit plus d'une fois sur deux.
+const EASY: f64 = 0.5;
+/// Une ouverture « difficile » : moins de trois fois sur dix.
+const HARD: f64 = 0.3;
+
+/// Le détail de la conversion : converties face à ce qu'aurait converti un
+/// joueur moyen, les ouvertures faciles ratées, les difficiles réussies.
+pub fn detail(mine: &[Opportunity], theirs: &[Opportunity], d: &mut super::Detail) {
+    let Some((observed, expected)) = observed_and_expected(mine) else { return };
+    let converted = mine.iter().filter(|o| o.converted).count() as f64;
+    let average = mine.iter().map(|o| o.chance).sum::<f64>();
+    d.fact("conversion.converted", observed >= expected, observed - expected, &[converted, mine.len() as f64, (average * 10.0).round() / 10.0]);
+    let n = mine.len() as f64;
+    let easy_missed: Vec<&Opportunity> = mine.iter().filter(|o| !o.converted && o.chance >= EASY).collect();
+    if !easy_missed.is_empty() {
+        d.fact("conversion.easy_missed", false, easy_missed.len() as f64 / n, &[easy_missed.len() as f64]);
+    }
+    let hard_landed: Vec<&Opportunity> = mine.iter().filter(|o| o.converted && o.chance < HARD).collect();
+    if !hard_landed.is_empty() {
+        d.fact("conversion.hard_landed", true, hard_landed.len() as f64 / n, &[hard_landed.len() as f64]);
+    }
+    for o in &easy_missed {
+        d.moment(o.open, "conversion.easy_missed", false, o.chance, &[o.fall, o.offset]);
+    }
+    for o in &hard_landed {
+        d.moment(o.hit.unwrap_or(o.open), "conversion.hard_landed", true, 1.0 - o.chance, &[o.fall]);
+    }
+    if !theirs.is_empty() {
+        let theirs_converted = theirs.iter().filter(|o| o.converted).count() as f64;
+        d.versus("conversion.converted", &[converted, n], &[theirs_converted, theirs.len() as f64]);
+    }
+}
+
 /// Les grosses et les petites ouvertures, comptées à part pour la page d'un
 /// duel (frontière : `BIG_FALL`). Hors note.
 #[derive(Debug, Clone, Copy, Default, PartialEq, serde::Serialize)]

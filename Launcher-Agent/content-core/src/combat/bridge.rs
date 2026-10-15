@@ -23,7 +23,8 @@ use super::writer::send;
 /// 6 (2026-10-13) : `yf_combat_history`, l'historique des duels.
 /// 10 (2026-10-14) : le résumé passe à 46 nombres (note avant bonus, bug
 /// use, grosses et petites ouvertures, dégâts évités).
-const ABI_VERSION: u32 = 10;
+/// 11 (2026-10-15) : `yf_combat_detail`, le détail des familles d'un duel.
+const ABI_VERSION: u32 = 11;
 
 /// Autres joueurs transmis par tick, au plus.
 const MAX_OTHERS: usize = 16;
@@ -116,6 +117,30 @@ pub unsafe extern "C" fn yf_combat_history(dir: *const u8, dir_len: i32, out: *m
     }
     let history = super::history::history(std::path::Path::new(&dir));
     let bytes = history.as_bytes();
+    if bytes.len() > out_len as usize {
+        return -(bytes.len() as i32);
+    }
+    std::slice::from_raw_parts_mut(out, bytes.len()).copy_from_slice(bytes);
+    bytes.len() as i32
+}
+
+/// Le détail des familles d'un duel (format dans `score::detail_text`),
+/// pour la fenêtre qui s'ouvre au clic sur une famille. `dir` : le dossier de
+/// l'instance ; `time` : l'heure d'ouverture du duel. Rend le nombre d'octets
+/// écrits, ou l'opposé de la place qu'il aurait fallu. Relit un journal : à
+/// appeler à l'ouverture de la page du duel, pas à chaque image.
+///
+/// # Safety
+/// `dir` doit pointer sur `dir_len` octets lisibles, `out` sur `out_len`
+/// octets inscriptibles.
+#[no_mangle]
+pub unsafe extern "C" fn yf_combat_detail(dir: *const u8, dir_len: i32, time: i64, out: *mut u8, out_len: i32) -> i32 {
+    let dir = text(dir, dir_len);
+    if dir.is_empty() || out.is_null() || out_len <= 0 || time <= 0 {
+        return 0;
+    }
+    let detail = super::history::detail(std::path::Path::new(&dir), time as u64);
+    let bytes = detail.as_bytes();
     if bytes.len() > out_len as usize {
         return -(bytes.len() as i32);
     }

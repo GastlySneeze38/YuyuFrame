@@ -8,7 +8,7 @@
 
 use super::super::parse::{gear_at, Duel, Gear, SLOT_CHEST, SLOT_HAND};
 use super::control::{upward_teleport, Lunge};
-use super::{flag, sample_at, smash_bonus, view_at, Opportunity, View, ME_FLAGS, ON_GROUND, Y};
+use super::{sample_at, smash_bonus, view_at, Opportunity, View, Y};
 
 /// Une technique : son nom (celui de l'outil de calibration) et ses points de base.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -24,7 +24,12 @@ const LUNGE_SWAP: Technique = Technique { name: "lunge_swap", points: 1.0 };
 const BREACH_SWAP: Technique = Technique { name: "breach_swap", points: 2.0 };
 const DENSITY_SWAP: Technique = Technique { name: "density_swap", points: 2.0 };
 const REACH_SWAP: Technique = Technique { name: "reach_swap", points: 2.0 };
-const ELYTRA_SWAP: Technique = Technique { name: "elytra_swap", points: 2.0 };
+// L'elytra swap (élytre ↔ plastron en vol) est retiré le 2026-10-15 : en
+// 26.x, un clic droit avec le plastron en main l'échange instantanément avec
+// l'élytre portée. Ce n'est ni un bug ni un geste au tick près, c'est le
+// geste normal du kit masse — relevé chez TOUS nos adversaires, 4 à 30 fois
+// par duel, et deux fois chez nous sans le vouloir. Le plus courant ne vaut
+// rien selon la règle même de la famille.
 const D_HAND: Technique = Technique { name: "d_hand", points: 3.0 };
 const STUN_SLAM: Technique = Technique { name: "stun_slam", points: 4.0 };
 const INSTANT_PEARL_CATCH: Technique = Technique { name: "instant_pearl_catch", points: 4.0 };
@@ -72,9 +77,20 @@ struct Tally {
     found: Vec<(u64, &'static str, f64)>,
 }
 
+/// Ce que vaut une technique, face à ses points de base. Ralenti le
+/// 2026-10-15 : un peu de bug use dans un duel faisait monter tout de suite
+/// à +4. Il faut maintenant plusieurs techniques rares et réussies pour
+/// approcher ce bonus.
+const SCALE: f64 = 0.25;
+/// Chaque nouvelle réussite de la même technique dans un duel vaut moitié
+/// moins que la précédente : répéter un geste ne vaut jamais plus de deux
+/// fois sa première réussite.
+const REPEAT_DECAY: f64 = 0.5;
+
 impl Tally {
     fn add(&mut self, t: u64, technique: Technique, effect: f64) {
-        let points = technique.points * effect.clamp(1.0, 2.0);
+        let repeats = self.found.iter().filter(|(_, name, _)| *name == technique.name).count();
+        let points = technique.points * SCALE * effect.clamp(1.0, 2.0) * REPEAT_DECAY.powi(repeats as i32);
         self.points += points;
         self.found.push((t, technique.name, points));
     }
@@ -143,14 +159,6 @@ fn d_hand(tally: &mut Tally, totems: &[u64], deaths: &[u64]) {
     }
 }
 
-/// L'emplacement de plastron passe de l'élytre au plastron en plein vol.
-fn elytra_swap(tally: &mut Tally, gear: &[Gear], airborne: impl Fn(u64) -> bool) {
-    for w in gear.windows(2) {
-        if w[0].item(SLOT_CHEST) == "elytra" && w[1].item(SLOT_CHEST).ends_with("_chestplate") && airborne(w[1].t) {
-            tally.add(w[1].t, ELYTRA_SWAP, 1.0);
-        }
-    }
-}
 
 fn mine(duel: &Duel, my_views: &[View], mine: &[Opportunity], lunges: &[Lunge], ping: u64) -> Tally {
     let mut tally = Tally::default();
@@ -204,15 +212,14 @@ fn mine(duel: &Duel, my_views: &[View], mine: &[Opportunity], lunges: &[Lunge], 
         let leads = mine.iter().any(|o| o.open >= arrived && o.open - arrived <= 60);
         tally.add(start, INSTANT_PEARL_CATCH, if leads { 1.0 + ((peak - y0) / PEARL_CATCH_HEIGHT).min(1.0) } else { 1.0 });
     }
-    elytra_swap(&mut tally, &duel.my_gear, |t| sample_at(&duel.samples, t).is_some_and(|s| !flag(s.me[ME_FLAGS], ON_GROUND)));
     d_hand(&mut tally, &duel.my_totems, &duel.my_deaths);
     tally
 }
 
 /// Ses techniques, telles qu'on peut les voir : son objet en main qui change
-/// pile au moment où il nous frappe, sa garde-robe en vol, ses totems. Ses
-/// perles et charges de vent ne se voient pas.
-fn foe(duel: &Duel, their_views: &[View]) -> Tally {
+/// pile au moment où il nous frappe, ses totems. Ses perles et charges de
+/// vent ne se voient pas.
+fn foe(duel: &Duel) -> Tally {
     let mut tally = Tally::default();
     for hit in duel.hits.iter().filter(|h| !h.by_me) {
         // Son objet en main a changé dans les ticks qui précèdent le paquet (ping compris).
@@ -226,18 +233,17 @@ fn foe(duel: &Duel, their_views: &[View]) -> Tally {
             tally.add(hit.t, STUN_SLAM, 1.0);
         }
     }
-    elytra_swap(&mut tally, &duel.foe_gear, |t| view_at(their_views, t, 2).is_some_and(|v| !v.grounded));
     d_hand(&mut tally, &duel.foe_totems, &duel.foe_deaths);
     tally
 }
 
 /// Le bonus, et chaque technique reconnue des deux côtés.
-pub fn extract(duel: &Duel, my_views: &[View], their_views: &[View], opportunities: &[Opportunity], lunges: &[Lunge], ping: u64) -> (BugUse, Vec<Detection>) {
+pub fn extract(duel: &Duel, my_views: &[View], opportunities: &[Opportunity], lunges: &[Lunge], ping: u64) -> (BugUse, Vec<Detection>) {
     // Tout repose sur l'objet au coup et l'équipement au tick près (version 2).
     if !duel.detailed() {
         return (BugUse::default(), Vec::new());
     }
-    let (me, them) = (mine(duel, my_views, opportunities, lunges, ping), foe(duel, their_views));
+    let (me, them) = (mine(duel, my_views, opportunities, lunges, ping), foe(duel));
     let bonus = BugUse { points: me.points.min(CAP), techniques: me.count(), foe_points: them.points.min(CAP), foe_techniques: them.count() };
     let mut found: Vec<Detection> = me.found.iter().map(|(t, name, points)| Detection { t: *t, by_me: true, name, points: *points }).collect();
     found.extend(them.found.iter().map(|(t, name, points)| Detection { t: *t, by_me: false, name, points: *points }));
@@ -261,12 +267,12 @@ mod tests {
         let list = vec![gear(10, "", "netherite_sword"), gear(11, "", "mace,breach=4")];
         let mut tally = Tally::default();
         attack_swap(&mut tally, &list, 10, "netherite_sword", "mace", true);
-        assert_eq!((tally.points, tally.count()), (BREACH_SWAP.points * 2.0, 1));
+        assert_eq!((tally.points, tally.count()), (BREACH_SWAP.points * SCALE * 2.0, 1));
         assert_eq!(tally.found[0].1, "breach_swap");
         let plain = vec![gear(10, "", "netherite_sword"), gear(11, "", "mace")];
         let mut tally = Tally::default();
         attack_swap(&mut tally, &plain, 10, "netherite_sword", "mace", false);
-        assert_eq!(tally.points, COOLDOWN_SWAP.points);
+        assert_eq!(tally.points, COOLDOWN_SWAP.points * SCALE);
         let mut tally = Tally::default();
         attack_swap(&mut tally, &plain, 10, "mace", "netherite_sword", false);
         assert_eq!(tally.count(), 0, "d'une arme lente vers une rapide : pas un swap utile");
@@ -276,7 +282,7 @@ mod tests {
     fn deux_totems_coup_sur_coup_sans_mourir() {
         let mut tally = Tally::default();
         d_hand(&mut tally, &[100, 120], &[]);
-        assert_eq!(tally.points, D_HAND.points);
+        assert_eq!(tally.points, D_HAND.points * SCALE);
         assert_eq!(tally.found[0].0, 120, "au tick du deuxième totem");
         let mut tally = Tally::default();
         d_hand(&mut tally, &[100, 120], &[125]);
@@ -284,14 +290,17 @@ mod tests {
     }
 
     #[test]
-    fn l_elytre_quittee_en_vol() {
-        let list = vec![gear(10, "elytra", "mace"), gear(30, "netherite_chestplate", "mace")];
+    fn repeter_la_meme_technique_rapporte_de_moins_en_moins() {
         let mut tally = Tally::default();
-        elytra_swap(&mut tally, &list, |_| true);
-        assert_eq!(tally.points, ELYTRA_SWAP.points);
-        let mut tally = Tally::default();
-        elytra_swap(&mut tally, &list, |_| false);
-        assert_eq!(tally.count(), 0, "au sol, ce n'est qu'un changement d'équipement");
+        for t in 0..10 {
+            tally.add(t, COOLDOWN_SWAP, 1.0);
+        }
+        let first = COOLDOWN_SWAP.points * SCALE;
+        assert!(tally.points < 2.0 * first, "dix cooldown swaps valent moins de deux fois le premier : {}", tally.points);
+        assert_eq!(tally.found[1].2, first / 2.0);
+        // Une autre technique repart de sa pleine valeur.
+        tally.add(20, STUN_SLAM, 1.0);
+        assert_eq!(tally.found[10].2, STUN_SLAM.points * SCALE);
     }
 
     #[test]

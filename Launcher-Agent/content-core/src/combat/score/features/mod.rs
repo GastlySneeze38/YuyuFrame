@@ -496,6 +496,61 @@ impl Raw {
     }
 }
 
+/// Le détail d'une famille, pour la fenêtre qui s'ouvre au clic sur elle
+/// (2026-10-15) : des faits que le joueur peut vérifier de mémoire — des
+/// compteurs, des moments datés, la même mesure chez l'adversaire —, jamais
+/// le calcul (ni poids, ni centre, ni référence). Le but : qu'en le lisant,
+/// il ne conteste pas sa note. Les codes sont traduits côté Java
+/// (`PvpFamilyDetail`) ; les nombres sont ceux qui ont fait la note.
+#[derive(Debug, Clone, Default)]
+pub struct Detail {
+    pub facts: Vec<Fact>,
+    pub moments: Vec<Moment>,
+    pub versus: Vec<Versus>,
+}
+
+/// Un fait : il a fait monter (`up`) ou baisser la famille ; `weight` dit
+/// combien, pour ne montrer que les plus forts.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Fact {
+    pub code: &'static str,
+    pub up: bool,
+    pub weight: f64,
+    pub values: Vec<f64>,
+}
+
+/// Un moment du duel, au tick près ; `weight` dit lesquels montrer d'abord.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Moment {
+    pub t: u64,
+    pub code: &'static str,
+    pub good: bool,
+    pub weight: f64,
+    pub values: Vec<f64>,
+}
+
+/// La même mesure chez nous et chez lui — seulement quand elle existe de son côté.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Versus {
+    pub code: &'static str,
+    pub mine: Vec<f64>,
+    pub theirs: Vec<f64>,
+}
+
+impl Detail {
+    fn fact(&mut self, code: &'static str, up: bool, weight: f64, values: &[f64]) {
+        self.facts.push(Fact { code, up, weight: weight.abs(), values: values.to_vec() });
+    }
+
+    fn moment(&mut self, t: u64, code: &'static str, good: bool, weight: f64, values: &[f64]) {
+        self.moments.push(Moment { t, code, good, weight, values: values.to_vec() });
+    }
+
+    fn versus(&mut self, code: &'static str, mine: &[f64], theirs: &[f64]) {
+        self.versus.push(Versus { code, mine: mine.to_vec(), theirs: theirs.to_vec() });
+    }
+}
+
 /// Une famille faite de parties : sa valeur combinée, comptée sur `events`
 /// vraies situations (2026-10-15). Avant, le nombre d'événements était la
 /// somme de celui des parties, dont certaines comptent des tranches de temps :
@@ -537,6 +592,8 @@ pub struct Features {
     pub foe: FoeMeasures,
     /// Charge d'attaque moyenne à mes smashs, telle que le jeu la compte au coup.
     pub smash_charge: Option<f64>,
+    /// Le détail de mes cinq familles, pour la fenêtre qui s'ouvre au clic.
+    pub details: [Detail; 5],
     // Pour l'outil de calibration (`score::calibration`) : les parties des
     // familles avant recentrage, de chaque côté ; chaque smash jugé, des deux
     // côtés ; chaque technique et chaque élan de Lunge reconnus. L'outil n'est
@@ -587,13 +644,21 @@ pub fn extract(duel: &Duel) -> Features {
     let vertical = control::mine(duel, &my_views, &mine, &lunges, &mut raw_mine);
     let (exposure, avoided) = defense::mine(duel, &their_views, &mine, &theirs, &mut raw_mine);
     let resources = resources::mine(duel, &my_views, &their_views, &mine, &mut raw_mine);
-    let (bug_use, mut detections) = bug_use::extract(duel, &my_views, &their_views, &mine, &lunges, ping);
+    let (bug_use, mut detections) = bug_use::extract(duel, &my_views, &mine, &lunges, ping);
     // Les élans de Lunge aussi, rapportant ou non : leur reconnaissance se vérifie à l'œil.
     detections.extend(lunges.iter().map(|l| Detection { t: l.t, by_me: true, name: "lunge", points: 0.0 }));
     detections.sort_by_key(|d| d.t);
 
     let (foe_smash, foe_smashes) = smash::foe(duel, &theirs, &their_views);
     smashes.extend(foe_smashes);
+
+    // Le détail de chaque famille, dans l'ordre du résumé.
+    let mut details: [Detail; 5] = Default::default();
+    conversion::detail(&mine, &theirs, &mut details[0]);
+    smash::detail(duel, &smashes, &mut details[1]);
+    defense::detail(duel, &my_views, &their_views, &mine, &theirs, &mut details[2]);
+    control::detail(&my_views, &their_views, &mine, &theirs, &mut details[3]);
+    resources::detail(duel, &my_views, &their_views, &mine, &mut details[4]);
     let foe = FoeMeasures {
         conversion: conversion::measure(&theirs, true),
         smash_quality: foe_smash,
@@ -603,6 +668,7 @@ pub fn extract(duel: &Duel) -> Features {
 
     let engaged = duel.samples.iter().filter(|s| s.foe.is_some()).count();
     Features {
+        details,
         raw_mine,
         raw_foe,
         smashes,

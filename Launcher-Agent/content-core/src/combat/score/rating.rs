@@ -19,7 +19,12 @@ use super::features::{Features, Measure};
 // Version 7 (2026-10-15) : la chute possible d'un smash va jusqu'à la tête
 // de la cible, le critique de l'adversaire se lit au son, et les familles
 // comptent de vraies situations au lieu de tranches de temps.
-pub const SCORE_VERSION: u32 = 7;
+// Version 8 (2026-10-15) : une chute n'est plus comptée deux fois après deux
+// smashs ratés ; « gros coup du premier coup » ne regarde que les descentes
+// qui visent l'adversaire, et pas celles ratées face à son bouclier levé.
+// Version 9 (2026-10-15) : bug use sans l'elytra swap, au quart de ses
+// points, et de moins en moins pour une même technique répétée.
+pub const SCORE_VERSION: u32 = 9;
 
 /// Poids du lissage : une famille observée sur `K` événements compte autant
 /// que sa référence.
@@ -268,6 +273,7 @@ mod tests {
             resources: each,
             bug_use: Default::default(),
             smash_charge: None,
+            details: Default::default(),
             raw_mine: Default::default(),
             raw_foe: Default::default(),
             smashes: Vec::new(),

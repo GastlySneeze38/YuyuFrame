@@ -155,6 +155,9 @@ pub struct Duel {
     pub mode: Mode,
     /// L'heure d'ouverture du duel, en millisecondes depuis 1970.
     pub time: Option<u64>,
+    /// Le tick d'ouverture du duel : le zéro des moments montrés au joueur
+    /// (les dix secondes gardées avant sont en négatif).
+    pub start: u64,
 }
 
 impl Duel {
@@ -273,6 +276,7 @@ pub fn parse(text: &str) -> Option<Duel> {
         result: None,
         foe_name: foe_line.and_then(|l| l["name"].as_str()).map(str::to_string),
         time: header["time"].as_u64(),
+        start: header["t"].as_u64().unwrap_or(0),
     };
     let (mut saw_mace, mut saw_sword) = (false, false);
     for line in &lines {
