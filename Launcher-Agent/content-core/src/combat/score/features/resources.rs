@@ -9,7 +9,7 @@
 
 use super::super::parse::{gear_at, Duel, SLOT_CHEST, SLOT_HAND, SLOT_OFFHAND};
 use super::{
-    blend, centered, flag, mean, measure, sample_at, view_at, Measure, Opportunity, Part, View, GAP_TICKS, HEIGHT_ADVANTAGE, HIT_DELAY_TICKS, LOW_HEALTH, ME_FALL, ME_FLAGS, ME_FOOD,
+    blend, centered, family, flag, mean, sample_at, Raw, view_at, Measure, Opportunity, Part, View, GAP_TICKS, HEIGHT_ADVANTAGE, HIT_DELAY_TICKS, LOW_HEALTH, ME_FALL, ME_FLAGS, ME_FOOD,
     ME_HEALTH, ME_MAX_HEALTH, ME_SPEED, ME_STRENGTH, ON_GROUND, REACH, X, Y, Z,
 };
 
@@ -219,7 +219,7 @@ fn potions(duel: &Duel, mine: &[View], theirs: &[View]) -> Part {
 
 // --- 4. Les totems -------------------------------------------------------------------------------
 
-fn totems(duel: &Duel) -> Part {
+fn totems(duel: &Duel, raw: &mut Raw) -> Part {
     let refill = if duel.detailed() {
         mean(duel.my_totems.iter().filter(|t| !duel.my_deaths.iter().any(|d| *d >= **t && *d - **t <= 10)).filter_map(|t| {
             // La main secondaire se vide (un totem tenu dans la main principale ne laisse pas de trou), puis se remplit.
@@ -232,7 +232,7 @@ fn totems(duel: &Duel) -> Part {
     let (forced, spent) = (duel.foe_totems.len() as f64, duel.my_totems.len() as f64);
     let balance = (forced + spent > 0.0).then(|| (forced / (forced + spent), forced + spent));
     // Le bilan forcés / consommés vaut 0,5 en moyenne par nature : seul le délai est recentré.
-    blend(&[(1.0, centered(refill, TOTEM_REFILL_CENTER)), (1.0, balance)])
+    blend(&[(1.0, centered(raw.put("resources.totem_refill", refill), TOTEM_REFILL_CENTER)), (1.0, raw.put("resources.totem_balance", balance))])
 }
 
 // --- 5. Les charges de vent et les perles --------------------------------------------------------
@@ -318,15 +318,18 @@ fn rockets(duel: &Duel, mine: &[Opportunity]) -> Part {
     mean(duel.uses.iter().filter(|(_, i)| i == "firework_rocket").map(|(t, _)| mine.iter().any(|o| o.open > *t && o.open - t <= USEFUL_TICKS) as u8 as f64))
 }
 
-pub fn mine(duel: &Duel, mine_views: &[View], theirs: &[View], mine: &[Opportunity]) -> Measure {
-    measure(blend(&[
-        (W_WIND_AND_PEARLS, centered(wind_and_pearls(duel, mine_views, theirs, mine), WIND_AND_PEARLS_CENTER)),
-        (W_HOTBAR, centered(hotbar(duel, mine), HOTBAR_CENTER)),
-        (W_FOOD_AND_LIFE, centered(food_and_life(duel, theirs), FOOD_AND_LIFE_CENTER)),
-        (W_TOTEMS, totems(duel)),
-        (W_POTIONS, potions(duel, mine_views, theirs)),
-        (W_ROCKETS, rockets(duel, mine)),
-    ]))
+pub fn mine(duel: &Duel, mine_views: &[View], theirs: &[View], mine: &[Opportunity], raw: &mut Raw) -> Measure {
+    let combined = blend(&[
+        (W_WIND_AND_PEARLS, centered(raw.put("resources.wind_and_pearls", wind_and_pearls(duel, mine_views, theirs, mine)), WIND_AND_PEARLS_CENTER)),
+        (W_HOTBAR, centered(raw.put("resources.hotbar", hotbar(duel, mine)), HOTBAR_CENTER)),
+        (W_FOOD_AND_LIFE, centered(raw.put("resources.food_and_life", food_and_life(duel, theirs)), FOOD_AND_LIFE_CENTER)),
+        (W_TOTEMS, totems(duel, raw)),
+        (W_POTIONS, raw.put("resources.potions", potions(duel, mine_views, theirs))),
+        (W_ROCKETS, raw.put("resources.rockets", rockets(duel, mine))),
+    ]);
+    // Les situations : chaque objet utilisé et chaque totem qui saute, des deux côtés.
+    let events = duel.uses.len() + duel.my_totems.len() + duel.foe_totems.len();
+    family(combined, events as f64)
 }
 
 #[cfg(test)]

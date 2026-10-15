@@ -15,6 +15,8 @@ use super::super::record::{ME_LEN, ME_LEN_V1, OTHER_LEN, OTHER_LEN_V1};
 const STATUS_TOTEM: i64 = 35;
 /// Code d'événement d'entité : mort.
 const STATUS_DEATH: i64 = 3;
+/// Le son du coup critique, joué sur celui qui frappe.
+const CRIT_SOUND: &str = "entity.player.attack.crit";
 
 /// Un tick du duel : notre joueur, et l'adversaire quand il était transmis.
 pub struct Sample {
@@ -131,6 +133,10 @@ pub struct Duel {
     pub shield_sounds: Vec<ShieldSound>,
     /// Ticks où notre bouclier a été mis en recharge (hache, version 2).
     pub shield_cooldowns: Vec<u64>,
+    /// Coups critiques, par leur son : (tick, frappé par nous). Capturés
+    /// depuis le 2026-10-15 : un journal plus ancien n'en a aucun
+    /// ([`Duel::sees_crits`]).
+    pub crits: Vec<(u64, bool)>,
     /// Objets que notre joueur a utilisés : (tick, identifiant).
     pub uses: Vec<(u64, String)>,
     /// L'équipement de chacun, à chaque changement.
@@ -155,6 +161,11 @@ impl Duel {
     /// Le journal porte-t-il les mesures des familles (version 2) ?
     pub fn detailed(&self) -> bool {
         self.version >= 2
+    }
+
+    /// Le journal porte-t-il les sons des coups critiques (version 3) ?
+    pub fn sees_crits(&self) -> bool {
+        self.version >= 3
     }
 }
 
@@ -253,6 +264,7 @@ pub fn parse(text: &str) -> Option<Duel> {
         my_falls: Vec::new(),
         shield_sounds: Vec::new(),
         shield_cooldowns: Vec::new(),
+        crits: Vec::new(),
         uses: Vec::new(),
         my_gear: Vec::new(),
         foe_gear: Vec::new(),
@@ -294,7 +306,11 @@ pub fn parse(text: &str) -> Option<Duel> {
                 let on_me = int(&line["entity"]) == Some(me);
                 if on_me || (foe.is_some() && int(&line["entity"]) == foe) {
                     let sound = line["sound"].as_str().unwrap_or("");
-                    duel.shield_sounds.push(ShieldSound { t, on_me, broke: sound.ends_with("break") });
+                    if sound == CRIT_SOUND {
+                        duel.crits.push((t, on_me));
+                    } else if sound.starts_with("item.shield") {
+                        duel.shield_sounds.push(ShieldSound { t, on_me, broke: sound.ends_with("break") });
+                    }
                 }
             }
             // Le jeu envoie la recharge à son début (sa durée) et à sa fin
@@ -359,6 +375,7 @@ pub fn parse(text: &str) -> Option<Duel> {
     duel.uses.sort_by_key(|u| u.0);
     duel.shield_sounds.sort_by_key(|s| s.t);
     duel.shield_cooldowns.sort_unstable();
+    duel.crits.sort_unstable();
     duel.my_falls.sort_unstable();
     duel.my_totems.sort_unstable();
     duel.foe_totems.sort_unstable();
@@ -430,6 +447,7 @@ mod tests {
                     {\"k\":\"n\",\"t\":6,\"entity\":7,\"sound\":\"item.shield.break\"}\n\
                     {\"k\":\"n\",\"t\":8,\"entity\":1,\"sound\":\"item.shield.block\"}\n\
                     {\"k\":\"n\",\"t\":8,\"entity\":42,\"sound\":\"item.shield.block\"}\n\
+                    {\"k\":\"n\",\"t\":10,\"entity\":7,\"sound\":\"entity.player.attack.crit\"}\n\
                     {\"k\":\"c\",\"t\":9,\"group\":\"minecraft:shield\",\"ticks\":100}\n\
                     {\"k\":\"c\",\"t\":109,\"group\":\"minecraft:shield\",\"ticks\":0}\n\
                     {\"k\":\"d\",\"t\":12,\"entity\":1,\"cause\":-1,\"direct\":-1,\"type\":\"fall\"}\n\
@@ -438,7 +456,9 @@ mod tests {
         let duel = parse(text).unwrap();
         assert!(duel.detailed());
         assert_eq!((duel.attacks.len(), duel.attacks[0].on_foe, duel.attacks[0].item.as_str()), (1, true, "mace"));
-        assert_eq!(duel.shield_sounds.len(), 2, "le son sur un spectateur ne compte pas");
+        assert_eq!(duel.shield_sounds.len(), 2, "le son sur un spectateur ne compte pas, le critique est rangé à part");
+        assert_eq!(duel.crits, vec![(10, false)]);
+        assert!(!duel.sees_crits(), "version 2 : les critiques n'étaient pas capturés");
         assert!(duel.shield_sounds[0].broke && !duel.shield_sounds[0].on_me);
         assert!(!duel.shield_sounds[1].broke && duel.shield_sounds[1].on_me);
         assert_eq!(duel.shield_cooldowns, vec![9]);

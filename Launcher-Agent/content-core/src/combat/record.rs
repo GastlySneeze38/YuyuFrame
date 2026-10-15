@@ -45,7 +45,9 @@ pub const EVENT_ITEM_USE: i32 = 4;
 /// Son du bouclier joué par le serveur (ABI 9). `a` : le joueur sur qui il est
 /// joué (le plus proche du son), texte : `item.shield.block` (coup arrêté) ou
 /// `item.shield.break` (bouclier désactivé par une hache). Un coup arrêté
-/// n'envoie aucun paquet de dégâts : c'est sa seule trace.
+/// n'envoie aucun paquet de dégâts : c'est sa seule trace. Depuis le
+/// 2026-10-15 aussi `entity.player.attack.crit`, joué sur celui qui frappe un
+/// coup critique : la seule trace du critique de l'adversaire.
 pub const EVENT_SOUND: i32 = 5;
 /// Recharge d'un groupe de nos objets (ABI 9). `a` : durée en ticks, texte :
 /// le groupe (`shield` quand une hache désactive notre bouclier).

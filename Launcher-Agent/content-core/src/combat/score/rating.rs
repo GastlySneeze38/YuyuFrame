@@ -16,7 +16,10 @@ use super::features::{Features, Measure};
 // et le bonus bug use, hors de la moyenne.
 // Version 6 (2026-10-15) : les parties des familles recentrées sur ce que
 // font en moyenne les joueurs observés (`features::centered`).
-pub const SCORE_VERSION: u32 = 6;
+// Version 7 (2026-10-15) : la chute possible d'un smash va jusqu'à la tête
+// de la cible, le critique de l'adversaire se lit au son, et les familles
+// comptent de vraies situations au lieu de tranches de temps.
+pub const SCORE_VERSION: u32 = 7;
 
 /// Poids du lissage : une famille observée sur `K` événements compte autant
 /// que sa référence.
@@ -245,6 +248,7 @@ mod tests {
             realized: 0.0,
             fall: 0.0,
             hit_fall: 0.0,
+            possible_fall: 0.0,
             offset: 0.0,
             target_speed: 0.0,
             behind_shield: false,
@@ -264,6 +268,10 @@ mod tests {
             resources: each,
             bug_use: Default::default(),
             smash_charge: None,
+            raw_mine: Default::default(),
+            raw_foe: Default::default(),
+            smashes: Vec::new(),
+            detections: Vec::new(),
         }
     }
 

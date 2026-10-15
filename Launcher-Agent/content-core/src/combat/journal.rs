@@ -44,7 +44,12 @@ use super::record::*;
 /// la case d'un coup dans les lignes `a`, et deux sortes de lignes : `n` (son
 /// du bouclier) et `c` (recharge d'un objet). Un journal de version 1 se lit
 /// toujours (`parse.rs` complète les nombres absents par −1).
-pub const TELEMETRY_VERSION: u32 = 2;
+///
+/// Version 3 (2026-10-15) : les lignes `n` portent aussi le son du coup
+/// critique (`entity.player.attack.crit`). Le format ne change pas ; la
+/// version dit seulement qu'une absence de critique veut dire « aucun », et
+/// non « pas encore capturé ».
+pub const TELEMETRY_VERSION: u32 = 3;
 /// Un autre joueur à moins de cette distance : on est engagé.
 const ENGAGE_BLOCKS: f64 = 16.0;
 /// Lignes gardées avant l'ouverture du duel (10 s d'échantillons).
@@ -241,7 +246,8 @@ impl Journal {
                     EVENT_DAMAGE => json!({ "k": "d", "t": self.tick, "entity": a, "cause": b, "direct": c, "type": text }),
                     EVENT_ENTITY => json!({ "k": "v", "t": self.tick, "entity": a, "status": b }),
                     EVENT_ITEM_USE => json!({ "k": "u", "t": self.tick, "item": text, "main": a == 1 }),
-                    // Son du bouclier : la seule trace d'un coup arrêté.
+                    // Son du bouclier ou du critique : la seule trace d'un
+                    // coup arrêté, et du critique de l'adversaire.
                     EVENT_SOUND => json!({ "k": "n", "t": self.tick, "entity": a, "sound": text }),
                     EVENT_COOLDOWN => json!({ "k": "c", "t": self.tick, "group": text, "ticks": a }),
                     _ => return out,

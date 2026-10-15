@@ -10,7 +10,7 @@
 //! reconstruire. Chez l'adversaire, A, B, C et E se mesurent en miroir.
 
 use super::super::parse::{gear_at, Duel, Gear, SLOT_HAND};
-use super::{blend, centered, descents, mean, measure, Measure, Opportunity, Part, View, BIG_FALL, GAP_TICKS, HEIGHT_ADVANTAGE, HIT_DELAY_TICKS, MIN_FALL, REACH, Y};
+use super::{blend, centered, descents, family, mean, Measure, Opportunity, Part, Raw, View, BIG_FALL, GAP_TICKS, HEIGHT_ADVANTAGE, HIT_DELAY_TICKS, MIN_FALL, REACH, Y};
 
 // Poids des groupes (décision du 2026-10-14), *à calibrer*.
 const W_FOLLOW: f64 = 0.35;
@@ -308,17 +308,17 @@ fn chain(views: &[View], opportunities: &[Opportunity]) -> Part {
     blend(&[(0.25, mean(follow_up)), (0.25, lengths), (0.5, rebuild)])
 }
 
-fn family(parts: [Part; 5], views: &[View]) -> Measure {
+fn groups(parts: [Part; 5], views: &[View], raw: &mut Raw) -> Measure {
     let combined = blend(&[
-        (W_FOLLOW, centered(parts[0], FOLLOW_CENTER)),
-        (W_CLIMB, centered(parts[1], CLIMB_CENTER)),
-        (W_PEAK, centered(parts[2], PEAK_CENTER)),
-        (W_HORIZONTAL, centered(parts[3], HORIZONTAL_CENTER)),
-        (W_CHAIN, centered(parts[4], CHAIN_CENTER)),
+        (W_FOLLOW, centered(raw.put("control.follow", parts[0]), FOLLOW_CENTER)),
+        (W_CLIMB, centered(raw.put("control.climb", parts[1]), CLIMB_CENTER)),
+        (W_PEAK, centered(raw.put("control.peak", parts[2]), PEAK_CENTER)),
+        (W_HORIZONTAL, centered(raw.put("control.horizontal", parts[3]), HORIZONTAL_CENTER)),
+        (W_CHAIN, centered(raw.put("control.chain", parts[4]), CHAIN_CENTER)),
     ]);
-    // Compté en tranches de quatre secondes de duel : une minute pèse autant
-    // que quinze opportunités.
-    measure(combined.map(|(value, _)| (value, views.len() as f64 / 80.0)))
+    // Une situation, c'est une descente : chacune se juge (suivre, se placer,
+    // enchaîner). Avant le 2026-10-15, des tranches de quatre secondes.
+    family(combined, descents(views).len() as f64)
 }
 
 fn hits(opportunities: &[Opportunity]) -> Vec<u64> {
@@ -326,10 +326,10 @@ fn hits(opportunities: &[Opportunity]) -> Vec<u64> {
 }
 
 /// Notre contrôle : les cinq groupes.
-pub fn mine(duel: &Duel, views: &[View], _theirs: &[View], opportunities: &[Opportunity], lunges: &[Lunge]) -> Measure {
+pub fn mine(duel: &Duel, views: &[View], opportunities: &[Opportunity], lunges: &[Lunge], raw: &mut Raw) -> Measure {
     let armor = armor_factor(duel.my_gear.last());
     let resources = height_per_resource(duel, armor);
-    family(
+    groups(
         [
             follow(views, &hits(opportunities)),
             climb(views, armor, resources),
@@ -338,14 +338,15 @@ pub fn mine(duel: &Duel, views: &[View], _theirs: &[View], opportunities: &[Oppo
             chain(views, opportunities),
         ],
         views,
+        raw,
     )
 }
 
 /// Le sien, en miroir : sans le déplacement horizontal (ses élans et ses
 /// objets ne se voient pas) ni la hauteur par ressource.
-pub fn foe(duel: &Duel, views: &[View], _mine: &[View], opportunities: &[Opportunity]) -> Measure {
+pub fn foe(duel: &Duel, views: &[View], opportunities: &[Opportunity], raw: &mut Raw) -> Measure {
     let armor = armor_factor(duel.foe_gear.last());
-    family([follow(views, &hits(opportunities)), climb(views, armor, None), peaks(views), None, chain(views, opportunities)], views)
+    groups([follow(views, &hits(opportunities)), climb(views, armor, None), peaks(views), None, chain(views, opportunities)], views, raw)
 }
 
 #[cfg(test)]
@@ -399,6 +400,7 @@ mod tests {
             realized: 0.0,
             fall: 5.0,
             hit_fall: 5.0,
+            possible_fall: 5.0,
             offset: 1.0,
             target_speed: 0.0,
             behind_shield: false,

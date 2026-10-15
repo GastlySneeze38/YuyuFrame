@@ -9,6 +9,8 @@
 //! Le journal est la seule source : features et note en sont dérivées et
 //! portent leur version, pour être recalculées quand une formule change.
 
+#[cfg(test)]
+mod calibration;
 mod features;
 mod parse;
 mod rating;
@@ -21,7 +23,8 @@ pub use rating::Prior;
 /// Version de l'extraction des features. Changer la définition d'une
 /// opportunité ou d'une famille l'incrémente.
 // Version 3 (2026-10-14) : les familles de docs/scoring/familles/.
-pub const EXTRACTOR_VERSION: u32 = 3;
+// Version 4 (2026-10-15) : chute possible prolongée, critique au son, nombre d'événements.
+pub const EXTRACTOR_VERSION: u32 = 4;
 
 /// Le décompte des opportunités d'un joueur.
 #[derive(Debug, Serialize)]

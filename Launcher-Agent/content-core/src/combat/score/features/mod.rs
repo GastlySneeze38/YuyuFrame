@@ -31,7 +31,8 @@ mod defense;
 mod resources;
 mod smash;
 
-pub use bug_use::BugUse;
+pub use bug_use::{BugUse, Detection};
+pub use smash::Smash;
 pub use conversion::Split;
 
 use super::parse::{Duel, Sample};
@@ -55,6 +56,9 @@ const LOW_HEALTH: f64 = 8.0;
 /// que traverser la zone (conversion). Posé à la main, *à calibrer* sur les
 /// duels du joueur.
 const MIN_WINDOW_TICKS: u64 = 3;
+/// Taille d'un joueur debout : le smash ne peut plus attendre une fois les
+/// pieds de l'attaquant à la hauteur de la tête de la cible.
+const PLAYER_HEIGHT: f64 = 1.8;
 /// Angle sous lequel un bouclier arrête un coup : 90° de part et d'autre du
 /// regard (`BlocksAttacks.DamageReduction` du bouclier, jar 26.3).
 const SHIELD_HALF_ANGLE_COS: f64 = 0.0;
@@ -129,6 +133,12 @@ pub struct Opportunity {
     /// Plus grosse chute de la fenêtre, et chute au coup.
     pub fall: f64,
     pub hit_fall: f64,
+    /// La chute qu'aurait eue le coup en attendant le plus possible : celle
+    /// du coup plus ce qu'il restait à descendre jusqu'à la tête de la cible
+    /// (qualité du smash). La fenêtre se ferme au coup, donc sa plus grosse
+    /// chute est toujours celle du coup : sans ce prolongement, frapper trop
+    /// tôt ne se verrait jamais. Égale à `fall` pour une opportunité ratée.
+    pub possible_fall: f64,
     /// Décalage horizontal et vitesse horizontale de la cible à l'ouverture.
     pub offset: f64,
     pub target_speed: f64,
@@ -341,6 +351,7 @@ fn opportunities(views: &[View], smashes: &[u64], density: f64) -> Vec<Opportuni
         // du paquet, le jeu l'a déjà remise à zéro.
         let hit_fall = views[end].fall;
         let realized = hit.map(|_| smash_bonus(hit_fall, density)).unwrap_or(0.0);
+        let left_to_fall = if hit.is_some() { (views[end].above - PLAYER_HEIGHT).max(0.0) } else { 0.0 };
         let behind_shield = window.iter().any(|v| v.shielded && !v.front);
         let (offset, target_speed) = (views[start].horizontal, views[start].target_speed);
         out.push(Opportunity {
@@ -352,6 +363,7 @@ fn opportunities(views: &[View], smashes: &[u64], density: f64) -> Vec<Opportuni
             realized,
             fall,
             hit_fall,
+            possible_fall: fall.max(hit_fall + left_to_fall),
             offset,
             target_speed,
             behind_shield,
@@ -377,6 +389,7 @@ fn opportunities(views: &[View], smashes: &[u64], density: f64) -> Vec<Opportuni
             realized: bonus,
             fall,
             hit_fall: fall,
+            possible_fall: fall,
             offset: 0.0,
             target_speed: 0.0,
             behind_shield: false,
@@ -470,6 +483,27 @@ fn centered(part: Part, center: f64) -> Part {
     })
 }
 
+/// Les parties de chaque famille avant recentrage, sous leur nom : ce que
+/// relève l'outil de calibration (`score::calibration`).
+#[derive(Debug, Clone, Default)]
+pub struct Raw(pub Vec<(&'static str, Option<f64>)>);
+
+impl Raw {
+    /// Retient une partie et la rend telle quelle.
+    fn put(&mut self, name: &'static str, part: Part) -> Part {
+        self.0.push((name, part.map(|(v, _)| v)));
+        part
+    }
+}
+
+/// Une famille faite de parties : sa valeur combinée, comptée sur `events`
+/// vraies situations (2026-10-15). Avant, le nombre d'événements était la
+/// somme de celui des parties, dont certaines comptent des tranches de temps :
+/// 100 à 300 « événements » par duel, et le lissage n'agissait plus.
+fn family(combined: Part, events: f64) -> Measure {
+    measure(combined.map(|(value, _)| (value, events)))
+}
+
 fn measure(part: Part) -> Measure {
     part.map(|(value, count)| Measure { value, count }).unwrap_or(Measure::NONE)
 }
@@ -503,6 +537,18 @@ pub struct Features {
     pub foe: FoeMeasures,
     /// Charge d'attaque moyenne à mes smashs, telle que le jeu la compte au coup.
     pub smash_charge: Option<f64>,
+    // Pour l'outil de calibration (`score::calibration`) : les parties des
+    // familles avant recentrage, de chaque côté ; chaque smash jugé, des deux
+    // côtés ; chaque technique et chaque élan de Lunge reconnus. L'outil n'est
+    // compilé que pour les tests : ailleurs, personne ne les lit.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub raw_mine: Raw,
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub raw_foe: Raw,
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub smashes: Vec<Smash>,
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub detections: Vec<Detection>,
 }
 
 /// Ce qu'on sait mesurer de l'adversaire : quatre des cinq familles. Ses
@@ -532,23 +578,35 @@ pub fn extract(duel: &Duel) -> Features {
     let theirs = opportunities(&their_views, &their_smashes, duel.foe_density);
     let ping = ping_ticks(&duel.samples);
 
+    let (mut raw_mine, mut raw_foe) = (Raw::default(), Raw::default());
     let conversion = conversion::measure(&mine, true);
-    let (smash_quality, smash_charge) = smash::mine(duel, &mine, &my_views, ping);
+    let (smash_quality, mut smashes) = smash::mine(duel, &mine, &my_views, ping);
+    let charges: Vec<f64> = smashes.iter().filter_map(|s| s.charge).collect();
+    let smash_charge = (!charges.is_empty()).then(|| charges.iter().sum::<f64>() / charges.len() as f64);
     let lunges = control::lunges(duel, &my_views);
-    let vertical = control::mine(duel, &my_views, &their_views, &mine, &lunges);
-    let (exposure, avoided) = defense::mine(duel, &my_views, &their_views, &mine, &theirs);
-    let resources = resources::mine(duel, &my_views, &their_views, &mine);
-    let bug_use = bug_use::extract(duel, &my_views, &their_views, &mine, &lunges, ping);
+    let vertical = control::mine(duel, &my_views, &mine, &lunges, &mut raw_mine);
+    let (exposure, avoided) = defense::mine(duel, &their_views, &mine, &theirs, &mut raw_mine);
+    let resources = resources::mine(duel, &my_views, &their_views, &mine, &mut raw_mine);
+    let (bug_use, mut detections) = bug_use::extract(duel, &my_views, &their_views, &mine, &lunges, ping);
+    // Les élans de Lunge aussi, rapportant ou non : leur reconnaissance se vérifie à l'œil.
+    detections.extend(lunges.iter().map(|l| Detection { t: l.t, by_me: true, name: "lunge", points: 0.0 }));
+    detections.sort_by_key(|d| d.t);
 
+    let (foe_smash, foe_smashes) = smash::foe(duel, &theirs, &their_views);
+    smashes.extend(foe_smashes);
     let foe = FoeMeasures {
         conversion: conversion::measure(&theirs, true),
-        smash_quality: smash::foe(duel, &theirs, &their_views),
-        exposure: defense::foe(duel, &my_views, &their_views, &mine),
-        vertical: control::foe(duel, &their_views, &my_views, &theirs),
+        smash_quality: foe_smash,
+        exposure: defense::foe(duel, &my_views, &mine, &mut raw_foe),
+        vertical: control::foe(duel, &their_views, &theirs, &mut raw_foe),
     };
 
     let engaged = duel.samples.iter().filter(|s| s.foe.is_some()).count();
     Features {
+        raw_mine,
+        raw_foe,
+        smashes,
+        detections,
         engaged_secs: engaged as f64 / 20.0,
         split: Split::of(&mine),
         mine,

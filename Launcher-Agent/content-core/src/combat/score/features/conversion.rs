@@ -112,6 +112,7 @@ mod tests {
             realized: 0.0,
             fall,
             hit_fall: fall,
+            possible_fall: fall,
             offset: 1.0,
             target_speed: 0.0,
             behind_shield: false,

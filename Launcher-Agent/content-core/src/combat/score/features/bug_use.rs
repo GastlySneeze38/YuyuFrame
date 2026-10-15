@@ -10,17 +10,24 @@ use super::super::parse::{gear_at, Duel, Gear, SLOT_CHEST, SLOT_HAND};
 use super::control::{upward_teleport, Lunge};
 use super::{flag, sample_at, smash_bonus, view_at, Opportunity, View, ME_FLAGS, ON_GROUND, Y};
 
-/// Points de base de chaque technique réussie, selon sa rareté : posés au
-/// jugé (décision du 2026-10-14), *à calibrer*.
-const COOLDOWN_SWAP: f64 = 1.0;
-const LUNGE_SWAP: f64 = 1.0;
-const BREACH_SWAP: f64 = 2.0;
-const DENSITY_SWAP: f64 = 2.0;
-const REACH_SWAP: f64 = 2.0;
-const ELYTRA_SWAP: f64 = 2.0;
-const D_HAND: f64 = 3.0;
-const STUN_SLAM: f64 = 4.0;
-const INSTANT_PEARL_CATCH: f64 = 4.0;
+/// Une technique : son nom (celui de l'outil de calibration) et ses points de base.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Technique {
+    pub name: &'static str,
+    pub points: f64,
+}
+
+// Points de base de chaque technique réussie, selon sa rareté : posés au
+// jugé (décision du 2026-10-14), *à calibrer* sur leur fréquence réelle.
+const COOLDOWN_SWAP: Technique = Technique { name: "cooldown_swap", points: 1.0 };
+const LUNGE_SWAP: Technique = Technique { name: "lunge_swap", points: 1.0 };
+const BREACH_SWAP: Technique = Technique { name: "breach_swap", points: 2.0 };
+const DENSITY_SWAP: Technique = Technique { name: "density_swap", points: 2.0 };
+const REACH_SWAP: Technique = Technique { name: "reach_swap", points: 2.0 };
+const ELYTRA_SWAP: Technique = Technique { name: "elytra_swap", points: 2.0 };
+const D_HAND: Technique = Technique { name: "d_hand", points: 3.0 };
+const STUN_SLAM: Technique = Technique { name: "stun_slam", points: 4.0 };
+const INSTANT_PEARL_CATCH: Technique = Technique { name: "instant_pearl_catch", points: 4.0 };
 /// Plafond du bonus d'un duel (décision du 2026-10-14).
 pub const CAP: f64 = 10.0;
 
@@ -50,16 +57,30 @@ pub struct BugUse {
     pub foe_techniques: usize,
 }
 
+/// Une technique reconnue : quand, chez qui, et ce qu'elle a rapporté.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Detection {
+    pub t: u64,
+    pub by_me: bool,
+    pub name: &'static str,
+    pub points: f64,
+}
+
 #[derive(Default)]
 struct Tally {
     points: f64,
-    count: usize,
+    found: Vec<(u64, &'static str, f64)>,
 }
 
 impl Tally {
-    fn add(&mut self, base: f64, effect: f64) {
-        self.points += base * effect.clamp(1.0, 2.0);
-        self.count += 1;
+    fn add(&mut self, t: u64, technique: Technique, effect: f64) {
+        let points = technique.points * effect.clamp(1.0, 2.0);
+        self.points += points;
+        self.found.push((t, technique.name, points));
+    }
+
+    fn count(&self) -> usize {
+        self.found.len()
     }
 }
 
@@ -100,11 +121,11 @@ fn attack_swap(tally: &mut Tally, gear: &[Gear], t: u64, old: &str, new: &str, s
     // L'effet : le coup porté par un breach ou un density swap compte double quand c'est un smash.
     let effect = if smash { 2.0 } else { 1.0 };
     if level("breach") > 0.0 {
-        tally.add(BREACH_SWAP, effect);
+        tally.add(t, BREACH_SWAP, effect);
     } else if level("density") > 0.0 {
-        tally.add(DENSITY_SWAP, effect);
+        tally.add(t, DENSITY_SWAP, effect);
     } else {
-        tally.add(COOLDOWN_SWAP, 1.0);
+        tally.add(t, COOLDOWN_SWAP, 1.0);
     }
 }
 
@@ -114,7 +135,7 @@ fn d_hand(tally: &mut Tally, totems: &[u64], deaths: &[u64]) {
     while i + 1 < totems.len() {
         let (a, b) = (totems[i], totems[i + 1]);
         if b - a <= D_HAND_TICKS && !deaths.iter().any(|d| *d >= b && *d - b <= 20) {
-            tally.add(D_HAND, 1.0);
+            tally.add(b, D_HAND, 1.0);
             i += 2;
         } else {
             i += 1;
@@ -126,7 +147,7 @@ fn d_hand(tally: &mut Tally, totems: &[u64], deaths: &[u64]) {
 fn elytra_swap(tally: &mut Tally, gear: &[Gear], airborne: impl Fn(u64) -> bool) {
     for w in gear.windows(2) {
         if w[0].item(SLOT_CHEST) == "elytra" && w[1].item(SLOT_CHEST).ends_with("_chestplate") && airborne(w[1].t) {
-            tally.add(ELYTRA_SWAP, 1.0);
+            tally.add(w[1].t, ELYTRA_SWAP, 1.0);
         }
     }
 }
@@ -146,7 +167,7 @@ fn mine(duel: &Duel, my_views: &[View], mine: &[Opportunity], lunges: &[Lunge], 
         let Some(hit) = duel.hits.iter().find(|h| h.by_me && h.t >= attack.t && h.t <= attack.t + ATTACK_TO_HIT_TICKS + ping) else { continue };
         let far = view_at(my_views, attack.t, 2).is_some_and(|v| v.distance > PLAYER_REACH);
         if new.ends_with("_spear") && !old.ends_with("_spear") && far {
-            tally.add(REACH_SWAP, 1.0);
+            tally.add(attack.t, REACH_SWAP, 1.0);
         } else {
             attack_swap(&mut tally, &duel.my_gear, attack.t, old, new, hit.smash);
         }
@@ -160,7 +181,7 @@ fn mine(duel: &Duel, my_views: &[View], mine: &[Opportunity], lunges: &[Lunge], 
         let fresh = held_since.is_some_and(|since| lunge.t - since < recharge);
         let quick = last.is_some_and(|prev| lunge.t - prev < recharge);
         if fresh || quick {
-            tally.add(LUNGE_SWAP, 1.0);
+            tally.add(lunge.t, LUNGE_SWAP, 1.0);
         }
         last = Some(lunge.t);
     }
@@ -169,7 +190,7 @@ fn mine(duel: &Duel, my_views: &[View], mine: &[Opportunity], lunges: &[Lunge], 
     for broke in duel.shield_sounds.iter().filter(|s| !s.on_me && s.broke) {
         if let Some(hit) = duel.hits.iter().find(|h| h.by_me && h.smash && h.t >= broke.t && h.t <= broke.t + STUN_SLAM_TICKS) {
             let bonus = mine.iter().find(|o| o.hit == Some(hit.t)).map(|o| o.realized).unwrap_or(0.0);
-            tally.add(STUN_SLAM, 1.0 + (bonus / reference).min(1.0));
+            tally.add(hit.t, STUN_SLAM, 1.0 + (bonus / reference).min(1.0));
         }
     }
     // Instant pearl catch : perle et charge de vent à un tick d'écart, puis téléportation vers le haut.
@@ -181,7 +202,7 @@ fn mine(duel: &Duel, my_views: &[View], mine: &[Opportunity], lunges: &[Lunge], 
         let y0 = sample_at(&duel.samples, start).map(|s| s.me[Y]).unwrap_or(0.0);
         let peak = duel.samples.iter().filter(|s| s.t >= arrived && s.t <= arrived + 40).map(|s| s.me[Y]).fold(y0, f64::max);
         let leads = mine.iter().any(|o| o.open >= arrived && o.open - arrived <= 60);
-        tally.add(INSTANT_PEARL_CATCH, if leads { 1.0 + ((peak - y0) / PEARL_CATCH_HEIGHT).min(1.0) } else { 1.0 });
+        tally.add(start, INSTANT_PEARL_CATCH, if leads { 1.0 + ((peak - y0) / PEARL_CATCH_HEIGHT).min(1.0) } else { 1.0 });
     }
     elytra_swap(&mut tally, &duel.my_gear, |t| sample_at(&duel.samples, t).is_some_and(|s| !flag(s.me[ME_FLAGS], ON_GROUND)));
     d_hand(&mut tally, &duel.my_totems, &duel.my_deaths);
@@ -201,8 +222,8 @@ fn foe(duel: &Duel, their_views: &[View]) -> Tally {
         }
     }
     for broke in duel.shield_sounds.iter().filter(|s| s.on_me && s.broke) {
-        if duel.hits.iter().any(|h| !h.by_me && h.smash && h.t >= broke.t && h.t <= broke.t + STUN_SLAM_TICKS) {
-            tally.add(STUN_SLAM, 1.0);
+        if let Some(hit) = duel.hits.iter().find(|h| !h.by_me && h.smash && h.t >= broke.t && h.t <= broke.t + STUN_SLAM_TICKS) {
+            tally.add(hit.t, STUN_SLAM, 1.0);
         }
     }
     elytra_swap(&mut tally, &duel.foe_gear, |t| view_at(their_views, t, 2).is_some_and(|v| !v.grounded));
@@ -210,13 +231,18 @@ fn foe(duel: &Duel, their_views: &[View]) -> Tally {
     tally
 }
 
-pub fn extract(duel: &Duel, my_views: &[View], their_views: &[View], opportunities: &[Opportunity], lunges: &[Lunge], ping: u64) -> BugUse {
+/// Le bonus, et chaque technique reconnue des deux côtés.
+pub fn extract(duel: &Duel, my_views: &[View], their_views: &[View], opportunities: &[Opportunity], lunges: &[Lunge], ping: u64) -> (BugUse, Vec<Detection>) {
     // Tout repose sur l'objet au coup et l'équipement au tick près (version 2).
     if !duel.detailed() {
-        return BugUse::default();
+        return (BugUse::default(), Vec::new());
     }
     let (me, them) = (mine(duel, my_views, opportunities, lunges, ping), foe(duel, their_views));
-    BugUse { points: me.points.min(CAP), techniques: me.count, foe_points: them.points.min(CAP), foe_techniques: them.count }
+    let bonus = BugUse { points: me.points.min(CAP), techniques: me.count(), foe_points: them.points.min(CAP), foe_techniques: them.count() };
+    let mut found: Vec<Detection> = me.found.iter().map(|(t, name, points)| Detection { t: *t, by_me: true, name, points: *points }).collect();
+    found.extend(them.found.iter().map(|(t, name, points)| Detection { t: *t, by_me: false, name, points: *points }));
+    found.sort_by_key(|d| d.t);
+    (bonus, found)
 }
 
 #[cfg(test)]
@@ -235,24 +261,26 @@ mod tests {
         let list = vec![gear(10, "", "netherite_sword"), gear(11, "", "mace,breach=4")];
         let mut tally = Tally::default();
         attack_swap(&mut tally, &list, 10, "netherite_sword", "mace", true);
-        assert_eq!((tally.points, tally.count), (BREACH_SWAP * 2.0, 1));
+        assert_eq!((tally.points, tally.count()), (BREACH_SWAP.points * 2.0, 1));
+        assert_eq!(tally.found[0].1, "breach_swap");
         let plain = vec![gear(10, "", "netherite_sword"), gear(11, "", "mace")];
         let mut tally = Tally::default();
         attack_swap(&mut tally, &plain, 10, "netherite_sword", "mace", false);
-        assert_eq!(tally.points, COOLDOWN_SWAP);
+        assert_eq!(tally.points, COOLDOWN_SWAP.points);
         let mut tally = Tally::default();
         attack_swap(&mut tally, &plain, 10, "mace", "netherite_sword", false);
-        assert_eq!(tally.count, 0, "d'une arme lente vers une rapide : pas un swap utile");
+        assert_eq!(tally.count(), 0, "d'une arme lente vers une rapide : pas un swap utile");
     }
 
     #[test]
     fn deux_totems_coup_sur_coup_sans_mourir() {
         let mut tally = Tally::default();
         d_hand(&mut tally, &[100, 120], &[]);
-        assert_eq!(tally.points, D_HAND);
+        assert_eq!(tally.points, D_HAND.points);
+        assert_eq!(tally.found[0].0, 120, "au tick du deuxième totem");
         let mut tally = Tally::default();
         d_hand(&mut tally, &[100, 120], &[125]);
-        assert_eq!(tally.count, 0, "mort juste après : le deuxième n'a pas sauvé");
+        assert_eq!(tally.count(), 0, "mort juste après : le deuxième n'a pas sauvé");
     }
 
     #[test]
@@ -260,10 +288,10 @@ mod tests {
         let list = vec![gear(10, "elytra", "mace"), gear(30, "netherite_chestplate", "mace")];
         let mut tally = Tally::default();
         elytra_swap(&mut tally, &list, |_| true);
-        assert_eq!(tally.points, ELYTRA_SWAP);
+        assert_eq!(tally.points, ELYTRA_SWAP.points);
         let mut tally = Tally::default();
         elytra_swap(&mut tally, &list, |_| false);
-        assert_eq!(tally.count, 0, "au sol, ce n'est qu'un changement d'équipement");
+        assert_eq!(tally.count(), 0, "au sol, ce n'est qu'un changement d'équipement");
     }
 
     #[test]

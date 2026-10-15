@@ -102,7 +102,7 @@ public final class CombatTracker {
             return false;
         });
         VanillaHookRegistry.register(HookPoint.SOUND_PLAYED, ctx -> {
-            if (active && ctx instanceof SoundPlayed) guarded(() -> shieldSound((SoundPlayed) ctx));
+            if (active && ctx instanceof SoundPlayed) guarded(() -> combatSound((SoundPlayed) ctx));
             return false;
         });
         VanillaHookRegistry.register(HookPoint.ITEM_COOLDOWN, ctx -> {
@@ -299,13 +299,17 @@ public final class CombatTracker {
     }
 
     /**
-     * Le son du bouclier — blocage ({@code item.shield.block}) ou bouclier
-     * désactivé ({@code item.shield.break}) — rattaché au joueur sur qui il
-     * est joué : le plus proche de sa position, à moins de 2 blocs. Les autres
-     * sons ne sont pas transmis.
+     * Les sons du combat, rattachés au joueur sur qui ils sont joués : le plus
+     * proche de leur position, à moins de 2 blocs. Le son du bouclier —
+     * blocage ({@code item.shield.block}) ou bouclier désactivé
+     * ({@code item.shield.break}) — est joué aux pieds de celui qui bloque ;
+     * celui du coup critique ({@code entity.player.attack.crit}) aux pieds de
+     * celui qui frappe ({@code Player.attackVisualEffects}, jar 26.3) : c'est
+     * la seule trace du critique de l'adversaire. Les autres sons ne sont pas
+     * transmis.
      */
-    private static void shieldSound(SoundPlayed sound) {
-        if (sound.sound == null || !sound.sound.startsWith("item.shield")) {
+    private static void combatSound(SoundPlayed sound) {
+        if (sound.sound == null || !(sound.sound.startsWith("item.shield") || sound.sound.equals(CRIT_SOUND))) {
             return;
         }
         Object players = AccessorRegistry.get(AccessPoint.LEVEL_PLAYERS, null);
@@ -329,8 +333,10 @@ public final class CombatTracker {
         NativeCombat.event(NativeCombat.EVENT_SOUND, nearest, 0, 0, sound.sound);
     }
 
-    /** Distance au-delà de laquelle un son n'est rattaché à aucun joueur. Le son est joué aux pieds de celui qui bloque. */
+    /** Distance au-delà de laquelle un son n'est rattaché à aucun joueur. */
     private static final double SOUND_MATCH = 2.0;
+    /** Le son du coup critique ({@code SoundEvents.PLAYER_ATTACK_CRIT}). */
+    private static final String CRIT_SOUND = "entity.player.attack.crit";
 
     private static int selfFlags(Object self) {
         boolean[] move = PlayerData.movementFlags();

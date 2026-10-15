@@ -22,6 +22,8 @@ const CRIT: f64 = 1.5;
 const CRIT_CHARGE: f64 = 0.9;
 /// Un coup donné et son paquet de dégâts : au plus ce délai, ping compris.
 const ATTACK_TO_HIT_TICKS: u64 = 4;
+/// Écart toléré entre le son d'un critique et le paquet de dégâts du coup.
+const CRIT_SOUND_TICKS: u64 = 2;
 /// Durée maximale d'approche d'une charge de lance qu'on remonte.
 const APPROACH_TICKS: u64 = 100;
 
@@ -60,47 +62,98 @@ fn attack_tick(duel: &Duel, hit: u64, ping: u64) -> Option<u64> {
     duel.attacks.iter().rev().find(|a| a.on_foe && a.t <= hit && hit - a.t <= ATTACK_TO_HIT_TICKS + ping).map(|a| a.t)
 }
 
-/// Mes gros coups : la famille, et la charge moyenne à mes smashs.
-pub fn mine(duel: &Duel, mine: &[Opportunity], views: &[View], ping: u64) -> (Measure, Option<f64>) {
+/// Un smash réussi, tel que la famille le juge (relevé pour l'outil de calibration).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Smash {
+    pub t: u64,
+    pub by_me: bool,
+    /// Chute au coup, et chute possible en attendant le plus possible.
+    pub hit_fall: f64,
+    pub possible_fall: f64,
+    /// Charge au coup (la nôtre seulement), critique, sprint au coup ; `None` quand on ne le sait pas.
+    pub charge: Option<f64>,
+    pub crit: Option<bool>,
+    pub sprinting: Option<bool>,
+    /// Dégâts tirés ÷ dégâts possibles.
+    pub ratio: f64,
+}
+
+/// Un critique joué sur ce joueur près du paquet de dégâts : le son part du
+/// serveur au moment du coup, avec le paquet (deux ticks de marge).
+fn crit_heard(duel: &Duel, hit: u64, by_me: bool) -> bool {
+    duel.crits.iter().any(|(t, on_me)| *on_me == by_me && t.abs_diff(hit) <= CRIT_SOUND_TICKS)
+}
+
+/// Mes gros coups : la famille, et chaque smash jugé.
+pub fn mine(duel: &Duel, mine: &[Opportunity], views: &[View], ping: u64) -> (Measure, Vec<Smash>) {
     let mut ratios = Vec::new();
-    let mut charges = Vec::new();
+    let mut smashes = Vec::new();
     for o in mine.iter().filter(|o| o.converted) {
         let hit = o.hit.unwrap_or(o.close);
         let bonus_hit = smash_bonus(o.hit_fall, duel.my_density);
-        let bonus_max = smash_bonus(o.fall, duel.my_density).max(bonus_hit);
+        let bonus_max = smash_bonus(o.possible_fall, duel.my_density).max(bonus_hit);
         // L'objet au coup n'est connu que depuis la version 2 : sans lui, on
         // ne sait pas reconnaître un swap, et la charge reste hors de la note
         // (décision du 2026-10-14) — seul le moment du coup est jugé.
         let at = attack_tick(duel, hit, ping).filter(|_| duel.detailed());
         let sample = at.and_then(|t| sample_at(&duel.samples, t));
-        let ratio = match sample {
+        let mut smash = Smash { t: hit, by_me: true, hit_fall: o.hit_fall, possible_fall: o.possible_fall, charge: None, crit: None, sprinting: None, ratio: 0.0 };
+        smash.ratio = match sample {
             Some(s) => {
                 let charge = s.me[ME_CHARGE].clamp(0.0, 1.0);
-                charges.push(charge);
                 let flags = s.me[ME_FLAGS];
-                let crit = charge > CRIT_CHARGE && !flag(flags, SPRINTING) && !flag(flags, IN_WATER) && !flag(flags, PASSENGER);
+                // Le son du critique, quand le journal le porte, plutôt que de le déduire.
+                let crit = if duel.sees_crits() {
+                    crit_heard(duel, hit, true)
+                } else {
+                    charge > CRIT_CHARGE && !flag(flags, SPRINTING) && !flag(flags, IN_WATER) && !flag(flags, PASSENGER)
+                };
+                smash.charge = Some(charge);
+                smash.crit = Some(crit);
+                smash.sprinting = Some(flag(flags, SPRINTING));
                 let dealt = (MACE_BASE * charge_factor(charge) + bonus_hit) * if crit { CRIT } else { 1.0 };
                 dealt / ((MACE_BASE + bonus_max) * CRIT)
             }
             None => (MACE_BASE + bonus_hit) / (MACE_BASE + bonus_max),
-        };
-        ratios.push(ratio.min(1.0));
+        }
+        .min(1.0);
+        ratios.push(smash.ratio);
+        smashes.push(smash);
     }
     if duel.detailed() {
         ratios.extend(spear_charges(duel, views, true, ping));
     }
-    let smash_charge = (!charges.is_empty()).then(|| charges.iter().sum::<f64>() / charges.len() as f64);
-    (Measure::rate(ratios.iter().sum(), ratios.len() as f64), smash_charge)
+    (Measure::rate(ratios.iter().sum(), ratios.len() as f64), smashes)
 }
 
-/// Ses gros coups. Sa charge ne se voit pas : sa qualité ne mesure que le
-/// moment du coup — chute au coup ÷ plus grosse chute de sa fenêtre.
-pub fn foe(duel: &Duel, theirs: &[Opportunity], views: &[View]) -> Measure {
-    let mut ratios: Vec<f64> = theirs.iter().filter(|o| o.converted && o.fall > 0.0).map(|o| (o.hit_fall / o.fall).min(1.0)).collect();
+/// Ses gros coups. Sa charge ne se voit pas, son critique si (version 3 :
+/// le son joué sur lui) : on le juge comme nous, la charge tenue pour
+/// pleine — elle ne pèse que sur les dégâts de base, le critique sur tout.
+/// Dans un journal plus ancien, seul le moment du coup est jugé : chute au
+/// coup ÷ chute possible.
+pub fn foe(duel: &Duel, theirs: &[Opportunity], views: &[View]) -> (Measure, Vec<Smash>) {
+    let mut ratios = Vec::new();
+    let mut smashes = Vec::new();
+    for o in theirs.iter().filter(|o| o.converted && o.possible_fall > 0.0) {
+        let hit = o.hit.unwrap_or(o.close);
+        let mut smash = Smash { t: hit, by_me: false, hit_fall: o.hit_fall, possible_fall: o.possible_fall, charge: None, crit: None, sprinting: None, ratio: 0.0 };
+        smash.ratio = if duel.sees_crits() {
+            let crit = crit_heard(duel, hit, false);
+            smash.crit = Some(crit);
+            let bonus_hit = smash_bonus(o.hit_fall, duel.foe_density);
+            let bonus_max = smash_bonus(o.possible_fall, duel.foe_density).max(bonus_hit);
+            (MACE_BASE + bonus_hit) * if crit { CRIT } else { 1.0 } / ((MACE_BASE + bonus_max) * CRIT)
+        } else {
+            o.hit_fall / o.possible_fall
+        }
+        .min(1.0);
+        ratios.push(smash.ratio);
+        smashes.push(smash);
+    }
     if duel.detailed() {
         ratios.extend(spear_charges(duel, views, false, 0));
     }
-    Measure::rate(ratios.iter().sum(), ratios.len() as f64)
+    (Measure::rate(ratios.iter().sum(), ratios.len() as f64), smashes)
 }
 
 /// Les charges de lance qui ont touché, chacune en dégâts tirés ÷ dégâts

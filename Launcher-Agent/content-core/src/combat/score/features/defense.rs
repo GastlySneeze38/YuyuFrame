@@ -12,7 +12,7 @@
 //! trois premières : affichés, hors note.
 
 use super::super::parse::{Duel, SLOT_HAND, SLOT_OFFHAND};
-use super::{blend, centered, conversion, descents, mean, measure, sample_at, smash_bonus, Measure, Opportunity, Part, View, HEIGHT_ADVANTAGE, HIT_DELAY_TICKS, ME_HEALTH, MIN_FALL, REACH};
+use super::{blend, centered, conversion, descents, family, mean, sample_at, smash_bonus, Measure, Opportunity, Part, Raw, View, HEIGHT_ADVANTAGE, HIT_DELAY_TICKS, ME_HEALTH, MIN_FALL, REACH};
 
 // Poids des mesures, posés au jugé (décision du 2026-10-14), *à calibrer*.
 const W_SHIELD: f64 = 0.30;
@@ -155,18 +155,20 @@ impl Defender<'_> {
         }))
     }
 
-    fn family(&self, landing: Part) -> Measure {
+    fn family(&self, landing: Part, raw: &mut Raw) -> Measure {
         // Les ouvertures laissées sont déjà centrées par construction (0,5 :
         // comme un joueur moyen), atterrir proprement ne mesure qu'une erreur
         // (1 : aucune) : ni l'une ni l'autre n'est recentrée.
-        measure(blend(&[
-            (W_SHIELD, centered(self.shield(), SHIELD_CENTER)),
-            (W_OPENINGS, self.openings()),
-            (W_VULNERABLE, centered(self.vulnerable(), VULNERABLE_CENTER)),
-            (W_DODGE, centered(self.dodge(), DODGE_CENTER)),
-            (W_LANDING, landing),
-            (W_RECOVERY, centered(self.recovery(), RECOVERY_CENTER)),
-        ]))
+        let combined = blend(&[
+            (W_SHIELD, centered(raw.put("defense.shield", self.shield()), SHIELD_CENTER)),
+            (W_OPENINGS, raw.put("defense.openings", self.openings())),
+            (W_VULNERABLE, centered(raw.put("defense.vulnerable", self.vulnerable()), VULNERABLE_CENTER)),
+            (W_DODGE, centered(raw.put("defense.dodge", self.dodge()), DODGE_CENTER)),
+            (W_LANDING, raw.put("defense.landing", landing)),
+            (W_RECOVERY, centered(raw.put("defense.recovery", self.recovery()), RECOVERY_CENTER)),
+        ]);
+        // Les situations défensives : ses opportunités, ses smashs arrêtés, les gardes cassées.
+        family(combined, (self.attacks.len() + self.blocks.len() + self.breaks) as f64)
     }
 
     /// Les dégâts évités : la part de ce qu'il pouvait mettre qu'il n'a pas
@@ -208,7 +210,7 @@ fn holds_shield(gear: &[super::super::parse::Gear]) -> bool {
 }
 
 /// Notre défense, et les dégâts évités.
-pub fn mine(duel: &Duel, _mine_views: &[View], their_views: &[View], mine: &[Opportunity], theirs: &[Opportunity]) -> (Measure, Option<f64>) {
+pub fn mine(duel: &Duel, their_views: &[View], mine: &[Opportunity], theirs: &[Opportunity], raw: &mut Raw) -> (Measure, Option<f64>) {
     let sounds = |broke: bool| duel.shield_sounds.iter().filter(move |s| s.on_me && s.broke == broke).map(|s| s.t);
     let defender = Defender {
         views: their_views,
@@ -221,13 +223,13 @@ pub fn mine(duel: &Duel, _mine_views: &[View], their_views: &[View], mine: &[Opp
         sees_blocks: duel.detailed(),
         hits_taken: duel.hits.iter().filter(|h| !h.by_me).map(|h| h.t).collect(),
     };
-    (defender.family(landing(duel, mine)), defender.avoided())
+    (defender.family(landing(duel, mine), raw), defender.avoided())
 }
 
 /// La sienne, en miroir. Atterrir proprement ne se mesure pas : on ne voit
 /// pas sa vie. Ses gardes cassées : le son seulement, sa recharge ne nous
 /// est pas envoyée.
-pub fn foe(duel: &Duel, my_views: &[View], _their_views: &[View], mine: &[Opportunity]) -> Measure {
+pub fn foe(duel: &Duel, my_views: &[View], mine: &[Opportunity], raw: &mut Raw) -> Measure {
     let sounds = |broke: bool| duel.shield_sounds.iter().filter(move |s| !s.on_me && s.broke == broke).map(|s| s.t);
     let defender = Defender {
         views: my_views,
@@ -239,7 +241,7 @@ pub fn foe(duel: &Duel, my_views: &[View], _their_views: &[View], mine: &[Opport
         sees_blocks: duel.detailed(),
         hits_taken: duel.hits.iter().filter(|h| h.by_me).map(|h| h.t).collect(),
     };
-    defender.family(None)
+    defender.family(None, raw)
 }
 
 #[cfg(test)]

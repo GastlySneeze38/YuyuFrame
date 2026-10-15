@@ -316,8 +316,8 @@ final class PvpInfoModal {
             "Les chances sont posées à la main en attendant d'être apprises sur vos duels.",
             "Pour la monter : ne laissez pas passer les ouvertures faciles, collé à lui et sur une chute courte."));
         list.add(family(report, 1, "Qualité du smash",
-            "Ce que vous tirez de vos gros coups. Pour chaque smash réussi : les dégâts portés divisés par les dégâts possibles. Possibles : masse chargée à fond, coup critique, et la plus grosse chute de la fenêtre.",
-            "Deux erreurs y coûtent : frapper trop tôt, avec moins de chute que la fenêtre ne le permettait, et frapper mal chargé (moins de dégâts de base, pas de critique). La charge est celle que le jeu compte au coup : un attribute swap qui garde la charge de l'arme d'avant compte comme un coup bien chargé.",
+            "Ce que vous tirez de vos gros coups. Pour chaque smash réussi : les dégâts portés divisés par les dégâts possibles. Possibles : masse chargée à fond, coup critique, et la chute qu'aurait eue le coup en attendant que vos pieds arrivent à la hauteur de sa tête.",
+            "Deux erreurs y coûtent : frapper trop tôt, avec moins de chute que vous pouviez en prendre, et frapper mal chargé (moins de dégâts de base, pas de critique). La charge est celle que le jeu compte au coup : un attribute swap qui garde la charge de l'arme d'avant compte comme un coup bien chargé.",
             "La charge de la lance compte aussi : les dégâts à la vitesse de l'impact divisés par ceux que permettait la plus grande vitesse de l'approche.",
             "La hauteur elle-même n'y compte pas : elle est déjà dans la conversion et le contrôle. Les coups ordinaires ne rapportent rien. La valeur de référence est 75 %.",
             "Pour la monter : attendez le bas de la chute pour frapper, avec la barre d'attaque pleine et sans sprinter."));
