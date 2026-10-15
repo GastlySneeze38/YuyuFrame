@@ -31,11 +31,18 @@ use super::features::{Features, Measure};
 // reconnu à la masse qui apparaît après son smash.
 // Version 12 (2026-10-15) : centres recalés sur 23 duels, grosse chute à 14
 // blocs, « atterrir proprement » seulement quand une chute a fait mal.
-pub const SCORE_VERSION: u32 = 12;
+// Version 13 (2026-10-15) : lissage à 2 événements au lieu de 5.
+pub const SCORE_VERSION: u32 = 13;
 
 /// Poids du lissage : une famille observée sur `K` événements compte autant
-/// que sa référence.
-const K: f64 = 5.0;
+/// que sa référence. Ramené de 5 à 2 le 2026-10-15 : sur peu de matière, la
+/// moyenne effaçait ce qui s'était passé — deux smashs ratés donnaient 24
+/// au lieu de 8. Un seul événement compte maintenant pour un tiers.
+const K: f64 = 2.0;
+/// La confiance affichée garde son échelle d'origine : 5 opportunités
+/// donnent 50 %, 20 en donnent 80 %. Elle dit sur combien la note repose,
+/// indépendamment du lissage.
+const K_CONFIDENCE: f64 = 5.0;
 /// En dessous, le duel n'est pas noté.
 const MIN_OPPORTUNITIES: usize = 3;
 const MIN_ENGAGED_SECS: f64 = 20.0;
@@ -203,7 +210,7 @@ pub fn rate(features: &Features, prior: &Prior) -> Rating {
         base_score,
         bug_use,
         reason,
-        confidence: n / (n + K),
+        confidence: n / (n + K_CONFIDENCE),
         conversion: subs[0],
         smash_quality: subs[1],
         exposure: subs[2],
@@ -318,7 +325,7 @@ mod tests {
     fn peu_d_evenements_ramene_vers_la_reference() {
         let perfect_on_two = sub(Measure { value: 1.0, count: 2.0 }, &CONVERSION);
         assert!((perfect_on_two.smoothed - (2.0 + K * CONVERSION.mean) / (2.0 + K)).abs() < 1e-12);
-        assert!(perfect_on_two.smoothed < 0.7, "un 100 % sur deux opportunités ne vaut pas 100 %");
+        assert!(perfect_on_two.smoothed < 0.8, "un 100 % sur deux opportunités ne vaut pas 100 %");
         let nothing = sub(Measure { value: 0.0, count: 0.0 }, &CONVERSION);
         assert_eq!(nothing.z, 0.0, "aucun événement : la famille ne pèse rien");
     }

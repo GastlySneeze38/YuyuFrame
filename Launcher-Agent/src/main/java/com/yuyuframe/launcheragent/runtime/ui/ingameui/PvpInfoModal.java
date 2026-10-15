@@ -388,7 +388,7 @@ final class PvpInfoModal {
 
         list.add(new Topic("Du chiffre à la note",
             "# 1. Lissage",
-            "Une famille mesurée sur peu d'événements est tirée vers la référence : on compte la référence comme 5 événements de plus. Deux smashs réussis sur deux ne valent donc pas 100 %.",
+            "Une famille mesurée sur peu d'événements est tirée vers la référence : on compte la référence comme 2 événements de plus. Un seul événement compte donc pour un tiers, et deux smashs réussis sur deux ne valent pas 100 %.",
             "# 2. Écart",
             "La valeur lissée est comparée à la référence, en nombre d'écarts habituels entre joueurs. Un écart de 0, c'est exactement la référence.",
             "# 3. Combinaison",
