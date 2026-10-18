@@ -1,5 +1,6 @@
 package com.yuyuframe.launcheragent.celeritas.nativecore;
 
+import com.yuyuframe.launcheragent.base.AgentFiles;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.celeritas.chunk.sorting.PartitionTree;
 import com.yuyuframe.launcheragent.celeritas.chunk.sorting.SortState;
@@ -65,12 +66,9 @@ public final class NativeSort {
             LauncherLog.renderer(2, "Tri natif du translucide désactivé (" + PROPERTY + "=false)");
             return null;
         }
-        String appData = System.getenv("APPDATA");
-        if (appData == null) {
-            return null;
-        }
-        Path dll = Path.of(appData, "YuyuFrame", "agent", "content_core.dll");
-        if (!Files.isRegularFile(dll)) {
+        Path dll = AgentFiles.contentCore();
+        if (dll == null || !Files.isRegularFile(dll)) {
+            LauncherLog.warn("[RENDERER] Tri natif du translucide indisponible : content_core.dll introuvable (" + dll + ")");
             return null;
         }
         try {

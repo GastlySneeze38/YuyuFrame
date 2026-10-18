@@ -1,5 +1,6 @@
 package com.yuyuframe.launcheragent.celeritas.v1_8_9.nativecore;
 
+import com.yuyuframe.launcheragent.base.AgentFiles;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 
 import java.lang.foreign.Arena;
@@ -81,13 +82,8 @@ public final class NativeMesh {
             LauncherLog.renderer(2, "Noyau natif du maillage désactivé (" + PROPERTY + "=false)");
             return null;
         }
-        String appData = System.getenv("APPDATA");
-        if (appData == null) {
-            return null;
-        }
-        // Même emplacement que ContentBridge (JNI) et NativeMouse (FFM).
-        Path dll = Path.of(appData, "YuyuFrame", "agent", "content_core.dll");
-        if (!Files.isRegularFile(dll)) {
+        Path dll = AgentFiles.contentCore();
+        if (dll == null || !Files.isRegularFile(dll)) {
             LauncherLog.warn("[RENDERER] Noyau natif du maillage indisponible : " + dll + " absente — calcul Java gardé");
             return null;
         }

@@ -102,11 +102,9 @@ public final class LauncherLog {
             if (is != null) props.load(is);
         } catch (Exception ignored) {}
 
-        String externPath = System.getenv("APPDATA") != null
-            ? System.getenv("APPDATA") + "\\YuyuFrame\\agent\\" + PROPS_FILENAME
-            : null;
+        java.nio.file.Path externPath = com.yuyuframe.launcheragent.base.AgentFiles.file(PROPS_FILENAME);
         if (externPath != null) {
-            java.io.File external = new java.io.File(externPath);
+            java.io.File external = externPath.toFile();
             if (external.exists()) {
                 try (java.io.FileInputStream fis = new java.io.FileInputStream(external)) {
                     props.load(fis);
@@ -213,8 +211,8 @@ public final class LauncherLog {
     // ── Fichier permanent, indépendant de la capture console (peu fiable) ────
 
     private static final String LOG_PATH =
-        System.getenv("APPDATA") != null
-            ? System.getenv("APPDATA") + "\\YuyuFrame\\agent\\logs\\launcher-agent.log"
+        com.yuyuframe.launcheragent.base.AgentFiles.dir() != null
+            ? com.yuyuframe.launcheragent.base.AgentFiles.file("logs", "launcher-agent.log").toString()
             : null;
 
     private static java.io.Writer fileWriter;

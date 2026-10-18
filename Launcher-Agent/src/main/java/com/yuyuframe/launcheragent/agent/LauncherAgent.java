@@ -29,7 +29,7 @@ import java.util.List;
  */
 public class LauncherAgent {
 
-    private static final String BUILD_VERSION = "2026-10-15-v1377";
+    private static final String BUILD_VERSION = "2026-10-18-v1379";
 
     /** Accesseur public — voir {@code YfCommands} ("/yf version"/"/yf report"), Phase 4.5. */
     public static String buildVersion() { return BUILD_VERSION; }
@@ -44,6 +44,11 @@ public class LauncherAgent {
     }
 
     private static void premain0(String agentArgs, Instrumentation inst) {
+        // Avant tout : relève le dossier de l'agent depuis le classloader
+        // système, seul à coup sûr dans le vrai jar, et le publie pour les
+        // autres classloaders (voir AgentFiles). LauncherLog en dépend.
+        com.yuyuframe.launcheragent.base.AgentFiles.dir();
+
         // Tout premier appel : lit launcher-agent.properties (log.agent=3 etc.)
         // et applique les seuils AVANT le moindre autre log. Sans ça, les
         // seuils restent à leur valeur par défaut (3 = critique seul) jusqu'à

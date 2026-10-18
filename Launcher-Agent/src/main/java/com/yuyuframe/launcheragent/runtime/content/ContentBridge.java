@@ -1,10 +1,11 @@
 package com.yuyuframe.launcheragent.runtime.content;
 
+import com.yuyuframe.launcheragent.base.AgentFiles;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 
 /**
  * Pont Java → Rust via JNI dédié à LauncherAgent.
- * Charge content_core.dll depuis %APPDATA%\YuyuFrame\agent\ — DLL
+ * Charge content_core.dll depuis le dossier de l'agent ({@link AgentFiles}) — DLL
  * séparée de rust_core.dll (p2p), déployée dans son propre sous-dossier
  * pour ne jamais mélanger les deux agents (voir docs/LauncherAgent/index.md).
  *
@@ -27,12 +28,10 @@ public final class ContentBridge {
         if (loadAttempted) return false;
         loadAttempted = true;
 
-        String appData = System.getenv("APPDATA");
-        String path = appData != null
-            ? appData + "\\YuyuFrame\\agent\\content_core.dll"
-            : "content_core (via java.library.path)";
+        java.nio.file.Path dll = AgentFiles.contentCore();
+        String path = dll != null ? dll.toString() : "content_core (via java.library.path)";
         try {
-            if (appData != null) System.load(appData + "\\YuyuFrame\\agent\\content_core.dll");
+            if (dll != null) System.load(dll.toAbsolutePath().toString());
             else System.loadLibrary("content_core");
             loaded = true;
             LauncherLog.content(3, "[LauncherAgent] content_core.dll chargée");

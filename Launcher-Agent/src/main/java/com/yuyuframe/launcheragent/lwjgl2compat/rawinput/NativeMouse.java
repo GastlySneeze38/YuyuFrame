@@ -60,10 +60,19 @@ public final class NativeMouse {
 			LegacyLwjgl3.info("Souris brute native désactivée (" + PROPERTY + "=false)");
 			return null;
 		}
+		// Ce jar est à part (lwjgl2-compat.jar) : il ne voit pas AgentFiles,
+		// mais lit le dossier que l'agent a publié en tête de premain — le
+		// dossier de stockage du launcher se déplace, %APPDATA% n'est que le
+		// défaut.
+		String agentDir = System.getProperty("launcheragent.dir");
 		String appData = System.getenv("APPDATA");
-		if (appData == null) return null;
-		// Même emplacement que ContentBridge (agent), qui la charge par JNI.
-		Path dll = Path.of(appData, "YuyuFrame", "agent", "content_core.dll");
+		Path dll;
+		if (agentDir != null && !agentDir.isEmpty()) dll = Path.of(agentDir, "content_core.dll");
+		else if (appData != null) dll = Path.of(appData, "YuyuFrame", "agent", "content_core.dll");
+		else {
+			LegacyLwjgl3.warn("Souris brute native indisponible : dossier de l'agent inconnu");
+			return null;
+		}
 		if (!Files.isRegularFile(dll)) {
 			LegacyLwjgl3.warn("Souris brute native indisponible : " + dll + " absente");
 			return null;

@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { api } from '@/api/client'
-import type { FleetConfig } from '@/api/client'
+import type { FleetAnnouncement, FleetConfig } from '@/api/client'
 
 /**
  * Pilotage du launcher depuis le back-office (`GET /v1/config`, catégorie
@@ -45,6 +45,12 @@ interface FleetStore {
    *  (événement `fleet_config`) — voir `FleetNotices`. */
   apply: (config: FleetConfig) => void
   dismiss: (id: string) => void
+  /** Bannière d'accueil imposée par l'atelier de développement
+   *  (`pages/DevModals.tsx`) ; jamais lue hors `import.meta.env.DEV`. Elle vit
+   *  à côté de `config` et non dedans : la configuration est remplacée en
+   *  entier à chaque chargement, l'essai disparaîtrait au bout d'une minute. */
+  devHomeBanner: FleetAnnouncement | null
+  setDevHomeBanner: (banner: FleetAnnouncement | null) => void
   /** Une clé inconnue vaut « activée ». */
   isEnabled: (key: string) => boolean
   flagMessage: (key: string) => string | null
@@ -69,6 +75,8 @@ export const useFleet = create<FleetStore>((set, get) => ({
   },
   apply: (config) => set({ config }),
   dismiss: (id) => set({ dismissed: [...get().dismissed, id] }),
+  devHomeBanner: null,
+  setDevHomeBanner: (devHomeBanner) => set({ devHomeBanner }),
   isEnabled: (key) => {
     const flag = get().config.flags.find((f) => f.key === key)
     return flag ? flag.enabled : true

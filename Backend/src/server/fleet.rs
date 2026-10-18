@@ -48,7 +48,7 @@ pub struct Announcement {
     pub kicker: Option<String>,
     #[serde(default)]
     pub title: Option<String>,
-    /// none | festive
+    /// none | festive | halloween
     #[serde(default = "none")]
     pub theme: String,
     pub ends_at: Option<String>,

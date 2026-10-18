@@ -253,8 +253,8 @@ public final class SkinPoster {
     private static boolean memoryLoaded;
 
     private static File memoryFile() {
-        String appData = System.getenv("APPDATA");
-        return appData == null ? null : new File(appData + "\\YuyuFrame\\agent\\skin-servers.properties");
+        java.nio.file.Path path = com.yuyuframe.launcheragent.base.AgentFiles.file("skin-servers.properties");
+        return path == null ? null : path.toFile();
     }
 
     private static String remembered(String key) {

@@ -82,14 +82,16 @@ public final class HudConfigStore {
     private static final String CONFIG_PATH = computeConfigPath();
 
     private static String computeConfigPath() {
-        String appData = System.getenv("APPDATA");
-        if (appData == null) return null;
+        // Même dossier que le launcher (agent_options.rs) : celui de l'agent,
+        // qui suit le dossier de stockage choisi.
+        if (com.yuyuframe.launcheragent.base.AgentFiles.dir() == null) return null;
         String userDir = System.getProperty("user.dir", "");
         String instanceSlug = userDir.replace('\\', '/');
         int lastSlash = instanceSlug.lastIndexOf('/');
         instanceSlug = lastSlash >= 0 ? instanceSlug.substring(lastSlash + 1) : instanceSlug;
         if (instanceSlug.isEmpty()) instanceSlug = "default";
-        return appData + "\\YuyuFrame\\agent\\module-config\\" + instanceSlug + ".properties";
+        return com.yuyuframe.launcheragent.base.AgentFiles
+            .file("module-config", instanceSlug + ".properties").toString();
     }
 
     private static final Properties DATA = new Properties();

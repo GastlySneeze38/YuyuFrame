@@ -115,12 +115,12 @@ final class YfCommands {
             public String description() { return "Dump un snapshot (version, bracket MC, modules actifs) prêt pour le support"; }
             public void execute(String[] args) {
                 try {
-                    String appData = System.getenv("APPDATA");
-                    if (appData == null) {
-                        LauncherLog.err("[YfCommands] /yf report: APPDATA introuvable");
+                    java.nio.file.Path reports = com.yuyuframe.launcheragent.base.AgentFiles.file("reports");
+                    if (reports == null) {
+                        LauncherLog.err("[YfCommands] /yf report: dossier de l'agent introuvable");
                         return;
                     }
-                    File dir = new File(appData, "YuyuFrame\\agent\\reports");
+                    File dir = reports.toFile();
                     dir.mkdirs();
                     String timestamp = String.valueOf(System.currentTimeMillis());
                     File out = new File(dir, "report-" + timestamp + ".txt");

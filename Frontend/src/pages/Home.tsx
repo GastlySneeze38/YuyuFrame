@@ -15,7 +15,7 @@ import { showError, showNotice } from '@/stores/useErrorToast'
 import { InstanceSwitchModal } from '@/components/instances/InstanceSwitchModal'
 import { WelcomeSequence } from '@/components/home/WelcomeSequence'
 import { homeGreeting } from '@/lib/greeting'
-import { HomeBanner, Confetti, useHomeBanner } from '@/components/home/HomeBanner'
+import { HomeBanner, Confetti, HalloweenSky, useHomeBanner } from '@/components/home/HomeBanner'
 import { ProCard } from '@/components/home/ProCard'
 import { LaunchSweep } from '@/components/home/LaunchSweep'
 import { AgentModal, WarningIcon } from '@/components/home/AgentModal'
@@ -223,6 +223,7 @@ export default function Home() {
   // panneau passe en habillage festif.
   const banner = useHomeBanner()
   const festive = banner?.theme === 'festive'
+  const halloween = banner?.theme === 'halloween'
   // La bannière attend la fin de la séquence — sauf quand il n'y a plus de
   // séquence à attendre, auquel cas elle est là tout de suite.
   const [bannerReady, setBannerReady] = useState(false)
@@ -566,6 +567,15 @@ export default function Home() {
             className="absolute inset-0 bg-[linear-gradient(180deg,#160a14_0%,#3a1230_38%,#7a2340_72%,#c2543c_100%)]"
           />
           {festive && <Confetti />}
+
+          {/* Nuit d'Halloween : même fondu par-dessus la nuit ordinaire, vers
+              un ciel violet sombre qui rougeoie à l'horizon. */}
+          <motion.div
+            animate={{ opacity: halloween ? 1 : 0 }}
+            transition={{ duration: 1.1 }}
+            className="absolute inset-0 bg-[linear-gradient(180deg,#05020a_0%,#140822_30%,#2a0f2c_55%,#4a1620_78%,#7a2a10_100%)]"
+          />
+          {halloween && <HalloweenSky />}
 
           {/* Aurore et étoiles : le panneau respire en permanence. Il n'y a
               plus d'interrupteur — un fond vivant n'est pas une option qu'on

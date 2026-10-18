@@ -38,9 +38,9 @@ use super::options::McOption;
 /// Dossier des configurations de modules.
 ///
 /// Suit la racine de données du launcher (`paths::root()`), comme le dépôt du
-/// jar de l'agent (`agent_deploy::launcher_agent_dir`). Note : `HudConfigStore`
-/// côté Java lit `%APPDATA%` directement, donc les deux ne désignent le même
-/// dossier que tant que la racine n'a pas été déplacée depuis les réglages.
+/// jar de l'agent (`agent_deploy::launcher_agent_dir`). `HudConfigStore` côté
+/// Java prend le dossier où il a trouvé son jar (`AgentFiles`), donc le même,
+/// racine déplacée ou non (il lisait `%APPDATA%` en dur jusqu'au 2026-10-18).
 fn module_config_dir() -> std::path::PathBuf {
     crate::paths::root().join("agent").join("module-config")
 }

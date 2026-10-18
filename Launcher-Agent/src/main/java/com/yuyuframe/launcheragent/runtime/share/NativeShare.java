@@ -1,5 +1,6 @@
 package com.yuyuframe.launcheragent.runtime.share;
 
+import com.yuyuframe.launcheragent.base.AgentFiles;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 
 import java.lang.foreign.Arena;
@@ -65,12 +66,9 @@ public final class NativeShare {
     }
 
     private static boolean load() {
-        String appData = System.getenv("APPDATA");
-        if (appData == null) {
-            return false;
-        }
-        Path dll = Path.of(appData, "YuyuFrame", "agent", "content_core.dll");
-        if (!Files.isRegularFile(dll)) {
+        Path dll = AgentFiles.contentCore();
+        if (dll == null || !Files.isRegularFile(dll)) {
+            LauncherLog.warn("[SHARE] Indisponible : content_core.dll introuvable (" + dll + ")");
             return false;
         }
         try {

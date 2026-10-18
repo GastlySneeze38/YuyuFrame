@@ -70,8 +70,8 @@ export interface FleetAnnouncement {
   /** Étiquette courte avant le titre (« ÉVÉNEMENT »). */
   kicker: string | null
   title: string | null
-  /** none | festive — habillage du panneau d'accueil. */
-  theme: 'none' | 'festive'
+  /** none | festive | halloween — habillage du panneau d'accueil. */
+  theme: 'none' | 'festive' | 'halloween'
   ends_at: string | null
 }
 

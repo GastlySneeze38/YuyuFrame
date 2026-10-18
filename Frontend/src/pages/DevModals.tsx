@@ -1,6 +1,9 @@
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Button } from '@/components/ui/Button'
+import { useNavigate } from 'react-router-dom'
 import { useModalQueue, type QueuedModal } from '@/stores/useModalQueue'
+import { useFleet } from '@/stores/useFleet'
+import type { FleetAnnouncement } from '@/api/client'
 
 /**
  * Atelier des modales — écran de développement.
@@ -136,7 +139,27 @@ const SAMPLES: { label: string; hint: string; item: QueuedModal }[] = [
   },
 ]
 
+/** Un exemple par habillage de la bannière d'accueil — la forme exacte de ce
+ *  que publie le back-office. */
+const HOME_BANNERS: { label: string; banner: FleetAnnouncement }[] = [
+  {
+    label: 'Ciel de nuit',
+    banner: { id: 'dev-home-none', message: 'Nouveaux modules disponibles dans le client', level: 'info', placement: 'home', kicker: 'Nouveau', title: 'La 0.2 est arrivée', theme: 'none', ends_at: null },
+  },
+  {
+    label: 'Festif',
+    banner: { id: 'dev-home-festive', message: 'Merci à tous pour cette première année', level: 'info', placement: 'home', kicker: 'Événement', title: 'YuyuFrame fête ses 1 an', theme: 'festive', ends_at: null },
+  },
+  {
+    label: 'Halloween',
+    banner: { id: 'dev-home-halloween', message: 'Skins et décor d’Halloween jusqu’au 1er novembre', level: 'info', placement: 'home', kicker: 'Halloween', title: 'La nuit des citrouilles', theme: 'halloween', ends_at: null },
+  },
+]
+
 export default function DevModals() {
+  const navigate = useNavigate()
+  const devHomeBanner = useFleet((s) => s.devHomeBanner)
+  const setDevHomeBanner = useFleet((s) => s.setDevHomeBanner)
   const push = useModalQueue((s) => s.push)
   const forgetAll = useModalQueue((s) => s.forgetAll)
   const current = useModalQueue((s) => s.current)
@@ -201,6 +224,32 @@ export default function DevModals() {
           demande déposée deux fois serait refusée par la file — ce qui est
           exactement ce qu’on lui demande de faire en vrai.
         </p>
+
+        {/* Bannière d'accueil : elle passe devant celle du back-office et
+            tient jusqu'à ce qu'on la retire ou qu'on relance le launcher. */}
+        <div className="flex flex-col gap-2 border-t border-border pt-4">
+          <span className="text-[13px] font-semibold text-txt-primary">Bannière d’accueil</span>
+          <span className="text-[11px] text-txt-muted">
+            Forcée : <b className="text-txt-primary">{devHomeBanner ? devHomeBanner.theme : 'non (celle du back-office)'}</b>
+          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            {HOME_BANNERS.map(({ label, banner }) => (
+              <Button
+                key={banner.id}
+                variant={devHomeBanner?.id === banner.id ? 'primary' : undefined}
+                onClick={() => {
+                  setDevHomeBanner(banner)
+                  navigate('/home')
+                }}
+              >
+                {label}
+              </Button>
+            ))}
+            <Button onClick={() => setDevHomeBanner(null)} disabled={!devHomeBanner}>
+              Revenir à la vraie
+            </Button>
+          </div>
+        </div>
       </div>
     </div>
   )

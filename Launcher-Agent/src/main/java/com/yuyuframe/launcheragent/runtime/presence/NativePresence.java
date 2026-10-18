@@ -1,5 +1,6 @@
 package com.yuyuframe.launcheragent.runtime.presence;
 
+import com.yuyuframe.launcheragent.base.AgentFiles;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 
 import java.lang.foreign.Arena;
@@ -62,12 +63,9 @@ public final class NativePresence {
     }
 
     private static MethodHandle load() {
-        String appData = System.getenv("APPDATA");
-        if (appData == null) {
-            return null;
-        }
-        Path dll = Path.of(appData, "YuyuFrame", "agent", "content_core.dll");
-        if (!Files.isRegularFile(dll)) {
+        Path dll = AgentFiles.contentCore();
+        if (dll == null || !Files.isRegularFile(dll)) {
+            LauncherLog.warn("[PRESENCE] Indisponible : content_core.dll introuvable (" + dll + ")");
             return null;
         }
         try {
