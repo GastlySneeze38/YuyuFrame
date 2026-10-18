@@ -15,7 +15,8 @@ import { showError, showNotice } from '@/stores/useErrorToast'
 import { InstanceSwitchModal } from '@/components/instances/InstanceSwitchModal'
 import { WelcomeSequence } from '@/components/home/WelcomeSequence'
 import { homeGreeting } from '@/lib/greeting'
-import { HomeBanner, Confetti, HalloweenSky, useHomeBanner } from '@/components/home/HomeBanner'
+import { HomeBanner, Confetti, useHomeBanner } from '@/components/home/HomeBanner'
+import { HalloweenGround, HalloweenSky } from '@/components/home/Halloween'
 import { ProCard } from '@/components/home/ProCard'
 import { LaunchSweep } from '@/components/home/LaunchSweep'
 import { AgentModal, WarningIcon } from '@/components/home/AgentModal'
@@ -689,6 +690,10 @@ export default function Home() {
             playIntro={welcome.playIntro}
             onAvatarClick={() => navigate('/login')}
           />
+
+          {/* Après la bande du pseudo : son dégradé couvre toute la largeur
+              du bas et éteindrait les citrouilles posées dessous. */}
+          {halloween && <HalloweenGround />}
 
           {/* La bannière attend que le badge soit posé : deux choses qui
               entrent en même temps, on ne regarde ni l'une ni l'autre. */}
