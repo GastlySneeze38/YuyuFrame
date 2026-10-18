@@ -1,7 +1,7 @@
 //! Le partage des duels pour la calibration de la note (docs/scoring/partage.md).
 //!
 //! Seulement si le joueur l'a activé (réglage « Partager mes duels » du module
-//! Score PvP, éteint par défaut) et seulement avec un compte YuyuFrame
+//! Score PvP, allumé par défaut, désactivable) et seulement avec un compte YuyuFrame
 //! connecté. À la fermeture de chaque duel, le noyau prépare un paquet — TOUT
 //! le calcul est fait ici, le serveur ne fait que ranger :
 //!
@@ -235,7 +235,7 @@ fn hex(bytes: &[u8]) -> String {
 }
 
 /// Base64 standard, avec remplissage — le journal compressé voyage dans du JSON.
-fn base64(bytes: &[u8]) -> String {
+pub(crate) fn base64(bytes: &[u8]) -> String {
     const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
     for chunk in bytes.chunks(3) {

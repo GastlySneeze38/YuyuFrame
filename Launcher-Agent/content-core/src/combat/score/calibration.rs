@@ -198,10 +198,71 @@ fn read_journal(path: &Path) -> Option<String> {
     }
 }
 
+/// Décode du base64 standard (avec ou sans remplissage).
+#[cfg(test)]
+fn base64_decode(text: &str) -> Option<Vec<u8>> {
+    let value = |c: u8| -> Option<u32> {
+        Some(match c {
+            b'A'..=b'Z' => c - b'A',
+            b'a'..=b'z' => c - b'a' + 26,
+            b'0'..=b'9' => c - b'0' + 52,
+            b'+' => 62,
+            b'/' => 63,
+            _ => return None,
+        } as u32)
+    };
+    let bytes: Vec<u8> = text.bytes().filter(|c| !c.is_ascii_whitespace() && *c != b'=').collect();
+    let mut out = Vec::with_capacity(bytes.len() * 3 / 4);
+    for chunk in bytes.chunks(4) {
+        let mut n = 0u32;
+        for (i, c) in chunk.iter().enumerate() {
+            n |= value(*c)? << (18 - 6 * i);
+        }
+        out.push((n >> 16) as u8);
+        if chunk.len() > 2 {
+            out.push((n >> 8) as u8);
+        }
+        if chunk.len() > 3 {
+            out.push(n as u8);
+        }
+    }
+    Some(out)
+}
+
+/// Un export du back-office (Calibration PvP → « Journaux ») : un duel par
+/// ligne, `{ "duel", "joueur", "journal" }`, le journal compressé en zstd puis
+/// en base64. Rend `(nom, texte)` pour chaque duel lisible, `None` si le
+/// fichier n'est pas un export (c'est alors un journal en clair).
+#[cfg(test)]
+fn read_export(path: &Path) -> Option<Vec<(String, Option<String>)>> {
+    let text = std::fs::read_to_string(path).ok()?;
+    let first: serde_json::Value = serde_json::from_str(text.lines().next()?).ok()?;
+    first.get("journal")?;
+    Some(
+        text.lines()
+            .filter(|l| !l.trim().is_empty())
+            .map(|line| {
+                let value: serde_json::Value = serde_json::from_str(line).unwrap_or_default();
+                let name = value["duel"].as_str().unwrap_or("export").to_string();
+                let journal = value["journal"].as_str().and_then(base64_decode).and_then(|bytes| {
+                    let mut text = String::new();
+                    zstd::stream::read::Decoder::new(bytes.as_slice()).ok()?.read_to_string(&mut text).ok()?;
+                    Some(text)
+                });
+                (name, journal)
+            })
+            .collect(),
+    )
+}
+
+/// Le relevé. `YF_MATCHES` peut contenir des journaux du jeu (`.zst`, ou
+/// `.ndjson` en clair) ET des exports du back-office (`.ndjson`, un duel par
+/// ligne) : tout est relu et recalculé avec la version de l'extraction en
+/// cours.
 #[test]
 #[ignore]
 fn releve_de_calibration() {
-    let matches = std::env::var("YF_MATCHES").expect("YF_MATCHES : le dossier des journaux (yuyuframe/matches)");
+    let matches = std::env::var("YF_MATCHES").expect("YF_MATCHES : le dossier des journaux (yuyuframe/matches) ou des exports");
     let out = std::env::var("YF_CALIB_OUT").expect("YF_CALIB_OUT : le dossier où écrire les tableaux");
     let mut paths: Vec<_> = std::fs::read_dir(&matches)
         .unwrap()
@@ -212,13 +273,18 @@ fn releve_de_calibration() {
     let mut tables = Tables::new();
     let (mut read, mut skipped) = (0, 0);
     for path in &paths {
-        let name = path.file_name().unwrap().to_string_lossy().split('.').next().unwrap_or("").to_string();
-        let Some(duel) = read_journal(path).and_then(|text| parse::parse(&text)) else {
-            skipped += 1;
-            continue;
-        };
-        tables.add(&name, &duel, &features::extract(&duel));
-        read += 1;
+        let duels = read_export(path).unwrap_or_else(|| {
+            let name = path.file_name().unwrap().to_string_lossy().split('.').next().unwrap_or("").to_string();
+            vec![(name, read_journal(path))]
+        });
+        for (name, text) in duels {
+            let Some(duel) = text.and_then(|text| parse::parse(&text)) else {
+                skipped += 1;
+                continue;
+            };
+            tables.add(&name, &duel, &features::extract(&duel));
+            read += 1;
+        }
     }
     tables.write(Path::new(&out));
     println!("{read} journaux relevés, {skipped} illisibles → {out}");
@@ -227,6 +293,27 @@ fn releve_de_calibration() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn un_export_du_back_office_se_relit() {
+        let journal = include_str!("fixtures/duel_masse_defaite.ndjson");
+        let packed = crate::combat::share::base64(&zstd::bulk::compress(journal.as_bytes(), 9).unwrap());
+        assert_eq!(base64_decode(&packed).map(|b| zstd::bulk::decompress(&b, 1 << 24).unwrap()), Some(journal.as_bytes().to_vec()));
+        let dir = std::env::temp_dir().join(format!("yf-export-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("duels-partages.ndjson");
+        let line = serde_json::json!({ "duel": "0123456789abcdef", "joueur": 1, "journal": packed }).to_string();
+        std::fs::write(&path, format!("{line}\n{line}\n")).unwrap();
+        let duels = read_export(&path).expect("un export");
+        assert_eq!(duels.len(), 2);
+        assert_eq!(duels[0].0, "0123456789abcdef");
+        assert_eq!(duels[0].1.as_deref(), Some(journal));
+        // Un journal du jeu en clair n'est pas pris pour un export.
+        let plain = dir.join("1.ndjson");
+        std::fs::write(&plain, journal).unwrap();
+        assert!(read_export(&plain).is_none());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 
     #[test]
     fn un_vrai_duel_remplit_les_cinq_tableaux() {

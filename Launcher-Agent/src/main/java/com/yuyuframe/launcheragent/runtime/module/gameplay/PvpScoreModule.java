@@ -82,6 +82,10 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
         CombatTracker.install();
         CombatTracker.setActive(isEnabled());
         instance = this;
+        // La valeur par défaut part au noyau tout de suite : un réglage jamais
+        // touché n'est pas relu du fichier, donc aucun setter ne la donnerait.
+        // Une valeur sauvegardée arrive ensuite et la remplace.
+        NativeCombat.share(shareDuels);
     }
 
     @Override
@@ -93,13 +97,14 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
      * « Partager mes duels » : chaque duel fermé part, anonymisé, vers le
      * serveur de YuyuFrame pour calibrer la note (voir
      * {@code content-core/src/combat/share.rs} et docs/scoring/partage.md).
-     * Éteint par défaut, et rien ne part sans compte YuyuFrame connecté.
+     * Allumé par défaut (décision du 2026-10-18 : la calibration a besoin des
+     * duels de tout le monde), et rien ne part sans compte YuyuFrame connecté.
      *
      * <p>Le module n'a pas d'écran de réglages — sa carte ouvre l'historique :
      * l'interrupteur est sur cette page ({@code UiPvpScoreScreen}). Le
      * réglage est déclaré ici pour être sauvegardé comme les autres.
      */
-    private boolean shareDuels = false;
+    private boolean shareDuels = true;
 
     public boolean shareDuels() {
         return shareDuels;
