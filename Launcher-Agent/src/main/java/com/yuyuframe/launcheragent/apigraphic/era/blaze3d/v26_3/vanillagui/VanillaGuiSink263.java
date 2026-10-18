@@ -100,6 +100,12 @@ public final class VanillaGuiSink263 implements VanillaGuiSink {
         return true;
     }
 
+    /** {@code GameRenderer.extract} précède {@code render} (javap). */
+    @Override
+    public boolean extractsBeforeRender() {
+        return true;
+    }
+
     @Override
     public boolean glassPanel(Object hookContext, float x0, float y0, float x1, float y1,
                               float rTopLeft, float rTopRight, float rBottomLeft, float rBottomRight,

@@ -223,12 +223,42 @@ public final class VanillaGuiTarget {
         // Une chaîne par zones (le HUD) ne vaut pas pour qui demande tout
         // l'écran ensuite dans la même passe : celui-là la refait en entier.
         if (glassChainDone && (regions != null || !glassChainRegional)) return true;
-        glassChainDone = Blaze3DBlur.renderChainNow(passes, vpWidth, vpHeight, regions);
+        if (sink.extractsBeforeRender()) {
+            // 26.x : l'écran tient encore l'image d'avant (voir
+            // VanillaGuiSink.extractsBeforeRender). On ne fait que noter la
+            // demande et créer les textures que les panneaux référencent ;
+            // la chaîne est calculée juste avant le dessin de l'interface.
+            deferredPasses = passes;
+            deferredWidth = vpWidth;
+            deferredHeight = vpHeight;
+            deferredRegions = regions;
+            deferredPending = true;
+            glassChainDone = Blaze3DBlur.prepareChain(vpWidth, vpHeight);
+        } else {
+            glassChainDone = Blaze3DBlur.renderChainNow(passes, vpWidth, vpHeight, regions);
+        }
         glassChainRegional = regions != null;
         return glassChainDone;
     }
 
     private static boolean glassChainDone, glassChainRegional;
+
+    /** La chaîne demandée pendant la préparation de l'interface, à calculer avant son dessin (26.x). */
+    private static boolean deferredPending;
+    private static int deferredPasses, deferredWidth, deferredHeight;
+    private static float[][] deferredRegions;
+
+    /**
+     * Calcule la chaîne demandée pendant la préparation de l'interface — à
+     * appeler après le dessin du monde et avant celui de l'interface
+     * ({@code GuiFlushMixin} des 26.x). Ne fait rien si aucun verre n'a été
+     * demandé.
+     */
+    public static void renderDeferredGlassChain() {
+        if (!deferredPending) return;
+        deferredPending = false;
+        Blaze3DBlur.renderChainNow(deferredPasses, deferredWidth, deferredHeight, deferredRegions);
+    }
 
     /**
      * Panneau de verre, rayons dans l'ordre du MOTEUR (bas-gauche, bas-droit,

@@ -71,6 +71,8 @@ public final class GuiElementShaders {
         "flat in vec2 halfSize;\n" +
         "flat in vec4 radii;\n" +
         "out vec4 fragColor;\n" +
+        // Les dégradés (couleur par coin) passent aussi par ici.
+        com.yuyuframe.launcheragent.apigraphic.value.Dither.GLSL +
         "void main() {\n" +
         "    float radius = (localPos.y < 0.0)\n" +
         "        ? ((localPos.x < 0.0) ? radii.x : radii.y)\n" +
@@ -79,7 +81,7 @@ public final class GuiElementShaders {
         "    float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;\n" +
         "    float alpha = 1.0 - smoothstep(-0.5, 0.5, d);\n" +
         "    if (alpha <= 0.001) discard;\n" +
-        "    fragColor = vec4(vertexColor.rgb, vertexColor.a * alpha) * ColorModulator;\n" +
+        "    fragColor = dither(vec4(vertexColor.rgb, vertexColor.a * alpha) * ColorModulator);\n" +
         "}\n";
 
     /**
@@ -309,6 +311,7 @@ public final class GuiElementShaders {
         "flat in vec4 radii;\n" +
         "out vec4 fragColor;\n" +
         com.yuyuframe.launcheragent.apigraphic.value.GlassRim.GLSL +
+        com.yuyuframe.launcheragent.apigraphic.value.Dither.GLSL +
         "void main() {\n" +
         // Coordonnée d'échantillonnage déduite du fragment, sans attribut ni
         // uniforme : gl_FragCoord est en pixels de FENÊTRE, et la texture
@@ -352,6 +355,6 @@ public final class GuiElementShaders {
         "    rgb = mix(rgb, vec3(0.0), glassShadow(up, q, d, px, halfSize));\n" +
         "    rgb = mix(rgb, vec3(1.0), glassRim(up, q, d, px, halfSize));\n" +
         "    float a = smoothstep(0.0, " + GLASS_DENSITY_FADE + ", density);\n" +
-        "    fragColor = vec4(rgb, a * mask) * ColorModulator;\n" +
+        "    fragColor = dither(vec4(rgb, a * mask) * ColorModulator);\n" +
         "}\n";
 }

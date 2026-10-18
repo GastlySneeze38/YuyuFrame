@@ -236,8 +236,16 @@ public final class Blaze3DBackend implements UiBackend {
             UiColor dense = new UiColor(fallback.r, fallback.g, fallback.b,
                 Math.min(1f, tintStrength / com.yuyuframe.launcheragent.apigraphic.era.blaze3d.vanillagui.GuiElementShaders.GLASS_DENSITY_TO_TINT)
                     * fallback.a);
+            // BUG CORRIGÉ (2026-10-18, « le coin arrondi est inversé dans
+            // l'axe Y ») : les noms des paramètres de glassPanel mentent,
+            // comme ceux de UiRenderer.drawRoundedRect — ils arrivent dans
+            // l'ordre RÉEL du moteur, bas-gauche, bas-droit, haut-gauche,
+            // haut-droit (voir HudPanelRenderer.edgeAwareRadii). Les passer
+            // par leur nom retournait les coins carrés d'un panneau collé au
+            // bord de l'écran. VanillaGuiTarget veut ce même ordre : on le
+            // transmet tel quel, par position.
             if (VanillaGuiTarget.glassPanel(x1, y1, x2, y2,
-                    radiusBottomLeft, radiusBottomRight, radiusTopLeft, radiusTopRight,
+                    radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight,
                     tint, dense, vpWidth, vpHeight)) return true;
         }
         if (Blaze3DBlur.isGlassAvailable() && !VanillaGuiTarget.isArmed()) {

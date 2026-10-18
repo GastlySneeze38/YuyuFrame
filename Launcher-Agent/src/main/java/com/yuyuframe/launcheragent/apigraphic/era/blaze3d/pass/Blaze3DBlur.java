@@ -149,6 +149,7 @@ public final class Blaze3DBlur {
         "in vec2 fragPos;\n" +
         "out vec4 fragColor;\n" +
         com.yuyuframe.launcheragent.apigraphic.value.GlassRim.GLSL +
+        com.yuyuframe.launcheragent.apigraphic.value.Dither.GLSL +
         "void main() {\n" +
         "    vec2 halfSize = (u_Rect.zw - u_Rect.xy) * 0.5;\n" +
         "    vec2 center = (u_Rect.xy + u_Rect.zw) * 0.5;\n" +
@@ -177,7 +178,7 @@ public final class Blaze3DBlur {
         "    if (color.a < 0.01) {\n" +
         "        discard;\n" +
         "    }\n" +
-        "    fragColor = color;\n" +
+        "    fragColor = dither(color);\n" +
         "}\n";
 
     static Object downPipeline, downShaderSource, upPipeline, upShaderSource, compositePipeline, compositeShaderSource;
@@ -616,6 +617,29 @@ public final class Blaze3DBlur {
      */
     public static boolean renderChainNow(int passes, int vpWidth, int vpHeight, float[][] regions) {
         return renderFrameChain(passes, vpWidth, vpHeight, regions);
+    }
+
+    /**
+     * Crée les textures de la chaîne à la taille de l'écran, SANS les
+     * remplir — pour qui doit référencer {@link #blurredView()} avant que la
+     * chaîne ne soit calculée (le HUD des 26.x, voir
+     * {@code VanillaGuiTarget.beginGlassFrame}). Une chaîne calculée plus tard
+     * dans la frame écrit dans ces mêmes textures.
+     *
+     * @return {@code true} si la vue existe
+     */
+    public static boolean prepareChain(int vpWidth, int vpHeight) {
+        if (!isAvailable() || !resolve()) return false;
+        try {
+            ensureChain(gpu.device(), vpWidth, vpHeight);
+            return levelView[COMPOSITE_LEVEL] != null;
+        } catch (Throwable t) {
+            if (failureLogCount < 5) {
+                failureLogCount++;
+                LauncherLog.err("[UiRenderer] Blaze3DBlur.prepareChain a échoué #" + failureLogCount + " : " + t);
+            }
+            return false;
+        }
     }
 
     /**

@@ -359,6 +359,7 @@ public final class Gl3PrimitiveRenderer {
         "uniform vec4 u_ColorTL;\n" +
         "uniform vec4 u_ColorTR;\n" +
         "out vec4 fragColor;\n" +
+        com.yuyuframe.launcheragent.apigraphic.value.Dither.GLSL +
         "void main() {\n" +
         "    vec2 center = (u_Rect.xy + u_Rect.zw) * 0.5;\n" +
         "    vec2 halfSize = (u_Rect.zw - u_Rect.xy) * 0.5;\n" +
@@ -371,7 +372,7 @@ public final class Gl3PrimitiveRenderer {
         "    vec4 bottom = mix(u_ColorBL, u_ColorBR, u);\n" +
         "    vec4 top = mix(u_ColorTL, u_ColorTR, u);\n" +
         "    vec4 col = mix(bottom, top, v);\n" +
-        "    fragColor = vec4(col.rgb, col.a * alpha);\n" +
+        "    fragColor = dither(vec4(col.rgb, col.a * alpha));\n" +
         "}\n";
 
     private int gradient2DProgram = -1;
@@ -457,6 +458,7 @@ public final class Gl3PrimitiveRenderer {
         "uniform vec4 u_Stop6Color;\n" + "uniform float u_Stop6Pos;\n" +
         "uniform vec4 u_Stop7Color;\n" + "uniform float u_Stop7Pos;\n" +
         "out vec4 fragColor;\n" +
+        com.yuyuframe.launcheragent.apigraphic.value.Dither.GLSL +
         "float segT(float t, float p0, float p1) {\n" +
         "    float span = p1 - p0;\n" +
         "    return span < 1e-6 ? 0.0 : clamp((t - p0) / span, 0.0, 1.0);\n" +
@@ -494,7 +496,7 @@ public final class Gl3PrimitiveRenderer {
         "    else if (t <= u_Stop6Pos) col = mix(u_Stop5Color, u_Stop6Color, segT(t, u_Stop5Pos, u_Stop6Pos));\n" +
         "    else if (t <= u_Stop7Pos) col = mix(u_Stop6Color, u_Stop7Color, segT(t, u_Stop6Pos, u_Stop7Pos));\n" +
         "    else col = u_Stop7Color;\n" +
-        "    fragColor = vec4(col.rgb, col.a * alpha);\n" +
+        "    fragColor = dither(vec4(col.rgb, col.a * alpha));\n" +
         "}\n";
 
     private int multiStopGradientProgram = -1;
@@ -588,6 +590,8 @@ public final class Gl3PrimitiveRenderer {
         "uniform vec4 u_ColorB;\n" +
         "uniform float u_Gradient;\n" +
         "out vec4 fragColor;\n" +
+        // Ombres (bord flou) et contours en dégradé : deux dégradés de plus.
+        com.yuyuframe.launcheragent.apigraphic.value.Dither.GLSL +
         "void main() {\n" +
         "    vec2 center = (u_Rect.xy + u_Rect.zw) * 0.5;\n" +
         "    vec2 halfSize = (u_Rect.zw - u_Rect.xy) * 0.5;\n" +
@@ -608,7 +612,7 @@ public final class Gl3PrimitiveRenderer {
         "        float t = clamp((gl_FragCoord.y - u_Rect.y) / max(u_Rect.w - u_Rect.y, 1.0), 0.0, 1.0);\n" +
         "        rgb = mix(u_ColorA.rgb, u_ColorB.rgb, t);\n" +
         "    }\n" +
-        "    fragColor = vec4(rgb, u_ColorA.a * alpha);\n" +
+        "    fragColor = dither(vec4(rgb, u_ColorA.a * alpha));\n" +
         "}\n";
 
     private int fxProgram = -1;

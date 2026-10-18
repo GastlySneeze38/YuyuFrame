@@ -198,6 +198,8 @@ public final class Blaze3DCore {
         "in vec4 vertexColor;\n" +
         "in vec2 fragPos;\n" +
         "out vec4 fragColor;\n" +
+        // Les dégradés à couleur de sommet passent aussi par ici.
+        com.yuyuframe.launcheragent.apigraphic.value.Dither.GLSL +
         "void main() {\n" +
         "    vec2 halfSize = (u_Rect.zw - u_Rect.xy) * 0.5;\n" +
         "    vec2 center = (u_Rect.xy + u_Rect.zw) * 0.5;\n" +
@@ -213,7 +215,7 @@ public final class Blaze3DCore {
         "    if (color.a < 0.01) {\n" +
         "        discard;\n" +
         "    }\n" +
-        "    fragColor = color;\n" +
+        "    fragColor = dither(color);\n" +
         "}\n";
 
     static Object rectPipeline, rectShaderSource;
@@ -268,6 +270,7 @@ public final class Blaze3DCore {
         "in vec2 localUV;\n" +
         "in vec2 rectSize;\n" +
         "out vec4 fragColor;\n" +
+        com.yuyuframe.launcheragent.apigraphic.value.Dither.GLSL +
         "void main() {\n" +
         "    float radius = u_Radius.x;\n" +
         "    vec2 halfSize = rectSize * 0.5;\n" +
@@ -280,7 +283,7 @@ public final class Blaze3DCore {
         "    if (color.a < 0.01) {\n" +
         "        discard;\n" +
         "    }\n" +
-        "    fragColor = color;\n" +
+        "    fragColor = dither(color);\n" +
         "}\n";
 
     static Object batchPipeline, batchShaderSource;

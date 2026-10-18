@@ -87,6 +87,21 @@ public interface VanillaGuiSink {
      */
     boolean supportsGlassPanel();
 
+    /**
+     * Le jeu prépare-t-il l'interface AVANT de dessiner le monde de la frame ?
+     *
+     * <p>Vrai à partir des 26.x : {@code GameRenderer.extract} (où le HUD est
+     * soumis) passe avant {@code GameRenderer.render} (qui efface l'écran,
+     * dessine le monde, puis l'interface). Au moment de la soumission, l'écran
+     * contient donc encore l'image PRÉCÉDENTE, HUD compris — la flouter
+     * faisait boucler le verre sur lui-même (voile noir, texte du HUD qui
+     * bave dans le flou). La chaîne est alors calculée plus tard, juste avant
+     * le dessin de l'interface (voir {@code VanillaGuiTarget.renderDeferredGlassChain}).
+     */
+    default boolean extractsBeforeRender() {
+        return false;
+    }
+
     /** Panneau de verre dépoli — la chaîne de flou doit avoir été calculée avant. */
     boolean glassPanel(Object hookContext, float x0, float y0, float x1, float y1,
                        float rTopLeft, float rTopRight, float rBottomLeft, float rBottomRight,

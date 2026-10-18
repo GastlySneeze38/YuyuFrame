@@ -445,6 +445,69 @@ public final class PvpScoreUi {
         }
     }
 
+    // ── Casual / compétitif ──────────────────────────────────────────────────
+
+    /**
+     * Les deux façons de jouer le mode choisi dans la liste déroulante, dans
+     * l'ordre du sélecteur. Seul le casual est noté aujourd'hui.
+     */
+    static final String[] PLAY_TYPES = { "CASUAL", "COMPÉTITIF" };
+
+    /**
+     * Deux boutons collés, l'un allumé : casual ou compétitif, pour le mode
+     * de la liste déroulante d'à côté. La pastille de l'option choisie glisse
+     * d'un côté à l'autre.
+     */
+    static final class PlayTypeToggle extends UiWidget {
+        private final java.util.function.IntConsumer onChange;
+        private int selected;
+        private final UiAnimatedFloat slide;
+        private final UiAnimatedFloat hoverLeft = new UiAnimatedFloat(0f, 16f);
+        private final UiAnimatedFloat hoverRight = new UiAnimatedFloat(0f, 16f);
+        private double lastMouseX;
+
+        PlayTypeToggle(float x, float y, float w, float h, int selected, java.util.function.IntConsumer onChange) {
+            super(x, y, w, h);
+            this.selected = Math.max(0, Math.min(PLAY_TYPES.length - 1, selected));
+            this.slide = new UiAnimatedFloat(this.selected, 14f);
+            this.onChange = onChange;
+        }
+
+        @Override
+        public void draw(UiRenderer r, double mouseX, double mouseY, int vw, int vh) {
+            lastMouseX = mouseX;
+            float half = w / 2f;
+            boolean inside = contains(mouseX, mouseY);
+            hoverLeft.setTarget(inside && mouseX < x + half ? 1f : 0f);
+            hoverRight.setTarget(inside && mouseX >= x + half ? 1f : 0f);
+            slide.setTarget(selected);
+            float radius = UiTheme.scaled(9f);
+            float inset = UiTheme.scaled(4f);
+            r.drawRoundedRect(x - 1f, y - 1f, x + w + 1f, y + h + 1f, radius + 1f, a(UiTheme.GLASS_BORDER), vw, vh);
+            r.drawRoundedRect(x, y, x + w, y + h, radius, a(UiTheme.CARD_BG), vw, vh);
+            float pillLeft = x + inset + slide.get() * half;
+            r.drawRoundedRect(pillLeft, y + inset, pillLeft + half - inset * 2f, y + h - inset, radius - inset / 2f,
+                a(UiTheme.ACCENT.withAlpha(0.45f)), vw, vh);
+            float scale = UiTheme.scaled(0.46f);
+            float mid = y + h / 2f;
+            for (int i = 0; i < PLAY_TYPES.length; i++) {
+                float hovered = i == 0 ? hoverLeft.get() : hoverRight.get();
+                UiColor color = i == selected ? UiTheme.TEXT_PRIMARY
+                    : UiColor.lerp(UiTheme.TEXT_SECONDARY, UiTheme.TEXT_PRIMARY, hovered);
+                centered(r, UiFont.BOLD, Lang.tr(PLAY_TYPES[i]), x + half * i + half / 2f, middle(mid, scale),
+                    half - inset * 4f, color, scale, vw, vh);
+            }
+        }
+
+        @Override
+        public void onClick() {
+            int clicked = lastMouseX < x + w / 2f ? 0 : 1;
+            if (clicked == selected) return;
+            selected = clicked;
+            if (onChange != null) onChange.accept(clicked);
+        }
+    }
+
     /** Un paragraphe coupé en lignes de {@code maxWidth} au plus, aux espaces. */
     static List<String> wrap(UiRenderer r, UiFont font, String text, float scale, float maxWidth) {
         List<String> lines = new ArrayList<String>();

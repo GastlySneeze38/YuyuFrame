@@ -25,6 +25,9 @@ public abstract class GuiFlushMixin2611 {
     private void la$flushPendingItemIcons(CallbackInfo ci) {
         try {
             FabricKnotExposer.ensureExposed(this.getClass().getClassLoader());
+            // Le monde de CETTE frame est dessiné, l'interface pas encore :
+            // le seul moment où flouter l'écran donne le bon fond au verre du HUD.
+            com.yuyuframe.launcheragent.apigraphic.era.blaze3d.vanillagui.VanillaGuiTarget.renderDeferredGlassChain();
             UiRenderer.flushPendingModernItemIcons(this);
         } catch (Throwable t) {
             LauncherLog.err("[LauncherAgent] GuiFlushMixin2611 (apimixin): " + t);

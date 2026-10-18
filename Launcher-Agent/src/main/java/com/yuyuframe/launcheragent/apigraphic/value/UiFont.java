@@ -1,10 +1,12 @@
 package com.yuyuframe.launcheragent.apigraphic.value;
 
-import java.awt.Color;
 import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics2D;
-import java.awt.RenderingHints;
+import java.awt.Shape;
+import java.awt.font.FontRenderContext;
+import java.awt.geom.PathIterator;
+import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -16,8 +18,9 @@ import java.util.Map;
  * dans le JVM hôte, Minecraft ou pas) — pas d'atlas/police embarquée en
  * ressource, pas de lib externe (pas de STB TrueType/FreeType).
  *
- * Rasterisée en couverture anti-aliasée classique PUIS convertie en champ de
- * distance signée (SDF, voir {@link #buildSignedDistanceField}) — l'alpha de
+ * Encodée en champ de distance signée (SDF), calculé depuis le contour
+ * vectoriel de chaque lettre (voir {@link #writeOutlineDistance} ; la police
+ * en pixels du jeu passe, elle, par {@link #buildSignedDistanceField}) — l'alpha de
  * chaque texel encode "à quelle distance du bord du glyphe" plutôt que
  * "opaque ou pas". UiRenderer.drawText utilise un shader dédié qui
  * reconstruit un bord net à partir de cette distance (smoothstep+fwidth),
@@ -273,29 +276,37 @@ public final class UiFont {
         int atlasH = 64;
         while (atlasH < neededH) atlasH *= 2; // arrondi à la puissance de 2 sup. — compat GPU anciens
 
+        // Champ de distance calculé depuis le CONTOUR VECTORIEL de chaque
+        // lettre (2026-10-18), plus depuis une image rasterisée.
+        //
+        // BUG CORRIGÉ (utilisateur : la note du duel, en très grand, « est
+        // pixelisée ») : le champ venait d'une image des lettres seuillée à
+        // 50 % (dedans / dehors, pixel par pixel), puis d'une transformée de
+        // distance chamfer. Le bord ainsi encodé suivait l'escalier des
+        // pixels de l'atlas : invisible en petit, où plusieurs texels tombent
+        // dans un pixel d'écran, mais dès qu'un texte dépasse la taille de
+        // rasterisation (RASTER_PX), chaque marche devient visible sur les
+        // diagonales et les courbes. Ici la distance est celle de chaque texel
+        // au vrai contour (segments de la courbe aplatie à 1/50 de pixel près)
+        // et le signe vient du contour lui-même : le bord reconstruit par le
+        // shader est une ligne lisse à toute échelle.
         atlasImage = new BufferedImage(atlasW, atlasH, BufferedImage.TYPE_INT_ARGB);
-        Graphics2D g = atlasImage.createGraphics();
-        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-        g.setFont(font);
-        g.setColor(Color.WHITE); // blanc uni — la teinte réelle vient du glColor4f au dessin (GL_MODULATE)
-
+        int[] field = new int[atlasW * atlasH];
+        // Métriques entières (fractionalMetrics=false) : les mêmes que charWidth, qui a placé les cellules.
+        FontRenderContext frc = new FontRenderContext(null, true, false);
         for (Map.Entry<Character, int[]> e : placement.entrySet()) {
             char c = e.getKey();
             int[] p = e.getValue();
-            g.drawString(String.valueOf(c), p[0], p[1] + ascent);
+            Shape outline = font.createGlyphVector(frc, String.valueOf(c)).getOutline(p[0], p[1] + ascent);
+            writeOutlineDistance(field, atlasW, atlasH, outline);
             glyphs.put(c, new Glyph(
                 p[0] / (float) atlasW, p[1] / (float) atlasH,
                 (p[0] + p[2]) / (float) atlasW, (p[1] + cellHeight) / (float) atlasH,
                 p[2], p[2]
             ));
         }
-        g.dispose();
-
-        // Construit le SDF EN PREMIER (mute atlasImage en place) — voir plus
-        // bas pour pourquoi atlasImagePlain en dérive maintenant, au lieu
-        // d'être une copie de la couverture antialiasée brute AVANT ce calcul.
-        buildSignedDistanceField(atlasImage);
+        for (int i = 0; i < field.length; i++) field[i] = (field[i] << 24) | 0x00FFFFFF;
+        atlasImage.setRGB(0, 0, atlasW, atlasH, field, 0, atlasW);
 
         // BUG TROUVÉ #1 (texte era E quasi invisible, voir historique) : le
         // pipeline Blaze3D natif (UiTextBlaze3D) utilise le shader vanilla
@@ -384,6 +395,88 @@ public final class UiFont {
             argb[i] = (a << 24) | 0x00FFFFFF;
         }
         img.setRGB(0, 0, w, h, argb, 0, w);
+    }
+
+    /**
+     * Écrit dans {@code field} (alpha 0-255 par texel, 128 = bord, même
+     * codage que {@link #buildSignedDistanceField}) la distance signée de
+     * chaque texel au contour {@code outline}, en coordonnées d'atlas.
+     *
+     * <p>La distance est mesurée du CENTRE du texel ({@code x + 0.5}) aux
+     * segments de la courbe aplatie ; le signe vient de {@code contains},
+     * qui suit la règle de remplissage de la police. Seuls les texels à moins
+     * de {@link #SDF_SPREAD} du contour sont calculés finement, les autres
+     * saturent. Une lettre voisine dont la zone déborderait jusqu'ici est
+     * combinée par le maximum — l'union de deux formes, jamais un effacement.
+     */
+    private static void writeOutlineDistance(int[] field, int atlasW, int atlasH, Shape outline) {
+        List<float[]> segments = new ArrayList<>();
+        float[] coords = new float[6];
+        float startX = 0, startY = 0, lastX = 0, lastY = 0;
+        for (PathIterator it = outline.getPathIterator(null, 0.02); !it.isDone(); it.next()) {
+            switch (it.currentSegment(coords)) {
+                case PathIterator.SEG_MOVETO:
+                    startX = lastX = coords[0];
+                    startY = lastY = coords[1];
+                    break;
+                case PathIterator.SEG_LINETO:
+                    segments.add(new float[]{ lastX, lastY, coords[0], coords[1] });
+                    lastX = coords[0];
+                    lastY = coords[1];
+                    break;
+                case PathIterator.SEG_CLOSE:
+                    segments.add(new float[]{ lastX, lastY, startX, startY });
+                    lastX = startX;
+                    lastY = startY;
+                    break;
+                default:
+                    break; // aplati : ni quadratique ni cubique
+            }
+        }
+        if (segments.isEmpty()) return; // espace, ou glyphe sans dessin
+
+        Rectangle2D bounds = outline.getBounds2D();
+        int x0 = Math.max(0, (int) Math.floor(bounds.getMinX() - SDF_SPREAD) - 1);
+        int y0 = Math.max(0, (int) Math.floor(bounds.getMinY() - SDF_SPREAD) - 1);
+        int x1 = Math.min(atlasW, (int) Math.ceil(bounds.getMaxX() + SDF_SPREAD) + 1);
+        int y1 = Math.min(atlasH, (int) Math.ceil(bounds.getMaxY() + SDF_SPREAD) + 1);
+        int w = x1 - x0, h = y1 - y0;
+        if (w <= 0 || h <= 0) return;
+
+        float[] nearest = new float[w * h];
+        java.util.Arrays.fill(nearest, SDF_SPREAD);
+        for (float[] s : segments) {
+            float ax = s[0], ay = s[1], bx = s[2], by = s[3];
+            int sx0 = Math.max(x0, (int) Math.floor(Math.min(ax, bx) - SDF_SPREAD));
+            int sy0 = Math.max(y0, (int) Math.floor(Math.min(ay, by) - SDF_SPREAD));
+            int sx1 = Math.min(x1, (int) Math.ceil(Math.max(ax, bx) + SDF_SPREAD));
+            int sy1 = Math.min(y1, (int) Math.ceil(Math.max(ay, by) + SDF_SPREAD));
+            float dx = bx - ax, dy = by - ay;
+            float len2 = dx * dx + dy * dy;
+            for (int y = sy0; y < sy1; y++) {
+                float py = y + 0.5f;
+                for (int x = sx0; x < sx1; x++) {
+                    float px = x + 0.5f;
+                    float t = len2 < 1e-12f ? 0f : ((px - ax) * dx + (py - ay) * dy) / len2;
+                    t = Math.max(0f, Math.min(1f, t));
+                    float ex = px - (ax + t * dx), ey = py - (ay + t * dy);
+                    float d = (float) Math.sqrt(ex * ex + ey * ey);
+                    int i = (y - y0) * w + (x - x0);
+                    if (d < nearest[i]) nearest[i] = d;
+                }
+            }
+        }
+
+        for (int y = y0; y < y1; y++) {
+            for (int x = x0; x < x1; x++) {
+                float d = nearest[(y - y0) * w + (x - x0)];
+                float signed = outline.contains(x + 0.5, y + 0.5) ? d : -d;
+                float norm = Math.max(-1f, Math.min(1f, signed / SDF_SPREAD));
+                int a = Math.round((norm * 0.5f + 0.5f) * 255f);
+                int i = y * atlasW + x;
+                if (a > field[i]) field[i] = a;
+            }
+        }
     }
 
     /** Distance (chamfer, 2 passes) de chaque texel au texel "seed" (true) le plus proche. */

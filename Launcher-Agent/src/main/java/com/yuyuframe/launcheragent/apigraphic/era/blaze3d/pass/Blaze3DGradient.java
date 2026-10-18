@@ -87,6 +87,7 @@ public final class Blaze3DGradient {
         "};\n" +
         "in vec2 fragPos;\n" +
         "out vec4 fragColor;\n" +
+        com.yuyuframe.launcheragent.apigraphic.value.Dither.GLSL +
         "float stopPos(int i) {\n" +
         "    if (i < 4) {\n" +
         "        if (i == 0) return u_StopPos0123.x;\n" +
@@ -146,7 +147,7 @@ public final class Blaze3DGradient {
         "    if (color.a < 0.01) {\n" +
         "        discard;\n" +
         "    }\n" +
-        "    fragColor = color;\n" +
+        "    fragColor = dither(color);\n" +
         "}\n";
 
     private static Object gradientPipeline, gradientShaderSource;

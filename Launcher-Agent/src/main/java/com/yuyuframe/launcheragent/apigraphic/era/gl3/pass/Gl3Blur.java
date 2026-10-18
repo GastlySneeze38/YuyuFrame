@@ -126,6 +126,7 @@ public final class Gl3Blur {
         "uniform float u_Opacity;\n" +
         "out vec4 fragColor;\n" +
         com.yuyuframe.launcheragent.apigraphic.value.GlassRim.GLSL +
+        com.yuyuframe.launcheragent.apigraphic.value.Dither.GLSL +
         "void main() {\n" +
         // La boîte arrondie de Gl3Core.GLSL_ROUNDED_BOX, écrite ici en clair :
         // le relief du verre a besoin de la distance elle-même, pas seulement
@@ -157,7 +158,7 @@ public final class Gl3Blur {
         // Sur un panneau très transparent (HUD), lumière et ombre du bord
         // deviennent opaques, sinon le relief ne se verrait pas.
         "    float a = u_Opacity + (1.0 - u_Opacity) * max(shine, shade) * step(0.01, u_Opacity);\n" +
-        "    fragColor = vec4(tinted, a * coverage);\n" +
+        "    fragColor = dither(vec4(tinted, a * coverage));\n" +
         "}\n";
 
     private final Gl3Backdrop backdrop;

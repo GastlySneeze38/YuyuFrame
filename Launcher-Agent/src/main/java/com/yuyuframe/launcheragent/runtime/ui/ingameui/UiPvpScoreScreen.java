@@ -55,14 +55,17 @@ public final class UiPvpScoreScreen extends UiScreenBase {
 
     private UiScrollContainer scroll;
     private PvpScoreUi.ModeDropdown modeDropdown;
+    private PvpScoreUi.PlayTypeToggle playType;
+    /** La page du compétitif est affichée à la place du bilan et de l'historique. */
+    private boolean competitive;
     private PvpInfoModal info;
     private int lastW = -1, lastH = -1;
     private float lastScale = -1f;
     /** Bas du bilan, haut de la liste. */
     private float heroBottom, listTop;
 
-    /** Départ des animations de la page, et de celles de la liste (rejouées au changement de mode). */
-    private final long openedAt = System.nanoTime();
+    /** Départ des animations de la page (rejoué en passant du casual au compétitif), et de celles de la liste (rejouées au changement de mode). */
+    private long openedAt = System.nanoTime();
     private long listShownAt = openedAt;
 
     public UiPvpScoreScreen(Object lastScreen) {
@@ -130,16 +133,20 @@ public final class UiPvpScoreScreen extends UiScreenBase {
         super.uiDraw(mouseX, mouseY);
         try {
             float[] c = PvpScoreUi.content(screenWidth, screenHeight);
-            drawHero(renderer, c[0], c[1], c[2] - UiTheme.scaled(24f));
-            drawListTitle(renderer, c[0], c[1]);
-            if (scored.isEmpty()) {
-                PvpScoreUi.alpha = PvpScoreUi.ease(listShownAt, 0.3f, 0.5f);
-                String empty = Lang.tr("Aucun duel noté pour l'instant : ils apparaîtront ici dès le premier.");
-                PvpScoreUi.centered(renderer, UiFont.REGULAR, empty, screenWidth / 2f, (listTop + c[3]) / 2f, c[1] - c[0],
-                    UiTheme.TEXT_MUTED, UiTheme.scaled(0.56f), screenWidth, screenHeight);
-                PvpScoreUi.alpha = 1f;
-            } else if (scroll != null) {
-                scroll.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
+            if (competitive) {
+                drawCompetitive(renderer, c);
+            } else {
+                drawHero(renderer, c[0], c[1], c[2] - UiTheme.scaled(24f));
+                drawListTitle(renderer, c[0], c[1]);
+                if (scored.isEmpty()) {
+                    PvpScoreUi.alpha = PvpScoreUi.ease(listShownAt, 0.3f, 0.5f);
+                    String empty = Lang.tr("Aucun duel noté pour l'instant : ils apparaîtront ici dès le premier.");
+                    PvpScoreUi.centered(renderer, UiFont.REGULAR, empty, screenWidth / 2f, (listTop + c[3]) / 2f, c[1] - c[0],
+                        UiTheme.TEXT_MUTED, UiTheme.scaled(0.56f), screenWidth, screenHeight);
+                    PvpScoreUi.alpha = 1f;
+                } else if (scroll != null) {
+                    scroll.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
+                }
             }
             // La liste des modes passe par-dessus l'historique.
             if (modeDropdown != null) modeDropdown.drawPanel(renderer, mouseX, mouseY, screenWidth, screenHeight);
@@ -156,7 +163,7 @@ public final class UiPvpScoreScreen extends UiScreenBase {
     public void uiPollInput(UiInputPoller input) {
         super.uiPollInput(input);
         // La liste ne défile ni ne se clique tant que l'explication ou la liste des modes est ouverte.
-        boolean blocked = info != null || (modeDropdown != null && modeDropdown.busy(input.mouseX, input.mouseY));
+        boolean blocked = info != null || competitive || (modeDropdown != null && modeDropdown.busy(input.mouseX, input.mouseY));
         if (scroll != null && !blocked) scroll.pollInput(input);
     }
 
@@ -173,11 +180,23 @@ public final class UiPvpScoreScreen extends UiScreenBase {
         float dropW = UiTheme.scaled(230f);
         float dropH = UiTheme.scaled(38f);
         // À gauche, juste au-dessus de la liste qu'elle filtre : c'est là que l'œil la cherche.
-        modeDropdown = new PvpScoreUi.ModeDropdown(c[0], heroBottom - UiTheme.scaled(18f) - dropH, dropW, dropH, mode, index -> {
+        float rowY = heroBottom - UiTheme.scaled(18f) - dropH;
+        modeDropdown = new PvpScoreUi.ModeDropdown(c[0], rowY, dropW, dropH, mode, index -> {
             selectMode(index);
             buildList();
         });
+        // Casual ou compétitif, À L'INTÉRIEUR du mode choisi : les deux
+        // boutons dépendent de la liste d'à côté, qui reste là sur les deux
+        // pages.
+        playType = new PvpScoreUi.PlayTypeToggle(c[0] + dropW + UiTheme.scaled(22f), rowY, UiTheme.scaled(300f), dropH,
+            competitive ? 1 : 0, index -> {
+                competitive = index == 1;
+                openedAt = System.nanoTime();
+                listShownAt = openedAt;
+                buildLayout();
+            });
         widgets.add(modeDropdown);
+        widgets.add(playType);
         buildList();
     }
 
@@ -319,14 +338,45 @@ public final class UiPvpScoreScreen extends UiScreenBase {
         }
     }
 
-    /** Le titre de la liste, le choix du mode, et le nom de chaque colonne au-dessus des lignes. */
+    // ── Le compétitif ────────────────────────────────────────────────────────
+
+    /**
+     * Le compétitif du mode choisi dans la liste déroulante, à la place de
+     * son bilan et de son historique casual : l'annonce en haut, et en bas
+     * la place où ses duels classés apparaîtront. Changer de mode change la
+     * page.
+     */
+    private void drawCompetitive(UiRenderer r, float[] c) {
+        int vw = screenWidth, vh = screenHeight;
+        float left = c[0], right = c[1];
+        float top = c[2] - UiTheme.scaled(24f);
+        String modeName = Lang.tr(PvpScoreUi.MODES[Math.max(0, Math.min(PvpScoreUi.MODES.length - 1, mode))]);
+
+        // L'annonce, à la place du bilan.
+        float dy = enter(0.05f);
+        PvpScoreUi.tintedCard(r, left, heroBottom + dy, right, top + dy, UiTheme.ACCENT, 0.22f, vw, vh);
+        float pad = UiTheme.scaled(32f);
+        float textW = right - left - pad * 2f;
+        PvpScoreUi.left(r, UiFont.BOLD, Lang.tr("COMPÉTITIF") + "  ·  " + modeName.toUpperCase(java.util.Locale.ROOT),
+            left + pad, top + dy - UiTheme.scaled(44f), textW, UiTheme.ACCENT, UiTheme.scaled(0.48f), vw, vh);
+        PvpScoreUi.left(r, UiFont.BOLD, Lang.tr("Bientôt disponible"), left + pad, top + dy - UiTheme.scaled(104f), textW,
+            UiTheme.TEXT_PRIMARY, UiTheme.scaled(1.6f), vw, vh);
+        PvpScoreUi.left(r, UiFont.REGULAR, Lang.tr("Le compétitif de ce mode arrive bientôt, comme celui de tous les autres modes de jeu."),
+            left + pad, top + dy - UiTheme.scaled(146f), textW, UiTheme.TEXT_SECONDARY, UiTheme.scaled(0.52f), vw, vh);
+        PvpScoreUi.left(r, UiFont.REGULAR, Lang.tr("En attendant, tes duels de ce mode sont notés en casual."),
+            left + pad, top + dy - UiTheme.scaled(176f), textW, UiTheme.TEXT_MUTED, UiTheme.scaled(0.46f), vw, vh);
+
+        // À la place de l'historique : ce qui y apparaîtra.
+        PvpScoreUi.alpha = PvpScoreUi.ease(openedAt, 0.3f, 0.5f);
+        PvpScoreUi.centered(r, UiFont.REGULAR, Lang.tr("Tes duels compétitifs apparaîtront ici."), (left + right) / 2f,
+            (listTop + c[3]) / 2f, right - left, UiTheme.TEXT_MUTED, UiTheme.scaled(0.56f), vw, vh);
+        PvpScoreUi.alpha = 1f;
+    }
+
+    /** Le nom de chaque colonne au-dessus des lignes (le mode et le casual / compétitif sont des widgets). */
     private void drawListTitle(UiRenderer r, float left, float right) {
         int vw = screenWidth, vh = screenHeight;
         PvpScoreUi.alpha = PvpScoreUi.ease(openedAt, 0.3f, 0.5f);
-        // Le titre suit la liste déroulante du mode, posée à gauche.
-        float y = heroBottom - UiTheme.scaled(44f);
-        float titleLeft = modeDropdown != null ? modeDropdown.x + modeDropdown.w + UiTheme.scaled(22f) : left;
-        PvpScoreUi.text(r, UiFont.BOLD, Lang.tr("HISTORIQUE DES DUELS NOTÉS"), titleLeft, y, UiTheme.TEXT_SECONDARY, UiTheme.scaled(0.48f), vw, vh);
         if (!scored.isEmpty()) {
             float[] col = DuelRow.columns(left, right - left - UiTheme.scaled(18f));
             float small = UiTheme.scaled(0.34f);
@@ -445,10 +495,23 @@ public final class UiPvpScoreScreen extends UiScreenBase {
             // Le dégradé n'a qu'un rayon pour ses quatre coins : coupé, il est
             // carré, et rentré d'un rayon sur les côtés pour ne pas dépasser
             // des coins arrondis qui restent.
-            float tintInset = cutBottom || cutTop ? radius : 0f;
-            r.drawGradientRect2D(x + tintInset, visibleBottom, x + w - tintInset, visibleTop, cutBottom || cutTop ? 0f : radius,
+            boolean cut = cutBottom || cutTop;
+            float tintInset = cut ? radius : 0f;
+            r.drawGradientRect2D(x + tintInset, visibleBottom, x + w - tintInset, visibleTop, cut ? 0f : radius,
                 PvpScoreUi.a(tone.withAlpha(strength)), PvpScoreUi.a(tone.withAlpha(strength * 0.2f)),
                 PvpScoreUi.a(tone.withAlpha(strength)), PvpScoreUi.a(tone.withAlpha(strength * 0.2f)), vw, vh);
+            if (cut) {
+                // Les deux bandes laissées par ce retrait, sinon vides : la
+                // carte grise nue s'y voyait comme une bande sombre au bord
+                // d'une ligne coupée. Un rect arrondi coin par coin, de la
+                // couleur du dégradé à cet endroit — sur la largeur d'un
+                // rayon, sa pente ne se voit pas.
+                float edge = (radius / 2f) / w;
+                UiColor leftTint = PvpScoreUi.a(tone.withAlpha(strength * (1f - 0.8f * edge)));
+                UiColor rightTint = PvpScoreUi.a(tone.withAlpha(strength * (0.2f + 0.8f * edge)));
+                r.drawRoundedRect(x, visibleBottom, x + radius, visibleTop, bottomRadius, 0f, topRadius, 0f, leftTint, vw, vh);
+                r.drawRoundedRect(x + w - radius, visibleBottom, x + w, visibleTop, 0f, bottomRadius, 0f, topRadius, rightTint, vw, vh);
+            }
             float accent = UiTheme.scaled(5f) + lift * UiTheme.scaled(2f);
             r.drawRoundedRect(x, visibleBottom, x + accent, visibleTop, cutBottom ? 0f : accent / 2f, 0f,
                 cutTop ? 0f : accent / 2f, 0f, PvpScoreUi.a(tone), vw, vh);
