@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
+import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import launchSoundUrl from '@/assets/sounds/halloween-launch.ogg'
 
@@ -571,12 +572,28 @@ const BURST = Array.from({ length: 12 }, (_, i) => {
 
 /**
  * Au clic : une onde orange et une nuée de chauves-souris qui s'échappe du
- * bouton. À poser HORS du bouton (il coupe ce qui dépasse), avec une `key`
- * nouvelle à chaque clic pour rejouer l'animation.
+ * bouton. Une `key` nouvelle à chaque clic rejoue l'animation.
+ *
+ * ── Pourquoi un portail en position fixe ──────────────────────────────────
+ * Posée dans la page, à côté du bouton, l'envolée vivait dans la colonne qui
+ * défile : les chauves-souris qui partent à plusieurs centaines de pixels
+ * agrandissaient sa zone de défilement pendant leur vol, et une barre de
+ * défilement apparaissait d'un coup au clic. Rendue dans `body`, en `fixed`
+ * à l'endroit mesuré de `anchor`, elle ne compte plus dans aucune mise en
+ * page. Pas `fixed` sans portail : un ancêtre animé par Motion porte un
+ * `transform`, qui fait de lui le repère d'un enfant `fixed`.
  */
-export function HalloweenLaunchBurst() {
-  return (
-    <span aria-hidden className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
+export function HalloweenLaunchBurst({ anchor }: { anchor: RefObject<HTMLElement | null> }) {
+  // Mesuré une fois, au montage : l'envolée dure une seconde, le bouton ne
+  // bouge pas entre-temps.
+  const [rect] = useState(() => anchor.current?.getBoundingClientRect() ?? null)
+  if (!rect) return null
+  return createPortal(
+    <span
+      aria-hidden
+      className="pointer-events-none fixed z-50 flex items-center justify-center"
+      style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }}
+    >
       <motion.span
         className="absolute inset-0 rounded-xl border-2 border-[#ff8a1f]"
         initial={{ opacity: 0.9, scale: 1 }}
@@ -603,6 +620,7 @@ export function HalloweenLaunchBurst() {
           <path d={BAT_PATH} fill={INK} stroke="rgba(255,150,80,0.6)" strokeWidth="1" />
         </motion.svg>
       ))}
-    </span>
+    </span>,
+    document.body,
   )
 }

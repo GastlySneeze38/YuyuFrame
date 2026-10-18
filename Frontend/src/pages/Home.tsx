@@ -192,6 +192,8 @@ export default function Home() {
   /** Habillage Halloween : compteur des clics sur « Lancer », qui sert de
    *  `key` à l'envolée de chauves-souris pour la rejouer à chaque fois. */
   const [spookBurst, setSpookBurst] = useState(0)
+  /** Rangée du bouton de lancement : l'envolée d'Halloween s'y mesure. */
+  const launchRowRef = useRef<HTMLDivElement>(null)
   /** Pastille de l'entrée « Support » : les réponses de l'équipe non lues,
    *  plus les rapports de plantage dont le statut a changé sans qu'on soit
    *  allé le lire. Les deux mènent au même écran, donc au même point. */
@@ -836,11 +838,12 @@ export default function Home() {
           {/* Plus de marge propre ici : le `gap` du groupe ci-dessus espaçait
               déjà le sélecteur du bouton, et les deux s'additionnaient — d'où
               un vide deux fois trop grand entre les deux. */}
-          {/* `relative` pour l'envolée d'Halloween, posée ici et non dans le
-              bouton : celui-ci est remplacé par l'état « en jeu » dès que le
-              lancement part, et l'animation disparaîtrait avec lui. */}
-          <div className="relative flex w-full gap-2">
-            {halloween && spookBurst > 0 && <HalloweenLaunchBurst key={spookBurst} />}
+          {/* L'envolée d'Halloween part d'ici et non du bouton : celui-ci
+              est remplacé par l'état « en jeu » dès que le lancement part, et
+              l'animation disparaîtrait avec lui. Elle se rend dans `body`
+              (voir `HalloweenLaunchBurst`), la rangée ne sert qu'à la placer. */}
+          <div ref={launchRowRef} className="flex w-full gap-2">
+            {halloween && spookBurst > 0 && <HalloweenLaunchBurst key={spookBurst} anchor={launchRowRef} />}
             {gameRunning ? (
               <div
                 // Même rayon que le bouton de lancement : c'est le même
