@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
+import launchSoundUrl from '@/assets/sounds/halloween-launch.ogg'
 
 /**
  * Habillage « Halloween » de la bannière d'accueil (thème `halloween` d'une
@@ -482,5 +483,126 @@ function Fog() {
         transition={{ duration: 19, repeat: Infinity, ease: 'easeInOut' }}
       />
     </>
+  )
+}
+
+// ── Bouton de lancement ─────────────────────────────────────────────────────
+
+let launchSound: HTMLAudioElement | null = null
+
+/**
+ * Le son du clic sur « Lancer ». Un seul élément audio, créé au premier
+ * appel puis rembobiné : en recréer un à chaque clic relirait le fichier.
+ * Un refus de lecture (format non pris en charge, sortie audio absente) ne
+ * doit jamais empêcher le lancement : il est avalé, avec une trace.
+ */
+export function playHalloweenLaunchSound() {
+  try {
+    if (!launchSound) {
+      launchSound = new Audio(launchSoundUrl)
+      launchSound.volume = 0.8
+    }
+    launchSound.currentTime = 0
+    launchSound.play().catch((e) => console.warn('Son de lancement Halloween :', e))
+  } catch (e) {
+    console.warn('Son de lancement Halloween :', e)
+  }
+}
+
+/** Gouttes de bave verte qui pendent du haut du bouton : x, largeur, durée. */
+const DRIPS = [
+  { left: '9%', width: 5, duration: 3.4, delay: 0 },
+  { left: '27%', width: 4, duration: 4.2, delay: 1.1 },
+  { left: '61%', width: 6, duration: 3.8, delay: 0.5 },
+  { left: '84%', width: 4, duration: 4.6, delay: 1.8 },
+]
+
+/**
+ * Décor DANS le bouton (qui coupe ce qui dépasse) : bave qui coule du bord
+ * haut, et une petite citrouille qui cligne à gauche du texte.
+ */
+export function HalloweenButtonFx() {
+  return (
+    <span aria-hidden className="pointer-events-none absolute inset-0 z-[5]">
+      {/* Le rebord de bave, puis les gouttes qui s'étirent et retombent. */}
+      <span className="absolute inset-x-0 top-0 h-[3px] bg-[#7cff4f]/70" />
+      {DRIPS.map((d, i) => (
+        <motion.span
+          key={i}
+          className="absolute top-0 rounded-b-full bg-[#7cff4f]/70"
+          style={{ left: d.left, width: d.width, transformOrigin: '50% 0%' }}
+          initial={{ height: 3 }}
+          animate={{ height: [3, 12, 16, 3], opacity: [0.9, 0.9, 0.5, 0.9] }}
+          transition={{ duration: d.duration, times: [0, 0.6, 0.75, 1], repeat: Infinity, delay: d.delay, ease: 'easeIn' }}
+        />
+      ))}
+      <motion.svg
+        viewBox="0 0 12 12"
+        shapeRendering="crispEdges"
+        // Centrée par `y` et non par une classe : Motion réécrit `transform`.
+        className="absolute left-[clamp(8px,1.4vw,16px)] top-1/2 h-[42%] w-auto"
+        initial={{ y: '-50%' }}
+        animate={{ rotate: [0, -10, 8, 0], y: ['-50%', '-62%', '-50%', '-50%'] }}
+        transition={{ duration: 1.2, repeat: Infinity, repeatDelay: 2.5 }}
+      >
+        <rect x="1" y="2" width="10" height="9" fill="#ffa53a" />
+        <rect x="0" y="3" width="12" height="7" fill="#ffa53a" />
+        <rect x="3" y="2" width="1" height="9" fill="#d9700f" />
+        <rect x="8" y="2" width="1" height="9" fill="#d9700f" />
+        <rect x="5" y="0" width="2" height="2" fill="#4a6b1f" />
+        <g fill="#3b0d05">
+          <rect x="2" y="4" width="2" height="2" />
+          <rect x="8" y="4" width="2" height="2" />
+          <rect x="2" y="8" width="8" height="1" />
+          <rect x="3" y="9" width="2" height="1" />
+          <rect x="7" y="9" width="2" height="1" />
+        </g>
+      </motion.svg>
+    </span>
+  )
+}
+
+/** Directions de l'envolée, en pixels depuis le centre du bouton. */
+const BURST = Array.from({ length: 12 }, (_, i) => {
+  const angle = (i / 12) * Math.PI * 2 + (i % 2) * 0.25
+  const reach = 90 + (i % 3) * 45
+  return { x: Math.cos(angle) * reach * 1.6, y: Math.sin(angle) * reach * 0.8 - 30, size: 14 + (i % 3) * 5, rotate: (i % 2 ? 1 : -1) * (20 + i * 9), delay: (i % 4) * 0.04 }
+})
+
+/**
+ * Au clic : une onde orange et une nuée de chauves-souris qui s'échappe du
+ * bouton. À poser HORS du bouton (il coupe ce qui dépasse), avec une `key`
+ * nouvelle à chaque clic pour rejouer l'animation.
+ */
+export function HalloweenLaunchBurst() {
+  return (
+    <span aria-hidden className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
+      <motion.span
+        className="absolute inset-0 rounded-xl border-2 border-[#ff8a1f]"
+        initial={{ opacity: 0.9, scale: 1 }}
+        animate={{ opacity: 0, scale: 1.35 }}
+        transition={{ duration: 0.7, ease: 'easeOut' }}
+      />
+      <motion.span
+        className="absolute inset-0 rounded-xl bg-[#ff8a1f]"
+        initial={{ opacity: 0.55 }}
+        animate={{ opacity: 0 }}
+        transition={{ duration: 0.45 }}
+      />
+      {BURST.map((b, i) => (
+        <motion.svg
+          key={i}
+          viewBox="0 0 32 14"
+          width={b.size}
+          height={(b.size * 14) / 32}
+          className="absolute"
+          initial={{ x: 0, y: 0, opacity: 0, scale: 0.4, rotate: 0 }}
+          animate={{ x: b.x, y: b.y, opacity: [0, 1, 1, 0], scale: [0.4, 1, 1, 0.8], rotate: b.rotate }}
+          transition={{ duration: 1.1, delay: b.delay, ease: 'easeOut' }}
+        >
+          <path d={BAT_PATH} fill={INK} stroke="rgba(255,150,80,0.6)" strokeWidth="1" />
+        </motion.svg>
+      ))}
+    </span>
   )
 }

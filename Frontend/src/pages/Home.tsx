@@ -16,7 +16,7 @@ import { InstanceSwitchModal } from '@/components/instances/InstanceSwitchModal'
 import { WelcomeSequence } from '@/components/home/WelcomeSequence'
 import { homeGreeting } from '@/lib/greeting'
 import { HomeBanner, Confetti, useHomeBanner } from '@/components/home/HomeBanner'
-import { HalloweenGround, HalloweenSky } from '@/components/home/Halloween'
+import { HalloweenButtonFx, HalloweenGround, HalloweenLaunchBurst, HalloweenSky, playHalloweenLaunchSound } from '@/components/home/Halloween'
 import { ProCard } from '@/components/home/ProCard'
 import { LaunchSweep } from '@/components/home/LaunchSweep'
 import { AgentModal, WarningIcon } from '@/components/home/AgentModal'
@@ -134,6 +134,13 @@ const LAUNCH_HOVER_SHADOW = [
   '0 6px 32px rgba(75,63,207,0.55)',
 ].join(', ')
 
+/** La même ombre en habillage Halloween : orange puis violet. */
+const LAUNCH_HOVER_SHADOW_HALLOWEEN = [
+  '3px 3px 0 rgba(255,138,31,0.6)',
+  '6px 6px 0 rgba(109,29,92,0.55)',
+  '0 6px 32px rgba(255,110,20,0.5)',
+].join(', ')
+
 /** Pourcentage à partir duquel on efface le launcher, faute d'agent. */
 const HIDE_AT_PERCENT = 90
 
@@ -182,6 +189,9 @@ export default function Home() {
   const [ghastFlying, setGhastFlying] = useState(false)
   /** Survol du bouton de lancement — pilote la comète (voir LaunchSweep). */
   const [launchHover, setLaunchHover] = useState(false)
+  /** Habillage Halloween : compteur des clics sur « Lancer », qui sert de
+   *  `key` à l'envolée de chauves-souris pour la rejouer à chaque fois. */
+  const [spookBurst, setSpookBurst] = useState(0)
   /** Pastille de l'entrée « Support » : les réponses de l'équipe non lues,
    *  plus les rapports de plantage dont le statut a changé sans qu'on soit
    *  allé le lire. Les deux mènent au même écran, donc au même point. */
@@ -473,6 +483,10 @@ export default function Home() {
     if (!instanceId || gameRunning || !username) return
     setBannerPulse(true)
     setTimeout(() => setBannerPulse(false), 900)
+    if (halloween) {
+      playHalloweenLaunchSound()
+      setSpookBurst((n) => n + 1)
+    }
     try {
       // Choix « avec / sans le client intégré », pris dans sa fenêtre et
       // retenu par instance. Le Rust l'ignore là où l'agent ne peut pas se
@@ -525,13 +539,17 @@ export default function Home() {
     ? Math.round(progress.current / progress.total * 100)
     : 0
 
-  const launchBtnBg = canLaunch
+  const launchBtnBg = canLaunch && halloween
+    ? 'bg-[linear-gradient(135deg,#ff8a1f_0%,#d9480f_50%,#6d1d5c_100%)] hover:brightness-110'
+    : canLaunch
     ? 'bg-[#4B3FCF] hover:bg-[#6155e8]'
     : !username
       ? 'bg-[rgba(75,63,207,0.45)] hover:bg-[rgba(75,63,207,0.65)]'
       : 'bg-[rgba(40,38,65,0.7)]'
 
-  const launchBtnShadow = canLaunch
+  const launchBtnShadow = canLaunch && halloween
+    ? 'shadow-[0_4px_28px_rgba(255,110,20,0.42)] hover:shadow-[0_6px_32px_rgba(255,110,20,0.62)]'
+    : canLaunch
     ? 'shadow-[0_4px_28px_rgba(75,63,207,0.42)] hover:shadow-[0_6px_32px_rgba(75,63,207,0.62)]'
     : 'shadow-none'
 
@@ -611,7 +629,13 @@ export default function Home() {
 
           {/* Flash violet au lancement */}
           {bannerPulse && (
-            <div className="absolute inset-0 pointer-events-none animate-banner-flash rounded-[20px] z-10 bg-[radial-gradient(ellipse_at_50%_50%,rgba(160,130,255,0.95)_0%,rgba(90,70,255,0.6)_35%,transparent_72%)]" />
+            <div
+              className={`absolute inset-0 pointer-events-none animate-banner-flash rounded-[20px] z-10 ${
+                halloween
+                  ? 'bg-[radial-gradient(ellipse_at_50%_50%,rgba(255,170,80,0.95)_0%,rgba(255,100,20,0.6)_35%,transparent_72%)]'
+                  : 'bg-[radial-gradient(ellipse_at_50%_50%,rgba(160,130,255,0.95)_0%,rgba(90,70,255,0.6)_35%,transparent_72%)]'
+              }`}
+            />
           )}
 
           {/* Avant les arbres : il vole dans le ciel, donc derrière eux. */}
@@ -812,7 +836,11 @@ export default function Home() {
           {/* Plus de marge propre ici : le `gap` du groupe ci-dessus espaçait
               déjà le sélecteur du bouton, et les deux s'additionnaient — d'où
               un vide deux fois trop grand entre les deux. */}
-          <div className="flex w-full gap-2">
+          {/* `relative` pour l'envolée d'Halloween, posée ici et non dans le
+              bouton : celui-ci est remplacé par l'état « en jeu » dès que le
+              lancement part, et l'animation disparaîtrait avec lui. */}
+          <div className="relative flex w-full gap-2">
+            {halloween && spookBurst > 0 && <HalloweenLaunchBurst key={spookBurst} />}
             {gameRunning ? (
               <div
                 // Même rayon que le bouton de lancement : c'est le même
@@ -855,7 +883,7 @@ export default function Home() {
                   aria-hidden
                   animate={{ opacity: [0.25, 0.7, 0.25] }}
                   transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
-                  className="pointer-events-none absolute inset-x-3 inset-y-1.5 rounded-xl bg-[#4B3FCF] blur-[16px]"
+                  className={`pointer-events-none absolute inset-x-3 inset-y-1.5 rounded-xl blur-[16px] ${halloween ? 'bg-[#ff6a14]' : 'bg-[#4B3FCF]'}`}
                 />
               )}
 
@@ -871,7 +899,7 @@ export default function Home() {
                 // répondrait mou.
                 whileHover={
                   canLaunch
-                    ? { scale: 1.03, skewX: -8, boxShadow: LAUNCH_HOVER_SHADOW }
+                    ? { scale: 1.03, skewX: -8, boxShadow: halloween ? LAUNCH_HOVER_SHADOW_HALLOWEEN : LAUNCH_HOVER_SHADOW }
                     : { scale: 1.03, skewX: -8 }
                 }
                 whileTap={{ scale: 0.96, skewX: -8 }}
@@ -889,6 +917,7 @@ export default function Home() {
                     un bouton désactivé ou déjà en cours promettrait une
                     action qui n'arrivera pas. */}
                 {canLaunch && !progress && <LaunchSweep active={launchHover} />}
+                {canLaunch && !progress && halloween && <HalloweenButtonFx />}
 
                 {progress && (
                   <span
