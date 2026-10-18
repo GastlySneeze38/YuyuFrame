@@ -657,7 +657,26 @@ public final class UiRenderer {
         backend().beginGlassFrame(passes, vpWidth, vpHeight, regions);
     }
 
+    /**
+     * Pendant qu'il est posé, {@link #beginGlassFrame(int, int, int)} ne fait
+     * rien : le flou déjà calculé dans cette image sert tel quel.
+     *
+     * <p>Pour le fondu enchaîné entre deux écrans (voir
+     * {@code UiScreenBase.uiFrame}) : le second écran est dessiné APRÈS le
+     * premier, et s'il recalculait le flou, celui-ci capturerait le premier
+     * écran — fond sombre et panneaux compris. Avec le recalcul une image sur
+     * deux, c'était même toujours lui qui le calculait, et le premier écran
+     * floutait à l'image suivante sa propre image : le verre virait au noir
+     * pendant toute la transition, puis revenait d'un coup.
+     */
+    public static void freezeGlassChain(boolean frozen) {
+        glassChainFrozen = frozen;
+    }
+
+    private static boolean glassChainFrozen;
+
     public void beginGlassFrame(int passes, int vpWidth, int vpHeight) {
+        if (glassChainFrozen) return;
         FrameBackdrop backdrop = frameBackdrop;
         if (backdrop != null) {
             try {

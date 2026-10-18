@@ -226,9 +226,13 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
                 next.screenWidth = screenWidth;
                 next.screenHeight = screenHeight;
                 next.pushEnterLayer(renderer);
+                // Il reprend le flou de cette image, calculé sur le monde seul
+                // par l'écran qui s'en va (voir UiRenderer.freezeGlassChain).
+                UiRenderer.freezeGlassChain(true);
                 try {
                     next.uiDraw(mouseX, mouseY);
                 } finally {
+                    UiRenderer.freezeGlassChain(false);
                     renderer.popLayer();
                 }
             }
