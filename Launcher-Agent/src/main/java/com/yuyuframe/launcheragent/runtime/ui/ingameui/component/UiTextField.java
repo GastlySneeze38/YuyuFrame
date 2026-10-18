@@ -50,6 +50,10 @@ public class UiTextField extends UiWidget implements UiFocusable {
     private int selAnchor = -1;
     private final UiAnimatedFloat clearHoverAnim = new UiAnimatedFloat(0f, 16f);
     private final UiAnimatedFloat focusAnim = new UiAnimatedFloat(0f, 10f);
+    private final UiAnimatedFloat fieldHoverAnim = new UiAnimatedFloat(0f, 16f);
+    /** Position affichée du curseur, en pixels depuis le début du texte visible — elle glisse vers la vraie. */
+    private final UiAnimatedFloat caretX = new UiAnimatedFloat(0f, 30f);
+    private long caretMovedMs;
 
     private boolean searchIcon;
     /** Déclenché par Entrée (ou Entrée pavé numérique) pendant que ce champ a le focus — voir {@link UiInputPoller#pollTextEdit}. Null = pas de soumission explicite (juste onChange à chaque frappe). */
@@ -272,15 +276,19 @@ public class UiTextField extends UiWidget implements UiFocusable {
         // la variante à contour de drawGlassPanel : drawRoundedRectBorder est
         // inerte sur era E (GL brut, corrompait l'état GPU).
         focusAnim.setTarget(focused ? 1f : 0f);
+        fieldHoverAnim.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
         float ringT = focusAnim.get();
+        float hoverT = fieldHoverAnim.get();
+        // Le contour s'éclaire à moitié au survol, en entier au focus.
         UiColor ringColor = UiColor.lerp(
             renderer.isGlassAvailable() ? UiTheme.GLASS_BORDER : UiColor.TRANSPARENT,
-            UiTheme.ACCENT, ringT);
+            UiTheme.ACCENT, Math.max(ringT, hoverT * 0.45f));
         renderer.drawGlassPanel(x, y, x + w, y + h, UiTheme.RADIUS_SM,
             UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_FIELD, UiTheme.PANEL_BG_ALT,
             ringColor, Math.max(1f, UiTheme.scaled(1f)) + ringT * 0.5f, vpWidth, vpHeight);
-        if (focused) {
-            renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, UiTheme.ACCENT_DIM, vpWidth, vpHeight);
+        // Le fond du focus arrive et repart en fondu.
+        if (ringT > 0.01f) {
+            renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, UiTheme.ACCENT_DIM.multiplyAlpha(ringT), vpWidth, vpHeight);
         }
 
 
@@ -333,11 +341,20 @@ public class UiTextField extends UiWidget implements UiFocusable {
         // glyphTopOffset/glyphBottomOffset) — un premier jet calé sur h du
         // champ (~28px) donnait une grosse barre disproportionnée par rapport
         // au texte (~15px), confirmé en jeu ("bar clignotante trop grande").
-        if (focused && !hasSelection() && (System.currentTimeMillis() / 500L) % 2 == 0) {
+        if (focused && !hasSelection()) {
             int mark = Math.max(from, Math.min(to, caret));
-            float cx = x + textPad + renderer.textWidth(shown.substring(from, mark), scale);
+            float target = renderer.textWidth(shown.substring(from, mark), scale);
+            // Le curseur glisse vers sa nouvelle place (frappe, flèches) et
+            // respire au lieu de clignoter d'un coup ; il reste plein juste
+            // après un déplacement, pour qu'on le voie arriver.
+            if (caretX.target() != target) caretMovedMs = System.currentTimeMillis();
+            caretX.setTarget(target);
+            long sinceMove = System.currentTimeMillis() - caretMovedMs;
+            float blink = sinceMove < 500L ? 1f
+                : 0.5f + 0.5f * (float) Math.cos((sinceMove - 500L) / 1000.0 * Math.PI * 2.0);
+            float cx = x + textPad + caretX.get();
             renderer.drawRoundedRect(cx, baseline - glyphBottomOffset(scale), cx + UiTheme.scaled(1.2f), baseline + glyphTopOffset(scale),
-                0f, UiTheme.TEXT_PRIMARY, vpWidth, vpHeight);
+                0f, UiTheme.TEXT_PRIMARY.multiplyAlpha(Math.max(0f, Math.min(1f, blink * 1.4f - 0.2f))), vpWidth, vpHeight);
         }
 
         if (clearVisible) {

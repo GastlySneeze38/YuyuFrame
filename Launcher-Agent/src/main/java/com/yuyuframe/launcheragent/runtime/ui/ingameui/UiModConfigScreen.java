@@ -447,7 +447,9 @@ public class UiModConfigScreen extends UiScreenBase {
             // Agrandi/marge augmentée (retour utilisateur : "c'est trop petit... pas assez de marge") — 14px->18px, 0.48->0.5.
             // "name" reste le texte source (clé de anchors/activeCategory,
             // voir onClick ci-dessous) — traduit UNIQUEMENT ici, à l'affichage.
-            renderer.drawText(Lang.tr(name), x + UiTheme.scaled(18f), y + h / 2f - UiTheme.scaled(6f), textColor, UiTheme.scaled(0.5f), vpWidth, vpHeight);
+            // Le libellé glisse un peu vers la droite au survol et quand l'onglet devient actif.
+            float shift = Math.max(hoverT, activeT) * UiTheme.scaled(4f);
+            renderer.drawText(Lang.tr(name), x + UiTheme.scaled(18f) + shift, y + h / 2f - UiTheme.scaled(6f), textColor, UiTheme.scaled(0.5f), vpWidth, vpHeight);
         }
 
         /** Ne bascule plus l'affichage (liste continue désormais, voir javadoc de classe) — fait défiler jusqu'à la section, la sous-sidebar suit ensuite toute seule au fil du scroll (voir updateActiveCategory). */

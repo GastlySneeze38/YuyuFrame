@@ -94,7 +94,11 @@ public class UiSlider extends UiWidget {
         float trackW = trackW();
         float cy = y + h / 2f;
         renderer.drawRoundedRect(x, cy - TRACK_H / 2f, x + trackW, cy + TRACK_H / 2f, TRACK_H / 2f, UiTheme.TRACK_OFF, vpWidth, vpHeight);
-        float knobX = x + ratio() * trackW;
+        // Le curseur rejoint sa valeur en glissant (au pas d'un cran, ou
+        // quand la valeur change ailleurs) au lieu d'y sauter.
+        if (shownRatio == null) shownRatio = new UiAnimatedFloat(ratio(), 28f);
+        shownRatio.setTarget(ratio());
+        float knobX = x + shownRatio.get() * trackW;
         // Grisé (voir #enabledSupplier) : piste remplie ET curseur passent
         // en TEXT_MUTED au lieu de l'accent/blanc habituels — même signal
         // visuel qu'un contrôle HTML disabled, pas juste un survol qui ne
@@ -102,13 +106,27 @@ public class UiSlider extends UiWidget {
         UiColor fillColor = enabled ? UiColor.lerp(UiTheme.ACCENT, UiTheme.accentLight(), hoverT) : UiTheme.TRACK_OFF;
         renderer.drawRoundedRect(x, cy - TRACK_H / 2f, knobX, cy + TRACK_H / 2f, TRACK_H / 2f, fillColor, vpWidth, vpHeight);
         float knobR = KNOB_R * (1f + hoverT * 0.25f);
+        // Halo autour du curseur : au survol, plus large pendant le glissement.
+        dragAnim.setTarget(dragging ? 1f : 0f);
+        float drag = dragAnim.get();
+        if (enabled && hoverT > 0.01f) {
+            float halo = knobR + UiTheme.scaled(5f) * hoverT + UiTheme.scaled(3f) * drag;
+            renderer.drawRoundedRect(knobX - halo, cy - halo, knobX + halo, cy + halo, halo,
+                UiTheme.ACCENT.withAlpha(0.18f * hoverT + 0.12f * drag), vpWidth, vpHeight);
+        }
         renderer.drawRoundedRect(knobX - knobR, cy - knobR, knobX + knobR, cy + knobR, knobR,
             enabled ? UiTheme.TEXT_PRIMARY : UiTheme.TEXT_MUTED, vpWidth, vpHeight);
 
         String text = formatValue();
         float tw = renderer.textWidth(text, textScale);
-        renderer.drawText(text, x + w - tw, cy - UiTheme.scaled(5f), enabled ? UiTheme.TEXT_SECONDARY : UiTheme.TEXT_MUTED, textScale, vpWidth, vpHeight);
+        UiColor readout = enabled ? UiColor.lerp(UiTheme.TEXT_SECONDARY, UiTheme.accentLight(), drag) : UiTheme.TEXT_MUTED;
+        renderer.drawText(text, x + w - tw, cy - UiTheme.scaled(5f) + drag * UiTheme.scaled(1.5f), readout, textScale, vpWidth, vpHeight);
     }
+
+    /** Position affichée du curseur, qui suit la valeur en glissant — créée au premier dessin, à la valeur d'alors. */
+    private UiAnimatedFloat shownRatio;
+    /** Glissement en cours : le halo s'élargit et la valeur s'allume. */
+    private final UiAnimatedFloat dragAnim = new UiAnimatedFloat(0f, 18f);
 
     @Override
     public void pollContinuous(UiInputPoller input) {

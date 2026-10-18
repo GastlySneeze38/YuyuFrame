@@ -192,11 +192,30 @@ public class UiToggle extends UiWidget {
         UiColor bottom = (enabled ? UiColor.lerp(UiTheme.TRACK_OFF, UiTheme.ACCENT, t) : UiTheme.TRACK_OFF).multiplyAlpha(drawAlpha);
         renderer.drawGradientRect(x, y, x + w, y + h, h / 2f, bottom, top, vpWidth, vpHeight);
 
+        hoverAnim.setTarget(enabled && contains(mouseX, mouseY) ? 1f : 0f);
+        float hover = hoverAnim.get();
         float knobD = h - 4f;
         float knobXOff = 2f + t * (w - knobD - 4f); // 2f (position OFF) -> w-knobD-2f (position ON)
+        // Le bouton s'étire pendant qu'il glisse, puis reprend sa forme : il
+        // s'allonge du côté où il va (sin(πt) vaut 0 aux deux bouts).
+        float stretch = (float) Math.sin(Math.PI * t) * knobD * 0.35f * (anim.target() > 0.5f ? 1f : -1f);
+        float kx1 = x + knobXOff + Math.min(0f, stretch);
+        float kx2 = x + knobXOff + knobD + Math.max(0f, stretch);
+        // Halo au survol, centré sur le bouton.
+        if (hover > 0.01f) {
+            float halo = UiTheme.scaled(4f) * hover;
+            renderer.drawRoundedRect(kx1 - halo, y + 2f - halo, kx2 + halo, y + h - 2f + halo, knobD / 2f + halo,
+                UiTheme.ACCENT.withAlpha(0.28f * hover * drawAlpha), vpWidth, vpHeight);
+        }
         UiColor knob = enabled ? UiTheme.TEXT_PRIMARY : UiTheme.TEXT_MUTED;
-        renderer.drawRoundedRect(x + knobXOff, y + 2f, x + knobXOff + knobD, y + h - 2f, knobD / 2f, knob.multiplyAlpha(drawAlpha), vpWidth, vpHeight);
+        renderer.drawRoundedRect(kx1, y + 2f, kx2, y + h - 2f, knobD / 2f, knob.multiplyAlpha(drawAlpha), vpWidth, vpHeight);
     }
+
+    /** Survol : halo autour du bouton. */
+    private final UiAnimatedFloat hoverAnim = new UiAnimatedFloat(0f, 16f);
+    /** Instant du dernier clic, pour le rebond du cœur. */
+    private long poppedAt = -1L;
+    private static final long POP_MS = 320L;
 
     private static final Map<String, BufferedImage> HEART_CACHE = new HashMap<>();
 
@@ -258,6 +277,12 @@ public class UiToggle extends UiWidget {
         int px = Math.max(8, Math.round(Math.max(w, h) * 4f));
         BufferedImage img = heartImage(px, value);
         float size = Math.min(w, h);
+        // Rebond au clic : le cœur gonfle puis revient, avec un léger dépassement.
+        if (poppedAt >= 0) {
+            float p = (System.currentTimeMillis() - poppedAt) / (float) POP_MS;
+            if (p >= 1f) poppedAt = -1L;
+            else size *= 1f + 0.35f * (float) Math.sin(Math.PI * p) * (1f - p * 0.4f);
+        }
         float ix = x + (w - size) / 2f, iy = y + (h - size) / 2f;
         renderer.drawIcon("la$heart_" + px + "_" + value, img, ix, iy, size, size, drawAlpha, vpWidth, vpHeight);
     }
@@ -271,6 +296,7 @@ public class UiToggle extends UiWidget {
         boolean next = !value();
         value = next;
         anim.setTarget(next ? 1f : 0f);
+        poppedAt = System.currentTimeMillis();
         if (onChange != null) onChange.accept(next);
     }
 }

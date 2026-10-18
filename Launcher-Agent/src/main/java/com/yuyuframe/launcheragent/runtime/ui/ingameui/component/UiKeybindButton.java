@@ -31,6 +31,8 @@ public class UiKeybindButton extends UiWidget {
     private boolean listening;
     private final Consumer<String> onChange;
     private final UiAnimatedFloat hoverAnim = new UiAnimatedFloat(0f, 16f);
+    /** Capture en cours, en fondu — voir la respiration du liseré dans {@link #draw}. */
+    private final UiAnimatedFloat listenAnim = new UiAnimatedFloat(0f, 14f);
 
     public UiKeybindButton(float x, float y, float w, float h, String initialKeyName, Consumer<String> onChange) {
         super(x, y, w, h);
@@ -43,7 +45,19 @@ public class UiKeybindButton extends UiWidget {
     @Override
     public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
         hoverAnim.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
-        UiColor bg = listening ? UiTheme.ACCENT_DIM : UiColor.lerp(BASE, HOVER, hoverAnim.get());
+        listenAnim.setTarget(listening ? 1f : 0f);
+        float hover = hoverAnim.get();
+        float listen = listenAnim.get();
+        // En attente d'une touche, un liseré d'accent respire autour du
+        // bouton ; au survol, il s'allume sans respirer.
+        float breathe = 0.5f + 0.5f * (float) Math.sin(System.currentTimeMillis() / 1000.0 * Math.PI * 2.0 * 0.9);
+        float ring = Math.max(hover * 0.4f, listen * (0.45f + 0.55f * breathe));
+        if (ring > 0.01f) {
+            float grow = 1f + listen * breathe * UiTheme.scaled(1.5f);
+            renderer.drawRoundedRect(x - grow, y - grow, x + w + grow, y + h + grow, UiTheme.RADIUS_SM + grow,
+                UiTheme.ACCENT.withAlpha(0.6f * ring), vpWidth, vpHeight);
+        }
+        UiColor bg = UiColor.lerp(UiColor.lerp(BASE, HOVER, hover), UiTheme.ACCENT_DIM, listen);
         renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, bg, vpWidth, vpHeight);
 
         // Pendant la capture, on montre ce qui est déjà retenu : sans ce

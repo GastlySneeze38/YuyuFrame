@@ -435,7 +435,9 @@ public class UiModGroupConfigScreen extends UiScreenBase {
             // Marge gauche/texte agrandis (retour utilisateur) — 14->18, scale via TAB_LABEL_SCALE (0.4->0.46, voir buildLayout).
             // "name" reste le texte source (clé de anchors/activeTab, voir
             // onClick ci-dessous) — traduit UNIQUEMENT ici, à l'affichage.
-            renderer.drawText(Lang.tr(name), x + UiTheme.scaled(18f), y + h / 2f - UiTheme.scaled(6f), textColor, TAB_LABEL_SCALE, vpWidth, vpHeight);
+            // Le libellé glisse un peu vers la droite au survol et quand l'onglet devient actif.
+            float shift = Math.max(hoverT, activeT) * UiTheme.scaled(4f);
+            renderer.drawText(Lang.tr(name), x + UiTheme.scaled(18f) + shift, y + h / 2f - UiTheme.scaled(6f), textColor, TAB_LABEL_SCALE, vpWidth, vpHeight);
         }
 
         /** Ne bascule plus de page (liste continue désormais, voir javadoc de classe) — fait défiler jusqu'à la section. */

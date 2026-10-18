@@ -90,6 +90,35 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
     private static UiScreenBase lastActiveScreen;
 
     /**
+     * Entrée en cascade des widgets de l'écran, en plus du rideau : chacun
+     * monte de quelques pixels jusqu'à sa place, un peu après le précédent.
+     * Générique comme le rideau — tous les écrans en profitent. Seul le
+     * DESSIN est décalé : le clic garde la vraie position, ce qui ne se sent
+     * pas sur une demi-seconde.
+     */
+    private long cascadeStartNanos = System.nanoTime();
+    private static final float CASCADE_STEP_S = 0.03f;
+    private static final float CASCADE_DURATION_S = 0.35f;
+    private static final int CASCADE_MAX_STEPS = 14;
+
+    /**
+     * {@code false} pour un écran dont les widgets sont des positions réelles
+     * à l'écran (l'éditeur de HUD) : ils ne doivent pas bouger à l'ouverture.
+     */
+    protected boolean cascadeWidgets() {
+        return true;
+    }
+
+    /** Combien le widget n°{@code index} est encore sous sa place, {@code elapsed} secondes après l'ouverture. */
+    private static float cascadeOffset(int index, float elapsed) {
+        float t = (elapsed - Math.min(index, CASCADE_MAX_STEPS) * CASCADE_STEP_S) / CASCADE_DURATION_S;
+        if (t >= 1f) return 0f;
+        t = Math.max(0f, t);
+        float eased = 1f - (1f - t) * (1f - t) * (1f - t);
+        return (1f - eased) * UiTheme.scaled(16f);
+    }
+
+    /**
      * Constructeur no-arg de Screen (PAS Screen(Component title)) — ce dernier
      * n'existe pas forcément sur toutes les versions (ex: absent en 1.8.9,
      * observé via NoSuchMethodError: axu.<init>(Leu;)V lors du premier test en
@@ -473,14 +502,30 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
             if (lastActiveScreen != this) {
                 lastActiveScreen = this;
                 enterAnim.replay();
+                cascadeStartNanos = System.nanoTime();
             }
 
             UiRenderer renderer = UiRenderer.get(this.getClass().getClassLoader());
             renderer.drawRoundedRect(0, 0, screenWidth, screenHeight, 0, overlayColor(), screenWidth, screenHeight);
 
             String hoveredTooltip = null;
-            for (UiWidget w : widgets) {
-                w.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
+            float elapsed = (System.nanoTime() - cascadeStartNanos) / 1e9f;
+            for (int i = 0; i < widgets.size(); i++) {
+                UiWidget w = widgets.get(i);
+                float rise = cascadeWidgets() ? cascadeOffset(i, elapsed) : 0f;
+                // Les listes défilantes ne sont pas dans {@code widgets} (chaque
+                // écran les dessine lui-même) : leur contenu n'est pas décalé.
+                if (rise > 0.01f) {
+                    float restY = w.y;
+                    w.y = restY - rise;
+                    try {
+                        w.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
+                    } finally {
+                        w.y = restY;
+                    }
+                } else {
+                    w.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
+                }
                 if (w.tooltip != null && w.contains(mouseX, mouseY)) hoveredTooltip = w.tooltip;
             }
             if (hoveredTooltip != null) UiTooltip.draw(renderer, hoveredTooltip, mouseX, mouseY, screenWidth, screenHeight);

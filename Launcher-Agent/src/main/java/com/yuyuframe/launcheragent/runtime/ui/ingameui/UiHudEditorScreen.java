@@ -65,6 +65,12 @@ public class UiHudEditorScreen extends UiScreenBase {
         return EDITOR_OVERLAY;
     }
 
+    /** Les boîtes sont là où le HUD sera : elles ne montent pas en cascade à l'ouverture. */
+    @Override
+    protected boolean cascadeWidgets() {
+        return false;
+    }
+
     @Override
     public void uiDraw(double mouseX, double mouseY) {
         if (screenWidth > 0 && screenHeight > 0

@@ -44,14 +44,26 @@ public class UiButton extends UiWidget {
 
     @Override
     public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
-        hoverAnim.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
+        boolean over = contains(mouseX, mouseY);
+        hoverAnim.setTarget(over ? 1f : 0f);
+        pressAnim.setTarget(over && pressed ? 1f : 0f);
         float hover = hoverAnim.get();
+        float press = pressAnim.get();
         UiColor color = UiColor.lerp(BASE, HOVER, hover);
+        // Halo d'accent qui grandit autour du bouton au survol.
+        if (hover > 0.01f) {
+            float halo = UiTheme.scaled(3f) * hover;
+            renderer.drawRoundedRect(x - halo, y - halo, x + w + halo, y + h + halo, RADIUS + halo,
+                UiTheme.ACCENT.withAlpha(0.16f * hover), vpWidth, vpHeight);
+        }
+        // Enfoncé : le bouton rentre un peu sur lui-même pendant l'appui.
+        float inset = Math.min(w, h) * 0.05f * press;
+        float bx1 = x + inset, by1 = y + inset, bx2 = x + w - inset, by2 = y + h - inset;
         // Bouton de verre (rework 2026-08-27) — composant PARTAGÉ, converti
         // ici pour propager le style à tous ses appelants d'un coup.
         UiColor btnBorder = renderer.isGlassAvailable()
-            ? UiColor.lerp(UiTheme.GLASS_BORDER, UiTheme.GLASS_BORDER_HOVER, hover) : null;
-        renderer.drawGlassPanel(x, y, x + w, y + h, RADIUS,
+            ? UiColor.lerp(UiColor.lerp(UiTheme.GLASS_BORDER, UiTheme.GLASS_BORDER_HOVER, hover), UiTheme.ACCENT, press) : null;
+        renderer.drawGlassPanel(bx1, by1, bx2, by2, RADIUS,
             UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_FIELD, color,
             btnBorder, Math.max(1f, UiTheme.scaled(1f)), vpWidth, vpHeight);
         if (rippleStartMs >= 0) {
@@ -119,5 +131,14 @@ public class UiButton extends UiWidget {
     public void onClick() {
         rippleStartMs = System.currentTimeMillis();
         if (action != null) action.run();
+    }
+
+    /** Bouton gauche tenu enfoncé — lu à chaque image, pour l'enfoncement du bouton. */
+    private boolean pressed;
+    private final UiAnimatedFloat pressAnim = new UiAnimatedFloat(0f, 22f);
+
+    @Override
+    public void pollContinuous(com.yuyuframe.launcheragent.apigraphic.platform.UiInputPoller input) {
+        pressed = input.leftDown;
     }
 }

@@ -23,7 +23,8 @@ public final class UiTooltip {
     // juste une chaîne).
     private static String lastText;
     private static long shownAtMs = -1L;
-    private static final long FADE_MS = 120L;
+    private static long lastDrawnMs = -1L;
+    private static final long FADE_MS = 180L;
 
     public static void draw(UiRenderer renderer, String text, double mouseX, double mouseY, int vpWidth, int vpHeight) {
         if (text == null || text.isEmpty()) {
@@ -31,11 +32,17 @@ public final class UiTooltip {
             shownAtMs = -1L;
             return;
         }
-        if (!text.equals(lastText)) {
+        long now = System.currentTimeMillis();
+        // Une bulle qui n'a pas été dessinée depuis quelques images a été
+        // quittée : la revoir rejoue son apparition, même sur le même widget.
+        if (!text.equals(lastText) || now - lastDrawnMs > 100L) {
             lastText = text;
-            shownAtMs = System.currentTimeMillis();
+            shownAtMs = now;
         }
-        float alpha = Math.min(1f, (System.currentTimeMillis() - shownAtMs) / (float) FADE_MS);
+        lastDrawnMs = now;
+        float linear = Math.min(1f, (System.currentTimeMillis() - shownAtMs) / (float) FADE_MS);
+        // Ease-out : la bulle arrive vite et se pose en douceur.
+        float alpha = 1f - (1f - linear) * (1f - linear) * (1f - linear);
 
         // Recalculées à chaque appel (pas de champ statique figé) : cette
         // classe est un utilitaire 100% statique, dessinée chaque frame — pas
@@ -63,6 +70,14 @@ public final class UiTooltip {
             yTop = yBottom + boxH;
         }
 
+        // Elle monte de quelques pixels en apparaissant.
+        float rise = (1f - alpha) * UiTheme.scaled(6f);
+        yBottom -= rise;
+        yTop -= rise;
+        renderer.drawShadow(x, yBottom, x + boxW, yTop, UiTheme.RADIUS_SM, 8f, 0f,
+            new com.yuyuframe.launcheragent.apigraphic.value.UiColor(0, 0, 0, Math.round(80 * alpha)), vpWidth, vpHeight);
+        renderer.drawRoundedRect(x - 1f, yBottom - 1f, x + boxW + 1f, yTop + 1f, UiTheme.RADIUS_SM + 1f,
+            UiTheme.ACCENT.withAlpha(0.35f * alpha), vpWidth, vpHeight);
         renderer.drawRoundedRect(x, yBottom, x + boxW, yTop, UiTheme.RADIUS_SM, UiTheme.PANEL_BG_ALT.multiplyAlpha(alpha), vpWidth, vpHeight);
         renderer.drawText(text, x + PAD, yBottom + PAD + UiFont.REGULAR.descent * SCALE * UiFont.SIZE_CORRECTION,
             UiTheme.TEXT_PRIMARY.multiplyAlpha(alpha), SCALE, vpWidth, vpHeight);
