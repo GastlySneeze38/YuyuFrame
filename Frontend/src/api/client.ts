@@ -918,6 +918,9 @@ export const api = {
   // réponse : hors ligne, ou pays que Cloudflare ne sait pas situer.
   locale: {
     detectCountry: () => invoke<string | null>('detect_country'),
+    /** Langue de l'interface, donnée au Rust qui l'envoie au serveur avec
+     *  les informations d'appareil : c'est celle des e-mails du compte. */
+    setUiLanguage: (language: string) => invoke<void>('set_ui_language', { language }),
   },
 
   // Réglages du client intégré : mêmes paires clé/valeur, mais dans le

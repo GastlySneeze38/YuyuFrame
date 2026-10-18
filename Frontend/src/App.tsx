@@ -114,6 +114,7 @@ export default function App() {
   // Mot de passe provisoire donné par le support : la modale s'impose tant
   // qu'il n'est pas changé (le serveur refuse tout le reste).
   const applyDetectedLanguage = useStore((s) => s.applyDetectedLanguage)
+  const language = useStore((s) => s.language)
   const passwordResetRequired = useStore((s) => s.yuyuPasswordResetRequired)
   const emailVerificationRequired = useStore((s) => s.yuyuSignedIn && s.yuyuEmailVerificationRequired)
   // « Plus tard » sur la fenêtre de confirmation : elle ne revient pas avant
@@ -314,6 +315,14 @@ export default function App() {
     return () => { alive = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // La langue des e-mails du compte suit celle de l'interface : le Rust
+  // l'envoie au serveur à la prochaine connexion ou au prochain
+  // rafraîchissement de session (au plus 15 minutes).
+  useEffect(() => {
+    if (isConsoleWindow) return
+    api.locale.setUiLanguage(language).catch(() => {})
+  }, [language])
 
   // Lien yuyuframe://join?... — bouton "Rejoindre" de la Rich Presence
   // Discord d'un ami (voir discord.rs::build_join_url). Deux chemins

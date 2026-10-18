@@ -10,7 +10,7 @@ A YuyuFrame account is optional: the launcher installs and starts Minecraft with
 
 ## 2. Data we collect
 
-**Account data.** When you create a YuyuFrame account we collect a **username**, an **e-mail address** and a **password**. The e-mail address is required and must be confirmed with a code we send to it. The password is stored only as an Argon2id hash, never in plain text. We do not ask for your real name, date of birth or postal address. We also record the date on which you accepted this policy.
+**Account data.** When you create a YuyuFrame account we collect a **username**, an **e-mail address** and a **password**. The e-mail address is required and must be confirmed with a code we send to it. The password is stored only as an Argon2id hash, never in plain text. We do not ask for your real name, date of birth or postal address. We also record the date on which you accepted this policy, and the language of your launcher, so that our e-mails are written in it.
 
 **Password check.** When you choose a password, we check that it does not appear in known data breaches, using the Have I Been Pwned service. Only the first five characters of a SHA-1 hash of the password are sent; neither the password nor its full hash ever leaves our server.
 
@@ -86,7 +86,7 @@ We rely on the following providers, each strictly for the feature it supports:
 - **MineSkin**: hosting the skin of an offline Minecraft account at Mojang (it receives the skin image from our server)
 - **PostHog** (European Union): anonymous usage statistics, which you can turn off
 - **Backblaze B2**: storage of encrypted backups
-- **An e-mail delivery provider**: sending confirmation codes and security e-mails to your address
+- **Brevo** (France): sending confirmation codes and security e-mails to your address
 - **Discord**: the private channel where our team answers support tickets
 - **Cloudflare**: the one-time country lookup at first start
 - **Have I Been Pwned**: the breached-password check described above

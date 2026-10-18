@@ -42,7 +42,8 @@ const REFRESH_MARGIN_SECS: i64 = 60;
 /// connectés » du compte, et le pilotage de flotte (version, OS), s'en
 /// servent. `device_id` est le même identifiant anonyme que les statistiques ;
 /// `hardware_id` est l'empreinte du poste pour l'anti-alt (`security/hardware.rs`),
-/// absente quand le système n'en donne pas.
+/// absente quand le système n'en donne pas. `language` est celle de
+/// l'interface : le serveur en fait la langue des e-mails du compte.
 pub fn device_info() -> Value {
     serde_json::json!({
         "device_id": crate::integrations::analytics::install_id(),
@@ -50,6 +51,7 @@ pub fn device_info() -> Value {
         "os": std::env::consts::OS,
         "launcher_version": env!("CARGO_PKG_VERSION"),
         "hardware_id": crate::security::hardware::hardware_id(),
+        "language": crate::app::locale::ui_language(),
     })
 }
 

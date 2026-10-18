@@ -27,6 +27,35 @@ const TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
 
 const TRACE_URL: &str = "https://www.cloudflare.com/cdn-cgi/trace";
 
+// ── Langue de l'interface, pour les e-mails du compte ────────────────────
+// La langue vit dans le magasin du frontend ; le Rust ne la connaît que parce
+// que l'interface la lui donne au démarrage et à chaque changement. Elle part
+// avec les informations d'appareil (`server::device_info`) à la connexion et
+// à chaque rafraîchissement, et LauncherAPI en fait la langue des e-mails du
+// compte. En mémoire seulement : l'interface la redonne à chaque démarrage.
+
+static UI_LANGUAGE: std::sync::RwLock<Option<String>> = std::sync::RwLock::new(None);
+
+/// La langue de l'interface, ou rien tant qu'elle ne l'a pas donnée.
+pub fn ui_language() -> Option<String> {
+    UI_LANGUAGE.read().ok()?.clone()
+}
+
+/// La langue cachée (écriture de la table d'enchantement) se lit en
+/// français : c'est de lui qu'elle est calculée.
+fn normalize_language(language: &str) -> Option<String> {
+    let code = language.trim().to_ascii_lowercase();
+    let code = if code == "sga" { "fr".to_owned() } else { code };
+    (code.len() == 2 && code.bytes().all(|b| b.is_ascii_lowercase())).then_some(code)
+}
+
+#[tauri::command]
+pub fn set_ui_language(language: String) {
+    if let Ok(mut slot) = UI_LANGUAGE.write() {
+        *slot = normalize_language(&language);
+    }
+}
+
 /// Extrait le code pays de la réponse `cdn-cgi/trace`.
 ///
 /// `loc=XX` en majuscules, deux lettres. `loc=XX` peut valoir `XX` (inconnu)
@@ -72,6 +101,15 @@ mod tests {
         // Cloudflare rend littéralement « XX » quand il ne sait pas situer
         // l'adresse — le prendre pour un pays choisirait une langue au hasard.
         assert_eq!(parse_country("loc=XX\n"), None);
+    }
+
+    #[test]
+    fn la_langue_envoyee_au_serveur_est_un_code_simple() {
+        assert_eq!(normalize_language("fr").as_deref(), Some("fr"));
+        assert_eq!(normalize_language(" PT ").as_deref(), Some("pt"));
+        assert_eq!(normalize_language("sga").as_deref(), Some("fr"), "la langue cachée s'écrit en français");
+        assert_eq!(normalize_language("fr-FR"), None);
+        assert_eq!(normalize_language(""), None);
     }
 
     #[test]

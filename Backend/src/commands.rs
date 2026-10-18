@@ -206,6 +206,7 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         crate::backup::commands::backup_settings_save,
         crate::backup::commands::backup_settings_reset,
         crate::app::locale::detect_country,
+        crate::app::locale::set_ui_language,
         crate::server::patch_notes::patch_notes_latest,
         crate::server::patch_notes::patch_notes_list,
         crate::app::system_info::system_memory_info,
