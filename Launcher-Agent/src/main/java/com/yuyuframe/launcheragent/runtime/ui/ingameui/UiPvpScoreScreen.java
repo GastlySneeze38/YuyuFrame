@@ -172,6 +172,7 @@ public final class UiPvpScoreScreen extends UiScreenBase {
         widgets.add(PvpScoreUi.backButton(screenWidth, screenHeight, () -> closeTo(lastScreen)));
         widgets.add(PvpScoreUi.helpButton(screenWidth, screenHeight,
             () -> info = new PvpInfoModal(null, PvpInfoModal.OVERVIEW)));
+        widgets.add(PvpScoreUi.shareSwitch(screenWidth, screenHeight));
 
         float[] c = PvpScoreUi.content(screenWidth, screenHeight);
         heroBottom = c[2] - UiTheme.scaled(24f) - heroHeight();

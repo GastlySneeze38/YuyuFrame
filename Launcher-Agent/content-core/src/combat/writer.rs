@@ -106,6 +106,9 @@ impl Sink {
         };
         let report = super::score::score_with(&journal, &prior);
         publish(report.numbers());
+        // Partage pour la calibration, si le joueur l'a activé : le paquet se
+        // prépare ici, sur ce fil, jamais sur celui du jeu.
+        super::share::on_duel_closed(&self.summary, &self.text);
         let written = serde_json::to_string_pretty(&report).map_err(|e| e.to_string()).and_then(|json| std::fs::write(&self.summary, json).map_err(|e| e.to_string()));
         if let Err(e) = written {
             eprintln!("[YuyuFrame] résumé du duel {} impossible à écrire : {e}", self.summary.display());

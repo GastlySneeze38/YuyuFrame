@@ -33,7 +33,7 @@ import java.util.UUID;
 public final class NativeCombat {
 
     /** Même valeur que {@code ABI_VERSION} dans combat/bridge.rs. */
-    private static final int ABI_VERSION = 12;
+    private static final int ABI_VERSION = 13;
 
     /** Place réservée au texte de l'historique : deux cents duels en tiennent bien moins. */
     private static final int HISTORY_BYTES = 256 * 1024;
@@ -189,6 +189,7 @@ public final class NativeCombat {
     private static MethodHandle equipment;
     private static MethodHandle event;
     private static MethodHandle close;
+    private static MethodHandle share;
 
     private static final boolean READY = load();
     private static boolean errorLogged;
@@ -246,6 +247,8 @@ public final class NativeCombat {
                 FunctionDescriptor.ofVoid(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT,
                     ValueLayout.ADDRESS, ValueLayout.JAVA_INT), heap);
             close = linker.downcallHandle(lib.find("yf_combat_close").orElseThrow(), FunctionDescriptor.ofVoid());
+            share = linker.downcallHandle(lib.find("yf_combat_share").orElseThrow(),
+                FunctionDescriptor.ofVoid(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT), heap);
             return true;
         } catch (Throwable error) {
             LauncherLog.err("[COMBAT] Noyau natif indisponible — aucun journal de combat ne sera écrit", error);
@@ -270,6 +273,24 @@ public final class NativeCombat {
             byte[] m = utf8(mc);
             context.invokeExact(MemorySegment.ofArray(d), d.length, MemorySegment.ofArray(s), s.length,
                 MemorySegment.ofArray(m), m.length);
+        } catch (Throwable error) {
+            failed(error);
+        }
+    }
+
+    /**
+     * Le réglage « Partager mes duels » : le noyau prépare alors un paquet
+     * anonymisé à chaque fin de duel et l'envoie au serveur avec le compte
+     * YuyuFrame (voir {@code content-core/src/combat/share.rs}). Désactivé,
+     * les paquets qui attendaient sont effacés sans partir.
+     */
+    public static void share(boolean enabled) {
+        if (!READY) {
+            return;
+        }
+        try {
+            byte[] agent = utf8(com.yuyuframe.launcheragent.agent.LauncherAgent.buildVersion());
+            share.invokeExact(enabled ? 1 : 0, MemorySegment.ofArray(agent), agent.length);
         } catch (Throwable error) {
             failed(error);
         }

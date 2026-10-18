@@ -32,8 +32,8 @@ import com.yuyuframe.launcheragent.runtime.ui.ingameui.PvpScoreUi;
  * les quelques secondes qui suivent un duel.
  *
  * <p>La carte du module ouvre l'historique ({@code UiPvpScoreScreen}) : la
- * moyenne des notes, puis les duels, chacun menant à son détail. Le module
- * n'a aucun réglage — les duels sont reconnus sans rien demander au joueur.
+ * moyenne des notes, puis les duels, chacun menant à son détail. Son seul
+ * réglage, « Partager mes duels », est un interrupteur de cette page.
  *
  * <p>Éteint par défaut : tant que le score n'est pas calibré, personne ne
  * doit se retrouver avec des journaux écrits sans l'avoir demandé.
@@ -62,6 +62,13 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
     /** Le numéro du dernier résumé reçu — celui d'avant le lancement n'est pas montré. */
     private int lastReport = NativeCombat.report(new double[NativeCombat.REPORT_LEN]);
 
+    /** Le module, pour la page de l'historique qui porte son interrupteur de partage. */
+    private static volatile PvpScoreModule instance;
+
+    public static PvpScoreModule instance() {
+        return instance;
+    }
+
     public PvpScoreModule() {
         super("pvp-score", "Score PvP",
             "Note vos duels à la masse et affiche le résultat à la fin de chacun. En cours de développement : la note n'est pas encore calibrée.",
@@ -74,11 +81,41 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
         iconUrl = icons8("sword");
         CombatTracker.install();
         CombatTracker.setActive(isEnabled());
+        instance = this;
     }
 
     @Override
     public HudElement hudElement() {
         return element;
+    }
+
+    /**
+     * « Partager mes duels » : chaque duel fermé part, anonymisé, vers le
+     * serveur de YuyuFrame pour calibrer la note (voir
+     * {@code content-core/src/combat/share.rs} et docs/scoring/partage.md).
+     * Éteint par défaut, et rien ne part sans compte YuyuFrame connecté.
+     *
+     * <p>Le module n'a pas d'écran de réglages — sa carte ouvre l'historique :
+     * l'interrupteur est sur cette page ({@code UiPvpScoreScreen}). Le
+     * réglage est déclaré ici pour être sauvegardé comme les autres.
+     */
+    private boolean shareDuels = false;
+
+    public boolean shareDuels() {
+        return shareDuels;
+    }
+
+    public void setShareDuels(boolean value) {
+        shareDuels = value;
+        NativeCombat.share(value);
+        com.yuyuframe.launcheragent.runtime.ui.HudConfigStore.save();
+    }
+
+    @Override
+    protected void settings(com.yuyuframe.launcheragent.runtime.ui.config.SettingList s) {
+        s.toggle("shareDuels", "Partager mes duels",
+            "Envoie vos duels, anonymisés, pour calibrer la note — sans pseudo, ni UUID, ni adresse de serveur",
+            "Calibration", null, () -> shareDuels, v -> { shareDuels = v; NativeCombat.share(v); });
     }
 
     @Override

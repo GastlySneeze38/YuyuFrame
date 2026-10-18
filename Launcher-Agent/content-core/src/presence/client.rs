@@ -35,11 +35,19 @@ fn is_safe_base(base: &str) -> bool {
     base.starts_with("https://") || base.starts_with("http://localhost") || base.starts_with("http://127.0.0.1")
 }
 
+/// L'adresse de LauncherAPI, sans `/` final — `None` si elle n'est pas de
+/// celles où un jeton peut partir. Partagée avec l'envoi des duels
+/// (`combat::share`) : une seule règle pour tout ce qui part avec le jeton.
+pub fn api_base() -> Option<String> {
+    let base = std::env::var(API_ENV).ok().map(|b| b.trim().trim_end_matches('/').to_string()).filter(|b| !b.is_empty());
+    let base = base.unwrap_or_else(|| DEFAULT_API.to_string());
+    is_safe_base(&base).then_some(base)
+}
+
 impl Client {
     /// `None` si l'adresse de l'API n'est pas de celles où un jeton peut partir.
     pub fn from_env() -> Option<Self> {
-        let base = std::env::var(API_ENV).ok().map(|b| b.trim().trim_end_matches('/').to_string()).filter(|b| !b.is_empty());
-        Self::new(base.as_deref().unwrap_or(DEFAULT_API))
+        Self::new(&api_base()?)
     }
 
     fn new(base: &str) -> Option<Self> {

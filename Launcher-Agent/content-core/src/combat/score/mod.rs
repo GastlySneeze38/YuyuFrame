@@ -9,7 +9,8 @@
 //! Le journal est la seule source : features et note en sont dérivées et
 //! portent leur version, pour être recalculées quand une formule change.
 
-#[cfg(test)]
+// Plus seulement un outil de test (2026-10-18) : ses tableaux partent aussi
+// avec les duels que le joueur choisit de partager (voir `combat::share`).
 mod calibration;
 mod features;
 mod parse;
@@ -298,6 +299,16 @@ pub fn detail_text(text: &str) -> Option<String> {
     }
     Some(out)
 }
+
+/// Les tableaux de calibration d'un journal et son résumé, sous le nom
+/// `name` (voir `calibration::duel_tables`). `None` si le texte n'est pas un
+/// journal.
+pub fn calibration_tables(name: &str, text: &str) -> Option<(serde_json::Value, serde_json::Value)> {
+    let duel = parse::parse(text)?;
+    Some(calibration::duel_tables(name, &duel))
+}
+
+pub use rating::SCORE_VERSION;
 
 /// Note un journal contre un adversaire inconnu. `None` si le texte n'en est pas un.
 pub fn score_journal(text: &str) -> Option<Report> {

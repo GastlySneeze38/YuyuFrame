@@ -28,7 +28,7 @@
 //! `runtime/presence/NativePresence.java`.
 
 mod bridge;
-mod client;
+pub(crate) mod client;
 mod directory;
 mod fingerprint;
 pub(crate) mod token;

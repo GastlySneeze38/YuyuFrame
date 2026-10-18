@@ -21,7 +21,9 @@
 //! l'adversaire n'entre pas dans ce qu'on calibre ici.
 
 use std::fmt::Write as _;
+#[cfg(test)]
 use std::io::Read;
+#[cfg(test)]
 use std::path::Path;
 
 use super::features::{self, Features};
@@ -135,6 +137,18 @@ impl Tables {
         }
     }
 
+    /// Les cinq tableaux, en-têtes compris, sous le nom de leur fichier.
+    fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "duels": self.duels,
+            "parties": self.parts,
+            "opportunites": self.opportunities,
+            "smashs": self.smashes,
+            "techniques": self.techniques,
+        })
+    }
+
+    #[cfg(test)]
     fn write(&self, dir: &Path) {
         std::fs::create_dir_all(dir).unwrap();
         for (file, text) in [
@@ -149,7 +163,30 @@ impl Tables {
     }
 }
 
+/// Les cinq tableaux d'un seul duel, en-têtes compris (une ligne d'en-tête
+/// puis ses lignes), et ce qui le résume — ce qu'un joueur envoie pour la
+/// calibration (`combat::share`). Mêmes lignes que le relevé : le
+/// back-office les met bout à bout, en ne gardant qu'un en-tête par tableau.
+pub fn duel_tables(name: &str, duel: &parse::Duel) -> (serde_json::Value, serde_json::Value) {
+    let f = features::extract(duel);
+    let mut tables = Tables::new();
+    tables.add(name, duel, &f);
+    let r = rating::rate(&f, &Prior::default());
+    let summary = serde_json::json!({
+        "mode": format!("{:?}", duel.mode),
+        "result": duel.result,
+        "seconds": (f.engaged_secs * 10.0).round() / 10.0,
+        "score": r.score,
+        "base_score": r.base_score,
+        "opened": f.mine.len(),
+        "converted": f.mine.iter().filter(|o| o.converted).count(),
+        "foe_opened": f.theirs.len(),
+    });
+    (tables.to_json(), summary)
+}
+
 /// Le texte d'un journal, compressé (`.zst`) ou non.
+#[cfg(test)]
 fn read_journal(path: &Path) -> Option<String> {
     let bytes = std::fs::read(path).ok()?;
     if path.extension().is_some_and(|e| e == "zst") {

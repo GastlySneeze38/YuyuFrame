@@ -20,4 +20,5 @@ mod history;
 mod journal;
 mod record;
 mod score;
+mod share;
 mod writer;

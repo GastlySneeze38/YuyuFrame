@@ -25,7 +25,8 @@ use super::writer::send;
 /// use, grosses et petites ouvertures, dégâts évités).
 /// 11 (2026-10-15) : `yf_combat_detail`, le détail des familles d'un duel.
 /// 12 (2026-10-15) : le résumé passe à 50 nombres (coups et totems échangés).
-const ABI_VERSION: u32 = 12;
+/// 13 (2026-10-18) : `yf_combat_share`, le partage des duels pour la calibration.
+const ABI_VERSION: u32 = 13;
 
 /// Autres joueurs transmis par tick, au plus.
 const MAX_OTHERS: usize = 16;
@@ -61,7 +62,20 @@ pub unsafe extern "C" fn yf_combat_context(dir: *const u8, dir_len: i32, server:
     if dir.is_empty() {
         return;
     }
+    // La file des duels partagés de cette instance : surveillée dès maintenant.
+    super::share::watch(std::path::Path::new(&dir));
     send(Record::Context { dir: PathBuf::from(dir), server: text(server, server_len), mc: text(mc, mc_len) });
+}
+
+/// Le réglage « Partager mes duels » du module Score PvP, et la version de
+/// l'agent à joindre aux paquets. Appelé à chaque changement du réglage et au
+/// démarrage ; le passage à 0 vide les paquets en attente. Voir `share.rs`.
+///
+/// # Safety
+/// `agent` doit désigner `agent_len` octets lisibles (ou être nul avec 0).
+#[no_mangle]
+pub unsafe extern "C" fn yf_combat_share(enabled: i32, agent: *const u8, agent_len: i32) {
+    super::share::set_enabled(enabled != 0, &text(agent, agent_len));
 }
 
 /// Changement de monde : le journal en cours se termine.
