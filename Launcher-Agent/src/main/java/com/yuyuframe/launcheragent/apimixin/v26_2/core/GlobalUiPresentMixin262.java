@@ -112,7 +112,7 @@ public abstract class GlobalUiPresentMixin262 {
 
             UiDrawable ui = (UiDrawable) currentScreen;
             ui.uiPollInput(inputPoller);
-            ui.uiDraw(inputPoller.mouseX, inputPoller.mouseY);
+            ui.uiFrame(inputPoller.mouseX, inputPoller.mouseY);
 
             // « Cet écran est-il un écran de l'agent, et demande-t-il à
             // naviguer ? » — la question est posée à la couche du dessus, qui

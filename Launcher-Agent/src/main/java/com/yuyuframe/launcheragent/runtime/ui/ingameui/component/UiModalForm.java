@@ -63,33 +63,86 @@ public final class UiModalForm {
             lastW = vpWidth; lastH = vpHeight; lastScale = UiTheme.UI_SCALE; builtStep = step;
         }
 
+        // Ouverture : le voile s'assombrit pendant que le panneau jaillit du
+        // centre avec un petit rebond.
+        float open = clamp01((System.nanoTime() - openedAt) / 1e9f / OPEN_S);
         // Voile plein écran : il assombrit le fond ET absorbe les clics à côté
         // du panneau, puisque modalWidgets() rend cette liste exclusive.
-        renderer.drawRoundedRect(0, 0, vpWidth, vpHeight, 0f, new UiColor(0, 0, 0, 120), vpWidth, vpHeight);
-        renderer.drawGlassPanel(px, py, px + pw, py + ph, UiTheme.RADIUS_MD,
-            UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_FIELD, UiTheme.PANEL_BG,
-            UiTheme.GLASS_BORDER, Math.max(1f, UiTheme.scaled(1f)), vpWidth, vpHeight);
+        renderer.drawRoundedRect(0, 0, vpWidth, vpHeight, 0f, new UiColor(0, 0, 0, Math.round(120 * Math.min(1f, open * 2f))), vpWidth, vpHeight);
+        renderer.pushLayer(Math.min(1f, open * 2.2f), 0.84f + 0.16f * backOut(open), px + pw / 2f, py + ph / 2f, 0f, 0f);
+        try {
+            renderer.drawShadow(px, py, px + pw, py + ph, UiTheme.RADIUS_MD, 24f, 0f, new UiColor(0, 0, 0, 140), vpWidth, vpHeight);
+            renderer.drawGlassPanel(px, py, px + pw, py + ph, UiTheme.RADIUS_MD,
+                UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_FIELD, UiTheme.PANEL_BG,
+                UiTheme.GLASS_BORDER, Math.max(1f, UiTheme.scaled(1f)), vpWidth, vpHeight);
 
-        float pad = UiTheme.scaled(20f);
-        renderer.drawText(UiFont.BOLD, Lang.tr(modal.title), px + pad, py + ph - UiTheme.scaled(30f),
-            UiTheme.TEXT_PRIMARY, UiTheme.scaled(0.6f), vpWidth, vpHeight);
+            float pad = UiTheme.scaled(20f);
+            renderer.drawText(UiFont.BOLD, Lang.tr(modal.title), px + pad, py + ph - UiTheme.scaled(30f),
+                UiTheme.TEXT_PRIMARY, UiTheme.scaled(0.6f), vpWidth, vpHeight);
 
-        SettingModal.Step current = modal.steps.get(step);
-        renderer.drawText(Lang.tr(current.title), px + pad, py + ph - UiTheme.scaled(62f),
-            UiTheme.TEXT_SECONDARY, UiTheme.scaled(0.5f), vpWidth, vpHeight);
+            // « Étape 2 / 3 » — sans ce repère, un formulaire par étapes donne
+            // l'impression de ne jamais finir. La barre sous le titre avance avec.
+            String progress = (step + 1) + " / " + modal.steps.size();
+            float pw2 = renderer.textWidth(UiFont.REGULAR, progress, UiTheme.scaled(0.45f));
+            renderer.drawText(progress, px + pw - pad - pw2, py + ph - UiTheme.scaled(30f),
+                UiTheme.TEXT_MUTED, UiTheme.scaled(0.45f), vpWidth, vpHeight);
+            progressAnim.setTarget((step + 1) / (float) modal.steps.size());
+            float barY = py + ph - UiTheme.scaled(42f);
+            float barH = Math.max(2f, UiTheme.scaled(3f));
+            renderer.drawRoundedRect(px + pad, barY, px + pw - pad, barY + barH, barH / 2f, UiTheme.TRACK_OFF, vpWidth, vpHeight);
+            renderer.drawRoundedRect(px + pad, barY, px + pad + (pw - pad * 2f) * progressAnim.get(), barY + barH, barH / 2f,
+                UiTheme.ACCENT, vpWidth, vpHeight);
 
-        // « Étape 2 / 3 » — sans ce repère, un formulaire par étapes donne
-        // l'impression de ne jamais finir.
-        String progress = (step + 1) + " / " + modal.steps.size();
-        float pw2 = renderer.textWidth(UiFont.REGULAR, progress, UiTheme.scaled(0.45f));
-        renderer.drawText(progress, px + pw - pad - pw2, py + ph - UiTheme.scaled(30f),
-            UiTheme.TEXT_MUTED, UiTheme.scaled(0.45f), vpWidth, vpHeight);
-
-        for (UiWidget w : widgets) {
+            // Le contenu de l'étape glisse dans le sens où l'on va, en fondu.
+            float s = clamp01((System.nanoTime() - stepAt) / 1e9f / STEP_S);
+            float e = 1f - (1f - s) * (1f - s) * (1f - s);
+            renderer.pushLayer(s, 1f, px + pw / 2f, py + ph / 2f, stepDir * (1f - e) * UiTheme.scaled(40f), 0f);
             try {
-                w.draw(renderer, mouseX, mouseY, vpWidth, vpHeight);
-            } catch (Throwable ignored) {}
+                SettingModal.Step current = modal.steps.get(step);
+                renderer.drawText(Lang.tr(current.title), px + pad, py + ph - UiTheme.scaled(68f),
+                    UiTheme.TEXT_SECONDARY, UiTheme.scaled(0.5f), vpWidth, vpHeight);
+                // Le champ de l'étape (premier widget, voir build) glisse avec elle.
+                if (!widgets.isEmpty()) drawWidget(renderer, widgets.get(0), mouseX, mouseY, vpWidth, vpHeight);
+            } finally {
+                renderer.popLayer();
+            }
+            // Les boutons, eux, restent en place d'une étape à l'autre.
+            for (int i = 1; i < widgets.size(); i++) drawWidget(renderer, widgets.get(i), mouseX, mouseY, vpWidth, vpHeight);
+        } finally {
+            renderer.popLayer();
         }
+    }
+
+    private static final float OPEN_S = 0.42f;
+    private static final float STEP_S = 0.32f;
+    private final long openedAt = System.nanoTime();
+    /** Dernier changement d'étape, et son sens : +1 en avançant, −1 en revenant. */
+    private long stepAt = openedAt;
+    private int stepDir;
+    private final com.yuyuframe.launcheragent.apigraphic.anim.UiAnimatedFloat progressAnim =
+        new com.yuyuframe.launcheragent.apigraphic.anim.UiAnimatedFloat(0f, 10f);
+
+    private static void drawWidget(UiRenderer renderer, UiWidget w, double mouseX, double mouseY, int vpWidth, int vpHeight) {
+        try {
+            w.draw(renderer, mouseX, mouseY, vpWidth, vpHeight);
+        } catch (Throwable t) {
+            com.yuyuframe.launcheragent.base.log.LauncherLog.err("[UiModalForm] dessin d'un widget : " + t);
+        }
+    }
+
+    private void goTo(int next) {
+        stepDir = next > step ? 1 : -1;
+        stepAt = System.nanoTime();
+        step = next;
+    }
+
+    private static float clamp01(float v) {
+        return Math.max(0f, Math.min(1f, v));
+    }
+
+    private static float backOut(float t) {
+        float c1 = 1.3f, c3 = c1 + 1f, u = t - 1f;
+        return 1f + c3 * u * u * u + c1 * u * u;
     }
 
     private void build(int vpWidth, int vpHeight) {
@@ -123,13 +176,13 @@ public final class UiModalForm {
         widgets.add(new UiButton(px + pad, btnY, btnW, btnH,
             step == 0 ? "Annuler" : "Précédent", () -> {
                 if (step == 0) close();
-                else step--;
+                else goTo(step - 1);
             }));
 
         boolean last = step == modal.steps.size() - 1;
         widgets.add(new UiButton(px + pw - pad - btnW, btnY, btnW, btnH,
             last ? "Terminer" : "Suivant", () -> {
-                if (!last) { step++; return; }
+                if (!last) { goTo(step + 1); return; }
                 try {
                     modal.onComplete.accept(new ArrayList<String>(answers));
                 } finally {

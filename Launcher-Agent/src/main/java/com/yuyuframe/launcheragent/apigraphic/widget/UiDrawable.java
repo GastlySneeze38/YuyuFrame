@@ -18,8 +18,19 @@ import com.yuyuframe.launcheragent.apigraphic.platform.UiInputPoller;
  */
 public interface UiDrawable {
 
-    /** Dessine cet écran — appelé chaque frame depuis GlobalUiRenderMixin. mouseX/Y en pixels physiques écran. */
+    /** Dessine cet écran. mouseX/Y en pixels physiques écran. */
     void uiDraw(double mouseX, double mouseY);
+
+    /**
+     * L'image entière de cet écran — c'est CE que les mixins appellent chaque
+     * frame, pas {@link #uiDraw} directement : un écran peut ainsi envelopper
+     * tout son dessin (y compris ce que ses sous-classes ajoutent autour de
+     * {@code super.uiDraw}) dans sa transition d'entrée ou de sortie. Par
+     * défaut, c'est juste {@link #uiDraw}.
+     */
+    default void uiFrame(double mouseX, double mouseY) {
+        uiDraw(mouseX, mouseY);
+    }
 
     /** Reçoit les événements d'input pollés (souris/clavier) — voir UiInputPoller. */
     void uiPollInput(UiInputPoller input);

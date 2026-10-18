@@ -863,7 +863,8 @@ public class UiMainMenuScreen extends UiScreenBase {
             // suivante, sans conséquence visuelle notable (positions déjà
             // différentes à l'écran) — évite de faire transiter un compteur
             // entre deux appels séparés pour un gain quasi imperceptible.
-            float enterDelay = UiStagger.delayFor(i, 0.035f, 0.3f);
+            // Démarre après l'arrivée de l'écran lui-même (voir UiScreenBase#uiFrame).
+            float enterDelay = 0.12f + UiStagger.delayFor(i, 0.04f, 0.45f);
 
             if (entry instanceof ModuleGroup) {
                 ModuleGroup group = (ModuleGroup) entry;
@@ -1396,7 +1397,7 @@ public class UiMainMenuScreen extends UiScreenBase {
             this.cardShortDescription = shortDescription;
             this.cardIconUrl = iconUrl;
             this.onOpen = onOpen;
-            this.enterAnim = new UiTransition(0.28f, enterDelay, UiEasing.EASE_OUT_CUBIC);
+            this.enterAnim = new UiTransition(0.5f, enterDelay, UiEasing.QUART_OUT);
             this.enterAnim.show();
         }
 
@@ -1456,6 +1457,13 @@ public class UiMainMenuScreen extends UiScreenBase {
             return true;
         }
 
+        /** Courbe de la montée d'entrée : rapide, un léger dépassement, puis se pose. */
+        private float enterRise(float t) {
+            t = Math.max(0f, Math.min(1f, t));
+            float c1 = 1.2f, c3 = c1 + 1f, u = t - 1f;
+            return 1f + c3 * u * u * u + c1 * u * u;
+        }
+
         @Override
         public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
             // eased() peut légèrement dépasser 1.0 avec certaines courbes
@@ -1499,7 +1507,9 @@ public class UiMainMenuScreen extends UiScreenBase {
             float mdx = moveDx * moveRemain, mdy = moveDy * moveRemain;
 
             float drawX = x + mdx;
-            float drawY = y + mdy - (1f - t) * UiTheme.scaled(14f) + hoverT * HOVER_LIFT_PX;
+            // Montée d'entrée plus ample, qui dépasse un peu sa place avant de s'y poser.
+            float rise = moving ? 1f : enterRise(enterAnim.progress());
+            float drawY = y + mdy - (1f - rise) * UiTheme.scaled(34f) + hoverT * HOVER_LIFT_PX;
             // BUG TROUVÉ (retour utilisateur, capture d'écran : les toggles
             // n'apparaissent NULLE PART sur l'écran principal, pas un simple
             // chevauchement) — cette ligne ÉCRASAIT pairedToggle.y avec une

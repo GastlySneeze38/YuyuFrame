@@ -41,7 +41,7 @@ final class PvpFamilyModal {
     private static final int FACTS_SHOWN = 2;
     private static final int MOMENTS_SHOWN = 3;
 
-    private static final float OPEN_SECS = 0.35f;
+    private static final float OPEN_SECS = 0.45f;
     private static final float CLOSE_SECS = 0.2f;
 
     private final int family;
@@ -106,9 +106,14 @@ final class PvpFamilyModal {
         for (UiWidget w : widgets) widgetBaseY.add(w.y);
     }
 
-    /** Un bloc qui entre un peu après le précédent : son opacité, en plus de celle de la fenêtre. */
-    private float enter(float presence, float delay) {
-        return presence * PvpScoreUi.ease(openedAt, delay, 0.4f);
+    /**
+     * Ouvre le calque d'un bloc qui entre un peu après le précédent : il
+     * monte en fondu et grandit légèrement depuis son milieu. À refermer.
+     */
+    private void pushBlock(UiRenderer r, float delay, float pivotY) {
+        float t = PvpScoreUi.linear(openedAt, 0.12f + delay, 0.45f);
+        float e = PvpScoreUi.ease(openedAt, 0.12f + delay, 0.45f);
+        r.pushLayer(t, 0.94f + 0.06f * PvpScoreUi.backOut(t), px + pw / 2f, pivotY, 0f, -(1f - e) * UiTheme.scaled(22f));
     }
 
     void draw(UiRenderer r, double mouseX, double mouseY, int vw, int vh) {
@@ -117,32 +122,49 @@ final class PvpFamilyModal {
             lastW = vw; lastH = vh; lastScale = UiTheme.UI_SCALE;
         }
         float p = presence();
-        float dy = -(1f - p) * UiTheme.scaled(36f);
-        for (int i = 0; i < widgets.size(); i++) widgets.get(i).y = widgetBaseY.get(i) + dy;
+        for (int i = 0; i < widgets.size(); i++) widgets.get(i).y = widgetBaseY.get(i);
 
         r.drawRoundedRect(0f, 0f, vw, vh, 0f, UiTheme.GLASS_SCRIM.multiplyAlpha(p), vw, vh);
-        float y1 = py + dy, y2 = py + ph + dy;
-        r.drawGlassPanel(px, y1, px + pw, y2, UiTheme.scaled(14f),
-            UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_MODAL, UiTheme.PANEL_BG.multiplyAlpha(p),
-            UiTheme.GLASS_BORDER.multiplyAlpha(p), Math.max(1f, UiTheme.scaled(1f)), vw, vh);
+        float y1 = py, y2 = py + ph;
+        // La fenêtre entière dans un calque : elle jaillit du centre avec un
+        // petit rebond, puis ses blocs arrivent l'un après l'autre ; elle
+        // recule en s'effaçant à la fermeture.
+        float scale = closingAt != 0L
+            ? 0.92f + 0.08f * p
+            : 0.84f + 0.16f * PvpScoreUi.backOut(PvpScoreUi.linear(openedAt, 0f, OPEN_SECS));
+        r.pushLayer(p, scale, px + pw / 2f, py + ph / 2f, 0f, -(1f - p) * UiTheme.scaled(16f));
         try {
+            r.drawShadow(px, y1, px + pw, y2, UiTheme.scaled(14f), 30f, 0f, new UiColor(0, 0, 0, 150), vw, vh);
+            r.drawGlassPanel(px, y1, px + pw, y2, UiTheme.scaled(14f),
+                UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_MODAL, UiTheme.PANEL_BG,
+                UiTheme.GLASS_BORDER, Math.max(1f, UiTheme.scaled(1f)), vw, vh);
             float pad = UiTheme.scaled(24f);
             float left = px + pad, right = px + pw - pad;
-            PvpScoreUi.alpha = enter(p, 0f);
-            float y = drawHeader(r, left, right, y2 - pad, vw, vh);
+            float y = y2 - pad;
+            pushBlock(r, 0f, y);
+            try { y = drawHeader(r, left, right, y, vw, vh); } finally { r.popLayer(); }
             if (report[NativeCombat.REPORT_MY_COUNTS + family] > 0) {
-                PvpScoreUi.alpha = enter(p, 0.08f);
-                y = drawFacts(r, left, right, y - UiTheme.scaled(18f), vw, vh);
-                PvpScoreUi.alpha = enter(p, 0.16f);
-                y = drawMoments(r, left, right, y - UiTheme.scaled(20f), vw, vh);
-                PvpScoreUi.alpha = enter(p, 0.24f);
-                y = drawVersus(r, left, right, y - UiTheme.scaled(18f), vw, vh);
+                pushBlock(r, 0.07f, y);
+                try { y = drawFacts(r, left, right, y - UiTheme.scaled(18f), vw, vh); } finally { r.popLayer(); }
+                pushBlock(r, 0.14f, y);
+                try { y = drawMoments(r, left, right, y - UiTheme.scaled(20f), vw, vh); } finally { r.popLayer(); }
+                pushBlock(r, 0.21f, y);
+                try { y = drawVersus(r, left, right, y - UiTheme.scaled(18f), vw, vh); } finally { r.popLayer(); }
             }
-            PvpScoreUi.alpha = enter(p, 0.3f);
-            drawAdvice(r, left, right, y - UiTheme.scaled(16f), y1 + pad + UiTheme.scaled(48f), vw, vh);
-            PvpScoreUi.alpha = p;
-            for (UiWidget w : widgets) w.draw(r, mouseX, mouseY, vw, vh);
+            pushBlock(r, 0.28f, y);
+            try {
+                drawAdvice(r, left, right, y - UiTheme.scaled(16f), y1 + pad + UiTheme.scaled(48f), vw, vh);
+            } finally {
+                r.popLayer();
+            }
+            pushBlock(r, 0.34f, y1 + pad);
+            try {
+                for (UiWidget w : widgets) w.draw(r, mouseX, mouseY, vw, vh);
+            } finally {
+                r.popLayer();
+            }
         } finally {
+            r.popLayer();
             PvpScoreUi.alpha = 1f;
         }
     }

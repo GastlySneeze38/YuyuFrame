@@ -203,6 +203,18 @@ public final class PvpScoreUi {
         return UiEasing.BACK_OUT.apply(Math.max(0f, Math.min(1f, t)));
     }
 
+    /** Avancement brut (sans courbe) d'une animation, de 0 à 1. */
+    static float linear(long startNanos, float delay, float duration) {
+        float t = ((System.nanoTime() - startNanos) / 1e9f - delay) / duration;
+        return Math.max(0f, Math.min(1f, t));
+    }
+
+    /** Courbe à léger dépassement sur un avancement déjà calculé : pour ce qui « saute » à sa taille. */
+    static float backOut(float t) {
+        float c1 = 1.3f, c3 = c1 + 1f, u = t - 1f;
+        return 1f + c3 * u * u * u + c1 * u * u;
+    }
+
     /** Un nombre qui monte de 0 à sa valeur pendant que {@code progress} va de 0 à 1. */
     static long count(double value, float progress) {
         return Math.round(value * progress);
@@ -371,33 +383,51 @@ public final class PvpScoreUi {
             float open = unfold.get();
             if (open < 0.02f) return;
             float top = panelTop();
-            float fullBottom = panelBottom();
-            float bottom = top - (top - fullBottom) * open;
+            float bottom = panelBottom();
             float radius = UiTheme.scaled(9f);
-            r.drawShadow(x, bottom, x + w, top, radius, 14f, 0f, new UiColor(0, 0, 0, (int) (120 * open)), vw, vh);
-            r.drawRoundedRect(x - 1f, bottom - 1f, x + w + 1f, top + 1f, radius + 1f, UiTheme.GLASS_BORDER.multiplyAlpha(open), vw, vh);
-            r.drawRoundedRect(x, bottom, x + w, top, radius, UiTheme.PANEL_BG_ALT.multiplyAlpha(open), vw, vh);
+            // Le panneau sort du bouton : il grandit depuis son bord haut avec
+            // un petit rebond, ses lignes arrivent ensuite une à une.
+            float c1 = 1.4f, u = open - 1f;
+            float grow = 1f + (c1 + 1f) * u * u * u + c1 * u * u;
+            r.pushLayer(Math.min(1f, open * 1.6f), 0.82f + 0.18f * grow, x + w / 2f, top, 0f, (1f - open) * UiTheme.scaled(10f));
+            try {
+                r.drawShadow(x, bottom, x + w, top, radius, 16f, 0f, new UiColor(0, 0, 0, 130), vw, vh);
+                r.drawRoundedRect(x - 1f, bottom - 1f, x + w + 1f, top + 1f, radius + 1f, UiTheme.ACCENT.withAlpha(0.4f), vw, vh);
+                r.drawRoundedRect(x, bottom, x + w, top, radius, UiTheme.PANEL_BG_ALT, vw, vh);
 
-            float pad = UiTheme.scaled(14f);
-            float value = UiTheme.scaled(0.5f);
-            for (int i = 0; i < MODES.length; i++) {
-                float rowTop = top - i * h;
-                float rowBottom = rowTop - h;
-                // Une ligne n'apparaît qu'une fois dépliée en entier.
-                if (rowBottom < bottom) break;
-                boolean hovered = mouseX >= x && mouseX <= x + w && mouseY >= rowBottom && mouseY <= rowTop;
-                if (i == selected || hovered) {
-                    r.drawRoundedRect(x + UiTheme.scaled(4f), rowBottom + UiTheme.scaled(3f), x + w - UiTheme.scaled(4f), rowTop - UiTheme.scaled(3f),
-                        UiTheme.scaled(7f), (i == selected ? UiTheme.ACCENT.withAlpha(0.3f) : new UiColor(255, 255, 255, 16)).multiplyAlpha(open), vw, vh);
+                float pad = UiTheme.scaled(14f);
+                float value = UiTheme.scaled(0.5f);
+                int lines = MODES.length + 1;
+                for (int i = 0; i < MODES.length; i++) {
+                    float rowTop = top - i * h;
+                    float rowBottom = rowTop - h;
+                    float rowT = Math.max(0f, Math.min(1f, (open - 0.25f * i / lines) / 0.75f));
+                    boolean hovered = mouseX >= x && mouseX <= x + w && mouseY >= rowBottom && mouseY <= rowTop;
+                    r.pushLayer(rowT, 1f, x, rowBottom, -(1f - rowT) * UiTheme.scaled(14f), 0f);
+                    try {
+                        if (i == selected || hovered) {
+                            r.drawRoundedRect(x + UiTheme.scaled(4f), rowBottom + UiTheme.scaled(3f), x + w - UiTheme.scaled(4f), rowTop - UiTheme.scaled(3f),
+                                UiTheme.scaled(7f), i == selected ? UiTheme.ACCENT.withAlpha(0.3f) : new UiColor(255, 255, 255, 16), vw, vh);
+                        }
+                        r.drawText(i == selected ? UiFont.BOLD : UiFont.REGULAR, Lang.tr(MODES[i]),
+                            x + pad + (hovered ? UiTheme.scaled(3f) : 0f), middle((rowTop + rowBottom) / 2f, value),
+                            UiTheme.TEXT_PRIMARY, value, vw, vh);
+                    } finally {
+                        r.popLayer();
+                    }
                 }
-                r.drawText(i == selected ? UiFont.BOLD : UiFont.REGULAR, Lang.tr(MODES[i]), x + pad, middle((rowTop + rowBottom) / 2f, value),
-                    UiTheme.TEXT_PRIMARY.multiplyAlpha(open), value, vw, vh);
-            }
-            float noteTop = top - MODES.length * h;
-            if (noteTop - noteHeight() >= bottom) {
+                float noteTop = top - MODES.length * h;
+                float noteT = Math.max(0f, Math.min(1f, (open - 0.25f * MODES.length / lines) / 0.75f));
                 float small = UiTheme.scaled(0.36f);
-                left(r, UiFont.REGULAR, Lang.tr("D'autres modes arrivent bientôt"), x + pad, middle(noteTop - noteHeight() / 2f, small),
-                    w - pad * 2f, UiTheme.TEXT_MUTED.multiplyAlpha(open), small, vw, vh);
+                r.pushLayer(noteT, 1f, x, noteTop, -(1f - noteT) * UiTheme.scaled(14f), 0f);
+                try {
+                    left(r, UiFont.REGULAR, Lang.tr("D'autres modes arrivent bientôt"), x + pad, middle(noteTop - noteHeight() / 2f, small),
+                        w - pad * 2f, UiTheme.TEXT_MUTED, small, vw, vh);
+                } finally {
+                    r.popLayer();
+                }
+            } finally {
+                r.popLayer();
             }
         }
 

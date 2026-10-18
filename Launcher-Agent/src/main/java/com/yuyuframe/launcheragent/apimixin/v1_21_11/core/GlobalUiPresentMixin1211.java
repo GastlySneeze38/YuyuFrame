@@ -81,7 +81,7 @@ public abstract class GlobalUiPresentMixin1211 {
 
             UiDrawable ui = (UiDrawable) currentScreen;
             ui.uiPollInput(inputPoller);
-            ui.uiDraw(inputPoller.mouseX, inputPoller.mouseY);
+            ui.uiFrame(inputPoller.mouseX, inputPoller.mouseY);
 
             if (agent.hasPendingNavigation(currentScreen)) {
                 Object target = agent.consumePendingNavigation(currentScreen);

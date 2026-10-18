@@ -24,7 +24,7 @@ public final class UiTooltip {
     private static String lastText;
     private static long shownAtMs = -1L;
     private static long lastDrawnMs = -1L;
-    private static final long FADE_MS = 180L;
+    private static final long FADE_MS = 260L;
 
     public static void draw(UiRenderer renderer, String text, double mouseX, double mouseY, int vpWidth, int vpHeight) {
         if (text == null || text.isEmpty()) {
@@ -70,16 +70,23 @@ public final class UiTooltip {
             yTop = yBottom + boxH;
         }
 
-        // Elle monte de quelques pixels en apparaissant.
-        float rise = (1f - alpha) * UiTheme.scaled(6f);
-        yBottom -= rise;
-        yTop -= rise;
-        renderer.drawShadow(x, yBottom, x + boxW, yTop, UiTheme.RADIUS_SM, 8f, 0f,
-            new com.yuyuframe.launcheragent.apigraphic.value.UiColor(0, 0, 0, Math.round(80 * alpha)), vpWidth, vpHeight);
-        renderer.drawRoundedRect(x - 1f, yBottom - 1f, x + boxW + 1f, yTop + 1f, UiTheme.RADIUS_SM + 1f,
-            UiTheme.ACCENT.withAlpha(0.35f * alpha), vpWidth, vpHeight);
-        renderer.drawRoundedRect(x, yBottom, x + boxW, yTop, UiTheme.RADIUS_SM, UiTheme.PANEL_BG_ALT.multiplyAlpha(alpha), vpWidth, vpHeight);
-        renderer.drawText(text, x + PAD, yBottom + PAD + UiFont.REGULAR.descent * SCALE * UiFont.SIZE_CORRECTION,
-            UiTheme.TEXT_PRIMARY.multiplyAlpha(alpha), SCALE, vpWidth, vpHeight);
+        // Elle jaillit du curseur : elle grandit depuis le point le plus
+        // proche de lui, avec un petit rebond, en devenant opaque.
+        float pivotX = Math.max(x, Math.min(x + boxW, (float) mouseX));
+        float pivotY = Math.abs(yTop - (float) mouseY) < Math.abs(yBottom - (float) mouseY) ? yTop : yBottom;
+        float c1 = 1.5f, u = linear - 1f;
+        float pop = 1f + (c1 + 1f) * u * u * u + c1 * u * u;
+        renderer.pushLayer(alpha, 0.7f + 0.3f * pop, pivotX, pivotY, 0f, 0f);
+        try {
+            renderer.drawShadow(x, yBottom, x + boxW, yTop, UiTheme.RADIUS_SM, 10f, 0f,
+                new com.yuyuframe.launcheragent.apigraphic.value.UiColor(0, 0, 0, 90), vpWidth, vpHeight);
+            renderer.drawRoundedRect(x - 1f, yBottom - 1f, x + boxW + 1f, yTop + 1f, UiTheme.RADIUS_SM + 1f,
+                UiTheme.ACCENT.withAlpha(0.4f), vpWidth, vpHeight);
+            renderer.drawRoundedRect(x, yBottom, x + boxW, yTop, UiTheme.RADIUS_SM, UiTheme.PANEL_BG_ALT, vpWidth, vpHeight);
+            renderer.drawText(text, x + PAD, yBottom + PAD + UiFont.REGULAR.descent * SCALE * UiFont.SIZE_CORRECTION,
+                UiTheme.TEXT_PRIMARY, SCALE, vpWidth, vpHeight);
+        } finally {
+            renderer.popLayer();
+        }
     }
 }

@@ -91,15 +91,50 @@ public final class UiRenderer {
      * Le câblage est ici plutôt que dans le registre : celui-ci résout, la
      * façade branche.
      */
-    private UiBackend backend;
+    private com.yuyuframe.launcheragent.apigraphic.backend.UiLayerBackend backend;
 
-    private UiBackend backend() {
-        UiBackend local = backend;
+    /**
+     * Toujours enveloppé dans le calque de transformation (voir
+     * {@link #pushLayer}) : sans calque ouvert, il laisse tout passer tel quel.
+     */
+    private com.yuyuframe.launcheragent.apigraphic.backend.UiLayerBackend backend() {
+        com.yuyuframe.launcheragent.apigraphic.backend.UiLayerBackend local = backend;
         if (local != null) return local;
-        local = UiBackendRegistry.get();
-        local.attach(this, glBridge);
+        UiBackend era = UiBackendRegistry.get();
+        era.attach(this, glBridge);
+        local = new com.yuyuframe.launcheragent.apigraphic.backend.UiLayerBackend(era);
         backend = local;
         return local;
+    }
+
+    // ── Calques de transformation ─────────────────────────────────────────
+
+    /**
+     * Ouvre un calque : tout ce qui est dessiné jusqu'au {@link #popLayer}
+     * correspondant est rendu à {@code opacity}, zoomé de {@code scale} autour
+     * de ({@code pivotX}, {@code pivotY}) et décalé de ({@code dx}, {@code dy}),
+     * en pixels de framebuffer (y vers le haut). Les calques s'emboîtent.
+     * Toujours refermer dans un {@code finally}.
+     *
+     * <p>C'est l'outil des transitions : un écran, un panneau ou un widget
+     * entier apparaît ou disparaît sans rien savoir de son animation.
+     */
+    public void pushLayer(float opacity, float scale, float pivotX, float pivotY, float dx, float dy) {
+        backend().push(opacity, scale, pivotX, pivotY, dx, dy);
+    }
+
+    public void popLayer() {
+        backend().pop();
+    }
+
+    /** Nombre de calques ouverts — pour refermer ceux qu'une exception aurait laissés. */
+    public int layerDepth() {
+        return backend().depth();
+    }
+
+    /** Referme tous les calques. */
+    public void resetLayers() {
+        backend().reset();
     }
 
     public static UiRenderer get(ClassLoader gameClassLoader) {
@@ -464,7 +499,7 @@ public final class UiRenderer {
      */
     public void drawRoundedRect(float x1, float y1, float x2, float y2, float radius, UiColor color,
                                  int vpWidth, int vpHeight) {
-        UiBackendRegistry.get().roundedRect(x1, y1, x2, y2, radius, color, vpWidth, vpHeight);
+        backend().roundedRect(x1, y1, x2, y2, radius, color, vpWidth, vpHeight);
     }
 
     /**

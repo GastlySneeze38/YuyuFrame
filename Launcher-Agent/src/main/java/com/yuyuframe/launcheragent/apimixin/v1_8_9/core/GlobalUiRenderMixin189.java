@@ -118,7 +118,7 @@ public abstract class GlobalUiRenderMixin189 {
 
         UiDrawable ui = (UiDrawable) currentScreen;
         ui.uiPollInput(inputPoller);
-        ui.uiDraw(inputPoller.mouseX, inputPoller.mouseY);
+        ui.uiFrame(inputPoller.mouseX, inputPoller.mouseY);
 
         if (agent.hasPendingNavigation(currentScreen)) {
             // null = fermer l'écran : même point d'accès, argument null.

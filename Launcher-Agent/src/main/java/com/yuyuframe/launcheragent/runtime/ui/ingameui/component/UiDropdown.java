@@ -71,7 +71,7 @@ public class UiDropdown extends UiWidget {
     }
 
     /** Ouverture de la liste, de 0 (fermée) à 1 (dépliée). */
-    private final UiAnimatedFloat unfold = new UiAnimatedFloat(0f, 16f);
+    private final UiAnimatedFloat unfold = new UiAnimatedFloat(0f, 11f);
     /** Position de la pastille de survol dans la liste, en lignes — elle glisse d'une option à l'autre. */
     private final UiAnimatedFloat hoverRow = new UiAnimatedFloat(-1f, 24f);
     private final UiAnimatedFloat hoverRowAlpha = new UiAnimatedFloat(0f, 18f);
@@ -85,54 +85,77 @@ public class UiDropdown extends UiWidget {
      */
     @Override
     public void drawOverlay(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
-        // Dessinée tant qu'elle n'est pas complètement repliée : elle se
-        // déplie vers le bas en s'ouvrant, et se replie en se fermant.
+        // Dessinée tant qu'elle n'est pas complètement repliée. Le panneau
+        // entier sort du bouton : il grandit depuis son bord haut en
+        // descendant, avec un petit rebond, pendant que les options arrivent
+        // l'une après l'autre en glissant de la gauche. Il repart par le même
+        // chemin en se fermant.
         float open = unfold.get();
         if (open < 0.02f) return;
 
         float panelTop = y - PANEL_PAD;
-        float fullBottom = panelTop - options.size() * ROW_H;
-        float panelBottom = panelTop - (panelTop - fullBottom) * open;
-        // Ombre ajoutée (voir audit runtime/ui/) : ce panneau flotte
-        // au-dessus du contenu de l'écran en dessous (options, texte...) —
-        // sans ombre rien ne le distinguait visuellement de ce qu'il
-        // recouvre, contrairement à un vrai menu déroulant.
-        renderer.drawShadow(x, panelBottom, x + w, panelTop, UiTheme.RADIUS_SM, 8f, 0f,
-            new UiColor(0, 0, 0, Math.round(90 * open)), vpWidth, vpHeight);
-        renderer.drawRoundedRect(x, panelBottom, x + w, panelTop, UiTheme.RADIUS_SM, UiTheme.PANEL_BG_ALT.multiplyAlpha(open), vpWidth, vpHeight);
+        float panelBottom = panelTop - options.size() * ROW_H;
+        float grow = backOut(open);
+        renderer.pushLayer(Math.min(1f, open * 1.6f), 0.82f + 0.18f * grow, x + w / 2f, panelTop,
+            0f, (1f - open) * UiTheme.scaled(10f));
+        try {
+            // Ombre ajoutée (voir audit runtime/ui/) : ce panneau flotte
+            // au-dessus du contenu de l'écran en dessous (options, texte...) —
+            // sans ombre rien ne le distinguait visuellement de ce qu'il
+            // recouvre, contrairement à un vrai menu déroulant.
+            renderer.drawShadow(x, panelBottom, x + w, panelTop, UiTheme.RADIUS_SM, 12f, 0f,
+                new UiColor(0, 0, 0, 110), vpWidth, vpHeight);
+            renderer.drawRoundedRect(x - 1f, panelBottom - 1f, x + w + 1f, panelTop + 1f, UiTheme.RADIUS_SM + 1f,
+                UiTheme.ACCENT.withAlpha(0.35f), vpWidth, vpHeight);
+            renderer.drawRoundedRect(x, panelBottom, x + w, panelTop, UiTheme.RADIUS_SM, UiTheme.PANEL_BG_ALT, vpWidth, vpHeight);
 
-        float rowInset = UiTheme.scaled(2f), rowRadius = UiTheme.scaled(2f);
-        int hovered = -1;
-        for (int i = 0; i < options.size(); i++) {
-            float rowTop = panelTop - i * ROW_H;
-            if (mouseX >= x && mouseX <= x + w && mouseY >= rowTop - ROW_H && mouseY <= rowTop) hovered = i;
-        }
-        // La pastille de survol glisse d'une option à l'autre au lieu de sauter.
-        if (hovered >= 0 && hoverRowAlpha.get() < 0.05f) hoverRow.snapTo(hovered);
-        if (hovered >= 0) hoverRow.setTarget(hovered);
-        hoverRowAlpha.setTarget(hovered >= 0 ? 1f : 0f);
-        for (int i = 0; i < options.size(); i++) {
-            float rowTop = panelTop - i * ROW_H;
-            float rowBottom = rowTop - ROW_H;
-            // Une ligne n'apparaît qu'une fois dépliée en entier, et entre en fondu.
-            if (rowBottom < panelBottom - 0.5f) break;
-            float rowAlpha = open;
-            if (i == selectedIndex) {
-                renderer.drawRoundedRect(x + rowInset, rowBottom + 1, x + w - rowInset, rowTop - 1, rowRadius,
-                    UiTheme.ACCENT_DIM.multiplyAlpha(rowAlpha), vpWidth, vpHeight);
+            float rowInset = UiTheme.scaled(2f), rowRadius = UiTheme.scaled(2f);
+            int hovered = -1;
+            for (int i = 0; i < options.size(); i++) {
+                float rowTop = panelTop - i * ROW_H;
+                if (mouseX >= x && mouseX <= x + w && mouseY >= rowTop - ROW_H && mouseY <= rowTop) hovered = i;
             }
-            if (i == 0) {
-                float ha = hoverRowAlpha.get() * open;
-                if (ha > 0.01f) {
-                    float ht = panelTop - hoverRow.get() * ROW_H;
-                    renderer.drawRoundedRect(x + rowInset, ht - ROW_H + 1, x + w - rowInset, ht - 1, rowRadius,
-                        UiTheme.CARD_HOVER.multiplyAlpha(ha), vpWidth, vpHeight);
+            // La pastille de survol glisse d'une option à l'autre au lieu de sauter.
+            if (hovered >= 0 && hoverRowAlpha.get() < 0.05f) hoverRow.snapTo(hovered);
+            if (hovered >= 0) hoverRow.setTarget(hovered);
+            hoverRowAlpha.setTarget(hovered >= 0 ? 1f : 0f);
+            float ha = hoverRowAlpha.get();
+            if (ha > 0.01f) {
+                float ht = panelTop - hoverRow.get() * ROW_H;
+                renderer.drawRoundedRect(x + rowInset, ht - ROW_H + 1, x + w - rowInset, ht - 1, rowRadius,
+                    UiTheme.CARD_HOVER.multiplyAlpha(ha), vpWidth, vpHeight);
+            }
+            int n = options.size();
+            for (int i = 0; i < n; i++) {
+                float rowTop = panelTop - i * ROW_H;
+                float rowBottom = rowTop - ROW_H;
+                // Chaque option a son tour : la première d'abord.
+                float rowT = Math.max(0f, Math.min(1f, (open - 0.25f * i / Math.max(1, n)) / 0.75f));
+                renderer.pushLayer(rowT, 1f, x, rowBottom, -(1f - rowT) * UiTheme.scaled(14f), 0f);
+                try {
+                    if (i == selectedIndex) {
+                        renderer.drawRoundedRect(x + rowInset, rowBottom + 1, x + w - rowInset, rowTop - 1, rowRadius,
+                            UiTheme.ACCENT_DIM, vpWidth, vpHeight);
+                        renderer.drawRoundedRect(x + rowInset, rowBottom + UiTheme.scaled(5f), x + rowInset + UiTheme.scaled(3f),
+                            rowTop - UiTheme.scaled(5f), UiTheme.scaled(1.5f), UiTheme.ACCENT, vpWidth, vpHeight);
+                    }
+                    // Le libellé suit la pastille de survol : il s'écarte quand elle passe dessous.
+                    float near = Math.max(0f, 1f - Math.abs(hoverRow.get() - i)) * ha;
+                    renderer.drawText(options.get(i), x + textPad + near * UiTheme.scaled(4f), rowBottom + ROW_H / 2f - textVOff,
+                        UiTheme.TEXT_PRIMARY, textScale, vpWidth, vpHeight);
+                } finally {
+                    renderer.popLayer();
                 }
             }
-            float shift = i == hovered ? UiTheme.scaled(3f) : 0f;
-            renderer.drawText(options.get(i), x + textPad + shift, rowBottom + ROW_H / 2f - textVOff,
-                UiTheme.TEXT_PRIMARY.multiplyAlpha(rowAlpha), textScale, vpWidth, vpHeight);
+        } finally {
+            renderer.popLayer();
         }
+    }
+
+    /** Arrive avec un léger dépassement, puis se pose. */
+    private static float backOut(float t) {
+        float c1 = 1.4f, c3 = c1 + 1f, u = t - 1f;
+        return 1f + c3 * u * u * u + c1 * u * u;
     }
 
     @Override

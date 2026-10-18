@@ -60,7 +60,7 @@ final class PvpInfoModal {
     private final long openedAt = System.nanoTime();
     private long closingAt;
     private long topicAt = openedAt;
-    private static final float OPEN_SECS = 0.35f;
+    private static final float OPEN_SECS = 0.45f;
     private static final float CLOSE_SECS = 0.2f;
 
     /**
@@ -134,17 +134,30 @@ final class PvpInfoModal {
             lastW = vw; lastH = vh; lastScale = UiTheme.UI_SCALE;
         }
         float p = presence();
-        float dy = -(1f - p) * UiTheme.scaled(36f);
-        for (int i = 0; i < widgets.size(); i++) widgets.get(i).y = widgetBaseY.get(i) + dy;
+        for (int i = 0; i < widgets.size(); i++) widgets.get(i).y = widgetBaseY.get(i);
 
         r.drawRoundedRect(0f, 0f, vw, vh, 0f, UiTheme.GLASS_SCRIM.multiplyAlpha(p), vw, vh);
-        float y1 = py + dy, y2 = py + ph + dy;
-        // L'opacité du repli pilote aussi celle du verre (voir UiRenderer.drawGlassPanel).
-        r.drawGlassPanel(px, y1, px + pw, y2, UiTheme.scaled(14f),
-            UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_MODAL, UiTheme.PANEL_BG.multiplyAlpha(p),
-            UiTheme.GLASS_BORDER.multiplyAlpha(p), Math.max(1f, UiTheme.scaled(1f)), vw, vh);
+        float y1 = py, y2 = py + ph;
+        // La fenêtre entière dans un calque : elle jaillit du centre avec un
+        // petit rebond en s'ouvrant, et recule en s'effaçant en se fermant.
+        float scale = closingAt != 0L
+            ? 0.92f + 0.08f * p
+            : 0.84f + 0.16f * PvpScoreUi.backOut(PvpScoreUi.linear(openedAt, 0f, OPEN_SECS));
+        r.pushLayer(p, scale, px + pw / 2f, py + ph / 2f, 0f, -(1f - p) * UiTheme.scaled(16f));
+        try {
+            r.drawShadow(px, y1, px + pw, y2, UiTheme.scaled(14f), 30f, 0f, new UiColor(0, 0, 0, 150), vw, vh);
+            // L'opacité du repli pilote aussi celle du verre (voir UiRenderer.drawGlassPanel).
+            r.drawGlassPanel(px, y1, px + pw, y2, UiTheme.scaled(14f),
+                UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_MODAL, UiTheme.PANEL_BG,
+                UiTheme.GLASS_BORDER, Math.max(1f, UiTheme.scaled(1f)), vw, vh);
+            drawBody(r, mouseX, mouseY, vw, vh, y1, y2);
+        } finally {
+            r.popLayer();
+        }
+    }
 
-        PvpScoreUi.alpha = p;
+    private void drawBody(UiRenderer r, double mouseX, double mouseY, int vw, int vh, float y1, float y2) {
+        PvpScoreUi.alpha = 1f;
         try {
             float pad = UiTheme.scaled(20f);
             PvpScoreUi.left(r, UiFont.BOLD, Lang.tr("COMMENT ÇA MARCHE"), px + pad, y2 - pad - UiTheme.scaled(18f),
@@ -156,9 +169,9 @@ final class PvpInfoModal {
                 w.draw(r, mouseX, mouseY, vw, vh);
             }
             // Le texte d'un sujet entre en glissant un peu, à chaque changement.
-            float t = PvpScoreUi.ease(topicAt, 0f, 0.3f);
-            PvpScoreUi.alpha = p * t;
-            float slide = (1f - t) * UiTheme.scaled(18f);
+            float t = PvpScoreUi.ease(topicAt, 0f, 0.38f);
+            PvpScoreUi.alpha = t;
+            float slide = (1f - t) * UiTheme.scaled(28f);
             drawTopic(r, topics.get(selected), listRight + pad * 1.6f + slide, px + pw - pad * 1.4f + slide,
                 y2 - pad, y1 + pad + UiTheme.scaled(48f), vw, vh);
         } finally {

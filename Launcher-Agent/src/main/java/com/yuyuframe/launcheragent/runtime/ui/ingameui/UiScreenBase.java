@@ -5,11 +5,9 @@ import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.widget.UiDrawable;
 import com.yuyuframe.launcheragent.apigraphic.widget.UiFocusable;
 import com.yuyuframe.launcheragent.apigraphic.widget.UiHitTest;
-import com.yuyuframe.launcheragent.apigraphic.anim.UiEasing;
 import com.yuyuframe.launcheragent.apigraphic.platform.UiInputPoller;
 import com.yuyuframe.launcheragent.apigraphic.platform.lwjgl3.UiInputPollerModern;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
-import com.yuyuframe.launcheragent.apigraphic.anim.UiTransition;
 import com.yuyuframe.launcheragent.apigraphic.widget.UiWidget;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiKeybindButton;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTextField;
@@ -62,44 +60,203 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
      */
     protected Object escapeTarget;
 
-    /**
-     * "Rideau" qui se lève à l'apparition de CET écran — pas une vraie
-     * transition croisée entre l'ancien et le nouveau Screen (le nouveau
-     * Screen ne devient "courant" qu'à la frame SUIVANTE, voir closeTo()/
-     * GlobalUiRenderMixin : les deux ne sont jamais dessinés simultanément,
-     * donc pas de fondu enchaîné possible sans retarder le vrai
-     * mc.setScreen(), un changement bien plus risqué sur du code Mixin
-     * partagé par les deux pipelines). À la place : tout l'écran (fond +
-     * widgets) est dessiné normalement dès la première frame, puis recouvert
-     * d'un voile opaque qui s'estompe en {@link #uiDraw} — l'écran semble
-     * "se révéler" au lieu d'apparaître d'un coup sec. Générique ici (PAS
-     * dans UiMainMenuScreen) : chaque écran custom (config d'un module, HUD
-     * editor...) en profite automatiquement, aucun changement par écran.
-     */
-    private final UiTransition enterAnim = new UiTransition(0.22f, 0f, UiEasing.EASE_OUT_CUBIC);
+    // ── Transitions d'écran (2026-10-18) ─────────────────────────────────────
+    //
+    // L'écran entier (fond, widgets, et tout ce que la sous-classe dessine
+    // autour de super.uiDraw) passe dans un calque du moteur
+    // (UiRenderer.pushLayer) : opacité, zoom et glissement, sans qu'aucun
+    // widget n'en sache rien. Remplace l'ancien « rideau » sombre qui
+    // s'estompait, et la montée sèche des widgets.
+    //
+    //   - ouverture depuis le jeu : l'écran arrive en zoomant légèrement,
+    //     avec un tout petit dépassement, pendant que le fond apparaît ;
+    //   - d'un écran à l'autre : FONDU ENCHAÎNÉ, les deux écrans dessinés
+    //     ensemble pendant la transition — c'est closeTo() qui retarde la
+    //     vraie navigation jusqu'à la fin, et l'ancien écran dessine le
+    //     nouveau par-dessus lui. En avançant, l'ancien recule en grossissant
+    //     et le nouveau arrive de la droite ; en revenant, l'inverse ;
+    //   - fermeture vers le jeu : l'écran s'éloigne en se fondant.
+    //
+    // Les widgets entrent ensuite en cascade, chacun dans son propre calque :
+    // fondu, montée et léger zoom depuis leur centre.
 
-    /**
-     * Dernier écran custom effectivement dessiné, TOUS types confondus — sert
-     * UNIQUEMENT à détecter une RÉ-activation d'un écran déjà existant (ex:
-     * "Retour" vers l'instance de UiMainMenuScreen passée en lastScreen à
-     * l'ouverture d'un écran de config, voir closeTo()) : cette instance n'est
-     * jamais reconstruite, donc son enterAnim (déjà à 1.0 depuis longtemps) ne
-     * rejouerait jamais sans ça — l'écran de retour semblait apparaître d'un
-     * coup sec, sans transition, contrairement à un écran fraîchement ouvert.
-     */
+    /** Ouverture depuis le jeu, avance vers un nouvel écran, retour vers un écran déjà vu. */
+    private static final int ENTER_OPEN = 0, ENTER_FORWARD = 1, ENTER_BACK = 2;
+    private static final float OPEN_S = 0.46f;
+    private static final float NAV_S = 0.38f;
+    private static final float CLOSE_S = 0.24f;
+
+    /** Début de l'entrée de cet écran ; 0 = au premier dessin. */
+    private long enterStartNanos;
+    private int enterKind = ENTER_OPEN;
+    /** L'entrée a été lancée par la transition de l'écran précédent : ne pas la relancer au premier dessin. */
+    private boolean enterPrepared;
+    /** Cet écran a déjà été affiché : y revenir est un retour, pas une avance. */
+    private boolean framedBefore;
+
+    /** Sortie en cours : la navigation demandée n'est transmise au jeu qu'à sa fin. */
+    private boolean exiting;
+    private long exitStartNanos;
+    private Object exitTarget;
+    private int exitKind;
+
+    /** Dernier écran de l'agent dessiné comme écran courant — détecte un retour vers une instance déjà existante. */
     private static UiScreenBase lastActiveScreen;
 
+    private static float clamp01(float v) {
+        return Math.max(0f, Math.min(1f, v));
+    }
+
+    /** Ralentit fort sur la fin : le mouvement « se pose ». */
+    private static float easeOutQuint(float t) {
+        float u = 1f - t;
+        return 1f - u * u * u * u * u;
+    }
+
+    /** Arrive avec un léger dépassement, puis se pose. */
+    private static float easeOutBack(float t) {
+        float c1 = 1.25f, c3 = c1 + 1f;
+        float u = t - 1f;
+        return 1f + c3 * u * u * u + c1 * u * u;
+    }
+
+    private static float easeInCubic(float t) {
+        return t * t * t;
+    }
+
+    /** Avancement de l'entrée, 0 à 1 (linéaire). */
+    private float enterProgress() {
+        if (enterStartNanos == 0L) return 0f;
+        float duration = enterKind == ENTER_OPEN ? OPEN_S : NAV_S;
+        return clamp01((System.nanoTime() - enterStartNanos) / 1e9f / duration);
+    }
+
+    /** Appelé par l'écran qui s'en va vers celui-ci : l'entrée part en même temps que sa sortie. */
+    private void prepareEnter(long startNanos, int kind) {
+        enterStartNanos = startNanos;
+        enterKind = kind;
+        enterPrepared = true;
+    }
+
+    /** Ouvre le calque d'entrée de cet écran (à refermer par popLayer). */
+    private void pushEnterLayer(UiRenderer r) {
+        float t = enterProgress();
+        float cx = screenWidth / 2f, cy = screenHeight / 2f;
+        switch (enterKind) {
+            case ENTER_FORWARD: {
+                float p = easeOutQuint(t);
+                r.pushLayer(clamp01(t * 1.6f), 0.94f + 0.06f * p, cx, cy, (1f - p) * UiTheme.scaled(48f), 0f);
+                break;
+            }
+            case ENTER_BACK: {
+                float p = easeOutQuint(t);
+                r.pushLayer(clamp01(t * 1.6f), 1.06f - 0.06f * p, cx, cy, -(1f - p) * UiTheme.scaled(48f), 0f);
+                break;
+            }
+            default: {
+                float p = easeOutBack(t);
+                r.pushLayer(clamp01(t * 2.2f), 0.9f + 0.1f * p, cx, cy, 0f, -(1f - easeOutQuint(t)) * UiTheme.scaled(26f));
+                break;
+            }
+        }
+    }
+
+    /** Ouvre le calque de sortie de cet écran (à refermer par popLayer). */
+    private void pushExitLayer(UiRenderer r, float t) {
+        float cx = screenWidth / 2f, cy = screenHeight / 2f;
+        switch (exitKind) {
+            case ENTER_FORWARD: {
+                // L'ancien écran recule « vers nous » et s'efface sous le nouveau.
+                float p = easeOutQuint(t);
+                r.pushLayer(1f - clamp01(t * 1.3f), 1f + 0.05f * p, cx, cy, -p * UiTheme.scaled(36f), 0f);
+                break;
+            }
+            case ENTER_BACK: {
+                float p = easeOutQuint(t);
+                r.pushLayer(1f - clamp01(t * 1.3f), 1f - 0.05f * p, cx, cy, p * UiTheme.scaled(36f), 0f);
+                break;
+            }
+            default: {
+                // Vers le jeu : il s'éloigne en se fondant, et glisse un peu vers le bas.
+                float p = easeInCubic(t);
+                r.pushLayer(1f - t, 1f - 0.06f * p, cx, cy, 0f, -p * UiTheme.scaled(18f));
+                break;
+            }
+        }
+    }
+
+    @Override
+    public void uiFrame(double mouseX, double mouseY) {
+        UiRenderer renderer = UiRenderer.get(this.getClass().getClassLoader());
+        int depth = renderer.layerDepth();
+        try {
+            if (lastActiveScreen != this) {
+                lastActiveScreen = this;
+                // Ni préparé par l'écran d'avant, ni encore lancé : ouverture
+                // depuis le jeu (ou depuis un écran qui n'est pas à nous).
+                if (!enterPrepared || enterStartNanos == 0L) {
+                    enterStartNanos = System.nanoTime();
+                    enterKind = framedBefore ? ENTER_BACK : ENTER_OPEN;
+                }
+                enterPrepared = false;
+            }
+            framedBefore = true;
+
+            if (!exiting) {
+                pushEnterLayer(renderer);
+                try {
+                    uiDraw(mouseX, mouseY);
+                } finally {
+                    renderer.popLayer();
+                }
+                return;
+            }
+
+            float duration = exitKind == ENTER_OPEN ? CLOSE_S : NAV_S;
+            float t = clamp01((System.nanoTime() - exitStartNanos) / 1e9f / duration);
+            pushExitLayer(renderer, t);
+            try {
+                uiDraw(mouseX, mouseY);
+            } finally {
+                renderer.popLayer();
+            }
+            // Fondu enchaîné : le nouvel écran, déjà en train d'entrer, par-dessus.
+            if (exitTarget instanceof UiScreenBase) {
+                UiScreenBase next = (UiScreenBase) exitTarget;
+                next.screenWidth = screenWidth;
+                next.screenHeight = screenHeight;
+                next.pushEnterLayer(renderer);
+                try {
+                    next.uiDraw(mouseX, mouseY);
+                } finally {
+                    renderer.popLayer();
+                }
+            }
+            if (t >= 1f) {
+                exiting = false;
+                navigationTarget = exitTarget;
+                exitTarget = null;
+                navigationRequested = true;
+            }
+        } catch (Throwable t) {
+            LauncherLog.err("[UiScreenBase] uiFrame: " + t);
+        } finally {
+            // Un calque laissé ouvert par une exception détournerait tout le
+            // dessin suivant.
+            while (renderer.layerDepth() > depth) renderer.popLayer();
+        }
+    }
+
     /**
-     * Entrée en cascade des widgets de l'écran, en plus du rideau : chacun
-     * monte de quelques pixels jusqu'à sa place, un peu après le précédent.
-     * Générique comme le rideau — tous les écrans en profitent. Seul le
-     * DESSIN est décalé : le clic garde la vraie position, ce qui ne se sent
-     * pas sur une demi-seconde.
+     * Entrée en cascade des widgets, après celle de l'écran : chacun dans son
+     * propre calque, il apparaît en fondu, monte et grandit depuis son centre,
+     * un peu après le précédent. Seul le DESSIN bouge : le clic garde la vraie
+     * position, ce qui ne se sent pas sur une demi-seconde.
      */
-    private long cascadeStartNanos = System.nanoTime();
-    private static final float CASCADE_STEP_S = 0.03f;
-    private static final float CASCADE_DURATION_S = 0.35f;
-    private static final int CASCADE_MAX_STEPS = 14;
+    private static final float CASCADE_DELAY_S = 0.08f;
+    private static final float CASCADE_STEP_S = 0.035f;
+    private static final float CASCADE_DURATION_S = 0.42f;
+    private static final int CASCADE_MAX_STEPS = 16;
 
     /**
      * {@code false} pour un écran dont les widgets sont des positions réelles
@@ -109,13 +266,11 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
         return true;
     }
 
-    /** Combien le widget n°{@code index} est encore sous sa place, {@code elapsed} secondes après l'ouverture. */
-    private static float cascadeOffset(int index, float elapsed) {
-        float t = (elapsed - Math.min(index, CASCADE_MAX_STEPS) * CASCADE_STEP_S) / CASCADE_DURATION_S;
-        if (t >= 1f) return 0f;
-        t = Math.max(0f, t);
-        float eased = 1f - (1f - t) * (1f - t) * (1f - t);
-        return (1f - eased) * UiTheme.scaled(16f);
+    /** Avancement de l'entrée du widget n°{@code index}, 0 à 1 (linéaire). */
+    private float cascadeProgress(int index) {
+        if (enterStartNanos == 0L) return 0f;
+        float elapsed = (System.nanoTime() - enterStartNanos) / 1e9f;
+        return clamp01((elapsed - CASCADE_DELAY_S - Math.min(index, CASCADE_MAX_STEPS) * CASCADE_STEP_S) / CASCADE_DURATION_S);
     }
 
     /**
@@ -128,7 +283,6 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
      */
     protected UiScreenBase(String title) {
         super();
-        enterAnim.show();
     }
 
     /**
@@ -168,6 +322,8 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
         lastInput = input;
         screenWidth = input.fbWidth;
         screenHeight = input.fbHeight;
+        // Pendant la sortie, l'écran ne réagit plus : il s'en va.
+        if (exiting) return;
 
         // Continu — CHAQUE widget, chaque frame, indépendamment du clic (drag
         // de slider, capture de touche en cours...). Le clic lui-même est
@@ -276,7 +432,7 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
     }
 
     private boolean dispatchClick(int button, boolean doubleClick) {
-        if (button < 0 || button > 2 || lastInput == null) return false;
+        if (button < 0 || button > 2 || lastInput == null || exiting) return false;
         List<UiWidget> active = modalWidgets();
         List<UiWidget> targets = active != null ? active : widgets;
         // Hit-test centralisé (roadmap Phase 5.6, retour utilisateur : "c'est
@@ -493,35 +649,27 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
 
     @Override
     public void uiDraw(double mouseX, double mouseY) {
+        UiRenderer renderer = UiRenderer.get(this.getClass().getClassLoader());
+        int depth = renderer.layerDepth();
         try {
-            // Détecte une (RÉ)activation de CET écran — soit tout frais, soit
-            // un "Retour" vers une instance déjà existante (voir javadoc de
-            // lastActiveScreen) — et relance le rideau depuis 0 dans le second
-            // cas (le premier l'a déjà, enterAnim.show() du constructeur
-            // suffit alors, replay() est juste redondant/sans effet visible).
-            if (lastActiveScreen != this) {
-                lastActiveScreen = this;
-                enterAnim.replay();
-                cascadeStartNanos = System.nanoTime();
-            }
-
-            UiRenderer renderer = UiRenderer.get(this.getClass().getClassLoader());
             renderer.drawRoundedRect(0, 0, screenWidth, screenHeight, 0, overlayColor(), screenWidth, screenHeight);
 
             String hoveredTooltip = null;
-            float elapsed = (System.nanoTime() - cascadeStartNanos) / 1e9f;
+            boolean cascade = cascadeWidgets();
             for (int i = 0; i < widgets.size(); i++) {
                 UiWidget w = widgets.get(i);
-                float rise = cascadeWidgets() ? cascadeOffset(i, elapsed) : 0f;
+                float t = cascade ? cascadeProgress(i) : 1f;
                 // Les listes défilantes ne sont pas dans {@code widgets} (chaque
-                // écran les dessine lui-même) : leur contenu n'est pas décalé.
-                if (rise > 0.01f) {
-                    float restY = w.y;
-                    w.y = restY - rise;
+                // écran les dessine lui-même) : elles ont leurs propres entrées.
+                if (t < 1f) {
+                    float p = easeOutQuint(t);
+                    float pop = easeOutBack(t);
+                    renderer.pushLayer(clamp01(t * 1.8f), 0.86f + 0.14f * pop,
+                        w.x + w.w / 2f, w.y + w.h / 2f, 0f, -(1f - p) * UiTheme.scaled(22f));
                     try {
                         w.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
                     } finally {
-                        w.y = restY;
+                        renderer.popLayer();
                     }
                 } else {
                     w.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
@@ -529,29 +677,20 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
                 if (w.tooltip != null && w.contains(mouseX, mouseY)) hoveredTooltip = w.tooltip;
             }
             if (hoveredTooltip != null) UiTooltip.draw(renderer, hoveredTooltip, mouseX, mouseY, screenWidth, screenHeight);
-
-            drawRevealVeil(renderer);
         } catch (Throwable t) {
             LauncherLog.err("[UiScreenBase] uiDraw: " + t);
+        } finally {
+            while (renderer.layerDepth() > depth) renderer.popLayer();
         }
     }
 
     /**
-     * Voile de révélation — voir javadoc d'{@code enterAnim}. Opaque au
-     * premier instant (masque tout), s'estompe ensuite pour "révéler" l'écran
-     * déjà entièrement dessiné dessous. Appelé automatiquement en fin de
-     * {@link #uiDraw} ci-dessus, MAIS aussi ré-appelable explicitement par une
-     * sous-classe qui rajoute son propre contenu APRÈS {@code super.uiDraw()}
-     * (titres/logos par-dessus tout, voir UiMainMenuScreen) : sans ce second
-     * appel, ce contenu additionnel apparaîtrait d'un coup sec, jamais couvert
-     * par le voile puisque dessiné après lui.
+     * Ancien « rideau » de révélation, remplacé le 2026-10-18 par la
+     * transition de l'écran entier (voir {@link #uiFrame}). Gardé sans effet :
+     * des sous-classes l'appellent encore après leur propre contenu, qui est
+     * désormais dans le même calque que le reste.
      */
     protected void drawRevealVeil(UiRenderer renderer) {
-        float reveal = 1f - Math.max(0f, Math.min(1f, enterAnim.eased()));
-        if (reveal > 0.001f) {
-            renderer.drawRoundedRect(0, 0, screenWidth, screenHeight, 0,
-                new UiColor(8, 8, 12, 255).multiplyAlpha(reveal), screenWidth, screenHeight);
-        }
     }
 
     /**
@@ -599,8 +738,21 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
         // geste normal — perdrait cette dernière modification.
         com.yuyuframe.launcheragent.runtime.ui.HudConfigStore.flush();
 
-        navigationTarget = lastScreen;
-        navigationRequested = true;
+        // La navigation attend la fin de la sortie (voir uiFrame) : l'écran
+        // s'en va en transition, et le nouveau entre en même temps.
+        if (exiting) return;
+        exiting = true;
+        exitStartNanos = System.nanoTime();
+        exitTarget = lastScreen;
+        if (lastScreen instanceof UiScreenBase && lastScreen != this) {
+            UiScreenBase next = (UiScreenBase) lastScreen;
+            exitKind = next.framedBefore ? ENTER_BACK : ENTER_FORWARD;
+            next.prepareEnter(exitStartNanos, exitKind);
+            // Il sera redessiné comme écran courant à la fin : ce n'est pas une nouvelle activation.
+            next.exiting = false;
+        } else {
+            exitKind = ENTER_OPEN;
+        }
     }
 
     /** Consommé par le Mixin global de chaque version — true si closeTo() a été appelé cette frame. */
