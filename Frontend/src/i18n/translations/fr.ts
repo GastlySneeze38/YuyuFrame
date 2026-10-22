@@ -748,6 +748,10 @@ export const fr = {
       darkModeDesc: 'Luminosité boostée',
       brightnessLabel: 'Luminosité',
       brightnessDesc: "Ajuste finement la luminosité de l'interface",
+      soundLabel: 'Sons du launcher',
+      soundDesc: 'Volume des effets sonores, comme le son du bouton Lancer',
+      soundOff: 'Coupé',
+      soundTest: 'Écouter',
       dark: 'Sombre',
     },
     apropos: {

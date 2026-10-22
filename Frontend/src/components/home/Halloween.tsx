@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import launchSoundUrl from '@/assets/sounds/halloween-launch.ogg'
+import { useStore } from '@/stores/useStore'
 
 /**
  * Habillage « Halloween » de la bannière d'accueil (thème `halloween` d'une
@@ -496,13 +497,19 @@ let launchSound: HTMLAudioElement | null = null
  * appel puis rembobiné : en recréer un à chaque clic relirait le fichier.
  * Un refus de lecture (format non pris en charge, sortie audio absente) ne
  * doit jamais empêcher le lancement : il est avalé, avec une trace.
+ *
+ * Le volume est celui des Paramètres (Apparence → Sons du launcher), relu à
+ * chaque lecture : le changer prend effet au clic suivant. À zéro, rien ne
+ * se charge ni ne se joue.
  */
 export function playHalloweenLaunchSound() {
+  const volume = useStore.getState().soundVolume / 100
+  if (volume <= 0) return
   try {
     if (!launchSound) {
       launchSound = new Audio(launchSoundUrl)
-      launchSound.volume = 0.8
     }
+    launchSound.volume = volume
     launchSound.currentTime = 0
     launchSound.play().catch((e) => console.warn('Son de lancement Halloween :', e))
   } catch (e) {

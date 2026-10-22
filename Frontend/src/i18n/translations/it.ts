@@ -750,6 +750,10 @@ export const it: TranslationSchema = {
       darkModeDesc: 'Luminosità aumentata',
       brightnessLabel: 'Luminosità',
       brightnessDesc: 'Regola finemente la luminosità dell’interfaccia',
+      soundLabel: 'Suoni del launcher',
+      soundDesc: 'Volume degli effetti sonori, come il suono del pulsante Avvia',
+      soundOff: 'Disattivati',
+      soundTest: 'Ascolta',
       dark: 'Scuro',
     },
     apropos: {

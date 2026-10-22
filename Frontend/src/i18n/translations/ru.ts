@@ -750,6 +750,10 @@ export const ru: TranslationSchema = {
       darkModeDesc: 'Повышенная яркость',
       brightnessLabel: 'Яркость',
       brightnessDesc: 'Точно настраивает яркость интерфейса',
+      soundLabel: 'Звуки лаунчера',
+      soundDesc: 'Громкость звуковых эффектов, например звука кнопки «Запустить»',
+      soundOff: 'Выключены',
+      soundTest: 'Прослушать',
       dark: 'Тёмный',
     },
     apropos: {

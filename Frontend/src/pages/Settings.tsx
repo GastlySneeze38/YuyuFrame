@@ -16,6 +16,7 @@ import { PageGlow } from '@/components/PageGlow'
 import { Button } from '@/components/ui/Button'
 import { SettingsLinkModal, SettingsShareModal } from '@/components/settings/SettingsShare'
 import { CREATOR_SETTINGS_LINK } from '@/lib/launcherSettingsShare'
+import { playHalloweenLaunchSound } from '@/components/home/Halloween'
 import { useT, LANGUAGES } from '@/i18n'
 
 /** Valeurs courantes proposées en puces pour la RAM personnalisée (>8 Go) —
@@ -27,7 +28,7 @@ export default function Settings() {
   const t = useT()
   const navigate = useNavigate()
   const {
-    brightness, setBrightness, defaultRam, setDefaultRam, customRamMb, setCustomRamMb,
+    brightness, setBrightness, soundVolume, setSoundVolume, defaultRam, setDefaultRam, customRamMb, setCustomRamMb,
     closeOnLaunch, setCloseOnLaunch,
     allowBackground, setAllowBackground,
     instanceSyncMode, setInstanceSyncMode, avoidBetaDependencies, setAvoidBetaDependencies,
@@ -801,6 +802,37 @@ export default function Settings() {
                   <span>OLED</span>
                   <span>{t('settings.apparence.darkModeLabel')}</span>
                 </div>
+              </div>
+
+              <div className="h-px bg-white/6" />
+
+              {/* Sons du launcher */}
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-medium text-white">{t('settings.apparence.soundLabel')}</p>
+                    <p className="text-[11px] text-white/35 mt-0.5">
+                      {t('settings.apparence.soundDesc')}
+                    </p>
+                  </div>
+                  <div className="flex flex-none items-center gap-3">
+                    <span className="text-sm font-bold text-[#7b72e9]">
+                      {soundVolume === 0 ? t('settings.apparence.soundOff') : `${soundVolume}%`}
+                    </span>
+                    {/* Le seul son du launcher aujourd'hui : l'écouter dit
+                        tout de suite si le volume convient. */}
+                    <Button size="sm" variant="secondary" disabled={soundVolume === 0} onClick={playHalloweenLaunchSound}>
+                      {t('settings.apparence.soundTest')}
+                    </Button>
+                  </div>
+                </div>
+                <input
+                  type="range"
+                  min={0} max={100} step={5}
+                  value={soundVolume}
+                  onChange={(e) => setSoundVolume(Number(e.target.value))}
+                  className="w-full accent-[#4B3FCF]"
+                />
               </div>
             </div>
           </SCard>

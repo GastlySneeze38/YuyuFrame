@@ -750,6 +750,10 @@ export const en: TranslationSchema = {
       darkModeDesc: 'Boosted brightness',
       brightnessLabel: 'Brightness',
       brightnessDesc: 'Finely adjusts the interface brightness',
+      soundLabel: 'Launcher sounds',
+      soundDesc: 'Volume of sound effects, such as the Launch button sound',
+      soundOff: 'Muted',
+      soundTest: 'Play',
       dark: 'Dark',
     },
     apropos: {

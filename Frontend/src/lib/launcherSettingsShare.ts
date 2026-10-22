@@ -124,6 +124,14 @@ export const SHARED_SETTINGS: SharedSetting[] = [
     apply: (v) => store().setBrightness(v as number),
     format: (v) => `${v}%`,
   },
+  {
+    key: 'soundVolume',
+    label: 'settings.apparence.soundLabel',
+    read: () => store().soundVolume,
+    parse: intIn(0, 100),
+    apply: (v) => store().setSoundVolume(v as number),
+    format: (v, t) => (v === 0 ? t('settings.apparence.soundOff') : `${v}%`),
+  },
 ]
 
 const BY_KEY = new Map(SHARED_SETTINGS.map((s) => [s.key, s]))

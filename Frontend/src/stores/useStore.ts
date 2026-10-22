@@ -133,6 +133,10 @@ interface Store {
   brightness: number
   setBrightness: (b: number) => void
 
+  /** Volume des sons du launcher, de 0 (coupé) à 100. */
+  soundVolume: number
+  setSoundVolume: (v: number) => void
+
   instanceSyncMode: 'db_wins' | 'disk_wins'
   setInstanceSyncMode: (mode: 'db_wins' | 'disk_wins') => void
 
@@ -399,6 +403,9 @@ export const useStore = create<Store>()(
       brightness: 100,
       setBrightness: (brightness) => set({ brightness }),
 
+      soundVolume: 80,
+      setSoundVolume: (soundVolume) => set({ soundVolume: Math.min(100, Math.max(0, Math.round(soundVolume))) }),
+
       instanceSyncMode: 'db_wins',
       setInstanceSyncMode: (instanceSyncMode) => set({ instanceSyncMode }),
 
@@ -559,6 +566,7 @@ export const useStore = create<Store>()(
         allowBackground: s.allowBackground,
         p2pEnabled: s.p2pEnabled,
         brightness: s.brightness,
+        soundVolume: s.soundVolume,
         instanceSyncMode: s.instanceSyncMode,
         avoidBetaDependencies: s.avoidBetaDependencies,
         syncGameSettings: s.syncGameSettings,

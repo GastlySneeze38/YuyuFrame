@@ -751,6 +751,10 @@ export const pt: TranslationSchema = {
       darkModeDesc: 'Brilho reforçado',
       brightnessLabel: 'Brilho',
       brightnessDesc: 'Ajusta com precisão o brilho da interface',
+      soundLabel: 'Sons do launcher',
+      soundDesc: 'Volume dos efeitos sonoros, como o som do botão Iniciar',
+      soundOff: 'Mudo',
+      soundTest: 'Ouvir',
       dark: 'Escuro',
     },
     apropos: {
