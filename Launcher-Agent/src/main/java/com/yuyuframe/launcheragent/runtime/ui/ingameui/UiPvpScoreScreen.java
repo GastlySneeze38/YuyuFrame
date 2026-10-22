@@ -299,8 +299,8 @@ public final class UiPvpScoreScreen extends UiScreenBase {
 
     /**
      * Les dernières notes en barres, de la plus ancienne à gauche à la plus
-     * récente à droite, chacune dans sa couleur ; un trait marque 50, la
-     * référence. Les barres poussent l'une après l'autre.
+     * récente à droite, chacune dans sa couleur ; un trait marque 250, le
+     * joueur moyen. Les barres poussent l'une après l'autre.
      */
     private void drawTrend(UiRenderer r, float left, float bottom, float right, float top) {
         int vw = screenWidth, vh = screenHeight;
@@ -332,7 +332,7 @@ public final class UiPvpScoreScreen extends UiScreenBase {
             double score = scored.get(count - 1 - i).score();
             float x = chartRight - (count - i) * slot + (slot - barW) / 2f;
             float grow = PvpScoreUi.pop(openedAt, 0.45f + 0.035f * i, 0.55f);
-            float h = Math.max(UiTheme.scaled(3f), height * (float) (score / 100.0) * Math.max(0f, grow));
+            float h = Math.max(UiTheme.scaled(3f), height * (float) (score / NativeCombat.SCORE_MAX) * Math.max(0f, grow));
             UiColor tone = PvpScoreUi.scoreColor(score);
             r.drawGradientRect(x, chartBottom, x + barW, chartBottom + h, Math.min(barW / 2f, UiTheme.scaled(3f)),
                 tone.multiplyAlpha(0.55f * alpha), tone.multiplyAlpha(alpha), vw, vh);
@@ -553,7 +553,7 @@ public final class UiPvpScoreScreen extends UiScreenBase {
             float barRight = Math.min(barLeft + UiTheme.scaled(110f), col[4] - UiTheme.scaled(120f));
             if (barRight > barLeft + UiTheme.scaled(20f)) {
                 float grow = PvpScoreUi.ease(listShownAt, delay() + 0.15f, 0.7f);
-                PvpScoreUi.bar(r, barLeft, mid - UiTheme.scaled(3f), barRight, UiTheme.scaled(6f), level * grow, PvpScoreUi.FOE, vw, vh);
+                PvpScoreUi.bar(r, barLeft, mid - UiTheme.scaled(3f), barRight, UiTheme.scaled(6f), PvpScoreUi.percent(level) * grow, PvpScoreUi.FOE, vw, vh);
             }
 
             // Opportunités converties, temps au contact, date.

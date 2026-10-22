@@ -175,7 +175,7 @@ mod tests {
         let head: Vec<&str> = lines[0].split('\t').collect();
         assert_eq!((head[0], head[2], head[3]), ("avg", "2", "2"));
         let average: f64 = head[1].parse().unwrap();
-        assert!((0.0..=100.0).contains(&average));
+        assert!((0.0..=500.0).contains(&average));
 
         let duel: Vec<&str> = lines[1].split('\t').collect();
         assert_eq!(duel[0], "duel");
@@ -186,9 +186,9 @@ mod tests {
         // Le même adversaire deux fois : le premier duel le découvre, le
         // second le connaît par le premier.
         let older: Vec<f64> = lines[2].split('\t').nth(3).unwrap().split(',').map(|n| n.parse().unwrap()).collect();
-        assert_eq!((older[35], older[36]), (50.0, 0.0), "premier duel contre lui : inconnu");
+        assert_eq!((older[35], older[36]), (250.0, 0.0), "premier duel contre lui : inconnu");
         assert_eq!(numbers[36], 1.0, "second duel : connu par le premier");
-        assert_ne!(numbers[35], 50.0);
+        assert_ne!(numbers[35], 250.0);
         assert_eq!(average, ((numbers[0] + older[0]) / 2.0).round(), "la moyenne des deux notes");
 
         // Le résumé à côté du journal suit la formule courante.

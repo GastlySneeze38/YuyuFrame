@@ -9,8 +9,8 @@
 
 use super::super::parse::{gear_at, Duel, Gear, SLOT_CHEST, SLOT_HAND, SLOT_OFFHAND};
 use super::{
-    blend, centered, family, flag, mean, sample_at, Raw, view_at, Measure, Opportunity, Part, View, GAP_TICKS, HEIGHT_ADVANTAGE, HIT_DELAY_TICKS, LOW_HEALTH, ME_FALL, ME_FLAGS, ME_FOOD,
-    ME_HEALTH, ME_MAX_HEALTH, ME_SPEED, ME_STRENGTH, ON_GROUND, REACH, X, Y, Z,
+    family, flag, sample_at, view_at, Family, Norm, Opportunity, Part, View, GAP_TICKS, HEIGHT_ADVANTAGE, HIT_DELAY_TICKS, LOW_HEALTH, ME_FALL, ME_FLAGS, ME_FOOD, ME_HEALTH,
+    ME_MAX_HEALTH, ME_SPEED, ME_STRENGTH, ON_GROUND, REACH, X, Y, Z,
 };
 
 // Poids des mesures, posés au jugé (décision du 2026-10-14), *à calibrer*.
@@ -21,17 +21,35 @@ const W_TOTEMS: f64 = 0.15;
 const W_POTIONS: f64 = 0.10;
 const W_ROCKETS: f64 = 0.05;
 
-// Ce que valent ces mesures en moyenne (calibration provisoire du
-// 2026-10-15, voir `centered`). Rien ne se mesure chez l'adversaire : les
-// centres viennent de NOS duels seuls (26 notés, 4 en version 2 pour la
-// barre d'inventaire et le délai des totems). Tant que d'autres joueurs ne
-// sont pas mesurés, 50 veut dire « comme d'habitude », pas « comme un
-// joueur moyen ». Recalés le même soir sur 23 duels : charges de vent et
-// perles 0,32 (20), nourriture et vie 0,80 (23), délai des totems 0,10 (16).
-const WIND_AND_PEARLS_CENTER: f64 = 0.32;
-const HOTBAR_CENTER: f64 = 0.53;
-const FOOD_AND_LIFE_CENTER: f64 = 0.80;
-const TOTEM_REFILL_CENTER: f64 = 0.10;
+// Ce qu'on attend de chaque sorte d'action. Les moyennes reprennent celles
+// des groupes relevées le 2026-10-15 sur NOS duels seuls (rien ne se mesure
+// chez l'adversaire) : charges de vent et perles 0,32, barre d'inventaire
+// 0,53, nourriture et vie 0,80, délai des totems 0,10 ; potions et fusées,
+// jamais relevées, à 0,5. Les écarts sont posés à la main. Les duels
+// partagés par les joueurs en font enfin une moyenne de joueurs.
+// 5. Charges de vent et perles.
+pub const USEFUL: Norm = Norm::new("resources.useful", 0.32, 0.47);
+pub const EFFECTIVE: Norm = Norm::new("resources.effective", 0.32, 0.47);
+pub const ANSWERED: Norm = Norm::new("resources.answered", 0.32, 0.47);
+// 1. La barre d'inventaire.
+pub const MACE_READY: Norm = Norm::new("resources.mace_ready", 0.53, 0.4);
+pub const WIND_READY: Norm = Norm::new("resources.wind_ready", 0.53, 0.4);
+pub const APPLE_READY: Norm = Norm::new("resources.apple_ready", 0.53, 0.4);
+pub const SWITCH: Norm = Norm::new("resources.switch", 0.53, 0.4);
+// 2. La nourriture et la vie.
+pub const APPLE: Norm = Norm::new("resources.apple", 0.8, 0.3);
+pub const MEAL: Norm = Norm::new("resources.meal", 0.8, 0.4);
+pub const HUNGER: Norm = Norm::new("resources.hunger", 0.8, 0.25);
+pub const LOW_TIME: Norm = Norm::new("resources.low_time", 0.8, 0.2);
+pub const HEAL: Norm = Norm::new("resources.heal", 0.8, 0.3);
+// 4. Les totems : chacun qu'on lui fait sauter (1) ou qui nous saute (0).
+pub const TOTEM_REFILL: Norm = Norm::new("resources.totem_refill", 0.10, 0.3);
+pub const TOTEM_BALANCE: Norm = Norm::new("resources.totem_balance", 0.5, 0.5);
+// 3. Les potions, 6. les fusées.
+pub const POTION_ACTIVE: Norm = Norm::new("resources.potion_active", 0.5, 0.3);
+pub const POTION_RENEW: Norm = Norm::new("resources.potion_renew", 0.5, 0.35);
+pub const POTION_SAFE: Norm = Norm::new("resources.potion_safe", 0.5, 0.5);
+pub const ROCKET: Norm = Norm::new("resources.rocket", 0.5, 0.5);
 
 /// Masse en main : au-delà de 10 ticks après l'ouverture, c'est trop tard.
 const MACE_LATE_TICKS: f64 = 10.0;
@@ -131,52 +149,61 @@ fn safe_meal(theirs: &[View], t: u64) -> f64 {
 
 // --- 1. La barre d'inventaire : le bon objet au bon moment -----------------------
 
-fn hotbar(duel: &Duel, mine: &[Opportunity]) -> Part {
+/// La masse à l'ouverture, la charge de vent après l'atterrissage, la pomme
+/// quand on est bas, le passage d'un objet à l'autre.
+fn hotbar(duel: &Duel, mine: &[Opportunity]) -> [Part; 4] {
+    let (mut mace, mut wind, mut apple, mut switches) = (Part::new(MACE_READY), Part::new(WIND_READY), Part::new(APPLE_READY), Part::new(SWITCH));
     if !duel.detailed() {
-        return None;
+        return [mace, wind, apple, switches];
     }
     // Masse à l'ouverture : le bon joueur tient autre chose et passe à la masse au dernier moment.
-    let mace = mean(mine.iter().map(|o| {
-        first_held(duel, SLOT_HAND, o.open, o.close + HIT_DELAY_TICKS, |i| i == "mace").map(|t| late(t - o.open, MACE_LATE_TICKS)).unwrap_or(0.0)
-    }));
+    for o in mine {
+        let held = first_held(duel, SLOT_HAND, o.open, o.close + HIT_DELAY_TICKS, |i| i == "mace");
+        mace.add(Some(o.open), held.map(|t| late(t - o.open, MACE_LATE_TICKS)).unwrap_or(0.0));
+    }
     // Charge de vent en main après l'atterrissage, si le joueur en utilise.
-    let uses_wind = duel.uses.iter().any(|(_, i)| i == "wind_charge");
-    let wind = if uses_wind {
+    if duel.uses.iter().any(|(_, i)| i == "wind_charge") {
         let landings = duel.samples.windows(2).filter(|w| {
             w[1].t - w[0].t <= GAP_TICKS && !flag(w[0].me[ME_FLAGS], ON_GROUND) && w[0].me[ME_FALL] >= 2.0 && flag(w[1].me[ME_FLAGS], ON_GROUND)
         });
-        mean(landings.filter_map(|w| first_held(duel, SLOT_HAND, w[1].t, w[1].t + USEFUL_TICKS, |i| i == "wind_charge").map(|t| late(t - w[1].t, WIND_LATE_TICKS))))
-    } else {
-        None
-    };
+        for w in landings {
+            if let Some(t) = first_held(duel, SLOT_HAND, w[1].t, w[1].t + USEFUL_TICKS, |i| i == "wind_charge") {
+                wind.add(Some(w[1].t), late(t - w[1].t, WIND_LATE_TICKS));
+            }
+        }
+    }
     // Pomme d'or en main quand on passe sous 4 cœurs, si le joueur en mange.
-    let eats_apples = duel.uses.iter().any(|(_, i)| is_golden_apple(i));
-    let apple = if eats_apples {
+    if duel.uses.iter().any(|(_, i)| is_golden_apple(i)) {
         let drops = duel.samples.windows(2).filter(|w| w[0].me[ME_HEALTH] >= LOW_HEALTH && w[1].me[ME_HEALTH] < LOW_HEALTH && w[1].me[ME_HEALTH] > 0.0);
-        mean(drops.map(|w| first_held(duel, SLOT_HAND, w[1].t, w[1].t + 100, is_golden_apple).map(|t| late(t - w[1].t, APPLE_LATE_TICKS)).unwrap_or(0.0)))
-    } else {
-        None
-    };
+        for w in drops {
+            let held = first_held(duel, SLOT_HAND, w[1].t, w[1].t + 100, is_golden_apple);
+            apple.add(Some(w[1].t), held.map(|t| late(t - w[1].t, APPLE_LATE_TICKS)).unwrap_or(0.0));
+        }
+    }
     // Entre deux objets utilisés à la suite, les ticks passés sur la barre.
-    let switches = mean(duel.uses.windows(2).filter(|w| w[0].1 != w[1].1 && w[1].0 - w[0].0 <= 100).filter_map(|w| {
-        let left = duel.my_gear.iter().find(|g| g.t > w[0].0 && g.item(SLOT_HAND) != w[0].1)?.t;
-        let arrived = first_held(duel, SLOT_HAND, left, w[1].0, |i| i == w[1].1)?;
-        Some(late(arrived - left, SWITCH_LATE_TICKS))
-    }));
-    blend(&[(1.0, mace), (1.0, wind), (1.0, apple), (1.0, switches)])
+    for w in duel.uses.windows(2).filter(|w| w[0].1 != w[1].1 && w[1].0 - w[0].0 <= 100) {
+        let Some(left) = duel.my_gear.iter().find(|g| g.t > w[0].0 && g.item(SLOT_HAND) != w[0].1).map(|g| g.t) else { continue };
+        if let Some(arrived) = first_held(duel, SLOT_HAND, left, w[1].0, |i| i == w[1].1) {
+            switches.add(Some(left), late(arrived - left, SWITCH_LATE_TICKS));
+        }
+    }
+    [mace, wind, apple, switches]
 }
 
 // --- 2. La nourriture et la vie ------------------------------------------------------
 
-fn food_and_life(duel: &Duel, theirs: &[View]) -> Part {
+/// Les pommes au bon moment, les repas à l'abri, la barre de faim, le temps
+/// passé bas en vie, le temps pour remonter — ces deux derniers pour moitié
+/// chacun : ils disent ensemble comment on tient sa vie.
+fn food_and_life(duel: &Duel, theirs: &[View]) -> [(f64, Part); 5] {
     let health = |t: u64| sample_at(&duel.samples, t).map(|s| (s.me[ME_HEALTH], s.me[ME_MAX_HEALTH]));
     // Pomme d'or sous environ 4 cœurs, ou juste après un totem (toujours bonne), plutôt qu'à pleine vie.
-    let apples = mean(duel.uses.iter().filter(|(_, i)| is_golden_apple(i)).filter_map(|(t, _)| {
+    let apples = Part::of(APPLE, duel.uses.iter().filter(|(_, i)| is_golden_apple(i)).filter_map(|(t, _)| {
         let (hp, max) = health(*t)?;
         let after_totem = duel.my_totems.iter().any(|p| *p <= *t && t - p <= AFTER_TOTEM_TICKS);
-        Some(if hp < LOW_HEALTH || after_totem { 1.0 } else { 1.0 - ((hp - LOW_HEALTH) / (max - LOW_HEALTH).max(1.0)).clamp(0.0, 1.0) })
+        Some((Some(*t), if hp < LOW_HEALTH || after_totem { 1.0 } else { 1.0 - ((hp - LOW_HEALTH) / (max - LOW_HEALTH).max(1.0)).clamp(0.0, 1.0) }))
     }));
-    let meals = mean(duel.uses.iter().filter(|(_, i)| is_food(i)).map(|(t, _)| safe_meal(theirs, *t)));
+    let meals = Part::of(MEAL, duel.uses.iter().filter(|(_, i)| is_food(i)).map(|(t, _)| (Some(*t), safe_meal(theirs, *t))));
     let engaged: Vec<_> = duel.samples.iter().filter(|s| s.foe.is_some()).collect();
     // La barre de faim (journal de version 2).
     let fed: Vec<f64> = engaged
@@ -185,70 +212,77 @@ fn food_and_life(duel: &Duel, theirs: &[View]) -> Part {
         .filter(|f| *f >= 0.0)
         .map(|f| if f >= FOOD_REGEN { 1.0 } else if f >= FOOD_LUNGE { 0.5 } else { 0.0 })
         .collect();
-    let hunger = (!fed.is_empty()).then(|| (fed.iter().sum::<f64>() / fed.len() as f64, fed.len() as f64 / 80.0));
+    let hunger = Part::trend(HUNGER, (!fed.is_empty()).then(|| fed.iter().sum::<f64>() / fed.len() as f64));
     // Le temps passé bas en vie, et le temps pour remonter.
     let low = engaged.iter().filter(|s| s.me[ME_HEALTH] > 0.0 && s.me[ME_HEALTH] < LOW_HEALTH).count() as f64;
-    let low_time = (!engaged.is_empty()).then(|| (1.0 - low / engaged.len() as f64, engaged.len() as f64 / 80.0));
-    let mut climbs = Vec::new();
+    let low_time = Part::trend(LOW_TIME, (!engaged.is_empty()).then(|| 1.0 - low / engaged.len() as f64));
+    let mut heal = Part::new(HEAL);
     let mut since: Option<u64> = None;
     for s in &duel.samples {
         let hp = s.me[ME_HEALTH];
         match since {
             None if hp > 0.0 && hp < LOW_HEALTH => since = Some(s.t),
             Some(start) if hp >= LOW_HEALTH => {
-                climbs.push(late(s.t - start, HEAL_TICKS));
+                heal.add(Some(start), late(s.t - start, HEAL_TICKS));
                 since = None;
             }
             _ => {}
         }
     }
-    if since.is_some() {
-        climbs.push(0.0);
+    if let Some(start) = since {
+        heal.add(Some(start), 0.0);
     }
-    blend(&[(1.0, apples), (1.0, meals), (1.0, hunger), (1.0, blend(&[(1.0, low_time), (1.0, mean(climbs))]))])
+    [(1.0, apples), (1.0, meals), (1.0, hunger), (0.5, low_time), (0.5, heal)]
 }
 
 // --- 3. Les potions : force et vitesse seulement -------------------------------------------
 
-fn potions(duel: &Duel, mine: &[View], theirs: &[View]) -> Part {
+/// L'effet actif au contact, la potion reprise à temps, bue à l'abri.
+fn potions(duel: &Duel, mine: &[View], theirs: &[View]) -> [Part; 3] {
+    let (mut active, mut renew, mut safe) = (Part::new(POTION_ACTIVE), Part::new(POTION_RENEW), Part::new(POTION_SAFE));
     let effect = |s: &super::super::parse::Sample| s.me[ME_STRENGTH] > 0.0 || s.me[ME_SPEED] > 0.0;
     // Si aucune potion n'est utilisée, la partie ne compte pas : un kit sans
     // potions n'est pas pénalisé. Des effets sans potion bue viennent du
     // serveur (vu sur Minemen le 2026-10-15 : force et vitesse II données
     // par le kit, effacées par chaque totem) et ne disent rien du joueur.
     if !duel.uses.iter().any(|(_, i)| is_potion(i)) {
-        return None;
+        return [active, renew, safe];
     }
     let contact: Vec<_> = if duel.detailed() { mine.iter().filter(|v| v.horizontal <= CONTACT).filter_map(|v| sample_at(&duel.samples, v.t)).collect() } else { Vec::new() };
-    let active = (!contact.is_empty()).then(|| (contact.iter().filter(|s| effect(s)).count() as f64 / contact.len() as f64, contact.len() as f64 / 80.0));
+    if !contact.is_empty() {
+        active.add(None, contact.iter().filter(|s| effect(s)).count() as f64 / contact.len() as f64);
+    }
     // Reprendre la potion avant que l'effet tombe, pas longtemps après.
-    let mut renewals = Vec::new();
     if duel.detailed() {
         for index in [ME_STRENGTH, ME_SPEED] {
             for (i, w) in duel.samples.windows(2).enumerate() {
                 if w[0].me[index] > 0.0 && w[1].me[index] == 0.0 {
                     let back = duel.samples[i + 1..].iter().find(|s| s.me[index] > 0.0);
-                    renewals.push(back.map(|s| late(s.t - w[1].t, RENEW_TICKS)).unwrap_or(0.0));
+                    renew.add(Some(w[1].t), back.map(|s| late(s.t - w[1].t, RENEW_TICKS)).unwrap_or(0.0));
                 }
             }
         }
     }
-    let safe = mean(duel.uses.iter().filter(|(_, i)| i == "potion").map(|(t, _)| safe_meal(theirs, *t)));
-    blend(&[(1.0, active), (1.0, mean(renewals)), (1.0, safe)])
+    for (t, _) in duel.uses.iter().filter(|(_, i)| i == "potion") {
+        safe.add(Some(*t), safe_meal(theirs, *t));
+    }
+    [active, renew, safe]
 }
 
 // --- 4. Les totems -------------------------------------------------------------------------------
 
-fn totems(duel: &Duel, raw: &mut Raw) -> Part {
-    let refill = if duel.detailed() {
-        mean(refills(&duel.my_gear, &duel.my_totems, &duel.my_deaths).into_iter().map(|(_, delay)| delay.map(|d| late(d, TOTEM_LATE_TICKS)).unwrap_or(0.0)))
-    } else {
-        None
-    };
-    let (forced, spent) = (duel.foe_totems.len() as f64, duel.my_totems.len() as f64);
-    let balance = (forced + spent > 0.0).then(|| (forced / (forced + spent), forced + spent));
-    // Le bilan forcés / consommés vaut 0,5 en moyenne par nature : seul le délai est recentré.
-    blend(&[(1.0, centered(raw.put("resources.totem_refill", refill), TOTEM_REFILL_CENTER)), (1.0, raw.put("resources.totem_balance", balance))])
+/// Le délai pour remettre un totem, et chaque totem qui saute : le sien (1)
+/// ou le nôtre (0) — le bilan vaut 0,5 en moyenne par nature.
+fn totems(duel: &Duel) -> [Part; 2] {
+    let mut refill = Part::new(TOTEM_REFILL);
+    if duel.detailed() {
+        for (t, delay) in refills(&duel.my_gear, &duel.my_totems, &duel.my_deaths) {
+            refill.add(Some(t), delay.map(|d| late(d, TOTEM_LATE_TICKS)).unwrap_or(0.0));
+        }
+    }
+    let forced = duel.foe_totems.iter().map(|t| (Some(*t), 1.0));
+    let spent = duel.my_totems.iter().map(|t| (Some(*t), 0.0));
+    [refill, Part::of(TOTEM_BALANCE, forced.chain(spent))]
 }
 
 // --- 5. Les charges de vent et les perles --------------------------------------------------------
@@ -292,19 +326,20 @@ fn reason(duel: &Duel, t: u64, item: &str, mine_views: &[View], theirs: &[View],
     (useful, effective)
 }
 
-fn wind_and_pearls(duel: &Duel, mine_views: &[View], theirs: &[View], mine: &[Opportunity]) -> Part {
+/// Utiles, efficaces, et la menace à laquelle on a répondu.
+fn wind_and_pearls(duel: &Duel, mine_views: &[View], theirs: &[View], mine: &[Opportunity]) -> [Part; 3] {
     let uses: Vec<&(u64, String)> = duel.uses.iter().filter(|(_, i)| i == "wind_charge" || i == "ender_pearl").collect();
     if uses.is_empty() {
-        return None;
+        return [Part::new(USEFUL), Part::new(EFFECTIVE), Part::new(ANSWERED)];
     }
     let reasons: Vec<(bool, bool)> = uses.iter().map(|(t, item)| reason(duel, *t, item, mine_views, theirs, mine)).collect();
     // Efficience : la part des utilisations utiles — le spam est pénalisé
     // naturellement, chaque charge sans raison comptant comme gâchée.
-    let efficiency = mean(reasons.iter().map(|(useful, _)| *useful as u8 as f64));
+    let efficiency = Part::of(USEFUL, uses.iter().zip(&reasons).map(|((t, _), (useful, _))| (Some(*t), *useful as u8 as f64)));
     // Efficacité : ce qu'elles ont apporté.
-    let efficacy = mean(reasons.iter().map(|(_, effective)| *effective as u8 as f64));
+    let efficacy = Part::of(EFFECTIVE, uses.iter().zip(&reasons).map(|((t, _), (_, effective))| (Some(*t), *effective as u8 as f64)));
     // Recharges : quand il est au-dessus et à portée, s'en servir plutôt que d'attendre.
-    let mut answered = Vec::new();
+    let mut answered = Part::new(ANSWERED);
     let mut i = 0;
     while i < theirs.len() {
         if !(theirs[i].above > HEIGHT_ADVANTAGE && theirs[i].horizontal <= REACH) {
@@ -318,10 +353,10 @@ fn wind_and_pearls(duel: &Duel, mine_views: &[View], theirs: &[View], mine: &[Op
         let end = theirs[i - 1].t;
         // Un passage d'un tick n'est pas une menace qu'on a le temps de traiter.
         if end > start {
-            answered.push(uses.iter().any(|(t, _)| *t >= start && *t <= end) as u8 as f64);
+            answered.add(Some(start), uses.iter().any(|(t, _)| *t >= start && *t <= end) as u8 as f64);
         }
     }
-    blend(&[(1.0, efficiency), (1.0, efficacy), (1.0, mean(answered))])
+    [efficiency, efficacy, answered]
 }
 
 // --- 6. Les fusées d'élytre --------------------------------------------------------------------
@@ -329,18 +364,20 @@ fn wind_and_pearls(duel: &Duel, mine_views: &[View], theirs: &[View], mine: &[Op
 fn rockets(duel: &Duel, mine: &[Opportunity]) -> Part {
     // Ne compte que si le joueur porte une élytre.
     if !duel.my_gear.iter().any(|g| g.item(SLOT_CHEST) == "elytra") {
-        return None;
+        return Part::new(ROCKET);
     }
-    mean(duel.uses.iter().filter(|(_, i)| i == "firework_rocket").map(|(t, _)| mine.iter().any(|o| o.open > *t && o.open - t <= USEFUL_TICKS) as u8 as f64))
+    let led = |t: u64| mine.iter().any(|o| o.open > t && o.open - t <= USEFUL_TICKS);
+    Part::of(ROCKET, duel.uses.iter().filter(|(_, i)| i == "firework_rocket").map(|(t, _)| (Some(*t), led(*t) as u8 as f64)))
 }
 
 /// Le détail des ressources : charges de vent et perles utiles ou gâchées,
 /// masse en main à temps, pommes au bon moment, délai pour remettre un totem ;
 /// les charges gâchées et les totems remis comme moments ; ses totems en face.
 pub fn detail(duel: &Duel, mine_views: &[View], theirs: &[View], mine: &[Opportunity], d: &mut super::Detail) {
-    let weight = |part: Part, center: f64, w: f64| centered(part, center).map(|(v, _)| (v - 0.5) * w);
+    // Le poids d'un fait : l'écart de sa partie à l'attendu, fois le poids de son groupe.
+    let weight = |part: &Part, w: f64| part.gap().map(|g| g * w);
     let uses: Vec<&(u64, String)> = duel.uses.iter().filter(|(_, i)| i == "wind_charge" || i == "ender_pearl").collect();
-    if let Some(w) = weight(wind_and_pearls(duel, mine_views, theirs, mine), WIND_AND_PEARLS_CENTER, W_WIND_AND_PEARLS) {
+    if let Some(w) = weight(&wind_and_pearls(duel, mine_views, theirs, mine)[0], W_WIND_AND_PEARLS) {
         let reasons: Vec<bool> = uses.iter().map(|(t, item)| reason(duel, *t, item, mine_views, theirs, mine).0).collect();
         let useful = reasons.iter().filter(|r| **r).count() as f64;
         d.fact("resources.useful", w >= 0.0, w, &[useful, reasons.len() as f64]);
@@ -350,7 +387,7 @@ pub fn detail(duel: &Duel, mine_views: &[View], theirs: &[View], mine: &[Opportu
             }
         }
     }
-    if let Some(w) = weight(hotbar(duel, mine), HOTBAR_CENTER, W_HOTBAR) {
+    if let Some(w) = weight(&hotbar(duel, mine)[0], W_HOTBAR) {
         // À temps : la masse en main au plus tard à mi-chemin du délai qui ne vaut plus rien.
         let ready = mine
             .iter()
@@ -372,7 +409,7 @@ pub fn detail(duel: &Duel, mine_views: &[View], theirs: &[View], mine: &[Opportu
     if !apples.is_empty() {
         let good = apples.iter().filter(|a| **a).count() as f64;
         let share = good / apples.len() as f64;
-        d.fact("resources.apples", share >= 0.5, (share - 0.5) * W_FOOD_AND_LIFE, &[good, apples.len() as f64]);
+        d.fact("resources.apples", share >= APPLE.mean, (share - APPLE.mean) / APPLE.spread * W_FOOD_AND_LIFE, &[good, apples.len() as f64]);
     }
     if duel.detailed() {
         let mine_refills = refills(&duel.my_gear, &duel.my_totems, &duel.my_deaths);
@@ -380,7 +417,7 @@ pub fn detail(duel: &Duel, mine_views: &[View], theirs: &[View], mine: &[Opportu
             let delays: Vec<f64> = list.iter().filter_map(|(_, d)| *d).map(|d| d as f64 / 20.0).collect();
             (!delays.is_empty()).then(|| (delays.iter().sum::<f64>() / delays.len() as f64 * 10.0).round() / 10.0)
         };
-        if let (Some(s), Some(w)) = (seconds(&mine_refills), weight(mean(mine_refills.iter().map(|(_, d)| d.map(|d| late(d, TOTEM_LATE_TICKS)).unwrap_or(0.0))), TOTEM_REFILL_CENTER, W_TOTEMS)) {
+        if let (Some(s), Some(w)) = (seconds(&mine_refills), weight(&totems(duel)[0], W_TOTEMS)) {
             d.fact("resources.totem_refill", w >= 0.0, w, &[s]);
             for (t, delay) in &mine_refills {
                 let s = delay.map(|d| (d as f64 / 2.0).round() / 10.0).unwrap_or(-1.0);
@@ -394,18 +431,19 @@ pub fn detail(duel: &Duel, mine_views: &[View], theirs: &[View], mine: &[Opportu
     }
 }
 
-pub fn mine(duel: &Duel, mine_views: &[View], theirs: &[View], mine: &[Opportunity], raw: &mut Raw) -> Measure {
-    let combined = blend(&[
-        (W_WIND_AND_PEARLS, centered(raw.put("resources.wind_and_pearls", wind_and_pearls(duel, mine_views, theirs, mine)), WIND_AND_PEARLS_CENTER)),
-        (W_HOTBAR, centered(raw.put("resources.hotbar", hotbar(duel, mine)), HOTBAR_CENTER)),
-        (W_FOOD_AND_LIFE, centered(raw.put("resources.food_and_life", food_and_life(duel, theirs)), FOOD_AND_LIFE_CENTER)),
-        (W_TOTEMS, totems(duel, raw)),
-        (W_POTIONS, raw.put("resources.potions", potions(duel, mine_views, theirs))),
-        (W_ROCKETS, raw.put("resources.rockets", rockets(duel, mine))),
-    ]);
+pub fn mine(duel: &Duel, mine_views: &[View], theirs: &[View], mine: &[Opportunity]) -> Family {
+    let equal = |parts: Vec<Part>| parts.into_iter().map(|p| (1.0, p)).collect::<Vec<_>>();
+    let groups = [
+        (W_WIND_AND_PEARLS, equal(wind_and_pearls(duel, mine_views, theirs, mine).into())),
+        (W_HOTBAR, equal(hotbar(duel, mine).into())),
+        (W_FOOD_AND_LIFE, food_and_life(duel, theirs).into()),
+        (W_TOTEMS, equal(totems(duel).into())),
+        (W_POTIONS, equal(potions(duel, mine_views, theirs).into())),
+        (W_ROCKETS, vec![(1.0, rockets(duel, mine))]),
+    ];
     // Les situations : chaque objet utilisé et chaque totem qui saute, des deux côtés.
     let events = duel.uses.len() + duel.my_totems.len() + duel.foe_totems.len();
-    family(combined, events as f64)
+    family(&groups, events as f64)
 }
 
 #[cfg(test)]

@@ -10,41 +10,62 @@
 //! La Défense s'en sert à l'envers, sur les opportunités de l'adversaire
 //! (« ouvertures laissées ») : les deux familles reposent sur le même modèle.
 
-use super::{Measure, Opportunity, BIG_FALL};
+use super::{logistic, single, Family, Item, Norm, Opportunity, Part, BIG_FALL};
 
 // La chance de réussite d'une opportunité : une régression logistique sur
-// cinq critères. Les poids seront appris sur les opportunités des deux
-// joueurs, tous duels confondus ; en attendant, ils sont posés à la main
-// (*à calibrer*), pour qu'une opportunité ordinaire — 1,5 bloc de décalage,
-// cible qui marche, six ticks, six blocs de chute — tourne autour de 35 %.
+// cinq critères, apprise sur les opportunités des deux joueurs, tous duels
+// confondus (`calibration`, test `proposition_de_calibrage`). Posée d'abord
+// à la main, pour qu'une opportunité ordinaire — 1,5 bloc de décalage, cible
+// qui marche, six ticks, six blocs de chute — tourne autour de 35 %.
 const BIAS: f64 = 0.9;
-/// Par bloc de décalage horizontal à l'ouverture : collé à la cible, c'est facile.
-const PER_OFFSET_BLOCK: f64 = -0.5;
-/// Par bloc par tick de vitesse horizontale de la cible : une cible en sprint, sur une charge de vent, est dure à suivre.
-const PER_TARGET_SPEED: f64 = -4.0;
-/// Par tick de fenêtre, jusqu'à `MAX_WINDOW_TICKS` : une fenêtre longue laisse le temps.
-const PER_WINDOW_TICK: f64 = 0.08;
-const MAX_WINDOW_TICKS: f64 = 20.0;
-/// Par bloc de chute : on arrive vite, la cible a le temps de se replacer (décision du 2026-10-14).
-const PER_FALL_BLOCK: f64 = -0.08;
-/// Cible au bouclier levé, attaquant dans son dos : il faut l'avoir contourné.
-const BEHIND_SHIELD: f64 = -1.0;
+/// Dans l'ordre de [`criteria`] : par bloc de décalage horizontal à
+/// l'ouverture (collé à la cible, c'est facile) ; par bloc par tick de
+/// vitesse horizontale de la cible (en sprint, sur une charge de vent, elle
+/// est dure à suivre) ; par tick de fenêtre jusqu'à `MAX_WINDOW_TICKS` (une
+/// fenêtre longue laisse le temps) ; par bloc de chute (on arrive vite, la
+/// cible a le temps de se replacer, décision du 2026-10-14) ; cible au
+/// bouclier levé, attaquant dans son dos (il faut l'avoir contourné).
+const COEFS: [f64; 5] = [-0.5, -4.0, 0.08, -0.08, -1.0];
+pub(super) const MAX_WINDOW_TICKS: f64 = 20.0;
+
+/// Ce qu'on attend d'une ouverture : la moyenne n'y sert pas (chacune a sa
+/// chance), l'écart est celui d'un tirage à environ 35 %.
+pub const OPENING: Norm = Norm::new("conversion.opening", 0.35, 0.45);
+/// Les ouvertures de l'adversaire vues de la défense : qu'elles ne passent pas.
+pub const OPENING_LEFT: Norm = Norm::new("defense.openings", 0.65, 0.45);
+
+/// Les cinq critères d'une opportunité, dans l'ordre de `COEFS`.
+pub fn criteria(offset: f64, target_speed: f64, ticks: u64, fall: f64, behind_shield: bool) -> [f64; 5] {
+    [offset, target_speed, (ticks as f64).min(MAX_WINDOW_TICKS), fall, behind_shield as u8 as f64]
+}
 
 /// La chance qu'aurait un joueur moyen de convertir cette opportunité.
 pub fn chance(offset: f64, target_speed: f64, ticks: u64, fall: f64, behind_shield: bool) -> f64 {
-    let logit = BIAS
-        + PER_OFFSET_BLOCK * offset
-        + PER_TARGET_SPEED * target_speed
-        + PER_WINDOW_TICK * (ticks as f64).min(MAX_WINDOW_TICKS)
-        + PER_FALL_BLOCK * fall
-        + if behind_shield { BEHIND_SHIELD } else { 0.0 };
-    (1.0 / (1.0 + (-logit).exp())).clamp(0.02, 0.98)
+    logistic(BIAS, &COEFS, &criteria(offset, target_speed, ticks, fall, behind_shield))
 }
 
 /// Le poids d'une opportunité : son bonus de smash possible. Une ouverture
 /// sans bonus connu (smash relevé hors fenêtre, chute perdue) pèse un peu.
 fn weight(o: &Opportunity) -> f64 {
     o.expected.max(1.0)
+}
+
+/// Les ouvertures comme actions : convertie (1) ou non (0), face à sa
+/// chance, pesée de sa valeur. `attacker` faux : ce sont celles de
+/// l'adversaire, et c'est qu'elles ne passent pas qui compte (défense).
+pub fn part(list: &[Opportunity], attacker: bool) -> Part {
+    let mut part = Part::new(if attacker { OPENING } else { OPENING_LEFT });
+    for o in list {
+        let (value, expected) = if attacker { (o.converted as u8 as f64, o.chance) } else { ((!o.converted) as u8 as f64, 1.0 - o.chance) };
+        let context = criteria(o.offset, o.target_speed, o.close - o.open + 1, o.fall, o.behind_shield);
+        part.push(Item { t: Some(o.hit.unwrap_or(o.open)), value, expected, weight: weight(o), context });
+    }
+    part
+}
+
+/// La famille : ses ouvertures, chacune face à sa chance.
+pub fn family(list: &[Opportunity]) -> Family {
+    single(part(list, true), list.len() as f64)
 }
 
 /// Converti, et attendu d'un joueur moyen, pondérés par la valeur.
@@ -56,20 +77,6 @@ pub fn observed_and_expected(list: &[Opportunity]) -> Option<(f64, f64)> {
     let observed = list.iter().filter(|o| o.converted).map(weight).sum::<f64>() / total;
     let expected = list.iter().map(|o| weight(o) * o.chance).sum::<f64>() / total;
     Some((observed, expected))
-}
-
-/// La famille, entre 0 et 1 : 0,5 quand le joueur fait comme un joueur
-/// moyen sur ces opportunités, au-dessus quand il fait mieux. `attacker` :
-/// ce sont ses opportunités (conversion) ; sinon ce sont celles de
-/// l'adversaire et le joueur gagne quand elles ne passent pas (défense).
-pub fn measure(list: &[Opportunity], attacker: bool) -> Measure {
-    match observed_and_expected(list) {
-        Some((observed, expected)) => {
-            let gap = if attacker { observed - expected } else { expected - observed };
-            Measure { value: (0.5 + gap / 2.0).clamp(0.0, 1.0), count: list.len() as f64 }
-        }
-        None => Measure::NONE,
-    }
 }
 
 /// Une ouverture « facile » : un joueur moyen la convertit plus d'une fois sur deux.
@@ -163,20 +170,26 @@ mod tests {
         assert!(ordinary > 0.25 && ordinary < 0.45, "{ordinary}");
     }
 
+    fn gap(list: &[Opportunity], attacker: bool) -> f64 {
+        part(list, attacker).gap().unwrap()
+    }
+
     #[test]
-    fn faire_comme_un_joueur_moyen_vaut_cinquante() {
+    fn faire_comme_un_joueur_moyen_vaut_zero() {
         let list = [opportunity(true, 5.0, 0.5), opportunity(false, 5.0, 0.5)];
-        assert!((measure(&list, true).value - 0.5).abs() < 1e-9);
-        assert!((measure(&list, false).value - 0.5).abs() < 1e-9);
+        assert!(gap(&list, true).abs() < 1e-9);
+        assert!(gap(&list, false).abs() < 1e-9);
     }
 
     #[test]
     fn reussir_une_ouverture_difficile_rapporte_rater_une_facile_coute() {
         let hard_landed = [opportunity(true, 5.0, 0.1)];
         let easy_missed = [opportunity(false, 5.0, 0.9)];
-        assert!(measure(&hard_landed, true).value > 0.9);
-        assert!(measure(&easy_missed, true).value < 0.1);
-        assert!(measure(&easy_missed, false).value > 0.9, "l'adversaire qui rate une ouverture facile : bonne défense");
+        let easy_landed = [opportunity(true, 5.0, 0.9)];
+        assert!(gap(&hard_landed, true) > 1.5);
+        assert!(gap(&easy_missed, true) < -1.5);
+        assert!(gap(&hard_landed, true) > 5.0 * gap(&easy_landed, true), "réussir une facile rapporte peu");
+        assert!(gap(&easy_missed, false) > 1.5, "l'adversaire qui rate une ouverture facile : bonne défense");
     }
 
     #[test]
@@ -184,7 +197,7 @@ mod tests {
         // Une grosse réussie et une petite ratée valent mieux que l'inverse.
         let big_landed = [opportunity(true, 15.0, 0.3), opportunity(false, 2.0, 0.3)];
         let small_landed = [opportunity(false, 15.0, 0.3), opportunity(true, 2.0, 0.3)];
-        assert!(measure(&big_landed, true).value > measure(&small_landed, true).value);
+        assert!(gap(&big_landed, true) > gap(&small_landed, true));
         let split = Split::of(&big_landed);
         assert_eq!((split.big_opened, split.big_converted, split.small_opened, split.small_converted), (1, 1, 1, 0));
     }

@@ -175,12 +175,12 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
         /** Un résumé complet (toute la longueur du contrat) : le panneau lit aussi le nombre d'événements de chaque famille. */
         private static double[] sample() {
             double[] report = new double[NativeCombat.REPORT_LEN];
-            double[] head = { 72, 0.8, 1, 0, 68, 74, 55, 81, 62, 58, 34, 12, 7, 11, 4, 96 };
+            double[] head = { 342, 0.8, 1, 0, 318, 356, 262, 395, 281, 290, 34, 12, 7, 11, 4, 96 };
             System.arraycopy(head, 0, report, 0, head.length);
             for (int i = 0; i < NativeCombat.FAMILY_COUNT - 1; i++) report[NativeCombat.REPORT_MY_COUNTS + i] = 10;
             report[NativeCombat.REPORT_MODE] = 1;
-            report[NativeCombat.REPORT_BASE_SCORE] = 69;
-            report[NativeCombat.REPORT_BUG_USE] = 3;
+            report[NativeCombat.REPORT_BASE_SCORE] = 322;
+            report[NativeCombat.REPORT_BUG_USE] = 20;
             return report;
         }
 
@@ -254,7 +254,7 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
             tinted(r, left, bottom, boxRight, top, RADIUS * s, tone, 0.24f, vw, vh);
             centered(r, UiFont.BOLD, Lang.tr("NOTE"), center, top - 18f * s, fit, UiTheme.TEXT_MUTED, 0.3f * s, vw, vh);
             if (score >= 0) {
-                // Le bonus bug use, à part : « 62 + 4 bug use » sous la note.
+                // Le bonus bug use, à part : « 322 + 20 bug use » sous la note.
                 double bonus = report[NativeCombat.REPORT_BUG_USE];
                 boolean withBonus = bonus >= 0.5;
                 centered(r, UiFont.BOLD, PvpScoreUi.scoreText(score), center, bottom + (withBonus ? 46f : 38f) * s, fit, tone, 1.25f * s, vw, vh);
@@ -283,11 +283,11 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
             for (int i = 0; i < NativeCombat.FAMILY_COUNT; i++) {
                 float middle = rowTop - ROW * s / 2f;
                 rowTop -= ROW * s;
-                double family = Math.max(0, Math.min(100, report[NativeCombat.REPORT_FAMILIES + i]));
+                double family = Math.max(0, Math.min(NativeCombat.SCORE_MAX, report[NativeCombat.REPORT_FAMILIES + i]));
                 // Le niveau de l'adversaire parle de lui, pas de nous : gris,
                 // pour qu'il ne se lise pas comme une de nos familles.
                 boolean opponent = i == NativeCombat.FAMILY_COUNT - 1;
-                // Aucune mesure (aucun smash porté…) : « - », pas un 50 qui se lirait comme une note.
+                // Aucune mesure (aucun smash porté…) : « - », pas un 250 qui se lirait comme une note.
                 boolean measured = opponent || report[NativeCombat.REPORT_MY_COUNTS + i] > 0;
                 if (!measured) family = 0;
                 UiColor familyTone = opponent ? PvpScoreUi.FOE : measured ? PvpScoreUi.scoreColor(family) : PvpScoreUi.NEUTRAL;
@@ -297,7 +297,7 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
                 float barY = middle - 2.5f * s;
                 float barTop = middle + 2.5f * s;
                 r.drawRoundedRect(barLeft, barY, barRight, barTop, 2.5f * s, UiTheme.PANEL_BG, vw, vh);
-                float filled = barLeft + (barRight - barLeft) * (float) (family / 100.0);
+                float filled = barLeft + (barRight - barLeft) * (float) (family / NativeCombat.SCORE_MAX);
                 if (filled > barLeft + 1f) {
                     r.drawRoundedRect(barLeft, barY, filled, barTop, 2.5f * s, familyTone, vw, vh);
                 }

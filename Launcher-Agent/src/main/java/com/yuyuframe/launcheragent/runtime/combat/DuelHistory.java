@@ -27,7 +27,7 @@ public final class DuelHistory {
             this.report = report;
         }
 
-        /** Note sur 100, ou −1 si le duel n'est pas noté. */
+        /** Note sur 500, ou −1 si le duel n'est pas noté. */
         public double score() {
             return report[NativeCombat.REPORT_SCORE];
         }

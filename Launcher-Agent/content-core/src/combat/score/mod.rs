@@ -4,7 +4,7 @@
 //!
 //!   parse     le texte du journal → un duel en mémoire
 //!   features  les opportunités de smash et les cinq familles
-//!   rating    lissage, normalisation, note sur 100, confiance
+//!   rating    lissage, mise à l'échelle, note sur 500, points d'action, confiance
 //!
 //! Le journal est la seule source : features et note en sont dérivées et
 //! portent leur version, pour être recalculées quand une formule change.
@@ -26,7 +26,9 @@ pub use rating::Prior;
 // Version 3 (2026-10-14) : les familles de docs/scoring/familles/.
 // Version 4 (2026-10-15) : chute possible prolongée, critique au son, nombre d'événements.
 // Version 5 (2026-10-15) : chutes après un raté, grosses descentes, détail des familles.
-pub const EXTRACTOR_VERSION: u32 = 5;
+// Version 6 (2026-10-22) : chaque famille est faite d'actions jugées face à
+// leur attendu ; `parties.csv` a une ligne par action.
+pub const EXTRACTOR_VERSION: u32 = 6;
 
 /// Le décompte des opportunités d'un joueur.
 #[derive(Debug, Serialize)]
@@ -148,7 +150,8 @@ impl Report {
     ///
     /// Puis (ABI 8) : la force de l'adversaire connue avant le duel sur 100,
     /// le nombre de duels passés sur lesquels elle repose, et le mode
-    /// ([`Mode::code`]). La raison de l'absence de note peut valoir 3 : le
+    /// ([`Mode::code`]). Toutes les notes sont sur 500 depuis l'ABI 14
+    /// (2026-10-22), 250 étant le joueur moyen. La raison de l'absence de note peut valoir 3 : le
     /// duel n'est pas à la masse. Et la sixième famille (index 9) reste le
     /// niveau de l'adversaire mesuré PENDANT le duel — affiché, hors note.
     ///
@@ -276,15 +279,25 @@ impl Journal {
 /// fact   ⇥ <famille> ⇥ <code> ⇥ <1 a fait monter, 0 baisser> ⇥ <poids> ⇥ <nombres>
 /// moment ⇥ <famille> ⇥ <secondes depuis l'ouverture> ⇥ <code> ⇥ <1 bon, 0 mauvais> ⇥ <poids> ⇥ <nombres>
 /// versus ⇥ <famille> ⇥ <code> ⇥ <mes nombres> ⇥ <ses nombres>
+/// action ⇥ <famille> ⇥ <secondes, −1 pour une tendance sur tout le duel> ⇥ <code> ⇥ <points> ⇥ <valeur> ⇥ <attendu>
 /// ```
+///
+/// Les lignes `action` (ABI 14) disent ce que chaque action a rapporté à la
+/// note sur 500 : leurs points font ceux de la famille. Une tendance tenue
+/// sur tout le duel (temps passé au sol sous lui…) n'a qu'une ligne.
 ///
 /// `None` si le texte n'est pas un journal.
 pub fn detail_text(text: &str) -> Option<String> {
     let duel = parse::parse(text)?;
     let features = features::extract(&duel);
+    let rating = rating::rate(&features, &Prior::default());
     // Deux décimales au plus : l'écran n'en montre jamais plus.
     let join = |values: &[f64]| values.iter().map(|v| ((v * 100.0).round() / 100.0).to_string()).collect::<Vec<_>>().join(",");
     let mut out = String::new();
+    for a in &rating.actions {
+        let seconds = a.t.map(|t| (t as f64 - duel.start as f64) / 20.0).unwrap_or(-1.0);
+        out.push_str(&format!("action\t{}\t{seconds:.1}\t{}\t{:.2}\t{:.3}\t{:.3}\n", a.family, a.code, a.points, a.value, a.expected));
+    }
     for (family, detail) in features.details.iter().enumerate() {
         for f in &detail.facts {
             out.push_str(&format!("fact\t{family}\t{}\t{}\t{:.4}\t{}\n", f.code, f.up as u8, f.weight, join(&f.values)));
@@ -369,20 +382,20 @@ mod tests {
         assert_eq!(report.theirs.converted, 1);
         assert!(report.mine.opened >= report.mine.converted);
         let score = report.rating.score.expect("assez d'opportunités pour une note");
-        assert!((0.0..=100.0).contains(&score));
+        assert!((0.0..=500.0).contains(&score));
         assert!(report.rating.confidence > 0.0 && report.rating.confidence < 1.0);
         // Le même résumé, en nombres pour l'interface.
         let numbers = report.numbers();
         assert_eq!(numbers[0], score);
         assert_eq!(numbers[2], 2.0, "défaite");
         assert_eq!(numbers[3], 0.0, "duel noté");
-        assert!(numbers[4..10].iter().all(|family| (0.0..=100.0).contains(family)));
+        assert!(numbers[4..10].iter().all(|family| (0.0..=500.0).contains(family)));
         assert!(numbers[10] > 0.0, "ping connu");
         assert_eq!((numbers[11], numbers[12]), (report.mine.opened as f64, 3.0));
-        assert!(numbers[16..20].iter().all(|family| (0.0..=100.0).contains(family)), "familles de l'adversaire");
+        assert!(numbers[16..20].iter().all(|family| (0.0..=500.0).contains(family)), "familles de l'adversaire");
         assert_eq!(numbers[29], report.mine.realized);
-        assert!((0.0..=100.0).contains(&numbers[34]), "mon jeu seul");
-        assert_eq!((numbers[35], numbers[36]), (50.0, 0.0), "un adversaire jamais affronté");
+        assert!((0.0..=500.0).contains(&numbers[34]), "mon jeu seul");
+        assert_eq!((numbers[35], numbers[36]), (250.0, 0.0), "un adversaire jamais affronté");
         assert_eq!(numbers[37], 1.0, "un duel à la masse");
         assert_eq!(report.mode, Mode::Mace);
     }
@@ -423,6 +436,19 @@ mod tests {
         assert_eq!(lines.iter().filter(|l| l[0] == "moment" && l[1] == "1").count(), 3);
         assert!(lines.iter().any(|l| l[0] == "versus" && l[1] == "0" && l[2] == "conversion.converted"), "ses ouvertures, toujours mesurées");
         assert!(detail_text("pas un journal").is_none());
+    }
+
+    #[test]
+    fn les_points_des_actions_font_la_note() {
+        let report = score_journal(DEFEAT).unwrap();
+        let text = detail_text(DEFEAT).unwrap();
+        let actions: Vec<Vec<&str>> = text.lines().map(|l| l.split('\t').collect::<Vec<_>>()).filter(|l| l[0] == "action").collect();
+        assert!(actions.iter().all(|l| l.len() == 7));
+        assert!(actions.iter().any(|l| l[3] == "conversion.opening"), "chaque ouverture est une action");
+        let points: f64 = actions.iter().map(|l| l[4].parse::<f64>().unwrap()).sum();
+        // Contre un inconnu, la note des familles est 250 plus les points de toutes les actions (arrondis).
+        let base = report.rating.base_score.unwrap();
+        assert!((rating::CENTER + points - base).abs() <= 0.5 + 0.005 * actions.len() as f64, "250 + {points} ≠ {base}");
     }
 
     /// Outil de mise au point : le détail d'un journal déjà décompressé.

@@ -8,6 +8,7 @@ import com.yuyuframe.launcheragent.apigraphic.widget.UiWidget;
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
 import com.yuyuframe.launcheragent.apigraphic.value.UiTheme;
+import com.yuyuframe.launcheragent.runtime.combat.NativeCombat;
 import com.yuyuframe.launcheragent.runtime.i18n.Lang;
 import com.yuyuframe.launcheragent.runtime.module.gameplay.PvpScoreModule;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiButton;
@@ -57,9 +58,24 @@ public final class PvpScoreUi {
         return Math.round(baseScore) + " + " + Math.round(bonus) + " " + Lang.tr("bug use");
     }
 
-    /** À partir de là, une note est bonne ; en dessous de l'autre seuil, elle est mauvaise. */
-    public static final double GOOD_FROM = 65;
-    public static final double POOR_UNDER = 45;
+    /**
+     * À partir de là, une note sur 500 est bonne ; en dessous de l'autre
+     * seuil, elle est mauvaise. Les mêmes écarts au joueur moyen que 65 et 45
+     * sur l'ancienne note sur 100 (2026-10-22).
+     */
+    public static final double GOOD_FROM = 290;
+    public static final double POOR_UNDER = 235;
+
+    /** Une note sur 500 en part d'une barre (de 0 à 100). */
+    static double percent(double score) {
+        return score / NativeCombat.SCORE_MAX * 100.0;
+    }
+
+    /** Des points d'action, signés : « +12 », « −4 » (la police n'a que le tiret court). */
+    static String signedPoints(double points) {
+        long rounded = Math.round(points);
+        return rounded > 0 ? "+" + rounded : rounded < 0 ? "-" + (-rounded) : "0";
+    }
 
     /** Ce qui tient lieu de note quand il n'y en a pas (la police n'a pas de tiret long). */
     public static final String NO_SCORE = "-";
@@ -75,7 +91,7 @@ public final class PvpScoreUi {
         return result >= 0 && result < PvpScoreModule.RESULTS.length ? Lang.tr(PvpScoreModule.RESULTS[result]) : "";
     }
 
-    /** La couleur d'une note sur 100 : verte si elle est bonne, ambre si elle est moyenne, rouge sinon ; grise sans note. */
+    /** La couleur d'une note sur 500 : verte si elle est bonne, ambre si elle est moyenne, rouge sinon ; grise sans note. */
     public static UiColor scoreColor(double score) {
         if (score < 0) return NEUTRAL;
         return score >= GOOD_FROM ? GOOD : score >= POOR_UNDER ? MID : BAD;

@@ -70,18 +70,69 @@ public final class DuelDetail {
         }
     }
 
+    /**
+     * Une action jugée et ce qu'elle a rapporté à la note sur 500 (ABI 14) :
+     * ce qu'elle a donné ({@code value}, de 0 à 1) face à ce qu'en tire un
+     * joueur moyen ({@code expected}). Les points de toutes les actions d'une
+     * famille font ceux de la famille. {@code seconds} vaut −1 pour une
+     * tendance tenue sur tout le duel (le temps passé au sol sous lui…).
+     */
+    public static final class Action {
+        public final int family;
+        public final double seconds;
+        public final String code;
+        public final double points;
+        public final double value;
+        public final double expected;
+
+        Action(int family, double seconds, String code, double points, double value, double expected) {
+            this.family = family;
+            this.seconds = seconds;
+            this.code = code;
+            this.points = points;
+            this.value = value;
+            this.expected = expected;
+        }
+
+        /** Une tendance sur tout le duel, sans instant précis. */
+        public boolean isTrend() {
+            return seconds < 0;
+        }
+    }
+
     /** Un détail vide : le noyau absent, ou le journal introuvable. */
     public static final DuelDetail EMPTY = new DuelDetail(Collections.<Fact>emptyList(), Collections.<Moment>emptyList(),
-        Collections.<Versus>emptyList());
+        Collections.<Versus>emptyList(), Collections.<Action>emptyList());
 
     public final List<Fact> facts;
     public final List<Moment> moments;
     public final List<Versus> versus;
+    public final List<Action> actions;
 
-    private DuelDetail(List<Fact> facts, List<Moment> moments, List<Versus> versus) {
+    private DuelDetail(List<Fact> facts, List<Moment> moments, List<Versus> versus, List<Action> actions) {
         this.facts = facts;
         this.moments = moments;
         this.versus = versus;
+        this.actions = actions;
+    }
+
+    /** Les actions d'une famille (toutes si {@code family} vaut −1), celles qui ont le plus pesé d'abord. */
+    public List<Action> actions(int family) {
+        List<Action> out = new ArrayList<Action>();
+        for (Action a : actions) {
+            if (family < 0 || a.family == family) out.add(a);
+        }
+        out.sort((a, b) -> Double.compare(Math.abs(b.points), Math.abs(a.points)));
+        return out;
+    }
+
+    /** La somme des points d'une famille : ce qu'elle a fait gagner ou perdre à la note. */
+    public double points(int family) {
+        double sum = 0;
+        for (Action a : actions) {
+            if (a.family == family) sum += a.points;
+        }
+        return sum;
     }
 
     /** Le détail du duel ouvert à {@code time}, dans l'instance en cours. Relit un journal : à l'ouverture d'une page. */
@@ -122,10 +173,14 @@ public final class DuelDetail {
         List<Fact> facts = new ArrayList<Fact>();
         List<Moment> moments = new ArrayList<Moment>();
         List<Versus> versus = new ArrayList<Versus>();
+        List<Action> actions = new ArrayList<Action>();
         for (String line : text.split("\n")) {
             String[] f = line.split("\t", -1);
             try {
-                if (f.length == 6 && "fact".equals(f[0])) {
+                if (f.length == 7 && "action".equals(f[0])) {
+                    actions.add(new Action(Integer.parseInt(f[1]), Double.parseDouble(f[2]), f[3], Double.parseDouble(f[4]),
+                        Double.parseDouble(f[5]), Double.parseDouble(f[6])));
+                } else if (f.length == 6 && "fact".equals(f[0])) {
                     facts.add(new Fact(Integer.parseInt(f[1]), f[2], "1".equals(f[3]), Double.parseDouble(f[4]), numbers(f[5])));
                 } else if (f.length == 7 && "moment".equals(f[0])) {
                     moments.add(new Moment(Integer.parseInt(f[1]), Double.parseDouble(f[2]), f[3], "1".equals(f[4]),
@@ -138,7 +193,7 @@ public final class DuelDetail {
                 LauncherLog.warn("[COMBAT] Ligne de détail illisible : " + line + " (" + error.getMessage() + ")");
             }
         }
-        return new DuelDetail(facts, moments, versus);
+        return new DuelDetail(facts, moments, versus, actions);
     }
 
     private static double[] numbers(String field) {

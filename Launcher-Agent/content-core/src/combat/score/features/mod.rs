@@ -431,73 +431,204 @@ fn descents(views: &[View]) -> Vec<Descent> {
     out
 }
 
-/// Une famille : sa valeur entre 0 et 1, et sur combien d'événements.
+/// Une famille telle que la note la lit (2026-10-22) : l'écart entre ce que
+/// le joueur a tiré de ses actions et ce qu'en tire un joueur moyen, et sur
+/// combien de situations il repose.
+///
+/// `gap` est en écarts ordinaires : chaque action est comparée à ce qu'on en
+/// attendait, divisée par l'écart habituel des joueurs sur ce genre
+/// d'action ([`Norm`]), puis les parties sont pondérées. 0 : comme un joueur
+/// moyen sur les mêmes situations ; il n'y a plus de référence par famille,
+/// chaque action porte la sienne.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Measure {
-    pub value: f64,
+    pub gap: f64,
     pub count: f64,
 }
 
 impl Measure {
-    const NONE: Measure = Measure { value: 0.0, count: 0.0 };
+    pub const NONE: Measure = Measure { gap: 0.0, count: 0.0 };
+}
 
-    fn rate(part: f64, whole: f64) -> Measure {
-        if whole > 0.0 {
-            Measure { value: (part / whole).clamp(0.0, 1.0), count: whole }
-        } else {
-            Measure::NONE
-        }
+/// Ce qu'on attend d'une sorte d'action : ce qu'en tire en moyenne un
+/// joueur (`mean`, de 0 à 1 — pour une action à chance, ce qu'en dit son
+/// modèle remplace cette moyenne) et de combien les joueurs s'en écartent
+/// d'ordinaire d'une action à l'autre (`spread`). `code` la nomme dans
+/// l'outil de calibration et à l'écran.
+///
+/// Les moyennes reprennent les centres relevés le 2026-10-15 sur 23 duels ;
+/// les écarts sont posés à la main. Les deux se recalculent sur les duels
+/// partagés (`calibration`, test `proposition_de_calibrage`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Norm {
+    pub code: &'static str,
+    pub mean: f64,
+    pub spread: f64,
+}
+
+impl Norm {
+    pub const fn new(code: &'static str, mean: f64, spread: f64) -> Self {
+        Norm { code, mean, spread }
     }
 }
 
-/// Une mesure partielle : sa valeur entre 0 et 1 et le nombre d'événements
-/// qui la font. Absente (`None`) quand rien ne la mesure dans ce duel.
-type Part = Option<(f64, f64)>;
-
-/// La moyenne de scores entre 0 et 1, et leur nombre ; rien sans score.
-fn mean(scores: impl IntoIterator<Item = f64>) -> Part {
-    let (sum, n) = scores.into_iter().fold((0.0, 0.0), |(s, n), v| (s + v.clamp(0.0, 1.0), n + 1.0));
-    (n > 0.0).then(|| (sum / n, n))
+/// Une action jugée : ce qu'elle a donné (de 0 à 1) face à ce qu'on en
+/// attendait. `t` : son tick ; `None` pour une tendance tenue sur tout le
+/// duel (le temps passé au sol sous lui, la barre de faim…). `weight` : son
+/// poids parmi les actions de sa partie (la valeur d'une ouverture, la
+/// fuite de la cible…). `context` : ce dont dépend sa chance, pour les
+/// actions qui en ont une (relevé par l'outil de calibration).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Item {
+    pub t: Option<u64>,
+    pub value: f64,
+    pub expected: f64,
+    pub weight: f64,
+    pub context: Context,
 }
 
-/// Des parties pondérées. Une partie absente ne compte pas : son poids se
-/// répartit sur les autres (décision du 2026-10-14). Rend la valeur et le
-/// nombre d'événements de toutes les parties présentes.
-fn blend(parts: &[(f64, Part)]) -> Part {
-    let present: Vec<(f64, f64, f64)> = parts.iter().filter_map(|(w, p)| p.map(|(v, n)| (*w, v, n))).collect();
-    let weight: f64 = present.iter().map(|(w, _, _)| w).sum();
-    (weight > 0.0).then(|| (present.iter().map(|(w, v, _)| w * v).sum::<f64>() / weight, present.iter().map(|(_, _, n)| n).sum()))
+/// Ce dont dépend la chance d'une action : jusqu'à cinq critères, dans
+/// l'ordre des coefficients de son modèle.
+pub type Context = [f64; 5];
+pub const NO_CONTEXT: Context = [0.0; 5];
+
+/// Une partie d'une famille : les actions d'une même sorte.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Part {
+    pub norm: Norm,
+    pub items: Vec<Item>,
 }
 
-/// Recentre une partie sur ce que font en moyenne les joueurs observés :
-/// `center` y vaut 0,5, et 0 et 1 restent en place (deux droites).
-///
-/// Calibration provisoire du 2026-10-15 (`SCORE_VERSION` 6) : certaines
-/// parties valaient 0,2 ou 0,8 pour TOUS les joueurs, adversaires compris —
-/// ce n'était pas un niveau, c'était leur échelle. Sans recentrage, leur
-/// seule présence déplaçait la famille (le bouclier faisait baisser la
-/// défense des deux joueurs dès qu'il existait). Les centres sont les
-/// moyennes relevées sur 26 duels notés, nous et nos adversaires réunis
-/// quand la partie se mesure des deux côtés ; *à recalculer* avec la série
-/// de 50 duels.
-fn centered(part: Part, center: f64) -> Part {
-    part.map(|(v, n)| {
-        let v = v.clamp(0.0, 1.0);
-        (if v <= center { 0.5 * v / center } else { 0.5 + 0.5 * (v - center) / (1.0 - center) }, n)
-    })
-}
+impl Part {
+    fn new(norm: Norm) -> Self {
+        Part { norm, items: Vec::new() }
+    }
 
-/// Les parties de chaque famille avant recentrage, sous leur nom : ce que
-/// relève l'outil de calibration (`score::calibration`).
-#[derive(Debug, Clone, Default)]
-pub struct Raw(pub Vec<(&'static str, Option<f64>)>);
-
-impl Raw {
-    /// Retient une partie et la rend telle quelle.
-    fn put(&mut self, name: &'static str, part: Part) -> Part {
-        self.0.push((name, part.map(|(v, _)| v)));
+    /// Des actions jugées sur la moyenne de leur sorte.
+    fn of(norm: Norm, values: impl IntoIterator<Item = (Option<u64>, f64)>) -> Self {
+        let mut part = Part::new(norm);
+        for (t, value) in values {
+            part.add(t, value);
+        }
         part
     }
+
+    /// Une tendance tenue sur tout le duel : une seule « action », sans tick.
+    fn trend(norm: Norm, value: Option<f64>) -> Self {
+        Part::of(norm, value.map(|v| (None, v)))
+    }
+
+    fn add(&mut self, t: Option<u64>, value: f64) {
+        let expected = self.norm.mean;
+        self.push(Item { t, value, expected, weight: 1.0, context: NO_CONTEXT });
+    }
+
+    fn push(&mut self, mut item: Item) {
+        item.value = item.value.clamp(0.0, 1.0);
+        self.items.push(item);
+    }
+
+    fn total_weight(&self) -> f64 {
+        self.items.iter().map(|i| i.weight).sum()
+    }
+
+    /// Mesurée dans ce duel ? Une partie vide ne compte pas : son poids va aux autres.
+    fn present(&self) -> bool {
+        self.total_weight() > 0.0
+    }
+
+    /// Sa valeur moyenne, pondérée ; `None` si rien ne la mesure.
+    pub fn value(&self) -> Option<f64> {
+        let w = self.total_weight();
+        (w > 0.0).then(|| self.items.iter().map(|i| i.weight * i.value).sum::<f64>() / w)
+    }
+
+    /// Son écart à l'attendu, en écarts ordinaires ; `None` si rien ne la mesure.
+    pub fn gap(&self) -> Option<f64> {
+        let w = self.total_weight();
+        (w > 0.0).then(|| self.items.iter().map(|i| i.weight * (i.value - i.expected)).sum::<f64>() / w / self.norm.spread)
+    }
+}
+
+/// Une action dans sa famille : ce qu'elle lui a fait gagner ou perdre.
+/// L'écart de la famille vaut exactement Σ `share` × (`value` − `expected`)
+/// ÷ `spread` sur ses actions ; la note en tire les points de chacune.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Action {
+    pub t: Option<u64>,
+    pub code: &'static str,
+    pub value: f64,
+    pub expected: f64,
+    pub share: f64,
+    pub spread: f64,
+    pub context: Context,
+}
+
+impl Action {
+    /// Sa contribution à l'écart de la famille.
+    pub fn gap(&self) -> f64 {
+        self.share * (self.value - self.expected) / self.spread
+    }
+}
+
+/// Une famille : sa mesure, et les actions qui la font.
+#[derive(Debug, Clone, Default)]
+pub struct Family {
+    pub measure: Measure,
+    pub actions: Vec<Action>,
+}
+
+impl Default for Measure {
+    fn default() -> Self {
+        Measure::NONE
+    }
+}
+
+/// Une famille faite de groupes de parties pondérés. Une partie absente
+/// laisse son poids aux autres de son groupe, un groupe vide aux autres
+/// groupes (décision du 2026-10-14). `events` : sur combien de vraies
+/// situations elle repose (2026-10-15 — pas des tranches de temps).
+fn family(groups: &[(f64, Vec<(f64, Part)>)], events: f64) -> Family {
+    let present: Vec<(f64, Vec<&(f64, Part)>)> = groups
+        .iter()
+        .map(|(w, parts)| (*w, parts.iter().filter(|(pw, p)| *pw > 0.0 && p.present()).collect::<Vec<_>>()))
+        .filter(|(w, parts)| *w > 0.0 && !parts.is_empty())
+        .collect();
+    let total: f64 = present.iter().map(|(w, _)| w).sum();
+    if total <= 0.0 {
+        return Family::default();
+    }
+    let mut actions = Vec::new();
+    for (w, parts) in &present {
+        let inner: f64 = parts.iter().map(|(pw, _)| pw).sum();
+        for (pw, part) in parts {
+            let weights = part.total_weight();
+            for item in &part.items {
+                actions.push(Action {
+                    t: item.t,
+                    code: part.norm.code,
+                    value: item.value,
+                    expected: item.expected,
+                    share: w / total * pw / inner * item.weight / weights,
+                    spread: part.norm.spread,
+                    context: item.context,
+                });
+            }
+        }
+    }
+    let gap = actions.iter().map(Action::gap).sum();
+    Family { measure: Measure { gap, count: events }, actions }
+}
+
+/// Une famille d'une seule partie.
+fn single(part: Part, events: f64) -> Family {
+    family(&[(1.0, vec![(1.0, part)])], events)
+}
+
+/// Une régression logistique : la chance d'une action d'après sa situation.
+pub(super) fn logistic(bias: f64, coefs: &[f64], x: &[f64]) -> f64 {
+    let logit = bias + coefs.iter().zip(x).map(|(c, v)| c * v).sum::<f64>();
+    (1.0 / (1.0 + (-logit).exp())).clamp(0.02, 0.98)
 }
 
 /// Le détail d'une famille, pour la fenêtre qui s'ouvre au clic sur elle
@@ -555,25 +686,13 @@ impl Detail {
     }
 }
 
-/// Une famille faite de parties : sa valeur combinée, comptée sur `events`
-/// vraies situations (2026-10-15). Avant, le nombre d'événements était la
-/// somme de celui des parties, dont certaines comptent des tranches de temps :
-/// 100 à 300 « événements » par duel, et le lissage n'agissait plus.
-fn family(combined: Part, events: f64) -> Measure {
-    measure(combined.map(|(value, _)| (value, events)))
-}
-
-fn measure(part: Part) -> Measure {
-    part.map(|(value, count)| Measure { value, count }).unwrap_or(Measure::NONE)
-}
-
 pub struct Features {
     pub mine: Vec<Opportunity>,
     pub theirs: Vec<Opportunity>,
     /// Secondes passées avec l'adversaire à portée d'engagement.
     pub engaged_secs: f64,
     /// Exploite-t-il ses ouvertures, compte tenu de leur difficulté et de
-    /// leur valeur ? 0,5 : comme un joueur moyen sur les mêmes ouvertures.
+    /// leur valeur ? 0 : comme un joueur moyen sur les mêmes ouvertures.
     pub conversion: Measure,
     /// Grosses et petites ouvertures, à part (affiché, hors note).
     pub split: Split,
@@ -598,17 +717,14 @@ pub struct Features {
     pub smash_charge: Option<f64>,
     /// Le détail de mes cinq familles, pour la fenêtre qui s'ouvre au clic.
     pub details: [Detail; 5],
-    // Pour l'outil de calibration (`score::calibration`) : les parties des
-    // familles avant recentrage, de chaque côté ; chaque smash jugé, des deux
-    // côtés ; chaque technique et chaque élan de Lunge reconnus. L'outil n'est
-    // compilé que pour les tests : ailleurs, personne ne les lit.
-    #[cfg_attr(not(test), allow(dead_code))]
-    pub raw_mine: Raw,
-    #[cfg_attr(not(test), allow(dead_code))]
-    pub raw_foe: Raw,
-    #[cfg_attr(not(test), allow(dead_code))]
+    /// Les actions de mes cinq familles, dans l'ordre du résumé : la note en
+    /// tire leurs points, l'outil de calibration ce qu'on attend de chacune.
+    pub actions: [Vec<Action>; 5],
+    /// Celles des quatre familles de l'adversaire (outil de calibration).
+    pub foe_actions: [Vec<Action>; 4],
+    // Pour l'outil de calibration (`score::calibration`) : chaque smash jugé,
+    // des deux côtés ; chaque technique et chaque élan de Lunge reconnus.
     pub smashes: Vec<Smash>,
-    #[cfg_attr(not(test), allow(dead_code))]
     pub detections: Vec<Detection>,
 }
 
@@ -639,15 +755,14 @@ pub fn extract(duel: &Duel) -> Features {
     let theirs = opportunities(&their_views, &their_smashes, duel.foe_density);
     let ping = ping_ticks(&duel.samples);
 
-    let (mut raw_mine, mut raw_foe) = (Raw::default(), Raw::default());
-    let conversion = conversion::measure(&mine, true);
+    let conversion = conversion::family(&mine);
     let (smash_quality, mut smashes) = smash::mine(duel, &mine, &my_views, ping);
     let charges: Vec<f64> = smashes.iter().filter_map(|s| s.charge).collect();
     let smash_charge = (!charges.is_empty()).then(|| charges.iter().sum::<f64>() / charges.len() as f64);
     let lunges = control::lunges(duel, &my_views);
-    let vertical = control::mine(duel, &my_views, &mine, &lunges, &mut raw_mine);
-    let (exposure, avoided) = defense::mine(duel, &their_views, &mine, &theirs, &mut raw_mine);
-    let resources = resources::mine(duel, &my_views, &their_views, &mine, &mut raw_mine);
+    let vertical = control::mine(duel, &my_views, &mine, &lunges);
+    let (exposure, avoided) = defense::mine(duel, &their_views, &mine, &theirs);
+    let resources = resources::mine(duel, &my_views, &their_views, &mine);
     let (bug_use, mut detections) = bug_use::extract(duel, &my_views, &mine, &lunges, ping);
     // Les élans de Lunge aussi, rapportant ou non : leur reconnaissance se vérifie à l'œil.
     detections.extend(lunges.iter().map(|l| Detection { t: l.t, by_me: true, name: "lunge", points: 0.0 }));
@@ -663,30 +778,38 @@ pub fn extract(duel: &Duel) -> Features {
     defense::detail(duel, &my_views, &their_views, &mine, &theirs, &mut details[2]);
     control::detail(&my_views, &their_views, &mine, &theirs, &mut details[3]);
     resources::detail(duel, &my_views, &their_views, &mine, &mut details[4]);
+    let foe_families = [
+        conversion::family(&theirs),
+        foe_smash,
+        defense::foe(duel, &my_views, &mine),
+        control::foe(duel, &their_views, &theirs),
+    ];
     let foe = FoeMeasures {
-        conversion: conversion::measure(&theirs, true),
-        smash_quality: foe_smash,
-        exposure: defense::foe(duel, &my_views, &mine, &mut raw_foe),
-        vertical: control::foe(duel, &their_views, &theirs, &mut raw_foe),
+        conversion: foe_families[0].measure,
+        smash_quality: foe_families[1].measure,
+        exposure: foe_families[2].measure,
+        vertical: foe_families[3].measure,
     };
+    let [a, b, c, e] = foe_families;
+    let foe_actions = [a.actions, b.actions, c.actions, e.actions];
 
     let engaged = duel.samples.iter().filter(|s| s.foe.is_some()).count();
     Features {
         details,
-        raw_mine,
-        raw_foe,
         smashes,
         detections,
         engaged_secs: engaged as f64 / 20.0,
         split: Split::of(&mine),
         mine,
         theirs,
-        conversion,
-        smash_quality,
-        exposure,
+        conversion: conversion.measure,
+        smash_quality: smash_quality.measure,
+        exposure: exposure.measure,
         avoided,
-        vertical,
-        resources,
+        vertical: vertical.measure,
+        resources: resources.measure,
+        actions: [conversion.actions, smash_quality.actions, exposure.actions, vertical.actions, resources.actions],
+        foe_actions,
         bug_use,
         foe,
         smash_charge,
@@ -816,20 +939,37 @@ mod tests {
         assert_eq!(found[0].realized, smash_bonus(5.0, 0.0));
     }
 
+    const NORM: Norm = Norm::new("essai", 0.4, 0.2);
+
     #[test]
     fn une_partie_absente_laisse_son_poids_aux_autres() {
-        assert_eq!(blend(&[(0.3, Some((1.0, 2.0))), (0.7, None)]), Some((1.0, 2.0)));
-        assert_eq!(blend(&[(0.5, Some((1.0, 1.0))), (0.5, Some((0.0, 3.0)))]), Some((0.5, 4.0)));
-        assert_eq!(blend(&[(1.0, None)]), None);
-        assert_eq!(mean([]), None);
+        let done = Part::of(NORM, [(Some(1), 1.0)]);
+        let alone = family(&[(0.3, vec![(1.0, done.clone())]), (0.7, vec![(1.0, Part::new(NORM))])], 1.0);
+        assert!((alone.measure.gap - 3.0).abs() < 1e-12, "1 face à 0,4, en écarts de 0,2 : +3, tout le poids");
+        // Dans un groupe aussi : la partie vide laisse sa place à sa voisine.
+        let grouped = family(&[(1.0, vec![(0.5, done), (0.5, Part::new(NORM))])], 1.0);
+        assert!((grouped.measure.gap - 3.0).abs() < 1e-12);
+        assert_eq!(family(&[(1.0, vec![(1.0, Part::new(NORM))])], 0.0).measure, Measure::NONE);
     }
 
     #[test]
-    fn le_recentrage_met_la_moyenne_observee_a_cinquante() {
-        let at = |v: f64, c: f64| centered(Some((v, 1.0)), c).unwrap().0;
-        assert!((at(0.2, 0.2) - 0.5).abs() < 1e-12);
-        assert_eq!((at(0.0, 0.2), at(1.0, 0.2)), (0.0, 1.0), "les bouts restent en place");
-        assert!((at(0.6, 0.2) - 0.75).abs() < 1e-12);
-        assert_eq!(centered(None, 0.2), None);
+    fn les_actions_font_exactement_l_ecart_de_la_famille() {
+        let good = Part::of(NORM, [(Some(1), 0.9), (Some(2), 0.6)]);
+        let trend = Part::trend(Norm::new("tendance", 0.5, 0.1), Some(0.3));
+        let f = family(&[(0.6, vec![(1.0, good)]), (0.4, vec![(1.0, trend)])], 3.0);
+        assert_eq!(f.actions.len(), 3);
+        let sum: f64 = f.actions.iter().map(Action::gap).sum();
+        assert!((sum - f.measure.gap).abs() < 1e-12);
+        // Partie 1 : (0,5 + 0,2) / 2 ÷ 0,2 = 1,75, poids 0,6 ; tendance : −0,2 ÷ 0,1 = −2, poids 0,4.
+        assert!((f.measure.gap - (0.6 * 1.75 - 0.4 * 2.0)).abs() < 1e-12, "{}", f.measure.gap);
+        assert_eq!(f.actions[2].t, None, "une tendance n'a pas de tick");
+        assert_eq!(f.measure.count, 3.0);
+    }
+
+    #[test]
+    fn la_chance_logistique_reste_entre_ses_bornes() {
+        assert!((logistic(0.0, &[], &[]) - 0.5).abs() < 1e-12);
+        assert_eq!(logistic(50.0, &[], &[]), 0.98);
+        assert!(logistic(0.0, &[1.0], &[2.0]) > logistic(0.0, &[1.0], &[1.0]));
     }
 }

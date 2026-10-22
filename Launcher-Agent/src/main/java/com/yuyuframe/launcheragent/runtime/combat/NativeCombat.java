@@ -33,7 +33,7 @@ import java.util.UUID;
 public final class NativeCombat {
 
     /** Même valeur que {@code ABI_VERSION} dans combat/bridge.rs. */
-    private static final int ABI_VERSION = 13;
+    private static final int ABI_VERSION = 14;
 
     /** Place réservée au texte de l'historique : deux cents duels en tiennent bien moins. */
     private static final int HISTORY_BYTES = 256 * 1024;
@@ -43,15 +43,22 @@ public final class NativeCombat {
      * combat/score/mod.rs, même ordre.
      */
     public static final int REPORT_LEN = 50;
-    /** Note sur 100, bonus bug use compris, ou −1 si le duel n'est pas noté. */
+    /**
+     * Note sur {@link #SCORE_MAX} (500 depuis l'ABI 14), bonus bug use compris,
+     * ou −1 si le duel n'est pas noté. {@link #SCORE_CENTER} : le joueur moyen.
+     * Toutes les notes et les familles du résumé sont sur cette échelle.
+     */
     public static final int REPORT_SCORE = 0;
+    /** Le haut de l'échelle des notes, et le joueur moyen ({@code rating::MAX}, {@code rating::CENTER}). */
+    public static final double SCORE_MAX = 500;
+    public static final double SCORE_CENTER = 250;
     /** De 0 à 1. */
     public static final int REPORT_CONFIDENCE = 1;
     /** 0 aucun, 1 victoire, 2 défaite, 3 nul, 4 inconnu. */
     public static final int REPORT_RESULT = 2;
     /** Pourquoi il n'y a pas de note : 0 il y en a une, 1 duel trop court, 2 trop peu d'opportunités, 3 pas de masse. */
     public static final int REPORT_REASON = 3;
-    /** Les six familles sur 100, à la suite : conversion, qualité du smash, exposition, contrôle vertical, ressources, niveau de l'adversaire. */
+    /** Les six familles sur 500, à la suite : conversion, qualité du smash, exposition, contrôle vertical, ressources, niveau de l'adversaire. */
     public static final int REPORT_FAMILIES = 4;
     public static final int FAMILY_COUNT = 6;
     /** En millisecondes, ou −1 s'il est inconnu. */
@@ -62,7 +69,7 @@ public final class NativeCombat {
     public static final int REPORT_THEIR_CONVERTED = 14;
     /** Secondes passées avec l'adversaire à portée. */
     public static final int REPORT_ENGAGED_SECS = 15;
-    /** Les quatre familles du niveau de l'adversaire sur 100 : conversion, qualité du smash, défense, contrôle vertical. */
+    /** Les quatre familles du niveau de l'adversaire sur 500 : conversion, qualité du smash, défense, contrôle vertical. */
     public static final int REPORT_FOE_FAMILIES = 16;
     public static final int FOE_FAMILY_COUNT = 4;
     /** Nombre d'événements derrière chacune de mes cinq familles (dans l'ordre de {@link #REPORT_FAMILIES}). */
@@ -76,11 +83,11 @@ public final class NativeCombat {
     public static final int REPORT_THEIR_SMASH_POSSIBLE = 32;
     /** Charge d'attaque moyenne à mes smashs, de 0 à 1 ; −1 sans smash. */
     public static final int REPORT_SMASH_CHARGE = 33;
-    /** Mon jeu seul sur 100 : mes cinq familles combinées, sans le niveau de l'adversaire. */
+    /** Mon jeu seul sur 500 : mes cinq familles combinées, sans le niveau de l'adversaire. */
     public static final int REPORT_OWN = 34;
     /**
-     * La force de l'adversaire connue AVANT le duel, sur 100 : son niveau
-     * moyen dans nos duels précédents contre lui, tiré vers 50 tant qu'on l'a
+     * La force de l'adversaire connue AVANT le duel, sur 500 : son niveau
+     * moyen dans nos duels précédents contre lui, tiré vers 250 tant qu'on l'a
      * peu vu. C'est elle — et non le niveau mesuré pendant le duel, à
      * {@code REPORT_FAMILIES + 5} — qui entre dans la note.
      */
@@ -91,9 +98,9 @@ public final class NativeCombat {
     public static final int REPORT_MODE = 37;
     /** La note des six familles avant le bonus bug use, ou −1 si le duel n'est pas noté. */
     public static final int REPORT_BASE_SCORE = 38;
-    /** Le bonus bug use ajouté à la note (0 à 10) : il ne la fait jamais baisser. */
+    /** Le bonus bug use ajouté à la note (0 à 50) : il ne la fait jamais baisser. */
     public static final int REPORT_BUG_USE = 39;
-    /** Les points des techniques de l'adversaire (0 à 10) : affichés, jamais comptés. */
+    /** Les points des techniques de l'adversaire (0 à 50) : affichés, jamais comptés. */
     public static final int REPORT_FOE_BUG_USE = 40;
     /** Mes grosses ouvertures (14 blocs de chute et plus) ouvertes puis converties, mes petites. */
     public static final int REPORT_BIG_OPENED = 41;

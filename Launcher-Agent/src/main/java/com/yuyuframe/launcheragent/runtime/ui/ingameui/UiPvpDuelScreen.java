@@ -286,7 +286,7 @@ public final class UiPvpDuelScreen extends UiScreenBase {
             float pop = PvpScoreUi.pop(openedAt, 0.2f, 0.6f);
             float big = UiTheme.scaled(3.6f) * (0.85f + 0.15f * pop);
             PvpScoreUi.centered(r, UiFont.BOLD, shown, center, top - UiTheme.scaled(160f), width, tone, big, vw, vh);
-            PvpScoreUi.centered(r, UiFont.REGULAR, Lang.tr("sur 100"), center, top - UiTheme.scaled(200f), width,
+            PvpScoreUi.centered(r, UiFont.REGULAR, Lang.tr("sur 500"), center, top - UiTheme.scaled(200f), width,
                 UiTheme.TEXT_SECONDARY, body, vw, vh);
             // Le bonus bug use, à part : il ne fait que monter la note.
             double bonus = duel.report[NativeCombat.REPORT_BUG_USE];
@@ -387,15 +387,15 @@ public final class UiPvpDuelScreen extends UiScreenBase {
             }
             float grow = progress(0.4f + 0.07f * i, 0.8f);
             // Une famille mesurée sur aucun événement (aucun smash porté, par
-            // exemple) vaut la référence dans la note — elle n'y pèse rien —
-            // mais afficher 50 se lisait comme une note moyenne gagnée : on
+            // exemple) vaut l'attendu dans la note — elle n'y pèse rien —
+            // mais afficher 250 se lisait comme une note moyenne gagnée : on
             // montre « - » et un rail vide.
             double mine = duel.report[NativeCombat.REPORT_FAMILIES + i];
             boolean measured = duel.report[NativeCombat.REPORT_MY_COUNTS + i] > 0;
             UiColor tone = measured ? PvpScoreUi.scoreColor(mine) : PvpScoreUi.NEUTRAL;
             PvpScoreUi.text(r, UiFont.BOLD, measured ? String.valueOf(PvpScoreUi.count(mine, grow)) : PvpScoreUi.NO_SCORE,
                 cardLeft + inner, PvpScoreUi.middle(mid, value), tone, value, vw, vh);
-            PvpScoreUi.barLeftward(r, myBarLeft, mid - barH / 2f, myBarRight - UiTheme.scaled(12f), barH, measured ? mine * grow : 0, tone, vw, vh);
+            PvpScoreUi.barLeftward(r, myBarLeft, mid - barH / 2f, myBarRight - UiTheme.scaled(12f), barH, measured ? PvpScoreUi.percent(mine) * grow : 0, tone, vw, vh);
 
             float nameScale = name * (1f + 0.06f * hv);
             PvpScoreUi.centered(r, hv > 0.5f ? UiFont.BOLD : UiFont.REGULAR, Lang.tr(PvpScoreModule.FAMILIES[i]), center,
@@ -406,7 +406,7 @@ public final class UiPvpDuelScreen extends UiScreenBase {
                 double his = duel.report[NativeCombat.REPORT_FOE_FAMILIES + i];
                 boolean hisMeasured = duel.report[NativeCombat.REPORT_FOE_COUNTS + i] > 0;
                 UiColor hisTone = hisMeasured ? PvpScoreUi.FOE : PvpScoreUi.NEUTRAL;
-                PvpScoreUi.bar(r, hisBarLeft + UiTheme.scaled(12f), mid - barH / 2f, hisBarRight, barH, hisMeasured ? his * grow : 0, hisTone, vw, vh);
+                PvpScoreUi.bar(r, hisBarLeft + UiTheme.scaled(12f), mid - barH / 2f, hisBarRight, barH, hisMeasured ? PvpScoreUi.percent(his) * grow : 0, hisTone, vw, vh);
                 PvpScoreUi.right(r, UiFont.BOLD, hisMeasured ? String.valueOf(PvpScoreUi.count(his, grow)) : PvpScoreUi.NO_SCORE,
                     right - inner, PvpScoreUi.middle(mid, value), valueW, hisTone, value, vw, vh);
             } else {

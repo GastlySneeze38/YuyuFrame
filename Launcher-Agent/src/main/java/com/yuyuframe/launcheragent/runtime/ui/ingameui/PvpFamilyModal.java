@@ -21,25 +21,28 @@ import java.util.Map;
  * Le détail d'une famille dans un duel : la fenêtre qui s'ouvre au clic sur
  * une ligne du face-à-face de {@link UiPvpDuelScreen}.
  *
- * <p><b>Elle montre des faits, jamais le calcul.</b> Un joueur conteste une
- * note qu'il ne comprend pas, pas un fait qu'il se rappelle avoir vécu. On y
- * lit donc des compteurs (« 0 critique sur 5 »), des moments datés depuis
- * l'ouverture du duel (« 0:44, 10 blocs, en sprint ») et la même mesure chez
- * l'adversaire quand elle existe de son côté. Ni poids, ni centre, ni
- * référence, ni formule : le « comment c'est compté » reste dans
- * {@link PvpInfoModal}, à un bouton de là.
+ * <p><b>Elle montre des faits et ce qu'ils ont rapporté, jamais le calcul.</b>
+ * Un joueur conteste une note qu'il ne comprend pas, pas un fait qu'il se
+ * rappelle avoir vécu. On y lit donc des compteurs (« 0 critique sur 5 »), les
+ * actions qui ont le plus compté, datées depuis l'ouverture du duel, avec les
+ * points qu'elles ont fait gagner ou perdre à la note sur 500 (2026-10-22 :
+ * chaque action est jugée face à ce qu'en tire un joueur moyen), et la même
+ * mesure chez l'adversaire quand elle existe de son côté. Ni poids, ni écart,
+ * ni formule : le « comment c'est compté » reste dans {@link PvpInfoModal}, à
+ * un bouton de là.
  *
- * <p>De haut en bas : la famille, un verdict et la note ; ce qui l'a fait
- * monter et baisser (deux faits au plus de chaque côté, les plus forts) ;
- * trois moments au plus, dans l'ordre du duel ; le face-à-face ; un conseil
- * tiré du fait qui a le plus coûté. Tout vient du noyau ({@link DuelDetail}) ;
- * ici on ne fait que traduire et ranger.
+ * <p>De haut en bas : la famille, un verdict, la note et ses points ; ce qui
+ * l'a fait monter et baisser (deux faits au plus de chaque côté, les plus
+ * forts) ; quatre actions au plus, celles qui ont pesé le plus, dans l'ordre
+ * du duel ; le face-à-face ; un conseil tiré du fait qui a le plus coûté.
+ * Tout vient du noyau ({@link DuelDetail}) ; ici on ne fait que traduire et
+ * ranger.
  */
 final class PvpFamilyModal {
 
-    /** Deux faits au plus de chaque côté, trois moments au plus. */
+    /** Deux faits au plus de chaque côté, quatre actions au plus. */
     private static final int FACTS_SHOWN = 2;
-    private static final int MOMENTS_SHOWN = 3;
+    private static final int ACTIONS_SHOWN = 4;
 
     private static final float OPEN_SECS = 0.45f;
     private static final float CLOSE_SECS = 0.2f;
@@ -147,7 +150,7 @@ final class PvpFamilyModal {
                 pushBlock(r, 0.07f, y);
                 try { y = drawFacts(r, left, right, y - UiTheme.scaled(18f), vw, vh); } finally { r.popLayer(); }
                 pushBlock(r, 0.14f, y);
-                try { y = drawMoments(r, left, right, y - UiTheme.scaled(20f), vw, vh); } finally { r.popLayer(); }
+                try { y = drawActions(r, left, right, y - UiTheme.scaled(20f), vw, vh); } finally { r.popLayer(); }
                 pushBlock(r, 0.21f, y);
                 try { y = drawVersus(r, left, right, y - UiTheme.scaled(18f), vw, vh); } finally { r.popLayer(); }
             }
@@ -189,7 +192,15 @@ final class PvpFamilyModal {
             UiTheme.scaled(0.66f), vw, vh);
         if (measured) {
             String basis = Lang.tr("Mesurée sur") + " " + events + " " + Lang.tr(events > 1 ? "situations de ce duel" : "situation de ce duel");
-            PvpScoreUi.left(r, UiFont.REGULAR, basis, left, top - UiTheme.scaled(80f), textW, UiTheme.TEXT_SECONDARY, UiTheme.scaled(0.4f), vw, vh);
+            float basisScale = UiTheme.scaled(0.4f);
+            PvpScoreUi.left(r, UiFont.REGULAR, basis, left, top - UiTheme.scaled(80f), textW, UiTheme.TEXT_SECONDARY, basisScale, vw, vh);
+            // Ce que la famille a fait gagner ou perdre à la note : la somme de ses actions.
+            if (!detail.actions(family).isEmpty()) {
+                double points = detail.points(family);
+                String sum = " · " + PvpScoreUi.signedPoints(points) + " " + Lang.tr("dans la note");
+                PvpScoreUi.left(r, UiFont.BOLD, sum, left + r.textWidth(UiFont.REGULAR, basis, basisScale), top - UiTheme.scaled(80f),
+                    textW, points >= 0 ? PvpScoreUi.GOOD : PvpScoreUi.BAD, basisScale, vw, vh);
+            }
         }
         return top - UiTheme.scaled(92f);
     }
@@ -224,31 +235,37 @@ final class PvpFamilyModal {
         }
     }
 
-    /** Trois moments au plus, les plus parlants, rangés dans l'ordre du duel ; puis « + N autres ». Rend le bas du bloc. */
-    private float drawMoments(UiRenderer r, float left, float right, float top, int vw, int vh) {
-        List<DuelDetail.Moment> all = detail.moments(family);
+    /**
+     * Les actions qui ont le plus pesé (quatre au plus), rangées dans l'ordre
+     * du duel, les tendances sur tout le duel à la fin ; chacune avec ce
+     * qu'elle a rapporté. Une action qui tombe sur un moment déjà décrit par
+     * le noyau (« 10 blocs, en sprint ») en reprend la description. Puis
+     * « + N autres ». Rend le bas du bloc.
+     */
+    private float drawActions(UiRenderer r, float left, float right, float top, int vw, int vh) {
+        List<DuelDetail.Action> all = detail.actions(family);
         if (all.isEmpty()) {
             return top + UiTheme.scaled(20f);
         }
-        List<DuelDetail.Moment> shown = new ArrayList<DuelDetail.Moment>(all.subList(0, Math.min(MOMENTS_SHOWN, all.size())));
-        shown.sort((a, b) -> Double.compare(a.seconds, b.seconds));
+        List<DuelDetail.Action> shown = new ArrayList<DuelDetail.Action>(all.subList(0, Math.min(ACTIONS_SHOWN, all.size())));
+        shown.sort((a, b) -> Double.compare(a.isTrend() ? Double.MAX_VALUE : a.seconds, b.isTrend() ? Double.MAX_VALUE : b.seconds));
         float small = UiTheme.scaled(0.42f);
-        PvpScoreUi.left(r, UiFont.BOLD, Lang.tr("MOMENTS DU DUEL"), left, top - UiTheme.scaled(14f), right - left, UiTheme.TEXT_MUTED, small, vw, vh);
+        PvpScoreUi.left(r, UiFont.BOLD, Lang.tr("CE QUI A RAPPORTÉ"), left, top - UiTheme.scaled(14f), right - left, UiTheme.TEXT_MUTED, small, vw, vh);
         float rowH = UiTheme.scaled(32f);
         float y = top - UiTheme.scaled(26f);
         float body = UiTheme.scaled(0.46f);
         float timeW = UiTheme.scaled(70f);
-        float statusW = UiTheme.scaled(170f);
-        for (DuelDetail.Moment m : shown) {
+        float statusW = UiTheme.scaled(110f);
+        for (DuelDetail.Action a : shown) {
             PvpScoreUi.rect(r, left, y, right, y + Math.max(1f, UiTheme.scaled(1f)), 0f, UiTheme.GLASS_BORDER, vw, vh);
             float mid = y - rowH / 2f;
-            String[] text = momentText(m);
-            PvpScoreUi.left(r, UiFont.BOLD, clock(m.seconds), left, PvpScoreUi.middle(mid, body), timeW, UiTheme.TEXT_SECONDARY, body, vw, vh);
-            PvpScoreUi.left(r, UiFont.REGULAR, text[0], left + timeW, PvpScoreUi.middle(mid, body), right - left - timeW - statusW, UiTheme.TEXT_PRIMARY,
+            String when = a.isTrend() ? Lang.tr("duel") : clock(a.seconds);
+            PvpScoreUi.left(r, UiFont.BOLD, when, left, PvpScoreUi.middle(mid, body), timeW, UiTheme.TEXT_SECONDARY, body, vw, vh);
+            PvpScoreUi.left(r, UiFont.REGULAR, actionText(a), left + timeW, PvpScoreUi.middle(mid, body), right - left - timeW - statusW, UiTheme.TEXT_PRIMARY,
                 body, vw, vh);
-            if (!text[1].isEmpty()) {
-                PvpScoreUi.right(r, UiFont.BOLD, text[1], right, PvpScoreUi.middle(mid, body), statusW, m.good ? PvpScoreUi.GOOD : PvpScoreUi.BAD, body, vw, vh);
-            }
+            String points = PvpScoreUi.signedPoints(a.points) + " " + Lang.tr("pts");
+            UiColor tone = Math.round(a.points) > 0 ? PvpScoreUi.GOOD : Math.round(a.points) < 0 ? PvpScoreUi.BAD : UiTheme.TEXT_MUTED;
+            PvpScoreUi.right(r, UiFont.BOLD, points, right, PvpScoreUi.middle(mid, body), statusW, tone, body, vw, vh);
             y -= rowH;
         }
         PvpScoreUi.rect(r, left, y, right, y + Math.max(1f, UiTheme.scaled(1f)), 0f, UiTheme.GLASS_BORDER, vw, vh);
@@ -304,9 +321,99 @@ final class PvpFamilyModal {
 
     private static String verdict(double score, boolean measured) {
         if (!measured) return "Pas mesurée dans ce duel";
-        if (score >= 65) return "Un point fort de ce duel";
-        if (score >= 45) return "Dans votre moyenne";
+        if (score >= PvpScoreUi.GOOD_FROM) return "Un point fort de ce duel";
+        if (score >= PvpScoreUi.POOR_UNDER) return "Dans votre moyenne";
         return "Le point à travailler";
+    }
+
+    /**
+     * Les actions, par code (ceux des {@code Norm} de
+     * {@code content-core/src/combat/score/features/}) : ce qu'on écrit quand
+     * elle a rapporté, puis quand elle a coûté. Un code inconnu (noyau plus
+     * récent que l'écran) s'affiche tel quel.
+     */
+    private static final Map<String, String[]> ACTIONS = new HashMap<String, String[]>();
+    /** Les actions dont l'attendu est une chance propre à la situation : on la montre. */
+    private static final Map<String, Boolean> CHANCES = new HashMap<String, Boolean>();
+
+    static {
+        ACTIONS.put("conversion.opening", new String[]{ "Ouverture convertie", "Ouverture ratée" });
+        ACTIONS.put("smash.hit", new String[]{ "Smash bien tiré", "Smash mal tiré" });
+        ACTIONS.put("smash.spear", new String[]{ "Charge de lance bien tirée", "Charge de lance mal tirée" });
+        ACTIONS.put("smash.none", new String[]{ "Aucun smash sur ses ouvertures", "Aucun smash sur ses ouvertures" });
+        ACTIONS.put("defense.blocked", new String[]{ "Smash arrêté au bouclier", "Smash reçu ou garde cassée" });
+        ACTIONS.put("defense.ground_shield", new String[]{ "Pas planté au sol bouclier levé", "Planté au sol bouclier levé" });
+        ACTIONS.put("defense.shield_efficiency", new String[]{ "Bouclier levé au bon moment", "Bouclier levé pour rien" });
+        ACTIONS.put("defense.openings", new String[]{ "Son ouverture ratée", "Son ouverture convertie" });
+        ACTIONS.put("defense.vulnerable", new String[]{ "Peu de temps au sol sous lui", "Longtemps au sol sous lui" });
+        ACTIONS.put("defense.dodge", new String[]{ "Descente esquivée", "Descente pas esquivée" });
+        ACTIONS.put("defense.landing", new String[]{ "Chute après un smash raté", "Chute après un smash raté" });
+        ACTIONS.put("defense.recovery", new String[]{ "Dégagé vite après un coup", "Lent à vous dégager après un coup" });
+        ACTIONS.put("control.reached", new String[]{ "Descente arrivée à sa portée", "Descente arrivée trop loin" });
+        ACTIONS.put("control.caught", new String[]{ "Distance rattrapée en tombant", "Distance pas rattrapée" });
+        ACTIONS.put("control.first_time", new String[]{ "Grosse descente finie par un smash", "Grosse descente sans smash" });
+        ACTIONS.put("control.climb_speed", new String[]{ "Montée rapide", "Montée lente" });
+        ACTIONS.put("control.retake", new String[]{ "Hauteur reprise vite", "Hauteur reprise tard" });
+        ACTIONS.put("control.wind_height", new String[]{ "Charge de vent qui monte haut", "Charge de vent qui monte peu" });
+        ACTIONS.put("control.domination", new String[]{ "Souvent au-dessus de lui", "Souvent en dessous de lui" });
+        ACTIONS.put("control.peak", new String[]{ "Bien placé au sommet", "Loin de lui au sommet" });
+        ACTIONS.put("control.closing", new String[]{ "Vous vous rapprochez plus vite qu'il ne fuit", "Il fuit plus vite que vous n'approchez" });
+        ACTIONS.put("control.lunge", new String[]{ "Élan de Lunge à portée", "Élan de Lunge dans le vide" });
+        ACTIONS.put("control.glide", new String[]{ "Vol plané jusqu'à une ouverture", "Vol plané sans ouverture" });
+        ACTIONS.put("control.follow_up", new String[]{ "Smash enchaîné sans toucher le sol", "Smash sans suite" });
+        ACTIONS.put("control.chain_length", new String[]{ "Longue chaîne de smashs", "Chaîne de smashs courte" });
+        ACTIONS.put("control.rebuild", new String[]{ "Ouverture retrouvée vite", "Ouverture retrouvée lentement" });
+        ACTIONS.put("resources.useful", new String[]{ "Charge de vent ou perle utile", "Charge de vent ou perle sans raison" });
+        ACTIONS.put("resources.effective", new String[]{ "Charge de vent ou perle efficace", "Charge de vent ou perle sans effet" });
+        ACTIONS.put("resources.answered", new String[]{ "Menace traitée à la charge de vent", "Menace laissée sans réponse" });
+        ACTIONS.put("resources.mace_ready", new String[]{ "Masse en main à temps", "Masse en main trop tard" });
+        ACTIONS.put("resources.wind_ready", new String[]{ "Charge de vent prête à l'atterrissage", "Charge de vent prête trop tard" });
+        ACTIONS.put("resources.apple_ready", new String[]{ "Pomme en main quand vous étiez bas", "Pomme en main trop tard" });
+        ACTIONS.put("resources.switch", new String[]{ "Changement d'objet rapide", "Changement d'objet lent" });
+        ACTIONS.put("resources.apple", new String[]{ "Pomme d'or au bon moment", "Pomme d'or trop tôt" });
+        ACTIONS.put("resources.meal", new String[]{ "Repas à l'abri", "Repas sous sa menace" });
+        ACTIONS.put("resources.hunger", new String[]{ "Barre de faim tenue", "Barre de faim basse" });
+        ACTIONS.put("resources.low_time", new String[]{ "Peu de temps bas en vie", "Longtemps bas en vie" });
+        ACTIONS.put("resources.heal", new String[]{ "Vie remontée vite", "Vie remontée lentement" });
+        ACTIONS.put("resources.totem_refill", new String[]{ "Totem remis vite", "Totem remis tard" });
+        ACTIONS.put("resources.totem_balance", new String[]{ "Totem forcé", "Totem perdu" });
+        ACTIONS.put("resources.potion_active", new String[]{ "Potions actives au contact", "Potions tombées au contact" });
+        ACTIONS.put("resources.potion_renew", new String[]{ "Potion reprise à temps", "Potion reprise tard" });
+        ACTIONS.put("resources.potion_safe", new String[]{ "Potion bue à l'abri", "Potion bue sous sa menace" });
+        ACTIONS.put("resources.rocket", new String[]{ "Fusée qui mène à une ouverture", "Fusée sans ouverture" });
+
+        CHANCES.put("conversion.opening", false);
+        CHANCES.put("control.reached", false);
+        CHANCES.put("defense.dodge", false);
+        // Ses ouvertures : l'attendu est qu'elles ne passent pas, on montre SA chance.
+        CHANCES.put("defense.openings", true);
+    }
+
+    /**
+     * Une action : la description d'un moment du noyau au même instant s'il y
+     * en a un (« Ouverture facile, 4 blocs de chute »), sinon son libellé ; et
+     * sa chance quand elle en a une propre à sa situation.
+     */
+    private String actionText(DuelDetail.Action a) {
+        String text = null;
+        if (!a.isTrend()) {
+            for (DuelDetail.Moment m : detail.moments(family)) {
+                if (Math.abs(m.seconds - a.seconds) < 0.15) {
+                    text = momentText(m)[0];
+                    break;
+                }
+            }
+        }
+        if (text == null) {
+            String[] labels = ACTIONS.get(a.code);
+            text = labels == null ? a.code : Lang.tr(labels[a.points >= 0 ? 0 : 1]);
+        }
+        Boolean inverted = CHANCES.get(a.code);
+        if (inverted != null) {
+            double chance = inverted ? 1.0 - a.expected : a.expected;
+            text += " (" + Lang.tr("chance") + " " + Math.round(chance * 100) + " %)";
+        }
+        return text;
     }
 
     /**

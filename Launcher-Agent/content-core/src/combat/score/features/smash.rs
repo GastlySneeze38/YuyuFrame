@@ -9,7 +9,18 @@
 //! d'avant (attribute swap) y compte comme un coup bien chargé.
 
 use super::super::parse::{gear_at, Duel, SLOT_HAND};
-use super::{flag, sample_at, smash_bonus, Measure, Opportunity, View, IN_WATER, ME_CHARGE, ME_FLAGS, ME_PITCH, PASSENGER, SPRINTING};
+use super::{family, flag, sample_at, smash_bonus, Family, Norm, Opportunity, Part, View, IN_WATER, ME_CHARGE, ME_FLAGS, ME_PITCH, PASSENGER, SPRINTING};
+
+/// Ce qu'on attend d'un smash réussi : 0,63 des dégâts possibles, relevé
+/// sur 89 smashs le 2026-10-15 (nous 0,61, nos adversaires 0,66). Un smash
+/// part presque toujours en sprint (gardé en l'air après le saut ou la
+/// charge de vent), et le sprint empêche le critique : 8 critiques sur 89.
+pub const SMASH: Norm = Norm::new("smash.hit", 0.63, 0.2);
+/// Une charge de lance qui touche, jugée pareil.
+pub const SPEAR: Norm = Norm::new("smash.spear", 0.63, 0.2);
+/// Des ouvertures et aucun gros coup : un smash qui n'a rien tiré, compté
+/// une fois pour le duel (2026-10-15 — avant, la famille ne pesait rien).
+pub const NONE: Norm = Norm::new("smash.none", 0.63, 0.2);
 
 /// Dégâts de base d'un coup de masse : 1 pour le joueur, 5 pour la masse
 /// (`MaceItem.createAttributes`, jar 26.3, 2026-10-14).
@@ -89,8 +100,7 @@ fn crit_heard(duel: &Duel, hit: u64, by_me: bool) -> bool {
 }
 
 /// Mes gros coups : la famille, et chaque smash jugé.
-pub fn mine(duel: &Duel, mine: &[Opportunity], views: &[View], ping: u64) -> (Measure, Vec<Smash>) {
-    let mut ratios = Vec::new();
+pub fn mine(duel: &Duel, mine: &[Opportunity], views: &[View], ping: u64) -> (Family, Vec<Smash>) {
     let mut smashes = Vec::new();
     for o in mine.iter().filter(|o| o.converted) {
         let hit = o.hit.unwrap_or(o.close);
@@ -121,25 +131,27 @@ pub fn mine(duel: &Duel, mine: &[Opportunity], views: &[View], ping: u64) -> (Me
             None => (MACE_BASE + bonus_hit) / (MACE_BASE + bonus_max),
         }
         .min(1.0);
-        ratios.push(smash.ratio);
         smashes.push(smash);
     }
-    if duel.detailed() {
-        ratios.extend(spear_charges(duel, views, true, ping));
-    }
-    (judged(&ratios, mine), smashes)
+    let spears = if duel.detailed() { spear_charges(duel, views, true, ping) } else { Vec::new() };
+    (judged(&smashes, &spears, mine), smashes)
 }
 
-/// La famille sur les gros coups portés. Aucun gros coup alors que des
-/// ouvertures se sont présentées, c'est 0, compté sur ces ouvertures
-/// (2026-10-15) : avant, la famille ne mesurait rien et ne pesait rien —
-/// un duel sans un seul coup y valait la moyenne. Sans aucune ouverture,
-/// il n'y a rien à juger.
-fn judged(ratios: &[f64], opportunities: &[Opportunity]) -> Measure {
-    if ratios.is_empty() && !opportunities.is_empty() {
-        return Measure { value: 0.0, count: opportunities.len() as f64 };
+/// La famille sur les gros coups portés : chaque smash et chaque charge de
+/// lance comme une action, pesés ensemble à parts égales. Aucun gros coup
+/// alors que des ouvertures se sont présentées : une action à 0, comptée
+/// sur ces ouvertures (2026-10-15) — avant, un duel sans un seul coup y
+/// valait la moyenne. Sans aucune ouverture, il n'y a rien à juger.
+fn judged(smashes: &[Smash], spears: &[(u64, f64)], opportunities: &[Opportunity]) -> Family {
+    let hits = Part::of(SMASH, smashes.iter().map(|s| (Some(s.t), s.ratio)));
+    let charges = Part::of(SPEAR, spears.iter().map(|(t, ratio)| (Some(*t), *ratio)));
+    let count = (smashes.len() + spears.len()) as f64;
+    if count == 0.0 {
+        let none = Part::of(NONE, (!opportunities.is_empty()).then_some((None, 0.0)));
+        return family(&[(1.0, vec![(1.0, none)])], opportunities.len() as f64);
     }
-    Measure::rate(ratios.iter().sum(), ratios.len() as f64)
+    // Une partie par arme, pesée de son nombre de coups : comme un seul relevé.
+    family(&[(1.0, vec![(smashes.len() as f64, hits), (spears.len() as f64, charges)])], count)
 }
 
 /// Ses gros coups. Sa charge ne se voit pas, son critique si (version 3 :
@@ -147,8 +159,7 @@ fn judged(ratios: &[f64], opportunities: &[Opportunity]) -> Measure {
 /// pleine — elle ne pèse que sur les dégâts de base, le critique sur tout.
 /// Dans un journal plus ancien, seul le moment du coup est jugé : chute au
 /// coup ÷ chute possible.
-pub fn foe(duel: &Duel, theirs: &[Opportunity], views: &[View]) -> (Measure, Vec<Smash>) {
-    let mut ratios = Vec::new();
+pub fn foe(duel: &Duel, theirs: &[Opportunity], views: &[View]) -> (Family, Vec<Smash>) {
     let mut smashes = Vec::new();
     for o in theirs.iter().filter(|o| o.converted && o.possible_fall > 0.0) {
         let hit = o.hit.unwrap_or(o.close);
@@ -163,13 +174,10 @@ pub fn foe(duel: &Duel, theirs: &[Opportunity], views: &[View]) -> (Measure, Vec
             o.hit_fall / o.possible_fall
         }
         .min(1.0);
-        ratios.push(smash.ratio);
         smashes.push(smash);
     }
-    if duel.detailed() {
-        ratios.extend(spear_charges(duel, views, false, 0));
-    }
-    (judged(&ratios, theirs), smashes)
+    let spears = if duel.detailed() { spear_charges(duel, views, false, 0) } else { Vec::new() };
+    (judged(&smashes, &spears, theirs), smashes)
 }
 
 /// Frappé « au bon moment » : à un demi-bloc près de la chute possible.
@@ -224,8 +232,9 @@ pub fn detail(duel: &Duel, smashes: &[Smash], opened: usize, d: &mut super::Deta
 /// permis par la plus grande vitesse de l'approche. Une charge se reconnaît
 /// à un paquet de dégâts de lance (`spear`) que ne précède aucun coup donné
 /// — le jab, lui, est un coup ordinaire, précédé d'un clic, et ne compte pas.
-/// L'approche : les ticks où la lance est baissée, prête à partir.
-fn spear_charges(duel: &Duel, views: &[View], mine: bool, ping: u64) -> Vec<f64> {
+/// L'approche : les ticks où la lance est baissée, prête à partir. Rend le
+/// tick de chaque charge et son rapport.
+fn spear_charges(duel: &Duel, views: &[View], mine: bool, ping: u64) -> Vec<(u64, f64)> {
     let gear = if mine { &duel.my_gear } else { &duel.foe_gear };
     let mut out = Vec::new();
     for hit in duel.hits.iter().filter(|h| h.by_me == mine && h.kind == "spear") {
@@ -245,7 +254,7 @@ fn spear_charges(duel: &Duel, views: &[View], mine: bool, ping: u64) -> Vec<f64>
             .collect();
         let Some(at_impact) = approach.first().copied() else { continue };
         let best = approach.iter().copied().fold(at_impact, f64::max);
-        out.push((spear_damage(at_impact, multiplier) / spear_damage(best, multiplier)).min(1.0));
+        out.push((hit.t, (spear_damage(at_impact, multiplier) / spear_damage(best, multiplier)).min(1.0)));
     }
     out
 }
@@ -289,10 +298,12 @@ mod tests {
             behind_shield: false,
             chance: 0.4,
         };
-        let none = judged(&[], &[missed.clone(), missed]);
-        assert_eq!((none.value, none.count), (0.0, 2.0), "deux ouvertures, aucun smash : 0 sur deux");
-        assert_eq!(judged(&[], &[]).count, 0.0, "sans ouverture, rien à juger");
-        assert_eq!(judged(&[0.8], &[]).value, 0.8);
+        let none = judged(&[], &[], &[missed.clone(), missed]).measure;
+        assert!((none.gap - (0.0 - NONE.mean) / NONE.spread).abs() < 1e-12, "deux ouvertures, aucun smash : une action à 0");
+        assert_eq!(none.count, 2.0, "comptée sur les deux ouvertures");
+        assert_eq!(judged(&[], &[], &[]).measure.count, 0.0, "sans ouverture, rien à juger");
+        let one = judged(&[], &[(4, 0.83)], &[]).measure;
+        assert!((one.gap - 1.0).abs() < 1e-9, "0,83 face à 0,63 en écarts de 0,2 : +1");
     }
 
     #[test]

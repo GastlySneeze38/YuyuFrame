@@ -33,8 +33,9 @@ const REACH_SWAP: Technique = Technique { name: "reach_swap", points: 2.0 };
 const D_HAND: Technique = Technique { name: "d_hand", points: 3.0 };
 const STUN_SLAM: Technique = Technique { name: "stun_slam", points: 4.0 };
 const INSTANT_PEARL_CATCH: Technique = Technique { name: "instant_pearl_catch", points: 4.0 };
-/// Plafond du bonus d'un duel (décision du 2026-10-14).
-pub const CAP: f64 = 10.0;
+/// Plafond du bonus d'un duel (décision du 2026-10-14) : +10 sur 100,
+/// devenu +50 avec la note sur 500 (2026-10-22).
+pub const CAP: f64 = 50.0;
 
 /// Un coup donné et son paquet de dégâts : au plus ce délai, ping compris.
 const ATTACK_TO_HIT_TICKS: u64 = 4;
@@ -79,9 +80,9 @@ struct Tally {
 
 /// Ce que vaut une technique, face à ses points de base. Ralenti le
 /// 2026-10-15 : un peu de bug use dans un duel faisait monter tout de suite
-/// à +4. Il faut maintenant plusieurs techniques rares et réussies pour
-/// approcher ce bonus.
-const SCALE: f64 = 0.25;
+/// à +4 sur 100. Il faut maintenant plusieurs techniques rares et réussies
+/// pour approcher ce bonus. ×5 le 2026-10-22, avec la note sur 500.
+const SCALE: f64 = 1.25;
 /// Chaque nouvelle réussite de la même technique dans un duel vaut moitié
 /// moins que la précédente : répéter un geste ne vaut jamais plus de deux
 /// fois sa première réussite.

@@ -26,7 +26,8 @@ use super::writer::send;
 /// 11 (2026-10-15) : `yf_combat_detail`, le détail des familles d'un duel.
 /// 12 (2026-10-15) : le résumé passe à 50 nombres (coups et totems échangés).
 /// 13 (2026-10-18) : `yf_combat_share`, le partage des duels pour la calibration.
-const ABI_VERSION: u32 = 13;
+/// 14 (2026-10-22) : notes sur 500, et lignes `action` dans le détail d'un duel.
+const ABI_VERSION: u32 = 14;
 
 /// Autres joueurs transmis par tick, au plus.
 const MAX_OTHERS: usize = 16;
