@@ -23,6 +23,14 @@ const W_VULNERABLE: f64 = 0.15;
 const W_DODGE: f64 = 0.15;
 const W_LANDING: f64 = 0.10;
 const W_RECOVERY: f64 = 0.05;
+/// Tenir les échanges (2026-10-22) : chaque coup du duel, toutes armes
+/// confondues, porté ou reçu. Ajouté après l'étude des duels partagés — qui
+/// gagne les échanges garde l'écart entre deux joueurs sur un duel long, là
+/// où les taux par occasion se resserrent. Proche du résultat (c'est en
+/// touchant qu'on gagne), mais 0,6 (un tiers de la défense) faisait mieux
+/// que 0,3 sur 31 duels : écart sur les duels longs et stabilité par joueur.
+/// À revoir sur plus de duels.
+const W_EXCHANGES: f64 = 0.6;
 
 // Dans le bouclier : les smashs arrêtés en font l'essentiel, le temps au sol
 // bouclier levé pèse peu.
@@ -49,6 +57,8 @@ pub const DODGE: Norm = Norm::new("defense.dodge", 0.222, 0.416);
 /// que coûter.
 pub const LANDING: Norm = Norm::new("defense.landing", 1.0, 0.39);
 pub const RECOVERY: Norm = Norm::new("defense.recovery", 0.839, 0.234);
+/// Chaque coup du duel : porté (1) ou reçu (0) — 0,5 par symétrie.
+pub const EXCHANGE: Norm = Norm::new("defense.exchange", 0.5, 0.5);
 
 /// La chance d'esquiver une descente, d'après sa situation au départ :
 /// distance horizontale et hauteur de l'attaquant au-dessus. Apprise le
@@ -97,8 +107,9 @@ struct Defender<'a> {
     /// chaque smash arrêté passerait pour un smash évité de rien, et chaque
     /// bouclier pour inutile : la mesure du bouclier ne compte pas.
     sees_blocks: bool,
-    /// Ticks des coups reçus.
+    /// Ticks des coups reçus, et de ceux qu'il a portés.
     hits_taken: Vec<u64>,
+    hits_dealt: Vec<u64>,
 }
 
 impl Defender<'_> {
@@ -231,6 +242,12 @@ impl Defender<'_> {
         (threat.iter().filter(|v| v.target_grounded).count() as f64, threat.len() as f64)
     }
 
+    /// Les échanges : chaque coup porté vaut 1, chaque coup reçu 0.
+    fn exchanges(&self) -> Part {
+        let dealt = self.hits_dealt.iter().map(|t| (Some(*t), 1.0));
+        Part::of(EXCHANGE, dealt.chain(self.hits_taken.iter().map(|t| (Some(*t), 0.0))))
+    }
+
     fn family(&self, landing: Part) -> Family {
         let [stopped, ground, efficiency] = self.shield();
         let groups = [
@@ -240,6 +257,7 @@ impl Defender<'_> {
             (W_DODGE, vec![(1.0, self.dodge())]),
             (W_LANDING, vec![(1.0, landing)]),
             (W_RECOVERY, vec![(1.0, self.recovery())]),
+            (W_EXCHANGES, vec![(1.0, self.exchanges())]),
         ];
         // Les situations défensives : ses opportunités, ses smashs arrêtés, les gardes cassées.
         family(&groups, (self.attacks.len() + self.blocks.len() + self.break_ticks.len()) as f64)
@@ -309,6 +327,7 @@ fn me_defending<'a>(duel: &Duel, their_views: &'a [View], theirs: &'a [Opportuni
         has_shield: holds_shield(&duel.my_gear),
         sees_blocks: duel.detailed(),
         hits_taken: duel.hits.iter().filter(|h| !h.by_me).map(|h| h.t).collect(),
+        hits_dealt: duel.hits.iter().filter(|h| h.by_me).map(|h| h.t).collect(),
     }
 }
 
@@ -325,6 +344,7 @@ fn foe_defending<'a>(duel: &Duel, my_views: &'a [View], mine: &'a [Opportunity])
         has_shield: holds_shield(&duel.foe_gear),
         sees_blocks: duel.detailed(),
         hits_taken: duel.hits.iter().filter(|h| h.by_me).map(|h| h.t).collect(),
+        hits_dealt: duel.hits.iter().filter(|h| !h.by_me).map(|h| h.t).collect(),
     }
 }
 
@@ -401,6 +421,10 @@ pub fn detail(duel: &Duel, my_views: &[View], their_views: &[View], mine: &[Oppo
         let seconds = delays.iter().sum::<f64>() / delays.len() as f64 / 20.0;
         d.fact("defense.recovery", w >= 0.0, w, &[(seconds * 10.0).round() / 10.0]);
     }
+    if let Some(w) = weight(me.exchanges(), W_EXCHANGES) {
+        let (dealt, taken) = (me.hits_dealt.len() as f64, me.hits_taken.len() as f64);
+        d.fact("defense.exchange", w >= 0.0, w, &[dealt, taken]);
+    }
     // Ses smashs arrêtés, s'il avait un bouclier et que le journal les voit.
     let shielded = |who: &Defender| who.shield().iter().any(Part::present);
     if shielded(&me) && shielded(&them) {
@@ -416,7 +440,7 @@ mod tests {
 
     fn defender<'a>(views: &'a [View], attacks: &'a [Opportunity], blocks: Vec<u64>, breaks: usize) -> Defender<'a> {
         let break_ticks = (0..breaks as u64).map(|i| 10 + i).collect();
-        Defender { views, attacks, density: 0.0, blocks, break_ticks, has_shield: true, sees_blocks: true, hits_taken: Vec::new() }
+        Defender { views, attacks, density: 0.0, blocks, break_ticks, has_shield: true, sees_blocks: true, hits_taken: Vec::new(), hits_dealt: Vec::new() }
     }
 
     #[test]

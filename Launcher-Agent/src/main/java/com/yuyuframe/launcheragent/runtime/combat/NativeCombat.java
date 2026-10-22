@@ -88,15 +88,15 @@ public final class NativeCombat {
     /**
      * La force de l'adversaire connue AVANT le duel, sur 500 : son niveau
      * moyen dans nos duels précédents contre lui, tiré vers 250 tant qu'on l'a
-     * peu vu. C'est elle — et non le niveau mesuré pendant le duel, à
-     * {@code REPORT_FAMILIES + 5} — qui entre dans la note.
+     * peu vu. Affichée et gardée pour le classement ; elle n'entre plus dans
+     * la note depuis le 2026-10-22.
      */
     public static final int REPORT_FOE_KNOWN = 35;
     /** Le nombre de duels passés contre lui sur lesquels elle repose ; 0 pour un inconnu. */
     public static final int REPORT_FOE_KNOWN_DUELS = 36;
     /** Le mode, reconnu à l'arme en main : 1 masse, 2 épée, 3 autre. Seuls les duels à la masse sont notés. */
     public static final int REPORT_MODE = 37;
-    /** La note des six familles avant le bonus bug use, ou −1 si le duel n'est pas noté. */
+    /** La note des cinq familles avant le bonus bug use, ou −1 si le duel n'est pas noté. */
     public static final int REPORT_BASE_SCORE = 38;
     /** Le bonus bug use ajouté à la note (0 à 50) : il ne la fait jamais baisser. */
     public static final int REPORT_BUG_USE = 39;

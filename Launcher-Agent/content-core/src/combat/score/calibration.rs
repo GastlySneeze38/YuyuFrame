@@ -623,8 +623,8 @@ fn proposition_de_calibrage() {
     }
     let _ = writeln!(text, "FAMILY_SPREAD = {:?}", family_spread.map(|s| (s * 1000.0).round() / 1000.0));
 
-    // 4. La note qui en sortirait (contre un inconnu : la sixième famille vaut 0).
-    let means_z: Vec<f64> = per_duel.iter().map(|g| g.iter().zip(&family_spread).map(|(g, s)| g / s).sum::<f64>() / 6.0).collect();
+    // 4. La note qui en sortirait : la moyenne de mes cinq familles.
+    let means_z: Vec<f64> = per_duel.iter().map(|g| g.iter().zip(&family_spread).map(|(g, s)| g / s).sum::<f64>() / rating::FAMILIES).collect();
     let (_, spread_of_mean) = sd(&means_z);
     let factor = 1.0 / spread_of_mean;
     let _ = writeln!(text, "\n## Élargissement : SPREAD_FACTOR = {factor:.3} (pour un écart de note de 100 ; actuel {})", rating::SPREAD_FACTOR);

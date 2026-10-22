@@ -43,7 +43,11 @@ use super::features::{Features, Measure};
 // jugée face à ce qu'en tire un joueur moyen, points d'action.
 // Version 15 (2026-10-22) : attendus, modèles de chance, écarts des
 // familles et élargissement calibrés sur 31 duels notés partagés.
-pub const SCORE_VERSION: u32 = 15;
+// Version 16 (2026-10-22) : l'initiative dans le contrôle, les échanges
+// dans la défense, et le calibrage qui va avec.
+// Version 17 (2026-10-22) : la force connue de l'adversaire sort de la note
+// (gardée pour le classement) ; cinq familles.
+pub const SCORE_VERSION: u32 = 17;
 
 /// Poids du lissage : une famille observée sur `K` événements est tirée à
 /// moitié vers l'attendu. Ramené de 5 à 2 le 2026-10-15 : sur peu de
@@ -65,23 +69,27 @@ const MIN_ENGAGED_SECS: f64 = 20.0;
 /// le 2026-10-22 sur 31 duels notés partagés, les deux joueurs
 /// (`calibration`, test `proposition_de_calibrage`). Celui de la qualité du
 /// smash est large : un duel sans aucun smash sur ses ouvertures y pèse lourd.
-const FAMILY_SPREAD: [f64; 5] = [0.365, 0.708, 0.235, 0.227, 0.211];
+const FAMILY_SPREAD: [f64; 5] = [0.365, 0.708, 0.256, 0.249, 0.211];
 
 /// De la moyenne des écarts à l'écart de la note. Une moyenne de familles
 /// est plus resserrée qu'une famille seule, il faut donc l'élargir — mais
 /// pas comme si elles étaient indépendantes (×√6) : un joueur bon dans l'une
 /// l'est souvent dans les autres. Posé à 1,3 au jugé ; relevé le 2026-10-22
-/// à 1,83 sur 31 duels (ce qui donne à la note un écart de 100) : les
-/// familles sont moins liées qu'on le pensait.
-pub(super) const SPREAD_FACTOR: f64 = 1.83;
+/// à 1,83 sur 31 duels (ce qui donne à la note un écart de 100), à 1,68 avec
+/// l'initiative et les échanges, qui lient un peu plus les familles, puis à
+/// 1,40 quand la force connue de l'adversaire est sortie de la moyenne (cinq
+/// familles au lieu de six : la même échelle).
+pub(super) const SPREAD_FACTOR: f64 = 1.40;
 
 /// La note d'un joueur moyen, ce que vaut un écart, et le plafond.
 pub const CENTER: f64 = 250.0;
 const PER_Z: f64 = 100.0;
 pub const MAX: f64 = 500.0;
-/// Six familles à poids égaux (mes cinq et la force connue de
-/// l'adversaire) : ce que pèse un écart d'une seule famille dans la note.
-const POINTS_PER_Z: f64 = PER_Z * SPREAD_FACTOR / 6.0;
+/// Mes cinq familles à poids égaux : ce que pèse un écart d'une seule
+/// famille dans la note. La force connue de l'adversaire n'y entre plus
+/// (2026-10-22) : elle est gardée pour le classement, pas pour la note.
+pub(super) const FAMILIES: f64 = 5.0;
+const POINTS_PER_Z: f64 = PER_Z * SPREAD_FACTOR / FAMILIES;
 
 /// Un écart, sur l'échelle de la note.
 fn scale(z: f64) -> f64 {
@@ -128,7 +136,7 @@ pub struct Rating {
     /// De 0 à 500, bonus bug use compris ; absente si le duel n'est pas noté
     /// (`reason` dit pourquoi).
     pub score: Option<f64>,
-    /// La note des six familles, avant le bonus (« 312 » dans « 312 + 20 bug use »).
+    /// La note des cinq familles, avant le bonus (« 312 » dans « 312 + 20 bug use »).
     pub base_score: Option<f64>,
     /// Le bonus bug use : il ne fait jamais baisser la note, et reste hors
     /// de la moyenne des familles (docs/scoring/familles/bug-use.md).
@@ -149,9 +157,9 @@ pub struct Rating {
     /// notre conversion. Dans la note, il annulait une partie de notre propre
     /// jeu : dominer faisait paraître l'adversaire faible et plafonnait la note.
     pub opponent: Sub,
-    /// La force de l'adversaire connue AVANT ce duel ([`Prior`]) : c'est elle
-    /// qui entre dans la note comme sixième famille. Contre un inconnu, elle
-    /// vaut l'attendu et ne pèse rien.
+    /// La force de l'adversaire connue AVANT ce duel ([`Prior`]). Elle est
+    /// entrée dans la note comme sixième famille jusqu'au 2026-10-22 ; elle
+    /// n'y entre plus (`points` vaut 0) et reste calculée pour le classement.
     pub opponent_known: Sub,
     /// Les quatre familles dont le niveau de l'adversaire est fait, dans
     /// l'ordre : conversion, qualité du smash, défense, contrôle vertical.
@@ -205,15 +213,16 @@ pub fn rate(features: &Features, prior: &Prior) -> Rating {
     } else {
         None
     };
-    // Poids égaux — mes cinq familles et la force connue de l'adversaire —
-    // puis la moyenne ramenée à l'échelle d'un écart (`SPREAD_FACTOR`).
-    let opponent_known = Sub { gap: prior.z, count: prior.duels as f64, smoothed: prior.z, z: prior.z, score: scale(prior.z).round(), points: POINTS_PER_Z * prior.z };
-    let mean = (subs.iter().map(|s| s.z).sum::<f64>() + opponent_known.z) / (subs.len() + 1) as f64;
+    // Mes cinq familles à poids égaux, puis la moyenne ramenée à l'échelle
+    // d'un écart (`SPREAD_FACTOR`). La force connue de l'adversaire est
+    // calculée pour le classement, hors de la note.
+    let opponent_known = Sub { gap: prior.z, count: prior.duels as f64, smoothed: prior.z, z: prior.z, score: scale(prior.z).round(), points: 0.0 };
+    let mean = subs.iter().map(|s| s.z).sum::<f64>() / FAMILIES;
     let z = mean * SPREAD_FACTOR;
     let n = opportunities as f64;
     let own = combined(&subs, n);
     let base_score = reason.is_none().then(|| scale(z).round());
-    // Le bonus s'ajoute à la note des six familles, plafonné à +50 (déjà
+    // Le bonus s'ajoute à la note des cinq familles, plafonné à +50 (déjà
     // fait à l'extraction), la note restant plafonnée à 500.
     let bug_use = features.bug_use.points;
     // Les points de chaque action : sa part de l'écart de la famille, à la
@@ -374,7 +383,7 @@ mod tests {
     fn les_points_des_familles_font_la_note() {
         let r = unknown(&features(20, 120.0, Measure { gap: 0.2, count: 20.0 }));
         let families = [r.conversion, r.smash_quality, r.exposure, r.vertical, r.resources];
-        let points: f64 = families.iter().map(|s| s.points).sum::<f64>() + r.opponent_known.points;
+        let points: f64 = families.iter().map(|s| s.points).sum::<f64>();
         assert!((CENTER + points - r.base_score.unwrap()).abs() <= 0.5, "{} + {points} ≠ {:?}", CENTER, r.base_score);
     }
 
@@ -389,15 +398,14 @@ mod tests {
     }
 
     #[test]
-    fn la_force_connue_avant_le_duel_pese_dans_la_note() {
+    fn la_force_connue_avant_le_duel_est_gardee_mais_ne_compte_pas() {
         let features = features(20, 120.0, Measure { gap: 0.0, count: 20.0 });
         let strong = rate(&features, &Prior::from_levels(&[1.5, 1.2, 1.8]));
         let weak = rate(&features, &Prior::from_levels(&[-1.5, -1.2, -1.8]));
-        let first = unknown(&features);
-        // Le même jeu vaut plus contre un adversaire connu pour être fort.
-        assert!(strong.score.unwrap() > first.score.unwrap());
-        assert!(first.score.unwrap() > weak.score.unwrap());
+        assert_eq!(strong.score, weak.score, "le même jeu vaut la même note, quel que soit l'adversaire");
+        assert!(strong.opponent_known.score > weak.opponent_known.score, "elle reste calculée pour le classement");
         assert_eq!(strong.opponent_known.count, 3.0);
+        assert_eq!(strong.opponent_known.points, 0.0);
     }
 
     #[test]

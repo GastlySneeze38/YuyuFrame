@@ -28,7 +28,8 @@ pub use rating::Prior;
 // Version 5 (2026-10-15) : chutes après un raté, grosses descentes, détail des familles.
 // Version 6 (2026-10-22) : chaque famille est faite d'actions jugées face à
 // leur attendu ; `parties.csv` a une ligne par action.
-pub const EXTRACTOR_VERSION: u32 = 6;
+// Version 7 (2026-10-22) : l'initiative (contrôle) et les échanges (défense).
+pub const EXTRACTOR_VERSION: u32 = 7;
 
 /// Le décompte des opportunités d'un joueur.
 #[derive(Debug, Serialize)]
@@ -401,11 +402,12 @@ mod tests {
     }
 
     #[test]
-    fn un_adversaire_connu_pour_etre_fort_monte_la_note_du_meme_duel() {
+    fn un_adversaire_connu_ne_change_pas_la_note_du_meme_duel() {
         let journal = Journal::read(DEFEAT).unwrap();
         let first = score_with(&journal, &Prior::default());
         let known = score_with(&journal, &Prior::from_levels(&[1.5, 1.5]));
-        assert!(known.rating.score.unwrap() > first.rating.score.unwrap());
+        assert_eq!(known.rating.score, first.rating.score, "sa force est gardée pour le classement, hors de la note");
+        assert!(known.numbers()[35] > first.numbers()[35]);
         assert_eq!(known.numbers()[36], 2.0, "deux duels passés contre lui");
         assert_eq!(first.foe_key(), journal.foe_key(), "le même adversaire, lu au journal ou au résumé");
     }

@@ -18,6 +18,14 @@ const W_CLIMB: f64 = 0.20;
 const W_PEAK: f64 = 0.15;
 const W_HORIZONTAL: f64 = 0.15;
 const W_CHAIN: f64 = 0.15;
+/// F. L'initiative (2026-10-22) : qui se crée les ouvertures. Ajoutée après
+/// l'étude des duels partagés — la note jugeait ce que chacun fait de ses
+/// ouvertures, jamais combien il s'en crée, et celui qui domine un duel long
+/// n'en tirait rien. 0,6 (un tiers du contrôle) : essayé à 0,3 puis 0,6 sur
+/// 31 duels, 0,6 sépare mieux deux joueurs sur les duels longs et rend la
+/// note plus stable d'un duel à l'autre pour un même joueur. À revoir sur
+/// plus de duels.
+const W_INITIATIVE: f64 = 0.6;
 
 // Ce qu'on attend de chaque sorte d'action : relevé le 2026-10-22 sur les
 // duels notés partagés, les deux joueurs (`calibration`, test
@@ -46,6 +54,9 @@ pub const GLIDE: Norm = Norm::new("control.glide", 0.426, 0.494);
 pub const FOLLOW_UP: Norm = Norm::new("control.follow_up", 0.293, 0.469);
 pub const CHAIN_LENGTH: Norm = Norm::new("control.chain_length", 0.039, 0.15);
 pub const REBUILD: Norm = Norm::new("control.rebuild", 0.419, 0.366);
+// F. L'initiative : chaque ouverture du duel, la sienne (1) ou celle de
+// l'adversaire (0) — 0,5 par symétrie.
+pub const INITIATIVE: Norm = Norm::new("control.initiative", 0.5, 0.5);
 
 /// La chance qu'une descente qui le vise arrive à portée, d'après sa
 /// situation au départ : distance horizontale et hauteur au-dessus de lui.
@@ -373,6 +384,23 @@ fn chain(views: &[View], opportunities: &[Opportunity]) -> [Part; 3] {
 
 const CHAIN_WEIGHTS: [f64; 3] = [0.25, 0.25, 0.5];
 
+// --- F. L'initiative -------------------------------------------------------
+
+/// Chaque ouverture du duel est une action : la sienne vaut 1, celle de
+/// l'adversaire 0, chacune pesée de sa valeur (son bonus de smash possible).
+/// Celui qui s'en crée deux fois plus gagne à chacune, et l'écart grandit
+/// avec la durée du duel. Ça juge le jeu, pas le résultat : se créer une
+/// ouverture n'est pas encore toucher.
+fn initiative(own: &[Opportunity], other: &[Opportunity]) -> Part {
+    let mut part = Part::new(INITIATIVE);
+    for (list, value) in [(own, 1.0), (other, 0.0)] {
+        for o in list {
+            part.push(Item { t: Some(o.open), value, expected: INITIATIVE.mean, weight: o.expected.max(1.0), context: super::NO_CONTEXT });
+        }
+    }
+    part
+}
+
 /// Les smashs enchaînés sans toucher le sol, et le nombre de smashs.
 fn chained(views: &[View], opportunities: &[Opportunity]) -> (f64, f64) {
     let touched_ground = |from: u64, to: u64| views.iter().any(|v| v.t > from && v.t < to && v.grounded);
@@ -436,6 +464,11 @@ pub fn detail(views: &[View], their_views: &[View], mine: &[Opportunity], theirs
         let w = weight(linked / smashes, FOLLOW_UP, W_CHAIN / 2.0);
         d.fact("control.chained", w >= 0.0, w, &[linked, smashes]);
     }
+    // L'initiative : ses ouvertures face aux miennes.
+    if let Some(w) = initiative(mine, theirs).gap() {
+        d.fact("control.initiative", w >= 0.0, w * W_INITIATIVE, &[mine.len() as f64, theirs.len() as f64]);
+        d.versus("control.initiative", &[mine.len() as f64], &[theirs.len() as f64]);
+    }
     if mine.len() > 1 {
         let gaps: Vec<f64> = mine.windows(2).map(|w| w[1].open.saturating_sub(w[0].close) as f64 / 20.0).collect();
         let seconds = gaps.iter().sum::<f64>() / gaps.len() as f64;
@@ -444,9 +477,9 @@ pub fn detail(views: &[View], their_views: &[View], mine: &[Opportunity], theirs
     }
 }
 
-/// Les cinq groupes, chacun de ses parties : suivre, prendre la hauteur, se
-/// placer, se déplacer, enchaîner.
-fn groups(follow: [Part; 3], climb: [Part; 4], peak: Part, horizontal: [Part; 3], chain: [Part; 3], views: &[View]) -> Family {
+/// Les six groupes, chacun de ses parties : suivre, prendre la hauteur, se
+/// placer, se déplacer, enchaîner, l'initiative.
+fn groups(follow: [Part; 3], climb: [Part; 4], peak: Part, horizontal: [Part; 3], chain: [Part; 3], initiative: Part, views: &[View]) -> Family {
     let equal = |parts: Vec<Part>| parts.into_iter().map(|p| (1.0, p)).collect::<Vec<_>>();
     let [a, b, c] = chain;
     let groups = [
@@ -455,6 +488,7 @@ fn groups(follow: [Part; 3], climb: [Part; 4], peak: Part, horizontal: [Part; 3]
         (W_PEAK, vec![(1.0, peak)]),
         (W_HORIZONTAL, equal(horizontal.into())),
         (W_CHAIN, vec![(CHAIN_WEIGHTS[0], a), (CHAIN_WEIGHTS[1], b), (CHAIN_WEIGHTS[2], c)]),
+        (W_INITIATIVE, vec![(1.0, initiative)]),
     ];
     // Une situation, c'est une descente : chacune se juge (suivre, se placer,
     // enchaîner). Avant le 2026-10-15, des tranches de quatre secondes.
@@ -465,8 +499,8 @@ fn hits(opportunities: &[Opportunity]) -> Vec<u64> {
     opportunities.iter().filter_map(|o| o.hit).collect()
 }
 
-/// Notre contrôle : les cinq groupes.
-pub fn mine(duel: &Duel, views: &[View], opportunities: &[Opportunity], lunges: &[Lunge]) -> Family {
+/// Notre contrôle : les six groupes. `theirs` : ses ouvertures, pour l'initiative.
+pub fn mine(duel: &Duel, views: &[View], opportunities: &[Opportunity], theirs: &[Opportunity], lunges: &[Lunge]) -> Family {
     let armor = armor_factor(duel.my_gear.last());
     let resources = height_per_resource(duel, armor);
     groups(
@@ -475,13 +509,15 @@ pub fn mine(duel: &Duel, views: &[View], opportunities: &[Opportunity], lunges: 
         peaks(views),
         horizontal(views, opportunities, lunges),
         chain(views, opportunities),
+        initiative(opportunities, theirs),
         views,
     )
 }
 
 /// Le sien, en miroir : sans le déplacement horizontal (ses élans et ses
-/// objets ne se voient pas) ni la hauteur par ressource.
-pub fn foe(duel: &Duel, views: &[View], opportunities: &[Opportunity]) -> Family {
+/// objets ne se voient pas) ni la hauteur par ressource. `mine` : nos
+/// ouvertures, pour son initiative.
+pub fn foe(duel: &Duel, views: &[View], opportunities: &[Opportunity], mine: &[Opportunity]) -> Family {
     let armor = armor_factor(duel.foe_gear.last());
     let nothing = [Part::new(CLOSING), Part::new(LUNGE), Part::new(GLIDE)];
     groups(
@@ -490,6 +526,7 @@ pub fn foe(duel: &Duel, views: &[View], opportunities: &[Opportunity]) -> Family
         peaks(views),
         nothing,
         chain(views, opportunities),
+        initiative(opportunities, mine),
         views,
     )
 }

@@ -311,7 +311,7 @@ final class PvpInfoModal {
             "Chaque action du duel (une ouverture, un smash, une esquive, une charge de vent…) est comparée à ce qu'en tire un joueur moyen dans la même situation. Mieux que lui, elle rapporte des points ; moins bien, elle en coûte. Réussir une ouverture difficile rapporte beaucoup, une facile peu, et rater une facile coûte.",
             "Le détail de chaque famille montre les actions qui ont le plus compté et leurs points.",
             "# Les familles",
-            "La note est faite de six familles qui pèsent autant les unes que les autres : vos cinq familles (conversion, qualité du smash, défense, contrôle vertical et horizontal, ressources) et la force de votre adversaire, telle que vos duels précédents contre lui la font connaître.",
+            "La note est faite de vos cinq familles, qui pèsent autant les unes que les autres : conversion, qualité du smash, défense, contrôle vertical et horizontal, ressources. Elle juge votre jeu seulement : la force de votre adversaire n'y entre pas.",
             "S'y ajoute un bonus, le bug use, pour les techniques les plus dures : il ne fait jamais baisser la note et s'affiche à part, par exemple 322 + 20 bug use.",
             "Tout est calculé sur votre PC, à partir de ce que votre jeu voit pendant le duel. Si le partage de vos duels est activé (en haut de cette page), ils sont envoyés anonymisés pour calibrer la note. Il n'y a pas de classement.",
             "# Les couleurs",
@@ -341,13 +341,15 @@ final class PvpInfoModal {
             "La hauteur elle-même n'y compte pas : elle est déjà dans la conversion et le contrôle. Les coups ordinaires ne rapportent rien. Un joueur moyen tire 63 % de son smash : il part presque toujours en sprint, et le sprint empêche le critique. Chaque smash au-dessus rapporte, chaque smash en dessous coûte.",
             "Pour la monter : attendez le bas de la chute pour frapper, avec la barre d'attaque pleine et sans sprinter."));
         list.add(family(report, 2, "Défense",
-            "Empêchez-vous l'adversaire de vous mettre ses gros coups ? Six mesures : le bouclier (30 %), les ouvertures laissées (25 %), le temps vulnérable (15 %), l'esquive (15 %), atterrir proprement (10 %) et la reprise après un coup (5 %).",
+            "Empêchez-vous l'adversaire de vous mettre ses gros coups, et tenez-vous les échanges ? Sept mesures : les échanges (un tiers), puis le bouclier, les ouvertures laissées, le temps vulnérable, l'esquive, atterrir proprement et la reprise après un coup.",
+            "Échanges : chaque coup du duel, toutes armes confondues, rapporte s'il est porté et coûte s'il est reçu. C'est ce qui sépare deux joueurs sur un duel long, quand les taux de réussite de chacun se ressemblent.",
             "Bouclier : chaque smash arrêté rapporte selon ce qu'il valait, dix fois plus si vous étiez à 4 blocs ou plus au-dessus du sol ; chaque smash reçu coûte. Une garde cassée par une hache coûte autant qu'un smash de 8 blocs. Rester au sol bouclier levé sous lui coûte un peu.",
             "Ouvertures laissées : l'envers exact de la conversion, sur ses opportunités. Chaque descente esquivée se juge face à sa chance d'être esquivée. Temps vulnérable : au sol pendant qu'il est au-dessus de vous et à portée. Esquive : sortir de sa zone pendant ses descentes. Atterrir proprement : les dégâts de chute après un de vos smashs ratés. Reprise : vous dégager après un coup reçu.",
             "Les dégâts évités, affichés à part, résument ce qu'il pouvait vous mettre et qu'il n'a pas mis. Ils ne comptent pas dans la note.",
             "Pour la monter : levez le bouclier quand il tombe sur vous en l'air, pas au sol en permanence, et ne restez pas sous lui."));
         list.add(family(report, 3, "Contrôle vertical et horizontal",
             "Vous déplacez-vous pour mettre le coup ? On juge le déplacement obtenu, pas la technique : un combo qui ne vous amène nulle part ne rapporte rien.",
+            "L'initiative (un tiers de la famille) : chaque ouverture du duel rapporte si c'est vous qui vous l'êtes créée, et coûte si c'est lui. Celui qui domine se crée plus d'ouvertures, même s'il en rate une partie.",
             "Suivre pendant la chute (35 %) : vos descentes qui arrivent à portée, la distance rattrapée quand il fuit, et les gros coups qui passent du premier coup. Prendre la hauteur (20 %) : vitesse de montée, temps pour repasser au-dessus de lui, hauteur gagnée par charge de vent ou par combo perle et charge de vent, et la domination de la hauteur.",
             "Se placer au sommet (15 %) : être juste au-dessus de lui quand vous commencez à redescendre. Se déplacer à l'horizontale (15 %) : vitesse de rapprochement face à sa fuite, élans de Lunge qui vous mettent à portée, vols en élytre qui finissent en opportunité. Enchaîner (15 %) : un smash suivi d'une nouvelle opportunité sans toucher le sol, et le temps pour reconstruire après chaque engagement.",
             "Une armure en netherite ou la protection contre les explosions font monter moins haut : la hauteur attendue en tient compte. Chaque descente, montée ou enchaînement est comparé à ce qu'en tire un joueur moyen.",
@@ -364,8 +366,8 @@ final class PvpInfoModal {
             "Le niveau de votre adversaire, tel qu'on peut le lire de ce qu'il a fait contre vous : ses quatre familles mesurables (conversion, qualité du smash, défense, contrôle vertical et horizontal), jugées avec les mêmes attendus que les vôtres, puis combinées comme une note. C'est ce que montre le face-à-face.",
             "Il n'entre pas dans la note de ce duel. On ne le voit jouer que contre vous : sa conversion est l'envers de votre défense, sa défense l'envers de votre conversion. Ce niveau est donc en grande partie le miroir de votre jeu ; le compter reviendrait à vous enlever une partie de ce que vous avez bien fait.",
             "# Avant le duel",
-            "Ce qui compte dans la note, c'est sa force connue avant le duel : la moyenne de son niveau dans vos duels précédents contre lui, reconnu à son compte même s'il change de pseudo. Elle est tirée vers 250 tant que vous l'avez peu affronté : un duel passé compte pour un tiers, deux pour la moitié, huit pour les quatre cinquièmes.",
-            "Elle entre dans votre note comme une sixième famille : bien jouer contre un adversaire connu pour être fort vaut plus, contre un adversaire connu pour être faible vaut moins. Contre un inconnu, elle vaut 250 et ne change rien.",
+            "Sa force connue avant le duel est la moyenne de son niveau dans vos duels précédents contre lui, reconnu à son compte même s'il change de pseudo. Elle est tirée vers 250 tant que vous l'avez peu affronté : un duel passé compte pour un tiers, deux pour la moitié, huit pour les quatre cinquièmes.",
+            "Elle n'entre pas dans votre note, qui ne juge que votre jeu. Elle est gardée pour le classement, où battre un adversaire fort comptera plus.",
             "# Ce qu'il faut savoir",
             "Ses ressources ne sont pas mesurées : ses objets ne se voient pas d'ici. Ce niveau ne vaut que sur votre PC et face à vous : ce n'est pas un classement.");
         if (report != null) {
@@ -374,7 +376,7 @@ final class PvpInfoModal {
             opponent.paragraphs.add(met > 0
                 ? Lang.tr("Force connue avant le duel :") + " " + Math.round(report[NativeCombat.REPORT_FOE_KNOWN]) + ", " + Lang.tr("sur") + " " + met + " "
                     + Lang.tr(met > 1 ? "duels passés contre lui." : "duel passé contre lui.")
-                : Lang.tr("Premier duel contre lui : sa force connue vaut 250 et ne change pas la note."));
+                : Lang.tr("Premier duel contre lui : sa force n'est pas encore connue."));
             StringBuilder detail = new StringBuilder(Lang.tr("Niveau pendant le duel") + " " + Math.round(report[NativeCombat.REPORT_FAMILIES + 5]) + " : ");
             for (int i = 0; i < NativeCombat.FOE_FAMILY_COUNT; i++) {
                 if (i > 0) detail.append(", ");
@@ -409,7 +411,7 @@ final class PvpInfoModal {
             "# 2. Lissage",
             "Une famille mesurée sur peu de situations est tirée vers la moyenne : on compte 2 situations moyennes de plus. Une seule situation compte donc pour un tiers, et deux smashs réussis sur deux ne valent pas le maximum.",
             "# 3. Combinaison",
-            "Les six familles sont moyennées, puis élargies de 1,3 fois : une moyenne est plus resserrée qu'une famille seule.",
+            "Les cinq familles sont moyennées, puis élargies de 1,4 fois : une moyenne est plus resserrée qu'une famille seule.",
             "# 4. Note",
             "La note vaut 250, plus 100 par écart, en ligne droite, de 0 à 500. Chaque barre de famille suit la même échelle. Comme tout y est une somme, la note se découpe exactement en points : chaque action dit ce qu'elle a rapporté.",
             "# 5. Bonus",

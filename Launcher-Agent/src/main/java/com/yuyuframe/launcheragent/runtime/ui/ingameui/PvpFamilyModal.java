@@ -363,6 +363,8 @@ final class PvpFamilyModal {
         ACTIONS.put("control.follow_up", new String[]{ "Smash enchaîné sans toucher le sol", "Smash sans suite" });
         ACTIONS.put("control.chain_length", new String[]{ "Longue chaîne de smashs", "Chaîne de smashs courte" });
         ACTIONS.put("control.rebuild", new String[]{ "Ouverture retrouvée vite", "Ouverture retrouvée lentement" });
+        ACTIONS.put("control.initiative", new String[]{ "Ouverture que vous vous êtes créée", "Ouverture qu'il s'est créée" });
+        ACTIONS.put("defense.exchange", new String[]{ "Coup porté", "Coup reçu" });
         ACTIONS.put("resources.useful", new String[]{ "Charge de vent ou perle utile", "Charge de vent ou perle sans raison" });
         ACTIONS.put("resources.effective", new String[]{ "Charge de vent ou perle efficace", "Charge de vent ou perle sans effet" });
         ACTIONS.put("resources.answered", new String[]{ "Menace traitée à la charge de vent", "Menace laissée sans réponse" });
@@ -456,6 +458,8 @@ final class PvpFamilyModal {
         FACTS.put("control.peak", "À {0} blocs de lui au sommet, en moyenne");
         FACTS.put("control.chained", "{0} smash{s0} sur {1} suivi{s0} d'une autre ouverture sans toucher le sol");
         FACTS.put("control.rebuild", "{0} s en moyenne pour retrouver une ouverture");
+        FACTS.put("control.initiative", "{0} ouverture{s0} créée{s0}, {1} pour lui");
+        FACTS.put("defense.exchange", "{0} coup{s0} porté{s0}, {1} reçu{s1}");
         FACTS.put("resources.useful", "{0} charge{s0} de vent et perle{s0} utile{s0} sur {1}");
         FACTS.put("resources.mace_ready", "Masse en main à temps : {0} fois sur {1}");
         FACTS.put("resources.apples", "{0} pomme{s0} d'or sur {1} mangée{s0} au bon moment");
@@ -469,6 +473,7 @@ final class PvpFamilyModal {
         VERSUS.put("control.reached", "{0} descente{s0} sur {1} à portée");
         VERSUS.put("control.first_time", "{0} gros coup{s0} sur {1} du premier coup");
         VERSUS.put("resources.totem_refill", "Totem remis en {0} s");
+        VERSUS.put("control.initiative", "{0} ouverture{s0} créée{s0}");
 
         ADVICE.put("conversion.easy_missed", "Une ouverture facile, c'est collé à lui sur une chute courte : frappez-la sans attendre.");
         ADVICE.put("smash.none", "Une ouverture qui passe sans coup ne rapporte rien : frappez pendant la chute, même trop tôt plutôt que jamais.");
@@ -483,6 +488,8 @@ final class PvpFamilyModal {
         ADVICE.put("control.first_time", "Suivez-le pendant votre chute pour que le gros coup passe du premier coup.");
         ADVICE.put("control.reached", "Commencez vos descentes juste au-dessus de lui, pas à côté.");
         ADVICE.put("control.retake", "Quand il passe au-dessus de vous, reprenez la hauteur tout de suite.");
+        ADVICE.put("control.initiative", "Prenez la hauteur le premier : celui qui se crée les ouvertures mène le duel.");
+        ADVICE.put("defense.exchange", "Ne restez pas à portée quand vous ne pouvez pas frapper : chaque coup reçu compte.");
         ADVICE.put("resources.useful", "Chaque charge de vent doit servir : monter pour attaquer, casser son smash ou vous dégager.");
         ADVICE.put("resources.mace_ready", "Passez à la masse dès que l'ouverture se dessine.");
         ADVICE.put("resources.totem_refill", "Remettez un totem dans l'autre main dès que le premier saute.");

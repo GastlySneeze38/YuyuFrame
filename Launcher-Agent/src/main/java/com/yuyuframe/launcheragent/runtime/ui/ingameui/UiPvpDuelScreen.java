@@ -237,7 +237,7 @@ public final class UiPvpDuelScreen extends UiScreenBase {
         PvpScoreUi.left(r, UiFont.BOLD, opponent, left + inner, bottom + UiTheme.scaled(24f), half - inner,
             UiTheme.TEXT_PRIMARY, nameScale, vw, vh);
 
-        // Ce qu'on savait de lui avant ce duel : c'est cela qui compte dans la note.
+        // Ce qu'on savait de lui avant ce duel : affiché, gardé pour le classement, hors de la note.
         int met = (int) duel.report[NativeCombat.REPORT_FOE_KNOWN_DUELS];
         float known = UiTheme.scaled(0.42f);
         float knownX = left + inner + r.textWidth(UiFont.BOLD, opponent, nameScale) + UiTheme.scaled(22f);

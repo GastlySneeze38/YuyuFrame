@@ -760,7 +760,7 @@ pub fn extract(duel: &Duel) -> Features {
     let charges: Vec<f64> = smashes.iter().filter_map(|s| s.charge).collect();
     let smash_charge = (!charges.is_empty()).then(|| charges.iter().sum::<f64>() / charges.len() as f64);
     let lunges = control::lunges(duel, &my_views);
-    let vertical = control::mine(duel, &my_views, &mine, &lunges);
+    let vertical = control::mine(duel, &my_views, &mine, &theirs, &lunges);
     let (exposure, avoided) = defense::mine(duel, &their_views, &mine, &theirs);
     let resources = resources::mine(duel, &my_views, &their_views, &mine);
     let (bug_use, mut detections) = bug_use::extract(duel, &my_views, &mine, &lunges, ping);
@@ -782,7 +782,7 @@ pub fn extract(duel: &Duel) -> Features {
         conversion::family(&theirs),
         foe_smash,
         defense::foe(duel, &my_views, &mine),
-        control::foe(duel, &their_views, &theirs),
+        control::foe(duel, &their_views, &theirs, &mine),
     ];
     let foe = FoeMeasures {
         conversion: foe_families[0].measure,
