@@ -1,33 +1,38 @@
-//! Famille Placement (épée) : le premier coup de chaque échange, la portée
-//! au coup, l'espacement entre deux coups, le strafe.
+//! Famille Placement (épée) : le premier coup de chaque échange (75 %) et
+//! le strafe (25 %).
+//!
+//! La portée au coup et l'espacement entre deux coups ne sont plus notés
+//! (2026-10-22) : la distance entre deux joueurs est la même pour les deux,
+//! donc elles notaient le duel et non le joueur — sur 13 duels, 0,71 de
+//! portée des deux côtés, et tout le monde au-dessus de l'attendu appris sur
+//! d'autres serveurs (les positions de l'adversaire arrivent en retard selon
+//! le ping). Elles restent affichées, face à face, dans le détail. Ce qui
+//! distingue celui qui tient la distance, c'est de frapper le premier au
+//! bord de la portée : le premier coup de l'échange.
 
-use super::{count, family, weight, Detail, Family, Norm, Part, Side, REACH, SPACING_LOST};
+use super::{count, family, weight, Detail, Family, Norm, Part, Side, SPACING_LOST};
 
-const W_FIRST_HIT: f64 = 0.35;
-const W_RANGE: f64 = 0.25;
-const W_SPACING: f64 = 0.2;
-const W_STRAFE: f64 = 0.2;
+const W_FIRST_HIT: f64 = 0.75;
+const W_STRAFE: f64 = 0.25;
 
-/// Un échange s'arrête après 2 s sans coup : le suivant en ouvre un autre.
-const EXCHANGE_GAP_TICKS: u64 = 40;
-/// Distance sous laquelle un coup se donne collé à l'autre.
-const CLOSE_RANGE: f64 = 1.5;
+/// Un échange s'arrête après 1 s sans coup : le suivant en ouvre un autre.
+/// (2 s jusqu'au 2026-10-22 : à peine 2 échanges par duel, trop peu pour
+/// porter la famille ; un combo s'arrête à 1,5 s.)
+const EXCHANGE_GAP_TICKS: u64 = 20;
 /// Au-dessus, l'espacement est gardé.
 const SPACING_KEPT: f64 = 1.5;
 /// Le strafe se mesure quand il est à moins de 5 blocs et qu'on bouge.
 const STRAFE_RANGE: f64 = 5.0;
 const STRAFE_MIN_SPEED: f64 = 0.1;
 
-// Relevé le 2026-10-22 sur 23 duels à l'épée notés partagés.
 /// Le premier coup de chaque échange (0,5 par symétrie).
 pub const FIRST_HIT: Norm = Norm::new("sword.first_hit", 0.5, 0.5);
-pub const RANGE: Norm = Norm::new("sword.range", 0.461, 0.364);
-pub const SPACING: Norm = Norm::new("sword.spacing", 0.793, 0.342);
-/// Écart relevé sous le plancher de 0,15.
+/// Relevé le 2026-10-22 sur 23 duels à l'épée partagés ; écart sous le
+/// plancher de 0,15.
 pub const STRAFE: Norm = Norm::new("sword.strafe", 0.416, 0.15);
 
 impl Side<'_> {
-    /// Les échanges : des coups séparés par moins de 2 s. Rend le tick et
+    /// Les échanges : des coups séparés par moins de 1 s. Rend le tick et
     /// l'auteur (ce joueur ?) de leur premier coup.
     pub(super) fn exchange_openers(&self) -> Vec<(u64, bool)> {
         let mut out = Vec::new();
@@ -45,27 +50,25 @@ impl Side<'_> {
         Part::of(FIRST_HIT, self.exchange_openers().into_iter().map(|(t, own)| (Some(t), own as u8 as f64)))
     }
 
-    /// Chaque coup à l'épée : donné près de la portée maximale, là où l'autre
-    /// ne touche pas encore, plutôt que collé à lui.
-    fn range(&self) -> Part {
-        let scores = self.hits.iter().filter(|h| self.own(h) && Side::melee(h)).filter_map(|h| {
-            let v = self.view(h.t)?;
-            Some((Some(h.t), ((v.distance - CLOSE_RANGE) / (REACH - CLOSE_RANGE)).clamp(0.0, 1.0)))
-        });
-        Part::of(RANGE, scores)
+    /// La distance moyenne de ses coups à l'épée (affichée, pas notée).
+    fn mean_range(&self) -> Option<f64> {
+        let ranges: Vec<f64> = self.hits.iter().filter(|h| self.own(h) && Side::melee(h)).filter_map(|h| self.view(h.t)).map(|v| v.distance).collect();
+        (!ranges.is_empty()).then(|| ranges.iter().sum::<f64>() / ranges.len() as f64)
     }
 
-    /// Après chacun de ses coups, jusqu'au coup suivant : ne pas lui rentrer dedans.
-    fn spacing(&self) -> Part {
-        let mut part = Part::new(SPACING);
+    /// Combien de fois, entre un de ses coups et le coup suivant, il est
+    /// rentré dans l'autre (sous la moitié du chemin entre 0,5 et 1,5 bloc).
+    /// Affiché, pas noté.
+    fn spacing_lost(&self) -> usize {
+        let mut lost = 0;
         for (i, h) in self.hits.iter().enumerate().filter(|(_, h)| self.own(h)) {
             let Some(n) = self.next_after(i) else { continue };
             let closest = self.views.iter().filter(|v| v.t > h.t && v.t < n.t).map(|v| v.horizontal).fold(f64::MAX, f64::min);
-            if closest < f64::MAX {
-                part.add(Some(h.t), ((closest - SPACING_LOST) / (SPACING_KEPT - SPACING_LOST)).clamp(0.0, 1.0));
+            if closest < (SPACING_LOST + SPACING_KEPT) / 2.0 {
+                lost += 1;
             }
         }
-        part
+        lost
     }
 
     /// La part de son déplacement de côté plutôt que droit sur l'autre,
@@ -86,31 +89,26 @@ impl Side<'_> {
     }
 
     pub(super) fn placement_family(&self, situations: f64) -> Family {
-        let parts = vec![(W_FIRST_HIT, self.first_hits()), (W_RANGE, self.range()), (W_SPACING, self.spacing()), (W_STRAFE, self.strafe())];
+        let parts = vec![(W_FIRST_HIT, self.first_hits()), (W_STRAFE, self.strafe())];
         family(&[(1.0, parts)], situations)
     }
 
-    /// Le détail : les échanges ouverts, la distance moyenne au coup,
-    /// l'espacement perdu, le strafe.
-    pub(super) fn placement_detail(&self, d: &mut Detail) {
+    /// Le détail : les échanges ouverts et le strafe (notés), puis la
+    /// distance au coup et l'espacement perdu, face à face (hors note).
+    pub(super) fn placement_detail(&self, foe: &Side, d: &mut Detail) {
         let first = self.first_hits();
         if let Some(w) = weight(&first, W_FIRST_HIT) {
             let (k, n) = count(&first);
             d.fact("sword.first_hit", w >= 0.0, w, &[k, n]);
         }
-        if let Some(w) = weight(&self.range(), W_RANGE) {
-            let ranges: Vec<f64> = self.hits.iter().filter(|h| self.own(h) && Side::melee(h)).filter_map(|h| self.view(h.t)).map(|v| v.distance).collect();
-            let mean = ranges.iter().sum::<f64>() / ranges.len().max(1) as f64;
-            d.fact("sword.range", w >= 0.0, w, &[(mean * 10.0).round() / 10.0]);
-        }
-        let spacing = self.spacing();
-        if let Some(w) = weight(&spacing, W_SPACING) {
-            let lost = spacing.items.iter().filter(|i| i.value < 0.5).count() as f64;
-            d.fact("sword.spacing", w >= 0.0, w, &[lost]);
-        }
         if let Some(w) = weight(&self.strafe(), W_STRAFE) {
             d.fact("sword.strafe", w >= 0.0, w, &[]);
         }
+        let tenth = |v: f64| (v * 10.0).round() / 10.0;
+        if let (Some(mine), Some(theirs)) = (self.mean_range(), foe.mean_range()) {
+            d.versus("sword.range", &[tenth(mine)], &[tenth(theirs)]);
+        }
+        d.versus("sword.spacing", &[self.spacing_lost() as f64], &[foe.spacing_lost() as f64]);
     }
 }
 
@@ -120,9 +118,9 @@ mod tests {
     use super::super::Hit;
 
     #[test]
-    fn un_echange_s_ouvre_apres_deux_secondes_de_calme() {
+    fn un_echange_s_ouvre_apres_une_seconde_de_calme() {
         let duel = empty_duel();
-        let list = [hit(0, true), hit(10, false), hit(100, false), hit(105, true)];
+        let list = [hit(0, true), hit(10, false), hit(25, false), hit(100, false), hit(105, true)];
         let refs: Vec<&Hit> = list.iter().collect();
         assert_eq!(side(&duel, &refs).exchange_openers(), vec![(0, true), (100, false)]);
     }

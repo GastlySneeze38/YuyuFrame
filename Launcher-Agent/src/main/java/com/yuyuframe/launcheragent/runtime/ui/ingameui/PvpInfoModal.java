@@ -485,10 +485,11 @@ final class PvpInfoModal {
             "Jump reset : sauter au moment où un coup vous touche au sol, ce qui réduit le recul. Un coup reçu en l'air ne compte pas : il n'y avait pas de saut possible.",
             "Pour la monter : sautez au moment de son coup et répondez tout de suite."));
         list.add(family(report, 3, "Placement",
-            "Où êtes-vous quand le coup part ? Quatre mesures : le premier coup de l'échange (35 %), la portée (25 %), l'espacement (20 %), le strafe (20 %).",
-            "Un échange s'arrête après 2 secondes sans coup. Le premier coup de chacun rapporte s'il est à vous, coûte s'il est à lui.",
-            "Portée : frapper près des 3 blocs, là où il ne touche pas encore, plutôt que collé à lui (1,5 bloc ou moins). Espacement : entre deux de vos coups, ne pas lui rentrer dedans. Strafe : quand il est à moins de 5 blocs, la part de votre déplacement de côté plutôt que droit sur lui.",
-            "Pour la monter : gardez la distance de portée et tournez autour de lui."));
+            "Tenez-vous la distance ? Deux mesures : le premier coup de l'échange (75 %) et le strafe (25 %).",
+            "Un échange s'arrête après 1 seconde sans coup. Le premier coup de chacun rapporte s'il est à vous, coûte s'il est à lui : à la limite de la portée, vous pouvez toucher tous les deux, et c'est celui qui frappe le premier qui prend l'échange.",
+            "Strafe : quand il est à moins de 5 blocs, la part de votre déplacement de côté plutôt que droit sur lui.",
+            "La distance au coup et l'espacement entre deux coups sont affichés face à face, mais ne comptent pas : la distance entre vous est la même pour les deux, ils décrivent le duel et non votre jeu.",
+            "Pour la monter : entrez dans sa portée barre pleine pour frapper le premier, et tournez autour de lui."));
         list.add(new Topic("Pas de ressources",
             "En épée, le seul objet est l'épée : il n'y a pas de ressources à juger. Cette famille n'existe qu'en masse, et la note de l'épée n'est faite que des quatre autres."));
 
@@ -521,16 +522,16 @@ final class PvpInfoModal {
             "# 2. Lissage",
             "Une famille mesurée sur peu de coups est tirée vers la moyenne : on compte 2 situations moyennes de plus.",
             "# 3. Combinaison",
-            "Les quatre familles sont moyennées, puis élargies de 1,37 fois : une moyenne est plus resserrée qu'une famille seule. Cet élargissement n'est pas choisi : il vient de la façon dont les familles montent ensemble chez les joueurs, mesurée sur les duels partagés.",
+            "Les quatre familles sont moyennées, puis élargies de 1,39 fois : une moyenne est plus resserrée qu'une famille seule. Cet élargissement n'est pas choisi : il vient de la façon dont les familles montent ensemble chez les joueurs, mesurée sur les duels partagés.",
             "Être bon partout est plus rare qu'être bon dans une famille : un duel très régulier peut donc avoir une note un peu au-dessus de sa meilleure famille. C'est le même principe qu'un QI total.",
             "# 4. Note",
             "La note vaut 250, plus 100 par écart, en ligne droite, de 0 à 500. Chaque action dit ce qu'elle a rapporté."));
         list.add(new Topic("Confiance et seuils",
             "La confiance dit sur combien de coups la note repose : n / (n + 12), où n compte les coups du duel. 12 coups donnent 50 %, 48 en donnent 80 %.",
-            "Un duel n'est pas noté s'il a duré moins de 20 secondes au contact, ou s'il compte moins de 6 coups en tout."));
+            "Un duel à l'épée se juge à ses coups, pas à sa durée : un kill propre peut prendre dix secondes. Il n'est pas noté s'il compte moins de 15 coups en tout, ou moins de 5 secondes au contact."));
         list.add(new Topic("Limites",
             "La note de l'épée a été posée sur peu de duels : ce qu'on attend de chaque action sera ajusté avec les duels partagés, et les notes pourront bouger.",
-            "Le recul, la portée et le strafe se lisent dans ses positions, qui arrivent avec du retard : ce sont les mesures les moins précises.",
+            "Le recul et le strafe se lisent dans ses positions, qui arrivent avec du retard : ce sont les mesures les moins précises.",
             "Le ping est affiché, jamais corrigé.",
             "Les journaux de vos duels sont dans le dossier de l'instance, sous yuyuframe/matches."));
         return list;

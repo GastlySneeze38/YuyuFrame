@@ -51,14 +51,17 @@ use super::parse::Mode;
 // Version 18 (2026-10-22) : l'épée est notée.
 // Version 19 (2026-10-22) : l'élargissement se déduit de la corrélation
 // mesurée entre familles (masse 1,37, épée 1,37 au lieu de 2,0).
-pub const SCORE_VERSION: u32 = 19;
+// Version 20 (2026-10-22) : placement à l'épée = premier coup de l'échange
+// (ouvert après 1 s de calme) et strafe ; portée et espacement hors note.
+// Version 21 (2026-10-22) : un duel à l'épée se note dès 5 s au contact et
+// 15 coups (20 s et 6 coups avant).
+pub const SCORE_VERSION: u32 = 21;
 
 /// Poids du lissage : une famille observée sur `K` événements est tirée à
 /// moitié vers l'attendu. Ramené de 5 à 2 le 2026-10-15 : sur peu de
 /// matière, la moyenne effaçait ce qui s'était passé. Un seul événement
 /// compte pour un tiers.
 pub(super) const K: f64 = 2.0;
-const MIN_ENGAGED_SECS: f64 = 20.0;
 
 /// L'échelle d'un mode : ce qui ramène ses familles à la note.
 pub(super) struct Scale {
@@ -73,6 +76,8 @@ pub(super) struct Scale {
     pub correlation: f64,
     /// Combien de familles font la note, les premières cases du résumé.
     pub families: usize,
+    /// En dessous de ce temps au contact, le duel n'est pas noté.
+    pub min_engaged_secs: f64,
     /// En dessous de ce nombre de situations, le duel n'est pas noté.
     pub min_evidence: usize,
     /// La confiance : situations / (situations + ce nombre).
@@ -90,19 +95,25 @@ pub(super) struct Scale {
 /// déduit de la corrélation entre familles, mesurée sur ces 31 joueurs :
 /// 0,412, soit un élargissement de 1,37. La confiance garde son échelle
 /// d'origine : 5 opportunités donnent 50 %, 20 en donnent 80 %.
-const MACE: Scale = Scale { spread: [0.365, 0.708, 0.256, 0.249, 0.211], correlation: 0.412, families: 5, min_evidence: 3, k_confidence: 5.0 };
+const MACE: Scale = Scale { spread: [0.365, 0.708, 0.256, 0.249, 0.211], correlation: 0.412, families: 5, min_engaged_secs: 20.0, min_evidence: 3, k_confidence: 5.0 };
 /// L'épée (2026-10-22) : combos, qualité du coup, défense, placement — pas
 /// de ressources, le kit noté n'a que l'épée. Écarts relevés sur 23 duels à
 /// l'épée partagés (kits avec totems compris : les coups sont les mêmes) ;
-/// seuls 8 sont à l'épée seule, trop peu pour calibrer dessus. Corrélation
-/// entre familles : +0,227 mesurée sur ces 8 joueurs (±0,34), tirée vers
-/// celle de la masse comme si elle valait 30 joueurs, soit 0,373 et un
-/// élargissement de 1,37. (Un 2,0 posé à la main la supposait nulle : un
-/// joueur bon partout passait au-dessus de toutes ses familles, et au
+/// seuls 8 sont à l'épée seule, trop peu pour calibrer dessus. Placement
+/// refait le 2026-10-22 (premier coup de l'échange et strafe, portée et
+/// espacement sortis) : écart 0,308 sur les 8 duels à l'épée seule.
+/// Corrélation entre familles : +0,173 mesurée sur ces 8 joueurs (±0,34),
+/// tirée vers celle de la masse comme si elle valait 30 joueurs, soit 0,362
+/// et un élargissement de 1,39. (Un 2,0 posé à la main la supposait nulle :
+/// un joueur bon partout passait au-dessus de toutes ses familles, et au
 /// plafond.) *À recalibrer* sur les duels à l'épée seule (`YF_MODE=sword`)
 /// dès qu'il y en aura une cinquantaine. Les situations sont les coups
-/// échangés : 6 au moins, et 12 donnent une confiance de 50 %.
-const SWORD: Scale = Scale { spread: [0.304, 0.416, 0.287, 0.298, 1.0], correlation: 0.373, families: 4, min_evidence: 6, k_confidence: 12.0 };
+/// échangés : 12 donnent une confiance de 50 %. Un duel à l'épée est court
+/// (la moitié des 18 duels locaux durent moins de 25 s au contact, un kill
+/// propre en 8 s) : les 20 s de la masse en écartaient de vrais. Il est
+/// donc jugé sur ses coups — 15 au moins — et 5 s ne servent qu'à écarter
+/// une rencontre de passage.
+const SWORD: Scale = Scale { spread: [0.304, 0.416, 0.287, 0.308, 1.0], correlation: 0.362, families: 4, min_engaged_secs: 5.0, min_evidence: 15, k_confidence: 12.0 };
 
 impl Scale {
     /// De la moyenne des écarts à l'écart de la note, comme un QI total est
@@ -253,7 +264,7 @@ pub fn rate(features: &Features, prior: &Prior) -> Rating {
     let measures = [features.conversion, features.smash_quality, features.exposure, features.vertical, features.resources];
     let subs: Vec<Sub> = measures.iter().zip(s.spread).map(|(m, spread)| sub(*m, spread, per_z)).collect();
     let (opponent, opponent_families) = opponent_level(features, s);
-    let reason = if features.engaged_secs < MIN_ENGAGED_SECS {
+    let reason = if features.engaged_secs < s.min_engaged_secs {
         Some("too_short")
     } else if features.evidence < s.min_evidence {
         Some("too_few_opportunities")
@@ -383,7 +394,7 @@ mod tests {
 
     #[test]
     fn l_elargissement_suit_la_correlation_entre_familles() {
-        let with = |correlation: f64| Scale { spread: [1.0; 5], correlation, families: 4, min_evidence: 0, k_confidence: 1.0 }.factor();
+        let with = |correlation: f64| Scale { spread: [1.0; 5], correlation, families: 4, min_engaged_secs: 0.0, min_evidence: 0, k_confidence: 1.0 }.factor();
         // Indépendantes : √4 ; parfaitement liées : la simple moyenne.
         assert!((with(0.0) - 2.0).abs() < 1e-9);
         assert!((with(1.0) - 1.0).abs() < 1e-9);

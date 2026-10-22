@@ -392,8 +392,6 @@ final class PvpFamilyModal {
         ACTIONS.put("sword.break", new String[]{ "Son combo cassé", "Son combo continue" });
         ACTIONS.put("sword.jump_reset", new String[]{ "Jump reset", "Coup reçu sans jump reset" });
         ACTIONS.put("sword.first_hit", new String[]{ "Échange ouvert par vous", "Échange ouvert par lui" });
-        ACTIONS.put("sword.range", new String[]{ "Coup au bout de la portée", "Coup collé à lui" });
-        ACTIONS.put("sword.spacing", new String[]{ "Distance gardée", "Vous lui êtes rentré dedans" });
         ACTIONS.put("sword.strafe", new String[]{ "Déplacements de côté", "Déplacements droit sur lui" });
         CHANCES.put("sword.wtap", false);
 
@@ -493,8 +491,6 @@ final class PvpFamilyModal {
         FACTS.put("sword.break", "{0} de ses {1} enchaînements cassés");
         FACTS.put("sword.jump_reset", "{0} jump reset{s0} sur {1} coups reçus au sol");
         FACTS.put("sword.first_hit", "{0} échange{s0} ouvert{s0} sur {1}");
-        FACTS.put("sword.range", "Coups donnés à {0} blocs en moyenne");
-        FACTS.put("sword.spacing", "{0} fois rentré dedans entre deux coups");
         FACTS.put("sword.strafe", "Vos déplacements de côté face à lui");
         FACTS.put("resources.useful", "{0} charge{s0} de vent et perle{s0} utile{s0} sur {1}");
         FACTS.put("resources.mace_ready", "Masse en main à temps : {0} fois sur {1}");
@@ -513,6 +509,9 @@ final class PvpFamilyModal {
         VERSUS.put("sword.longest", "Plus long combo : {0}");
         VERSUS.put("sword.crits", "{0} critique{s0}");
         VERSUS.put("sword.jump_reset", "{0} jump reset{s0} sur {1}");
+        // Hors note : la distance entre deux joueurs est la même pour les deux.
+        VERSUS.put("sword.range", "Coups donnés à {0} blocs en moyenne");
+        VERSUS.put("sword.spacing", "{0} fois rentré dedans entre deux coups");
 
         ADVICE.put("conversion.easy_missed", "Une ouverture facile, c'est collé à lui sur une chute courte : frappez-la sans attendre.");
         ADVICE.put("smash.none", "Une ouverture qui passe sans coup ne rapporte rien : frappez pendant la chute, même trop tôt plutôt que jamais.");
@@ -537,7 +536,7 @@ final class PvpFamilyModal {
         ADVICE.put("sword.break", "Quand il enchaîne, sautez au moment du coup et reprenez la main au lieu d'encaisser.");
         ADVICE.put("sword.jump_reset", "Sautez au moment où son coup arrive : vous prenez moins de recul et revenez plus vite.");
         ADVICE.put("sword.first_hit", "Entrez dans sa portée au moment où votre barre est pleine, pour porter le premier coup.");
-        ADVICE.put("sword.spacing", "Entre deux coups, relâchez l'avant : lui rentrer dedans le laisse répondre.");
+        ADVICE.put("sword.strafe", "À portée, déplacez-vous de côté plutôt que droit sur lui.");
         ADVICE.put("resources.useful", "Chaque charge de vent doit servir : monter pour attaquer, casser son smash ou vous dégager.");
         ADVICE.put("resources.mace_ready", "Passez à la masse dès que l'ouverture se dessine.");
         ADVICE.put("resources.totem_refill", "Remettez un totem dans l'autre main dès que le premier saute.");

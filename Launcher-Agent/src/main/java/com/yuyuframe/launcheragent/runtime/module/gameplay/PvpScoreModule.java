@@ -343,7 +343,14 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
         private void drawFigures(UiRenderer r, double[] report, float left, float right, float top, float s, int vw, int vh) {
             float bottom = top - FIGURES_H * s;
             long seconds = Math.round(report[NativeCombat.REPORT_ENGAGED_SECS]);
-            String[][] figures = {
+            // L'épée n'a pas d'opportunités de smash : ses deux premières cases
+            // sont le W-tap et le plus long combo, le cœur du mode.
+            String[][] figures = isSword(report) ? new String[][] {
+                { "W-TAPS", (int) report[NativeCombat.REPORT_SWORD_WTAPS_LANDED] + " / " + (int) report[NativeCombat.REPORT_SWORD_WTAPS] },
+                { "PLUS LONG COMBO", String.valueOf((int) report[NativeCombat.REPORT_SWORD_LONGEST_COMBO]) },
+                { "AU CONTACT", seconds >= 60 ? (seconds / 60) + " min " + (seconds % 60) + " s" : seconds + " s" },
+                { "PING", report[NativeCombat.REPORT_PING] >= 0 ? Math.round(report[NativeCombat.REPORT_PING]) + " ms" : PvpScoreUi.NO_SCORE },
+            } : new String[][] {
                 { "CONVERTIES", (int) report[NativeCombat.REPORT_MY_CONVERTED] + " / " + (int) report[NativeCombat.REPORT_MY_OPENED] },
                 { "SUBIES", (int) report[NativeCombat.REPORT_THEIR_CONVERTED] + " / " + (int) report[NativeCombat.REPORT_THEIR_OPENED] },
                 { "AU CONTACT", seconds >= 60 ? (seconds / 60) + " min " + (seconds % 60) + " s" : seconds + " s" },

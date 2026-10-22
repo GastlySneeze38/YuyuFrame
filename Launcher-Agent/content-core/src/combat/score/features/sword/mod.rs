@@ -127,8 +127,10 @@ impl Side<'_> {
         let own = self.hits.iter().filter(|h| self.own(h)).count() as f64;
         let theirs = self.hits.len() as f64 - own;
         let (combos, failures) = self.combo_family(own);
+        // Le placement repose sur les échanges (le strafe n'est qu'une
+        // tendance du duel) : c'est leur nombre qui le lisse.
         let openers = self.exchange_openers().len() as f64;
-        ([combos, self.quality_family(own), self.defense_family(theirs), self.placement_family(own + openers)], failures)
+        ([combos, self.quality_family(own), self.defense_family(theirs), self.placement_family(openers)], failures)
     }
 }
 
@@ -175,7 +177,7 @@ fn detail(me: &Side, foe: &Side, failures: &[(u64, f64)], d: &mut [Detail; 5]) -
     me.combo_detail(foe, failures, &mut d[0], &mut figures);
     me.quality_detail(foe, &mut d[1], &mut figures);
     me.defense_detail(foe, &mut d[2], &mut figures);
-    me.placement_detail(&mut d[3]);
+    me.placement_detail(foe, &mut d[3]);
     figures
 }
 
