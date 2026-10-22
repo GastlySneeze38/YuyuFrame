@@ -18,6 +18,7 @@
 mod bridge;
 mod history;
 mod journal;
+mod ranked;
 mod record;
 mod score;
 mod share;

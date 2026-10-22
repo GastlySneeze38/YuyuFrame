@@ -198,7 +198,7 @@ impl Duel {
 /// rien d'autre en main ni dans l'autre main, aucun objet utilisé, aucun
 /// totem. Un kit épée avec totems, pommes ou perles est un autre mode, pas
 /// encore noté.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Mode {
     Mace,
