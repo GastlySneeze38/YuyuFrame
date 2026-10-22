@@ -30,28 +30,32 @@ const W_BLOCKED: f64 = 0.75;
 const W_GROUND_SHIELD: f64 = 0.10;
 const W_EFFICIENCY: f64 = 0.15;
 
-// Ce qu'on attend de chaque sorte d'action. Les moyennes reprennent les
-// centres relevés le 2026-10-15 (bouclier 0,29 sur 28 relevés — nous 0,21,
-// nos adversaires 0,38 —, temps vulnérable 0,38 sur 43, esquive 0,26 et
-// reprise 0,88 sur 52) ; le reste et les écarts sont posés à la main.
-/// Chaque gros coup qu'il pouvait mettre : arrêté (1), passé ou garde cassée (0).
-pub const BLOCKED: Norm = Norm::new("defense.blocked", 0.29, 0.45);
-pub const GROUND_SHIELD: Norm = Norm::new("defense.ground_shield", 0.8, 0.25);
-pub const SHIELD_EFFICIENCY: Norm = Norm::new("defense.shield_efficiency", 0.3, 0.3);
-pub const VULNERABLE: Norm = Norm::new("defense.vulnerable", 0.38, 0.25);
+// Ce qu'on attend de chaque sorte d'action : relevé le 2026-10-22 sur les
+// duels notés partagés, les deux joueurs (`calibration`, test
+// `proposition_de_calibrage`) — 31 duels complets, plus 11 d'un serveur où
+// aucun smash n'est relevé pour le bouclier au sol, son efficacité, le
+// temps vulnérable et la reprise (smashs arrêtés, esquives et chutes
+// viennent des 31 seuls). Un écart relevé sous 0,15 est porté à 0,15.
+/// Chaque gros coup qu'il pouvait mettre, pesé de ses dégâts : arrêté (1),
+/// passé ou garde cassée (0). 6 % arrêtés : le bouclier est rare.
+pub const BLOCKED: Norm = Norm::new("defense.blocked", 0.059, 0.452);
+pub const GROUND_SHIELD: Norm = Norm::new("defense.ground_shield", 0.961, 0.15);
+pub const SHIELD_EFFICIENCY: Norm = Norm::new("defense.shield_efficiency", 0.242, 0.467);
+pub const VULNERABLE: Norm = Norm::new("defense.vulnerable", 0.482, 0.159);
 /// Chaque descente qui le menaçait : esquivée ou non, face à sa chance.
-pub const DODGE: Norm = Norm::new("defense.dodge", 0.26, 0.44);
+pub const DODGE: Norm = Norm::new("defense.dodge", 0.222, 0.416);
 /// Chaque chute qui a fait mal après un smash raté : ce qui n'est pas perdu.
-/// On attend de n'en perdre aucun (1) : une chute ne fait que coûter.
-pub const LANDING: Norm = Norm::new("defense.landing", 1.0, 0.5);
-pub const RECOVERY: Norm = Norm::new("defense.recovery", 0.88, 0.25);
+/// On attend de n'en perdre aucun (1), par construction : une chute ne fait
+/// que coûter.
+pub const LANDING: Norm = Norm::new("defense.landing", 1.0, 0.39);
+pub const RECOVERY: Norm = Norm::new("defense.recovery", 0.839, 0.234);
 
 /// La chance d'esquiver une descente, d'après sa situation au départ :
-/// distance horizontale et hauteur de l'attaquant au-dessus. Posée à la
-/// moyenne observée (0,26) en attendant d'être apprise
-/// (`calibration`, test `proposition_de_calibrage`).
-const DODGE_BIAS: f64 = -1.046;
-const DODGE_COEFS: [f64; 2] = [0.0, 0.0];
+/// distance horizontale et hauteur de l'attaquant au-dessus. Apprise le
+/// 2026-10-22 sur 1 567 descentes : plus elle part loin, plus elle
+/// s'esquive (22 % en moyenne).
+const DODGE_BIAS: f64 = -2.14;
+const DODGE_COEFS: [f64; 2] = [0.227, 0.032];
 
 /// « En l'air » : 4 blocs et plus au-dessus du sol. Un blocage en l'air vaut
 /// ×1, au sol ×0,1, sans rampe entre les deux (décision du 2026-10-14).

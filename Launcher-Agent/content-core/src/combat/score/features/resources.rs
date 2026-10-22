@@ -21,33 +21,36 @@ const W_TOTEMS: f64 = 0.15;
 const W_POTIONS: f64 = 0.10;
 const W_ROCKETS: f64 = 0.05;
 
-// Ce qu'on attend de chaque sorte d'action. Les moyennes reprennent celles
-// des groupes relevées le 2026-10-15 sur NOS duels seuls (rien ne se mesure
-// chez l'adversaire) : charges de vent et perles 0,32, barre d'inventaire
-// 0,53, nourriture et vie 0,80, délai des totems 0,10 ; potions et fusées,
-// jamais relevées, à 0,5. Les écarts sont posés à la main. Les duels
-// partagés par les joueurs en font enfin une moyenne de joueurs.
+// Ce qu'on attend de chaque sorte d'action : relevé le 2026-10-22 sur les
+// duels notés partagés (rien ne se mesure chez l'adversaire : le joueur
+// seul), `calibration`, test `proposition_de_calibrage` — 31 duels
+// complets, plus 11 d'un serveur où aucun smash n'est relevé pour tout sauf
+// l'efficacité des charges de vent (qui demande une ouverture convertie). Un
+// écart relevé sous 0,15 est porté à 0,15. Les potions ne viennent que de
+// 17 et 56 relevés d'un seul joueur ; potion bue à l'abri et fusées (7
+// relevées), trop rares, restent à 0,5.
 // 5. Charges de vent et perles.
-pub const USEFUL: Norm = Norm::new("resources.useful", 0.32, 0.47);
-pub const EFFECTIVE: Norm = Norm::new("resources.effective", 0.32, 0.47);
-pub const ANSWERED: Norm = Norm::new("resources.answered", 0.32, 0.47);
+pub const USEFUL: Norm = Norm::new("resources.useful", 0.543, 0.499);
+pub const EFFECTIVE: Norm = Norm::new("resources.effective", 0.206, 0.394);
+pub const ANSWERED: Norm = Norm::new("resources.answered", 0.355, 0.472);
 // 1. La barre d'inventaire.
-pub const MACE_READY: Norm = Norm::new("resources.mace_ready", 0.53, 0.4);
-pub const WIND_READY: Norm = Norm::new("resources.wind_ready", 0.53, 0.4);
-pub const APPLE_READY: Norm = Norm::new("resources.apple_ready", 0.53, 0.4);
-pub const SWITCH: Norm = Norm::new("resources.switch", 0.53, 0.4);
+pub const MACE_READY: Norm = Norm::new("resources.mace_ready", 0.45, 0.454);
+pub const WIND_READY: Norm = Norm::new("resources.wind_ready", 0.572, 0.37);
+pub const APPLE_READY: Norm = Norm::new("resources.apple_ready", 0.281, 0.422);
+pub const SWITCH: Norm = Norm::new("resources.switch", 0.739, 0.41);
 // 2. La nourriture et la vie.
-pub const APPLE: Norm = Norm::new("resources.apple", 0.8, 0.3);
-pub const MEAL: Norm = Norm::new("resources.meal", 0.8, 0.4);
-pub const HUNGER: Norm = Norm::new("resources.hunger", 0.8, 0.25);
-pub const LOW_TIME: Norm = Norm::new("resources.low_time", 0.8, 0.2);
-pub const HEAL: Norm = Norm::new("resources.heal", 0.8, 0.3);
-// 4. Les totems : chacun qu'on lui fait sauter (1) ou qui nous saute (0).
-pub const TOTEM_REFILL: Norm = Norm::new("resources.totem_refill", 0.10, 0.3);
+pub const APPLE: Norm = Norm::new("resources.apple", 0.52, 0.4);
+pub const MEAL: Norm = Norm::new("resources.meal", 0.713, 0.423);
+pub const HUNGER: Norm = Norm::new("resources.hunger", 0.939, 0.15);
+pub const LOW_TIME: Norm = Norm::new("resources.low_time", 0.908, 0.15);
+pub const HEAL: Norm = Norm::new("resources.heal", 0.508, 0.359);
+// 4. Les totems : le délai pour en remettre un ; chacun qu'on lui fait
+// sauter (1) ou qui nous saute (0) — 0,5 par symétrie (0,52 relevé sur 88).
+pub const TOTEM_REFILL: Norm = Norm::new("resources.totem_refill", 0.069, 0.15);
 pub const TOTEM_BALANCE: Norm = Norm::new("resources.totem_balance", 0.5, 0.5);
 // 3. Les potions, 6. les fusées.
-pub const POTION_ACTIVE: Norm = Norm::new("resources.potion_active", 0.5, 0.3);
-pub const POTION_RENEW: Norm = Norm::new("resources.potion_renew", 0.5, 0.35);
+pub const POTION_ACTIVE: Norm = Norm::new("resources.potion_active", 0.863, 0.194);
+pub const POTION_RENEW: Norm = Norm::new("resources.potion_renew", 0.106, 0.186);
 pub const POTION_SAFE: Norm = Norm::new("resources.potion_safe", 0.5, 0.5);
 pub const ROCKET: Norm = Norm::new("resources.rocket", 0.5, 0.5);
 

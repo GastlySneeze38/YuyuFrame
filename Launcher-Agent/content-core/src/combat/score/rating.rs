@@ -41,7 +41,9 @@ use super::features::{Features, Measure};
 // Version 13 (2026-10-15) : lissage à 2 événements au lieu de 5.
 // Version 14 (2026-10-22) : note sur 500 en ligne droite, chaque action
 // jugée face à ce qu'en tire un joueur moyen, points d'action.
-pub const SCORE_VERSION: u32 = 14;
+// Version 15 (2026-10-22) : attendus, modèles de chance, écarts des
+// familles et élargissement calibrés sur 31 duels notés partagés.
+pub const SCORE_VERSION: u32 = 15;
 
 /// Poids du lissage : une famille observée sur `K` événements est tirée à
 /// moitié vers l'attendu. Ramené de 5 à 2 le 2026-10-15 : sur peu de
@@ -59,18 +61,19 @@ const MIN_ENGAGED_SECS: f64 = 20.0;
 /// De combien une famille s'écarte d'ordinaire d'un duel à l'autre, après
 /// lissage (dans l'unité de `Measure::gap`) : ce qui la ramène à un écart
 /// de note. Dans l'ordre : conversion, qualité du smash, défense, contrôle,
-/// ressources — les quatre premières servent aussi à l'adversaire. Posés à
-/// la main le 2026-10-22 ; *à recalculer* sur les duels partagés
-/// (`calibration`, test `proposition_de_calibrage`).
-const FAMILY_SPREAD: [f64; 5] = [0.4, 0.45, 0.35, 0.3, 0.3];
+/// ressources — les quatre premières servent aussi à l'adversaire. Relevés
+/// le 2026-10-22 sur 31 duels notés partagés, les deux joueurs
+/// (`calibration`, test `proposition_de_calibrage`). Celui de la qualité du
+/// smash est large : un duel sans aucun smash sur ses ouvertures y pèse lourd.
+const FAMILY_SPREAD: [f64; 5] = [0.365, 0.708, 0.235, 0.227, 0.211];
 
 /// De la moyenne des écarts à l'écart de la note. Une moyenne de familles
 /// est plus resserrée qu'une famille seule, il faut donc l'élargir — mais
 /// pas comme si elles étaient indépendantes (×√6) : un joueur bon dans l'une
-/// l'est souvent dans les autres, et ce facteur-là faisait sortir 97 sur 100
-/// d'un duel dont les familles valaient 52 à 97. Valeur pour des familles à
-/// moitié liées, à mesurer sur les matchs collectés.
-const SPREAD_FACTOR: f64 = 1.3;
+/// l'est souvent dans les autres. Posé à 1,3 au jugé ; relevé le 2026-10-22
+/// à 1,83 sur 31 duels (ce qui donne à la note un écart de 100) : les
+/// familles sont moins liées qu'on le pensait.
+pub(super) const SPREAD_FACTOR: f64 = 1.83;
 
 /// La note d'un joueur moyen, ce que vaut un écart, et le plafond.
 pub const CENTER: f64 = 250.0;

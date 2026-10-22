@@ -19,36 +19,40 @@ const W_PEAK: f64 = 0.15;
 const W_HORIZONTAL: f64 = 0.15;
 const W_CHAIN: f64 = 0.15;
 
-// Ce qu'on attend de chaque sorte d'action. Les moyennes reprennent celles
-// des groupes relevées le 2026-10-15 sur 23 duels (suivre 0,50, prendre la
-// hauteur 0,63, se placer 0,82, se déplacer 0,46, enchaîner 0,34) ; les
-// écarts sont posés à la main.
+// Ce qu'on attend de chaque sorte d'action : relevé le 2026-10-22 sur les
+// duels notés partagés, les deux joueurs (`calibration`, test
+// `proposition_de_calibrage`) — 31 duels complets, plus 11 d'un serveur où
+// aucun smash n'est relevé pour les sortes qui n'en dépendent pas (premier
+// coup et enchaînements viennent des 31 seuls). Un écart relevé sous 0,15
+// est porté à 0,15 : la vitesse de montée (0,98) et la longueur des chaînes
+// (0,04) valent presque toujours la même chose, une seule action ordinaire
+// y ferait sinon un écart de dix.
 // C. Suivre pendant la chute.
-pub const REACHED: Norm = Norm::new("control.reached", 0.5, 0.5);
-pub const CAUGHT: Norm = Norm::new("control.caught", 0.5, 0.35);
-pub const FIRST_TIME: Norm = Norm::new("control.first_time", 0.5, 0.5);
+pub const REACHED: Norm = Norm::new("control.reached", 0.631, 0.415);
+pub const CAUGHT: Norm = Norm::new("control.caught", 0.518, 0.45);
+pub const FIRST_TIME: Norm = Norm::new("control.first_time", 0.204, 0.343);
 // A. Prendre la hauteur.
-pub const CLIMB_SPEED: Norm = Norm::new("control.climb_speed", 0.63, 0.3);
-pub const RETAKE: Norm = Norm::new("control.retake", 0.63, 0.3);
-pub const WIND_HEIGHT_NORM: Norm = Norm::new("control.wind_height", 0.63, 0.3);
-pub const DOMINATION: Norm = Norm::new("control.domination", 0.63, 0.2);
+pub const CLIMB_SPEED: Norm = Norm::new("control.climb_speed", 0.985, 0.15);
+pub const RETAKE: Norm = Norm::new("control.retake", 0.523, 0.33);
+pub const WIND_HEIGHT_NORM: Norm = Norm::new("control.wind_height", 0.698, 0.413);
+pub const DOMINATION: Norm = Norm::new("control.domination", 0.552, 0.15);
 // B. Se placer au sommet.
-pub const PEAK: Norm = Norm::new("control.peak", 0.82, 0.25);
+pub const PEAK: Norm = Norm::new("control.peak", 0.686, 0.391);
 // D. Se déplacer à l'horizontale.
-pub const CLOSING: Norm = Norm::new("control.closing", 0.46, 0.2);
-pub const LUNGE: Norm = Norm::new("control.lunge", 0.46, 0.5);
-pub const GLIDE: Norm = Norm::new("control.glide", 0.46, 0.5);
+pub const CLOSING: Norm = Norm::new("control.closing", 0.425, 0.15);
+pub const LUNGE: Norm = Norm::new("control.lunge", 0.293, 0.527);
+pub const GLIDE: Norm = Norm::new("control.glide", 0.426, 0.494);
 // E. Enchaîner et reconstruire.
-pub const FOLLOW_UP: Norm = Norm::new("control.follow_up", 0.34, 0.47);
-pub const CHAIN_LENGTH: Norm = Norm::new("control.chain_length", 0.34, 0.35);
-pub const REBUILD: Norm = Norm::new("control.rebuild", 0.34, 0.3);
+pub const FOLLOW_UP: Norm = Norm::new("control.follow_up", 0.293, 0.469);
+pub const CHAIN_LENGTH: Norm = Norm::new("control.chain_length", 0.039, 0.15);
+pub const REBUILD: Norm = Norm::new("control.rebuild", 0.419, 0.366);
 
 /// La chance qu'une descente qui le vise arrive à portée, d'après sa
 /// situation au départ : distance horizontale et hauteur au-dessus de lui.
-/// Posée à la moyenne observée (0,5) en attendant d'être apprise
-/// (`calibration`, test `proposition_de_calibrage`).
-const REACH_BIAS: f64 = 0.0;
-const REACH_COEFS: [f64; 2] = [0.0, 0.0];
+/// Apprise le 2026-10-22 sur 2 539 descentes : plus elle part loin, moins
+/// elle arrive ; plus elle part haut, plus elle a le temps (63 % en moyenne).
+const REACH_BIAS: f64 = 1.232;
+const REACH_COEFS: [f64; 2] = [-0.492, 0.163];
 
 /// Une descente qui commence plus loin ne vise personne (*à calibrer*).
 const NEAR_DESCENT: f64 = 10.0;

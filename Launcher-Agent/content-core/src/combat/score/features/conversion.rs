@@ -12,12 +12,15 @@
 
 use super::{logistic, single, Family, Item, Norm, Opportunity, Part, BIG_FALL};
 
-// La chance de réussite d'une opportunité : une régression logistique sur
-// cinq critères, apprise sur les opportunités des deux joueurs, tous duels
-// confondus (`calibration`, test `proposition_de_calibrage`). Posée d'abord
-// à la main, pour qu'une opportunité ordinaire — 1,5 bloc de décalage, cible
-// qui marche, six ticks, six blocs de chute — tourne autour de 35 %.
-const BIAS: f64 = 0.9;
+// La chance de réussite d'une opportunité : une régression logistique,
+// apprise le 2026-10-22 sur 1 149 opportunités des deux joueurs de 31 duels
+// notés partagés (`calibration`, test `proposition_de_calibrage`). La durée
+// de la fenêtre et sa chute n'y sont pas apprises (coefficients à 0) : la
+// fenêtre se ferme au coup, donc une ouverture convertie paraît toujours plus
+// courte et moins haute — ces deux critères diraient le résultat, pas la
+// difficulté. Une opportunité ordinaire — 1,5 bloc de décalage, cible qui
+// marche — tourne autour de 35 % ; en moyenne, 32 % sont converties.
+const BIAS: f64 = 0.452;
 /// Dans l'ordre de [`criteria`] : par bloc de décalage horizontal à
 /// l'ouverture (collé à la cible, c'est facile) ; par bloc par tick de
 /// vitesse horizontale de la cible (en sprint, sur une charge de vent, elle
@@ -25,14 +28,15 @@ const BIAS: f64 = 0.9;
 /// fenêtre longue laisse le temps) ; par bloc de chute (on arrive vite, la
 /// cible a le temps de se replacer, décision du 2026-10-14) ; cible au
 /// bouclier levé, attaquant dans son dos (il faut l'avoir contourné).
-const COEFS: [f64; 5] = [-0.5, -4.0, 0.08, -0.08, -1.0];
+const COEFS: [f64; 5] = [-0.257, -6.54, 0.0, 0.0, -1.796];
 pub(super) const MAX_WINDOW_TICKS: f64 = 20.0;
 
 /// Ce qu'on attend d'une ouverture : la moyenne n'y sert pas (chacune a sa
-/// chance), l'écart est celui d'un tirage à environ 35 %.
-pub const OPENING: Norm = Norm::new("conversion.opening", 0.35, 0.45);
+/// chance), l'écart est celui du résultat autour de sa chance (relevés du
+/// 2026-10-22).
+pub const OPENING: Norm = Norm::new("conversion.opening", 0.323, 0.442);
 /// Les ouvertures de l'adversaire vues de la défense : qu'elles ne passent pas.
-pub const OPENING_LEFT: Norm = Norm::new("defense.openings", 0.65, 0.45);
+pub const OPENING_LEFT: Norm = Norm::new("defense.openings", 0.677, 0.442);
 
 /// Les cinq critères d'une opportunité, dans l'ordre de `COEFS`.
 pub fn criteria(offset: f64, target_speed: f64, ticks: u64, fall: f64, behind_shield: bool) -> [f64; 5] {
@@ -164,10 +168,11 @@ mod tests {
     fn la_chance_suit_la_difficulte() {
         let easy = chance(0.2, 0.0, 15, 3.0, false);
         let hard = chance(3.4, 0.4, 3, 15.0, true);
-        assert!(easy > 0.6 && hard < 0.1, "{easy} {hard}");
-        assert!(chance(1.5, 0.0, 6, 15.0, false) < chance(1.5, 0.0, 6, 3.0, false), "une grosse chute est plus difficile");
+        assert!(easy > 0.55 && hard < 0.1, "{easy} {hard}");
+        assert!(chance(1.5, 0.3, 6, 6.0, false) < chance(1.5, 0.0, 6, 6.0, false), "une cible rapide est plus difficile");
+        assert_eq!(chance(1.5, 0.0, 6, 15.0, false), chance(1.5, 0.0, 20, 3.0, false), "ni la durée ni la chute ne sont apprises");
         let ordinary = chance(1.5, 0.2, 6, 6.0, false);
-        assert!(ordinary > 0.25 && ordinary < 0.45, "{ordinary}");
+        assert!(ordinary > 0.15 && ordinary < 0.45, "{ordinary}");
     }
 
     fn gap(list: &[Opportunity], attacker: bool) -> f64 {

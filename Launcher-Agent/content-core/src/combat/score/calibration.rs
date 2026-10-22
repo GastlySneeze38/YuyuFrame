@@ -329,6 +329,26 @@ const LEAKING_CRITERIA: [usize; 2] = [2, 3];
 #[cfg(test)]
 const MIN_SPREAD: f64 = 0.15;
 
+/// Les sortes d'action faussées quand un serveur ne laisse voir aucun smash
+/// (2026-10-22) : tout ce qui demande si une ouverture a été convertie, si
+/// un smash est passé, ou qui en découle (une descente « esquivée » faute de
+/// smash vu, une chute « après un raté » qui suivait en fait un coup). Les
+/// duels d'un tel serveur apprennent toutes les autres.
+#[cfg(test)]
+const SMASH_DEPENDENT: [&str; 11] = [
+    "conversion.opening",
+    "defense.openings",
+    "defense.blocked",
+    "defense.dodge",
+    "defense.landing",
+    "control.first_time",
+    "control.follow_up",
+    "control.chain_length",
+    "resources.effective",
+    "smash.hit",
+    "smash.none",
+];
+
 /// Les sortes dont l'attendu est fixé par construction, pas par la moyenne :
 /// « aucun smash » vaut 0 par définition et se compare à un smash réussi
 /// moyen ; une chute après un raté n'existe que quand elle a fait mal et se
@@ -473,10 +493,12 @@ fn proposition_de_calibrage() {
     // Un duel noté sans un seul smash, ni d'un côté ni de l'autre, n'est pas
     // un duel où personne ne sait frapper : c'est un serveur dont les coups
     // de masse n'arrivent pas comme smashs (vu le 2026-10-22 sur un serveur
-    // entier). Il apprendrait que « aucun smash » est la norme.
+    // entier). Il apprendrait que « aucun smash » est la norme : il ne sert
+    // qu'aux sortes d'action qui n'en dépendent pas (`SMASH_DEPENDENT`), et
+    // jamais aux écarts des familles ni à la forme de la note.
     let (extracted, blind): (Vec<Features>, Vec<Features>) = scored.into_iter().partition(|f| f.mine.iter().chain(&f.theirs).any(|o| o.converted));
     let mut text = format!(
-        "{} duels relus, {skipped} illisibles, {} notés retenus, {} écartés faute d'un seul smash relevé.\n",
+        "{} duels relus, {skipped} illisibles, {} notés complets, {} sans aucun smash relevé (actions hors smashs seulement).\n",
         duels.len(),
         extracted.len(),
         blind.len()
@@ -493,9 +515,10 @@ fn proposition_de_calibrage() {
 
     // 1 et 2. Les sortes d'action.
     let mut pools: HashMap<&'static str, Pool> = HashMap::new();
-    for f in &extracted {
+    let complete = extracted.iter().map(|f| (f, true));
+    for (f, complete) in complete.chain(blind.iter().map(|f| (f, false))) {
         for (_, actions, _, _) in sides(f) {
-            for a in actions {
+            for a in actions.into_iter().filter(|a| complete || !SMASH_DEPENDENT.contains(&a.code)) {
                 let pool = pools.entry(a.code).or_default();
                 pool.values.push((a.value, a.share));
                 let mut x = a.context.to_vec();
@@ -604,7 +627,7 @@ fn proposition_de_calibrage() {
     let means_z: Vec<f64> = per_duel.iter().map(|g| g.iter().zip(&family_spread).map(|(g, s)| g / s).sum::<f64>() / 6.0).collect();
     let (_, spread_of_mean) = sd(&means_z);
     let factor = 1.0 / spread_of_mean;
-    let _ = writeln!(text, "\n## Élargissement : SPREAD_FACTOR = {factor:.3} (pour un écart de note de 100 ; actuel {})", 1.3);
+    let _ = writeln!(text, "\n## Élargissement : SPREAD_FACTOR = {factor:.3} (pour un écart de note de 100 ; actuel {})", rating::SPREAD_FACTOR);
     let mut notes: Vec<f64> = means_z.iter().map(|m| (rating::CENTER + 100.0 * m * factor).clamp(0.0, rating::MAX)).collect();
     notes.sort_by(f64::total_cmp);
     let above = |limit: f64| 100.0 * notes.iter().filter(|n| **n >= limit).count() as f64 / notes.len().max(1) as f64;

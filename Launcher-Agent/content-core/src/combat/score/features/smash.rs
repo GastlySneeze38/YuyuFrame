@@ -11,16 +11,19 @@
 use super::super::parse::{gear_at, Duel, SLOT_HAND};
 use super::{family, flag, sample_at, smash_bonus, Family, Norm, Opportunity, Part, View, IN_WATER, ME_CHARGE, ME_FLAGS, ME_PITCH, PASSENGER, SPRINTING};
 
-/// Ce qu'on attend d'un smash réussi : 0,63 des dégâts possibles, relevé
-/// sur 89 smashs le 2026-10-15 (nous 0,61, nos adversaires 0,66). Un smash
-/// part presque toujours en sprint (gardé en l'air après le saut ou la
-/// charge de vent), et le sprint empêche le critique : 8 critiques sur 89.
-pub const SMASH: Norm = Norm::new("smash.hit", 0.63, 0.2);
-/// Une charge de lance qui touche, jugée pareil.
-pub const SPEAR: Norm = Norm::new("smash.spear", 0.63, 0.2);
+/// Ce qu'on attend d'un smash réussi : 0,664 des dégâts possibles, relevé
+/// sur 379 smashs de 31 duels partagés le 2026-10-22 (0,63 sur nos 89 du
+/// 2026-10-15). Un smash part presque toujours en sprint (gardé en l'air
+/// après le saut ou la charge de vent), et le sprint empêche le critique.
+/// L'écart relevé est sous le plancher de 0,15 : les rapports se tassent
+/// autour de 0,6, le critique fait le reste.
+pub const SMASH: Norm = Norm::new("smash.hit", 0.664, 0.15);
+/// Une charge de lance qui touche (19 relevées).
+pub const SPEAR: Norm = Norm::new("smash.spear", 0.709, 0.29);
 /// Des ouvertures et aucun gros coup : un smash qui n'a rien tiré, compté
 /// une fois pour le duel (2026-10-15 — avant, la famille ne pesait rien).
-pub const NONE: Norm = Norm::new("smash.none", 0.63, 0.2);
+/// Se juge comme un smash réussi moyen, par construction.
+pub const NONE: Norm = Norm::new("smash.none", 0.664, 0.15);
 
 /// Dégâts de base d'un coup de masse : 1 pour le joueur, 5 pour la masse
 /// (`MaceItem.createAttributes`, jar 26.3, 2026-10-14).
@@ -302,8 +305,8 @@ mod tests {
         assert!((none.gap - (0.0 - NONE.mean) / NONE.spread).abs() < 1e-12, "deux ouvertures, aucun smash : une action à 0");
         assert_eq!(none.count, 2.0, "comptée sur les deux ouvertures");
         assert_eq!(judged(&[], &[], &[]).measure.count, 0.0, "sans ouverture, rien à juger");
-        let one = judged(&[], &[(4, 0.83)], &[]).measure;
-        assert!((one.gap - 1.0).abs() < 1e-9, "0,83 face à 0,63 en écarts de 0,2 : +1");
+        let one = judged(&[], &[(4, SPEAR.mean + SPEAR.spread)], &[]).measure;
+        assert!((one.gap - 1.0).abs() < 1e-9, "un écart au-dessus de l'attendu : +1");
     }
 
     #[test]
