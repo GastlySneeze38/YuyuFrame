@@ -39,14 +39,41 @@ pub fn recording() -> bool {
 /// relit à chaque tick et n'affiche que ce qui est nouveau.
 static LAST_REPORT: std::sync::Mutex<(i32, [f64; super::score::REPORT_LEN])> = std::sync::Mutex::new((0, [0.0; super::score::REPORT_LEN]));
 
-fn publish(numbers: [f64; super::score::REPORT_LEN]) {
+/// Publie le résumé d'un duel ; rend son numéro.
+fn publish(numbers: [f64; super::score::REPORT_LEN]) -> i32 {
     let mut last = LAST_REPORT.lock().unwrap_or_else(|p| p.into_inner());
     *last = (last.0 + 1, numbers);
+    last.0
 }
 
 /// Numéro du dernier résumé (0 : aucun duel fermé depuis le lancement) et ses nombres.
 pub fn last_report() -> (i32, [f64; super::score::REPORT_LEN]) {
     *LAST_REPORT.lock().unwrap_or_else(|p| p.into_inner())
+}
+
+/// Ce que le dernier duel fermé a rapporté au classement
+/// (`history::ranked_of`), avec le numéro de son résumé : il arrive un peu
+/// après lui, le temps de rejouer l'historique. Numéro 0 : rien encore.
+static LAST_RANKED: std::sync::Mutex<(i32, [f64; super::history::RANKED_LEN])> =
+    std::sync::Mutex::new((0, [0.0; super::history::RANKED_LEN]));
+
+pub fn last_ranked() -> (i32, [f64; super::history::RANKED_LEN]) {
+    *LAST_RANKED.lock().unwrap_or_else(|p| p.into_inner())
+}
+
+/// Calcule, sur un fil à part, ce que le duel `number` (ouvert à `time`) a
+/// rapporté au classement : rejouer l'historique prend quelques
+/// millisecondes par duel, et le fil d'écriture ne doit pas s'arrêter pendant
+/// ce temps (le duel suivant peut commencer).
+fn rank_later(number: i32, matches: std::path::PathBuf, time: u64) {
+    let spawned = std::thread::Builder::new().name("yf-ranked".into()).spawn(move || {
+        if let Some(values) = super::history::ranked_of(&matches, time) {
+            *LAST_RANKED.lock().unwrap_or_else(|p| p.into_inner()) = (number, values);
+        }
+    });
+    if let Err(e) = spawned {
+        eprintln!("[YuyuFrame] classement du duel non calculé : {e}");
+    }
 }
 
 /// Dépose un enregistrement pour le fil d'écriture. Ne bloque jamais : file
@@ -105,13 +132,17 @@ impl Sink {
             _ => super::score::Prior::default(),
         };
         let report = super::score::score_with(&journal, &prior);
-        publish(report.numbers());
+        let number = publish(report.numbers());
         // Partage pour la calibration, si le joueur l'a activé : le paquet se
         // prépare ici, sur ce fil, jamais sur celui du jeu.
         super::share::on_duel_closed(&self.summary, &self.text);
         let written = serde_json::to_string_pretty(&report).map_err(|e| e.to_string()).and_then(|json| std::fs::write(&self.summary, json).map_err(|e| e.to_string()));
         if let Err(e) = written {
             eprintln!("[YuyuFrame] résumé du duel {} impossible à écrire : {e}", self.summary.display());
+        }
+        // Après le résumé : le rejeu réécrit les résumés, celui-ci compris.
+        if let (Some(dir), Some(time)) = (self.summary.parent(), journal.time()) {
+            rank_later(number, dir.to_path_buf(), time);
         }
     }
 

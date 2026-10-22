@@ -73,7 +73,30 @@ public final class UiPvpScoreScreen extends UiScreenBase {
         super("Score PvP");
         this.lastScreen = lastScreen;
         this.escapeTarget = lastScreen;
-        selectMode(0);
+        // On arrive sur le compétitif du mode où l'on est le plus avancé :
+        // c'est la progression qui donne envie de relancer.
+        competitive = true;
+        selectMode(mostAdvancedMode());
+    }
+
+    /**
+     * L'index ({@link PvpScoreUi#MODES}) du mode où le joueur est le plus
+     * avancé : un rang dévoilé avant un placement, puis la position la plus
+     * haute, puis le plus de duels classés. Le premier mode sans aucun duel.
+     */
+    private int mostAdvancedMode() {
+        int best = 0;
+        double bestKey = -1;
+        for (int i = 0; i < PvpScoreUi.MODE_CODES.length; i++) {
+            DuelHistory.Rank rank = history.rank(PvpScoreUi.MODE_CODES[i]);
+            if (rank == null || rank.duels == 0) continue;
+            double key = (rank.placed ? 1e9 : 0) + PvpRank.cumulative(rank.division, rank.points) * 1e3 + rank.duels;
+            if (key > bestKey) {
+                bestKey = key;
+                best = i;
+            }
+        }
+        return best;
     }
 
     /**
@@ -138,20 +161,22 @@ public final class UiPvpScoreScreen extends UiScreenBase {
         super.uiDraw(mouseX, mouseY);
         try {
             float[] c = PvpScoreUi.content(screenWidth, screenHeight);
+            // Le compétitif remplace le bilan ; la liste reste (tous les duels
+            // notés sont classés), avec les points de chaque duel.
             if (competitive) {
                 drawCompetitive(renderer, c);
             } else {
                 drawHero(renderer, c[0], c[1], c[2] - UiTheme.scaled(24f));
-                drawListTitle(renderer, c[0], c[1]);
-                if (scored.isEmpty()) {
-                    PvpScoreUi.alpha = PvpScoreUi.ease(listShownAt, 0.3f, 0.5f);
-                    String empty = Lang.tr("Aucun duel noté pour l'instant : ils apparaîtront ici dès le premier.");
-                    PvpScoreUi.centered(renderer, UiFont.REGULAR, empty, screenWidth / 2f, (listTop + c[3]) / 2f, c[1] - c[0],
-                        UiTheme.TEXT_MUTED, UiTheme.scaled(0.56f), screenWidth, screenHeight);
-                    PvpScoreUi.alpha = 1f;
-                } else if (scroll != null) {
-                    scroll.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
-                }
+            }
+            drawListTitle(renderer, c[0], c[1]);
+            if (scored.isEmpty()) {
+                PvpScoreUi.alpha = PvpScoreUi.ease(listShownAt, 0.3f, 0.5f);
+                String empty = Lang.tr("Aucun duel noté pour l'instant : ils apparaîtront ici dès le premier.");
+                PvpScoreUi.centered(renderer, UiFont.REGULAR, empty, screenWidth / 2f, (listTop + c[3]) / 2f, c[1] - c[0],
+                    UiTheme.TEXT_MUTED, UiTheme.scaled(0.56f), screenWidth, screenHeight);
+                PvpScoreUi.alpha = 1f;
+            } else if (scroll != null) {
+                scroll.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
             }
             // La liste des modes passe par-dessus l'historique.
             if (modeDropdown != null) modeDropdown.drawPanel(renderer, mouseX, mouseY, screenWidth, screenHeight);
@@ -168,7 +193,7 @@ public final class UiPvpScoreScreen extends UiScreenBase {
     public void uiPollInput(UiInputPoller input) {
         super.uiPollInput(input);
         // La liste ne défile ni ne se clique tant que l'explication ou la liste des modes est ouverte.
-        boolean blocked = info != null || competitive || (modeDropdown != null && modeDropdown.busy(input.mouseX, input.mouseY));
+        boolean blocked = info != null || (modeDropdown != null && modeDropdown.busy(input.mouseX, input.mouseY));
         if (scroll != null && !blocked) scroll.pollInput(input);
     }
 
@@ -440,36 +465,214 @@ public final class UiPvpScoreScreen extends UiScreenBase {
     // ── Le compétitif ────────────────────────────────────────────────────────
 
     /**
-     * Le compétitif du mode choisi dans la liste déroulante, à la place de
-     * son bilan et de son historique casual : l'annonce en haut, et en bas
-     * la place où ses duels classés apparaîtront. Changer de mode change la
-     * page.
+     * Le compétitif du mode choisi, à la place de son bilan. Deux cartes :
+     *
+     * <ul>
+     *   <li>le rang, qui attire l'œil : son insigne qui luit doucement, son
+     *       nom en grand dans la couleur du matériau, la barre de la division
+     *       qui se remplit à l'ouverture, et l'objectif suivant (« encore ~6
+     *       victoires avant Bois 2 ») — ou, pendant le placement, les dix
+     *       cases et ce qui reste ;</li>
+     *   <li>sa place parmi les joueurs : la courbe de la répartition des
+     *       rangs (estimée), de Bois à Champion, et son repère dessus.</li>
+     * </ul>
+     *
+     * <p>Tout vient du noyau (`combat/ranked.rs`), rejoué avec l'historique ;
+     * noms et couleurs des rangs : {@link PvpRank}.
      */
     private void drawCompetitive(UiRenderer r, float[] c) {
         int vw = screenWidth, vh = screenHeight;
         float left = c[0], right = c[1];
         float top = c[2] - UiTheme.scaled(24f);
+        float gap = UiTheme.scaled(16f);
         String modeName = Lang.tr(PvpScoreUi.MODES[Math.max(0, Math.min(PvpScoreUi.MODES.length - 1, mode))]);
+        int code = PvpScoreUi.MODE_CODES[Math.max(0, Math.min(PvpScoreUi.MODE_CODES.length - 1, mode))];
+        DuelHistory.Rank rank = history.rank(code);
+        int duels = rank == null ? 0 : rank.duels;
+        boolean placed = rank != null && rank.placed;
+        int division = rank == null ? 0 : rank.division;
+        double points = rank == null ? 0 : rank.points;
 
-        // L'annonce, à la place du bilan.
+        // ── Le rang ──
+        float split = left + (right - left) * 0.5f;
         float dy = enter(0.05f);
-        PvpScoreUi.tintedCard(r, left, heroBottom + dy, right, top + dy, UiTheme.ACCENT, 0.22f, vw, vh);
-        float pad = UiTheme.scaled(32f);
-        float textW = right - left - pad * 2f;
-        PvpScoreUi.left(r, UiFont.BOLD, Lang.tr("COMPÉTITIF") + "  ·  " + modeName.toUpperCase(java.util.Locale.ROOT),
-            left + pad, top + dy - UiTheme.scaled(44f), textW, UiTheme.ACCENT, UiTheme.scaled(0.48f), vw, vh);
-        PvpScoreUi.left(r, UiFont.BOLD, Lang.tr("Bientôt disponible"), left + pad, top + dy - UiTheme.scaled(104f), textW,
-            UiTheme.TEXT_PRIMARY, UiTheme.scaled(1.6f), vw, vh);
-        PvpScoreUi.left(r, UiFont.REGULAR, Lang.tr("Le compétitif de ce mode arrive bientôt, comme celui de tous les autres modes de jeu."),
-            left + pad, top + dy - UiTheme.scaled(146f), textW, UiTheme.TEXT_SECONDARY, UiTheme.scaled(0.52f), vw, vh);
-        PvpScoreUi.left(r, UiFont.REGULAR, Lang.tr("En attendant, tes duels de ce mode sont notés en casual."),
-            left + pad, top + dy - UiTheme.scaled(176f), textW, UiTheme.TEXT_MUTED, UiTheme.scaled(0.46f), vw, vh);
+        float cardBottom = heroBottom + dy, cardTop = top + dy;
+        UiColor tone = placed ? PvpRank.color(division) : UiTheme.ACCENT;
+        float breath = 0.5f + 0.5f * (float) Math.sin((System.nanoTime() - openedAt) / 1e9 * 2.0);
+        if (placed) {
+            // Une auréole qui respire autour de la carte : elle appelle l'œil.
+            r.drawGlow(left, cardBottom, split, cardTop, UiTheme.scaled(14f), 0.18f + 0.1f * breath,
+                tone.multiplyAlpha(0.6f * PvpScoreUi.alpha), vw, vh);
+        }
+        PvpScoreUi.tintedCard(r, left, cardBottom, split, cardTop, tone, 0.3f, vw, vh);
+        float pad = UiTheme.scaled(26f);
+        float badge = Math.min(UiTheme.scaled(120f), cardTop - cardBottom - pad * 2f);
+        float badgeX = left + pad;
+        float badgeY = cardBottom + (cardTop - cardBottom - badge) / 2f;
+        float pop = PvpScoreUi.pop(openedAt, 0.15f, 0.6f);
+        if (placed) {
+            float size = badge * Math.max(0.01f, pop);
+            PvpRank.badge(r, division, badgeX + (badge - size) / 2f, badgeY + (badge - size) / 2f, size,
+                0.25f + 0.2f * breath, PvpScoreUi.alpha, vw, vh);
+        } else {
+            // Pendant le placement, l'insigne est un point d'interrogation.
+            PvpScoreUi.rect(r, badgeX, badgeY, badgeX + badge, badgeY + badge, badge * 0.24f,
+                UiTheme.ACCENT.withAlpha(0.25f), vw, vh);
+            PvpScoreUi.centered(r, UiFont.BOLD, "?", badgeX + badge / 2f, badgeY + badge * 0.28f, badge, UiTheme.ACCENT,
+                badge / 44f, vw, vh);
+        }
 
-        // À la place de l'historique : ce qui y apparaîtra.
-        PvpScoreUi.alpha = PvpScoreUi.ease(openedAt, 0.3f, 0.5f);
-        PvpScoreUi.centered(r, UiFont.REGULAR, Lang.tr("Tes duels compétitifs apparaîtront ici."), (left + right) / 2f,
-            (listTop + c[3]) / 2f, right - left, UiTheme.TEXT_MUTED, UiTheme.scaled(0.56f), vw, vh);
+        float textLeft = badgeX + badge + UiTheme.scaled(24f);
+        float textRight = split - pad;
+        float textW = textRight - textLeft;
+        PvpScoreUi.left(r, UiFont.BOLD, Lang.tr("COMPÉTITIF") + "  ·  " + modeName.toUpperCase(java.util.Locale.ROOT),
+            textLeft, cardTop - UiTheme.scaled(40f), textW, tone, UiTheme.scaled(0.42f), vw, vh);
+        if (placed) {
+            PvpScoreUi.left(r, UiFont.BOLD, PvpRank.name(division), textLeft, cardTop - UiTheme.scaled(96f), textW,
+                tone, UiTheme.scaled(1.55f), vw, vh);
+            boolean champion = division >= PvpRank.CHAMPION;
+            float barY = cardTop - UiTheme.scaled(126f);
+            float fill = champion ? 1f : (float) Math.max(0, Math.min(1, points / PvpRank.DIVISION_POINTS));
+            // La barre se lit de 0 à 100.
+            PvpScoreUi.bar(r, textLeft, barY, textRight, UiTheme.scaled(12f), 100.0 * fill * PvpScoreUi.ease(openedAt, 0.3f, 1.1f), tone, vw, vh);
+            String count = champion ? Math.round(points) + " " + Lang.tr("points")
+                : Math.round(points) + " / " + PvpRank.DIVISION_POINTS + " " + Lang.tr("points");
+            PvpScoreUi.left(r, UiFont.BOLD, count, textLeft, barY - UiTheme.scaled(30f), textW, UiTheme.TEXT_PRIMARY,
+                UiTheme.scaled(0.5f), vw, vh);
+            String goal = PvpRank.nextGoal(division, points);
+            if (!goal.isEmpty()) {
+                PvpScoreUi.right(r, UiFont.REGULAR, goal, textRight, barY - UiTheme.scaled(30f), textW * 0.6f,
+                    UiTheme.TEXT_SECONDARY, UiTheme.scaled(0.44f), vw, vh);
+            }
+        } else {
+            PvpScoreUi.left(r, UiFont.BOLD, Lang.tr("Placement"), textLeft, cardTop - UiTheme.scaled(96f), textW,
+                UiTheme.TEXT_PRIMARY, UiTheme.scaled(1.4f), vw, vh);
+            float pipGap = UiTheme.scaled(6f);
+            float pipW = (textW - pipGap * (PvpRank.PLACEMENT_DUELS - 1)) / PvpRank.PLACEMENT_DUELS;
+            float pipY = cardTop - UiTheme.scaled(128f);
+            for (int i = 0; i < PvpRank.PLACEMENT_DUELS; i++) {
+                float x = textLeft + i * (pipW + pipGap);
+                float light = i < duels ? PvpScoreUi.ease(openedAt, 0.3f + 0.06f * i, 0.4f) : 0f;
+                PvpScoreUi.rect(r, x, pipY, x + pipW, pipY + UiTheme.scaled(12f), UiTheme.scaled(4f),
+                    UiColor.lerp(new UiColor(0, 0, 0, 90), UiTheme.ACCENT, light), vw, vh);
+            }
+            int remaining = Math.max(0, PvpRank.PLACEMENT_DUELS - duels);
+            PvpScoreUi.left(r, UiFont.REGULAR, Lang.tr("Ton rang se dévoile dans") + " " + remaining + " "
+                    + Lang.tr(remaining > 1 ? "duels notés" : "duel noté"),
+                textLeft, pipY - UiTheme.scaled(30f), textW, UiTheme.TEXT_SECONDARY, UiTheme.scaled(0.46f), vw, vh);
+        }
+
+        // ── Sa place parmi les joueurs ──
+        dy = enter(0.15f);
+        drawRankDistribution(r, split + gap, heroBottom + dy, right, top + dy, placed, division, points);
         PvpScoreUi.alpha = 1f;
+    }
+
+    /**
+     * Où se place le joueur parmi les autres : la même courbe que la
+     * répartition des notes, mais sur l'échelle des rangs — de Bois à
+     * Champion, une zone par rang dans la couleur de son matériau, la
+     * courbe teintée de même —, son repère dessus et la part des joueurs
+     * qu'il dépasse. La répartition est une ESTIMATION ({@link PvpRank#ESTIMATED_SHARE}),
+     * dite comme telle : personne ne connaît les rangs des autres.
+     */
+    private void drawRankDistribution(UiRenderer r, float left, float bottom, float right, float top,
+                                      boolean placed, int division, double points) {
+        int vw = screenWidth, vh = screenHeight;
+        float alpha = PvpScoreUi.alpha;
+        PvpScoreUi.card(r, left, bottom, right, top, vw, vh);
+        float pad = UiTheme.scaled(14f);
+        float chartLeft = left + pad;
+        float chartRight = right - pad;
+        float chartBottom = bottom + UiTheme.scaled(30f);
+        float chartTop = top - UiTheme.scaled(42f);
+        float width = chartRight - chartLeft;
+        float peak = (chartTop - chartBottom) * 0.8f;
+        double axis = PvpRank.AXIS_DIVISIONS;
+
+        // L'en-tête : le titre, et ce que dit la position.
+        PvpScoreUi.left(r, UiFont.BOLD, Lang.tr("TA PLACE PARMI LES JOUEURS"), left + UiTheme.scaled(20f), top - UiTheme.scaled(30f),
+            width * 0.6f, UiTheme.TEXT_SECONDARY, UiTheme.scaled(0.38f), vw, vh);
+        double position = PvpRank.axisPosition(division, points);
+        long better = placed ? Math.round(PvpRank.percentBelow(position)) : 0;
+        // « Devant 0 % » ne dit rien d'utile : on ne l'écrit qu'à partir de 1 %.
+        if (better >= 1) {
+            PvpScoreUi.right(r, UiFont.BOLD, Lang.tr("Devant") + " " + better + " % " + Lang.tr("des joueurs"),
+                right - UiTheme.scaled(20f), top - UiTheme.scaled(30f), width * 0.45f, PvpRank.color(division), UiTheme.scaled(0.42f), vw, vh);
+        }
+
+        // Une zone par rang, dans la couleur de son matériau.
+        int tiers = PvpRank.TIERS.length;
+        float zoneW = width / tiers;
+        for (int t = 0; t < tiers; t++) {
+            float x1 = chartLeft + t * zoneW;
+            UiColor color = PvpRank.color(t * PvpRank.DIVISIONS_PER_TIER);
+            boolean current = placed && t == PvpRank.tier(division);
+            r.drawGradientRect(x1, chartBottom, x1 + zoneW, chartTop, 0f,
+                color.withAlpha((current ? 0.16f : 0.06f) * alpha), color.withAlpha((current ? 0.05f : 0.015f) * alpha), vw, vh);
+            PvpScoreUi.centered(r, current ? UiFont.BOLD : UiFont.REGULAR, Lang.tr(PvpRank.TIERS[t]), x1 + zoneW / 2f,
+                bottom + UiTheme.scaled(10f), zoneW, current ? color : UiTheme.TEXT_MUTED, UiTheme.scaled(0.34f), vw, vh);
+        }
+
+        // La courbe : une colonne de remplissage et un bout de trait tous les
+        // deux pixels, en deux lots, tracée de gauche à droite.
+        double max = 0;
+        for (int i = 0; i <= 200; i++) max = Math.max(max, PvpRank.density(axis * i / 200));
+        float drawn = PvpScoreUi.ease(openedAt, 0.4f, 1.1f);
+        float step = Math.max(1f, UiTheme.scaled(2f));
+        int columns = Math.max(1, (int) Math.ceil(width / step));
+        int shown = Math.max(0, Math.min(columns, Math.round(columns * drawn)));
+        float thickness = Math.max(1.5f, UiTheme.scaled(2.2f));
+        float[][] fill = new float[shown][];
+        UiColor[] fillColors = new UiColor[shown];
+        float[][] line = new float[shown][];
+        UiColor[] lineColors = new UiColor[shown];
+        for (int i = 0; i < shown; i++) {
+            float x1 = chartLeft + i * step;
+            float x2 = Math.min(chartRight, x1 + step);
+            double a1 = (x1 - chartLeft) / width * axis;
+            double a2 = (x2 - chartLeft) / width * axis;
+            float y1 = chartBottom + peak * (float) (PvpRank.density(a1) / max);
+            float y2 = chartBottom + peak * (float) (PvpRank.density(a2) / max);
+            UiColor tone = PvpRank.color((int) Math.min(axis - 1, (a1 + a2) / 2.0));
+            fill[i] = new float[]{ x1, chartBottom, x2 + 0.5f, Math.min(y1, y2) };
+            fillColors[i] = tone.multiplyAlpha(0.14f * alpha);
+            line[i] = new float[]{ x1, Math.min(y1, y2) - thickness / 2f, x2 + 0.5f, Math.max(y1, y2) + thickness / 2f };
+            lineColors[i] = tone.multiplyAlpha(alpha);
+        }
+        if (shown > 0) {
+            r.drawRoundedRectBatch(fill, fillColors, 0f, vw, vh);
+            r.drawRoundedRectBatch(line, lineColors, 0f, vw, vh);
+        }
+        PvpScoreUi.rect(r, chartLeft, chartBottom, chartRight, chartBottom + Math.max(1f, UiTheme.scaled(1f)), 0f,
+            new UiColor(255, 255, 255, 30), vw, vh);
+
+        if (!placed) {
+            PvpScoreUi.centered(r, UiFont.REGULAR, Lang.tr("Ta place apparaît après le placement"), (chartLeft + chartRight) / 2f,
+                chartBottom + peak + UiTheme.scaled(6f), width, UiTheme.TEXT_MUTED, UiTheme.scaled(0.38f), vw, vh);
+        } else {
+            // Le repère : la ligne qui monte de l'axe, le point blanc sur la
+            // courbe, et le rang au-dessus. Il apparaît une fois la courbe tracée.
+            float pop = PvpScoreUi.pop(openedAt, 1.2f, 0.5f);
+            if (pop > 0f) {
+                PvpScoreUi.alpha = alpha * Math.min(1f, pop);
+                float x = chartLeft + (float) (position / axis) * width;
+                float y = chartBottom + peak * (float) (PvpRank.density(position) / max);
+                UiColor rank = PvpRank.color(division);
+                float stem = Math.max(1f, UiTheme.scaled(1.6f));
+                r.drawGradientRect(x - stem / 2f, chartBottom, x + stem / 2f, y, 0f,
+                    new UiColor(255, 255, 255, 0), new UiColor(255, 255, 255, 230).multiplyAlpha(PvpScoreUi.alpha), vw, vh);
+                float dot = UiTheme.scaled(5.5f) * Math.max(0f, pop);
+                r.drawGlow(x - dot, y - dot, x + dot, y + dot, dot, 0.5f, rank.multiplyAlpha(PvpScoreUi.alpha), vw, vh);
+                r.drawRoundedRect(x - dot, y - dot, x + dot, y + dot, dot, new UiColor(255, 255, 255, 255).multiplyAlpha(PvpScoreUi.alpha), vw, vh);
+                PvpScoreUi.centered(r, UiFont.BOLD, PvpRank.name(division), x, y + UiTheme.scaled(12f), UiTheme.scaled(140f),
+                    rank, UiTheme.scaled(0.42f), vw, vh);
+                PvpScoreUi.alpha = alpha;
+            }
+        }
+        // L'estimation, dite.
+        PvpScoreUi.right(r, UiFont.REGULAR, Lang.tr("répartition estimée"), chartRight, chartTop - UiTheme.scaled(4f),
+            width * 0.4f, UiTheme.TEXT_MUTED, UiTheme.scaled(0.28f), vw, vh);
     }
 
     /** Le nom de chaque colonne au-dessus des lignes (le mode et le casual / compétitif sont des widgets). */
@@ -481,12 +684,12 @@ public final class UiPvpScoreScreen extends UiScreenBase {
             float small = UiTheme.scaled(0.34f);
             float hy = heroBottom - UiTheme.scaled(74f);
             UiColor muted = UiTheme.TEXT_MUTED;
-            PvpScoreUi.text(r, UiFont.REGULAR, Lang.tr("NOTE"), col[0], hy, muted, small, vw, vh);
+            PvpScoreUi.text(r, UiFont.REGULAR, Lang.tr(competitive ? "POINTS" : "NOTE"), col[0], hy, muted, small, vw, vh);
             PvpScoreUi.text(r, UiFont.REGULAR, Lang.tr("RÉSULTAT"), col[1], hy, muted, small, vw, vh);
             PvpScoreUi.text(r, UiFont.REGULAR, Lang.tr("ADVERSAIRE"), col[2], hy, muted, small, vw, vh);
             PvpScoreUi.text(r, UiFont.REGULAR, Lang.tr("NIVEAU ADVERSE"), col[3], hy, muted, small, vw, vh);
-            PvpScoreUi.right(r, UiFont.REGULAR, Lang.tr("OPPORTUNITÉS"), col[4], hy, UiTheme.scaled(140f), muted, small, vw, vh);
-            PvpScoreUi.right(r, UiFont.REGULAR, Lang.tr("AU CONTACT"), col[5], hy, UiTheme.scaled(120f), muted, small, vw, vh);
+            PvpScoreUi.right(r, UiFont.REGULAR, Lang.tr(competitive ? "NOTE" : "OPPORTUNITÉS"), col[4], hy, UiTheme.scaled(140f), muted, small, vw, vh);
+            PvpScoreUi.right(r, UiFont.REGULAR, Lang.tr("DURÉE"), col[5], hy, UiTheme.scaled(120f), muted, small, vw, vh);
             PvpScoreUi.right(r, UiFont.REGULAR, Lang.tr("DATE"), col[6], hy, UiTheme.scaled(120f), muted, small, vw, vh);
         }
         PvpScoreUi.alpha = 1f;
@@ -620,19 +823,30 @@ public final class UiPvpScoreScreen extends UiScreenBase {
             float normal = UiTheme.scaled(0.6f);
             float small = UiTheme.scaled(0.4f);
 
-            // La note, dans une pastille de sa couleur.
-            UiColor scoreTone = PvpScoreUi.scoreColor(duel.score());
+            // La pastille : en compétitif, les points du duel — ce qu'on
+            // regarde d'abord — ; en casual, la note. Dans sa couleur.
             float chipW = UiTheme.scaled(80f);
             float chipH = UiTheme.scaled(42f);
             float chipY = mid - chipH / 2f;
             // Le contenu entier, ou rien.
             if (chipY < clipBottom || chipY + chipH > clipTop) return;
-            PvpScoreUi.rect(r, col[0], chipY, col[0] + chipW, chipY + chipH, UiTheme.scaled(8f),
-                scoreTone.withAlpha(0.2f + 0.1f * lift), vw, vh);
             float strong = UiTheme.scaled(0.86f);
-            String score = String.valueOf(PvpScoreUi.count(duel.score(), PvpScoreUi.ease(listShownAt, delay() + 0.1f, 0.8f)));
-            PvpScoreUi.centered(r, UiFont.BOLD, score, col[0] + chipW / 2f, PvpScoreUi.middle(mid, strong),
-                chipW, scoreTone, strong, vw, vh);
+            float counting = PvpScoreUi.ease(listShownAt, delay() + 0.1f, 0.8f);
+            UiColor chipTone;
+            String chip;
+            if (competitive) {
+                boolean ranked = duel.ranked != null && duel.ranked.length > 0;
+                double total = ranked ? duel.ranked[0] : 0;
+                chipTone = !ranked ? PvpScoreUi.NEUTRAL : total > 0 ? PvpScoreUi.GOOD : total < 0 ? PvpScoreUi.BAD : PvpScoreUi.NEUTRAL;
+                chip = ranked ? PvpScoreUi.signedPoints(total * counting) : PvpScoreUi.NO_SCORE;
+            } else {
+                chipTone = PvpScoreUi.scoreColor(duel.score());
+                chip = String.valueOf(PvpScoreUi.count(duel.score(), counting));
+            }
+            PvpScoreUi.rect(r, col[0], chipY, col[0] + chipW, chipY + chipH, UiTheme.scaled(8f),
+                chipTone.withAlpha(0.2f + 0.1f * lift), vw, vh);
+            PvpScoreUi.centered(r, UiFont.BOLD, chip, col[0] + chipW / 2f, PvpScoreUi.middle(mid, strong),
+                chipW, chipTone, strong, vw, vh);
 
             // Le résultat, en capitales et dans sa couleur.
             float result = UiTheme.scaled(0.62f);
@@ -654,11 +868,17 @@ public final class UiPvpScoreScreen extends UiScreenBase {
                 PvpScoreUi.bar(r, barLeft, mid - UiTheme.scaled(3f), barRight, UiTheme.scaled(6f), PvpScoreUi.percent(level) * grow, PvpScoreUi.FOE, vw, vh);
             }
 
-            // Opportunités converties, temps au contact, date.
-            String converted = (int) duel.report[NativeCombat.REPORT_MY_CONVERTED] + " / " + (int) duel.report[NativeCombat.REPORT_MY_OPENED];
-            PvpScoreUi.right(r, UiFont.BOLD, converted, col[4], PvpScoreUi.middle(mid, normal), UiTheme.scaled(140f),
-                UiTheme.TEXT_PRIMARY, normal, vw, vh);
-            PvpScoreUi.right(r, UiFont.REGULAR, PvpScoreUi.duration(duel.report[NativeCombat.REPORT_ENGAGED_SECS]), col[5],
+            // Opportunités converties — en compétitif, la note, passée de la
+            // pastille à cette colonne —, durée du duel, date.
+            if (competitive) {
+                PvpScoreUi.right(r, UiFont.BOLD, PvpScoreUi.scoreText(duel.score()), col[4], PvpScoreUi.middle(mid, normal),
+                    UiTheme.scaled(140f), PvpScoreUi.scoreColor(duel.score()), normal, vw, vh);
+            } else {
+                String converted = (int) duel.report[NativeCombat.REPORT_MY_CONVERTED] + " / " + (int) duel.report[NativeCombat.REPORT_MY_OPENED];
+                PvpScoreUi.right(r, UiFont.BOLD, converted, col[4], PvpScoreUi.middle(mid, normal), UiTheme.scaled(140f),
+                    UiTheme.TEXT_PRIMARY, normal, vw, vh);
+            }
+            PvpScoreUi.right(r, UiFont.REGULAR, PvpScoreUi.duration(duel.report[NativeCombat.REPORT_DURATION_SECS]), col[5],
                 PvpScoreUi.middle(mid, normal), UiTheme.scaled(130f), UiTheme.TEXT_SECONDARY, normal, vw, vh);
             PvpScoreUi.right(r, UiFont.REGULAR, PvpScoreUi.date(duel.time), col[6], PvpScoreUi.middle(mid, small * 1.2f),
                 UiTheme.scaled(140f), UiTheme.TEXT_SECONDARY, small * 1.2f, vw, vh);

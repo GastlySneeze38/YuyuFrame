@@ -33,7 +33,14 @@ fn read_journal(path: &Path) -> Option<String> {
 
 /// Un duel noté, tel que le classement le voit ; `None` s'il n'y compte pas
 /// (pas noté, pas de verdict, mode sans classement).
-fn played(report: &Report) -> Option<Played> {
+///
+/// `foe` : la force de l'adversaire pour le classement — son niveau sur
+/// tous nos duels contre lui, CE DUEL COMPRIS, tiré vers l'attendu tant
+/// qu'on l'a peu vu ([`Prior`]). Pas son niveau de ce seul duel : battre
+/// quelqu'un le fait paraître faible (sur 58 duels, il sortait entre 75 et
+/// 175 dans presque toutes nos victoires), ce qui réduisait chaque victoire
+/// de 40 % — dominer coûtait des points.
+fn played(report: &Report, foe: &Prior) -> Option<Played> {
     let score = report.rating.score?;
     let outcome = match report.result.as_deref()? {
         "win" => Outcome::Win,
@@ -45,8 +52,8 @@ fn played(report: &Report) -> Option<Played> {
         mode: report.mode,
         outcome,
         score,
-        // Son niveau sans arrondi : le calcul est continu.
-        foe_score: (250.0 + 100.0 * report.rating.opponent.z).clamp(0.0, 500.0),
+        // Sans arrondi : le calcul est continu.
+        foe_score: (250.0 + 100.0 * foe.z).clamp(0.0, 500.0),
         foe_key: report.foe_key(),
         time: report.time.unwrap_or(0),
     })
@@ -78,9 +85,15 @@ fn duels(matches: &Path) -> (Vec<(Report, Option<Change>)>, Ladder) {
         let key = journal.foe_key();
         let prior = key.as_ref().and_then(|k| known.get(k)).map(|levels| Prior::from_levels(levels)).unwrap_or_default();
         let report = score_with(&journal, &prior);
-        if let (Some(key), true) = (key, report.informs_prior()) {
-            known.entry(key).or_default().push(report.rating.opponent.z);
-        }
+        // Sa force pour le classement : ses duels passés et celui-ci.
+        let foe = match (key, report.informs_prior()) {
+            (Some(key), true) => {
+                let levels = known.entry(key).or_default();
+                levels.push(report.rating.opponent.z);
+                Prior::from_levels(levels)
+            }
+            _ => Prior::from_levels(&[report.rating.opponent.z]),
+        };
         if !matches!(report.result.as_deref(), Some("win" | "loss" | "draw")) {
             continue;
         }
@@ -90,12 +103,42 @@ fn duels(matches: &Path) -> (Vec<(Report, Option<Change>)>, Ladder) {
                 eprintln!("[YuyuFrame] résumé du duel {} non mis à jour : {e}", path.display());
             }
         }
-        let change = played(&report).and_then(|p| ladder.play(&p));
+        let change = played(&report, &foe).and_then(|p| ladder.play(&p));
         out.push((report, change));
     }
     out.reverse();
     out.truncate(MAX_DUELS);
     (out, ladder)
+}
+
+/// Nombre de valeurs de [`ranked_of`].
+pub const RANKED_LEN: usize = 12;
+
+/// Ce qu'un duel du dossier `matches` a rapporté au classement, pour le
+/// panneau de fin de duel : `total, base, jeu, adversaire, répétition`, puis
+/// la position avant (`division, points, duels`) et après (`division, points,
+/// duels, placement terminé`). `None` s'il n'y compte pas.
+///
+/// Rejoue tout l'historique (le classement d'un duel dépend de tous ceux
+/// d'avant) : quelques millisecondes par duel, à appeler hors du fil du jeu.
+pub fn ranked_of(matches: &Path, time: u64) -> Option<[f64; RANKED_LEN]> {
+    let (reports, _) = duels(matches);
+    let change = reports.iter().find(|(r, _)| r.time == Some(time)).and_then(|(_, c)| *c)?;
+    let (b, a) = (change.before, change.after);
+    Some([
+        change.total as f64,
+        change.base,
+        change.play,
+        change.foe_factor,
+        change.repeat_factor,
+        b.division as f64,
+        b.points as f64,
+        b.duels as f64,
+        a.division as f64,
+        a.points as f64,
+        a.duels as f64,
+        a.placed() as u8 as f64,
+    ])
 }
 
 /// La force connue d'un adversaire, pour un duel qui vient de se terminer :
@@ -224,6 +267,12 @@ mod tests {
         assert!(first[0] <= -5.0, "une défaite coûte : {first:?}");
         assert_eq!(first[4], 1.0, "premier duel contre lui ce jour-là");
         assert_eq!(newer[4], 0.5, "le même adversaire le même jour : la moitié");
+
+        // Ce que le panneau de fin de duel reçoit pour ce duel : les mêmes points.
+        let time: u64 = lines[1].split('\t').nth(1).unwrap().parse().unwrap();
+        let panel = ranked_of(&dir.join("yuyuframe").join("matches"), time).expect("un duel classé");
+        assert_eq!(panel[0], newer[0], "le total");
+        assert_eq!((panel[8], panel[9]), (newer[5], newer[6]), "la position après");
 
         let duel: Vec<&str> = lines[1].split('\t').collect();
         assert_eq!(duel[0], "duel");

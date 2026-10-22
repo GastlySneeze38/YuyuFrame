@@ -33,7 +33,7 @@ import java.util.UUID;
 public final class NativeCombat {
 
     /** Même valeur que {@code ABI_VERSION} dans combat/bridge.rs. */
-    private static final int ABI_VERSION = 15;
+    private static final int ABI_VERSION = 16;
 
     /** Place réservée au texte de l'historique : deux cents duels en tiennent bien moins. */
     private static final int HISTORY_BYTES = 256 * 1024;
@@ -42,7 +42,7 @@ public final class NativeCombat {
      * Le résumé d'un duel, en nombres — {@code Report::numbers} dans
      * combat/score/mod.rs, même ordre.
      */
-    public static final int REPORT_LEN = 59;
+    public static final int REPORT_LEN = 60;
     /**
      * Note sur {@link #SCORE_MAX} (500 depuis l'ABI 14), bonus bug use compris,
      * ou −1 si le duel n'est pas noté. {@link #SCORE_CENTER} : le joueur moyen.
@@ -131,6 +131,29 @@ public final class NativeCombat {
     public static final int REPORT_SWORD_SPRINT_HITS = 56;
     public static final int REPORT_SWORD_CRITS = 57;
     public static final int REPORT_SWORD_JUMP_RESETS = 58;
+    /** Durée du duel en secondes, du premier au dernier tick enregistré (ABI 16) — pas seulement le temps au contact. */
+    public static final int REPORT_DURATION_SECS = 59;
+
+    /**
+     * Ce que le dernier duel a rapporté au classement — {@code history::ranked_of}
+     * dans content-core, même ordre (docs/scoring/classement.md) : total, base,
+     * jeu, adversaire (multiplicateur), répétition, puis la position avant
+     * (division, points, duels) et après (division, points, duels, placement
+     * terminé 0 ou 1). Division : 0 = Bois 1, trois par rang, 18 = Champion.
+     */
+    public static final int RANKED_LEN = 12;
+    public static final int RANKED_TOTAL = 0;
+    public static final int RANKED_BASE = 1;
+    public static final int RANKED_PLAY = 2;
+    public static final int RANKED_FOE = 3;
+    public static final int RANKED_REPEAT = 4;
+    public static final int RANKED_BEFORE_DIVISION = 5;
+    public static final int RANKED_BEFORE_POINTS = 6;
+    public static final int RANKED_BEFORE_DUELS = 7;
+    public static final int RANKED_AFTER_DIVISION = 8;
+    public static final int RANKED_AFTER_POINTS = 9;
+    public static final int RANKED_AFTER_DUELS = 10;
+    public static final int RANKED_PLACED = 11;
 
     /** Nombres décrivant notre joueur à un tick — {@code ME_LEN} dans combat/record.rs, même ordre. */
     public static final int ME_LEN = 21;
@@ -207,6 +230,7 @@ public final class NativeCombat {
     private static MethodHandle detail;
     private static MethodHandle recording;
     private static MethodHandle report;
+    private static MethodHandle ranked;
     private static MethodHandle tick;
     private static MethodHandle player;
     private static MethodHandle equipment;
@@ -258,6 +282,8 @@ public final class NativeCombat {
                     ValueLayout.ADDRESS, ValueLayout.JAVA_INT));
             recording = linker.downcallHandle(lib.find("yf_combat_recording").orElseThrow(), FunctionDescriptor.of(ValueLayout.JAVA_INT));
             report = linker.downcallHandle(lib.find("yf_combat_report").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT), heap);
+            ranked = linker.downcallHandle(lib.find("yf_combat_ranked").orElseThrow(),
                 FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT), heap);
             tick = linker.downcallHandle(lib.find("yf_combat_tick").orElseThrow(),
                 FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT), heap);
@@ -412,6 +438,27 @@ public final class NativeCombat {
         }
         try {
             return (int) report.invokeExact(MemorySegment.ofArray(out), out.length);
+        } catch (Throwable error) {
+            failed(error);
+            return 0;
+        }
+    }
+
+    /**
+     * Ce que le dernier duel fermé a rapporté au classement, calculé par le
+     * noyau un peu après son résumé (il rejoue l'historique sur un fil à part).
+     *
+     * @param out {@link #RANKED_LEN} nombres, dans l'ordre des constantes {@code RANKED_*}
+     * @return le numéro du résumé auquel ces points se rapportent (celui de
+     *         {@link #report}) ; 0 tant que rien n'est calculé. Un duel qui ne
+     *         compte pas au classement ne change pas ce numéro.
+     */
+    public static int ranked(double[] out) {
+        if (!READY || out == null || out.length < RANKED_LEN) {
+            return 0;
+        }
+        try {
+            return (int) ranked.invokeExact(MemorySegment.ofArray(out), out.length);
         } catch (Throwable error) {
             failed(error);
             return 0;

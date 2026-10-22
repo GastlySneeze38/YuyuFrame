@@ -28,7 +28,8 @@ use super::writer::send;
 /// 13 (2026-10-18) : `yf_combat_share`, le partage des duels pour la calibration.
 /// 14 (2026-10-22) : notes sur 500, et lignes `action` dans le détail d'un duel.
 /// 15 (2026-10-22) : le mode épée — neuf chiffres de plus dans le résumé.
-const ABI_VERSION: u32 = 15;
+/// 16 (2026-10-22) : durée du duel au bout du résumé, `yf_combat_ranked`.
+const ABI_VERSION: u32 = 16;
 
 /// Autres joueurs transmis par tick, au plus.
 const MAX_OTHERS: usize = 16;
@@ -109,6 +110,24 @@ pub extern "C" fn yf_combat_key() -> i32 {
 #[no_mangle]
 pub unsafe extern "C" fn yf_combat_report(out: *mut f64, len: i32) -> i32 {
     let (number, values) = super::writer::last_report();
+    if !out.is_null() && len as usize >= values.len() {
+        std::slice::from_raw_parts_mut(out, values.len()).copy_from_slice(&values);
+    }
+    number
+}
+
+/// Ce que le dernier duel fermé a rapporté au classement
+/// (`history::ranked_of`, `RANKED_LEN` nombres). Rend le numéro du résumé
+/// auquel il se rapporte — celui de [`yf_combat_report`] — ou 0 tant que
+/// rien n'est calculé : il arrive un peu après le résumé, le temps de
+/// rejouer l'historique sur un fil à part. Un duel qui ne compte pas au
+/// classement ne publie rien : Java garde alors l'ancien numéro.
+///
+/// # Safety
+/// `out` doit pointer sur `len` nombres inscriptibles (ou être nul).
+#[no_mangle]
+pub unsafe extern "C" fn yf_combat_ranked(out: *mut f64, len: i32) -> i32 {
+    let (number, values) = super::writer::last_ranked();
     if !out.is_null() && len as usize >= values.len() {
         std::slice::from_raw_parts_mut(out, values.len()).copy_from_slice(&values);
     }

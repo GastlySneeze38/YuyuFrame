@@ -71,6 +71,8 @@ pub struct Report {
     /// Reconnu à l'arme en main ; seuls les duels à la masse sont notés.
     pub mode: Mode,
     pub engaged_secs: f64,
+    /// Durée du duel, du premier au dernier tick enregistré (secondes).
+    pub duration_secs: f64,
     pub mine: Opportunities,
     pub theirs: Opportunities,
     /// Charge d'attaque moyenne à mes smashs, telle que le jeu la compte au coup.
@@ -94,7 +96,7 @@ pub struct Report {
 }
 
 /// Nombre de valeurs de [`Report::numbers`].
-pub const REPORT_LEN: usize = 59;
+pub const REPORT_LEN: usize = 60;
 
 /// Ce qui s'est échangé entre les deux duellistes, tel quel : les coups
 /// confirmés par le serveur dans un sens et dans l'autre, toutes armes
@@ -176,6 +178,9 @@ impl Report {
     /// Zéro hors de l'épée. À l'épée, les cinq familles (index 4 à 8) sont
     /// combos, qualité du coup, défense, placement, ressources, et les
     /// opportunités de smash valent zéro.
+    ///
+    /// Puis (ABI 16) : la durée du duel en secondes, du premier au dernier
+    /// tick enregistré — pas seulement le temps au contact.
     pub fn numbers(&self) -> [f64; REPORT_LEN] {
         let result = match self.result.as_deref() {
             Some("win") => 1.0,
@@ -252,6 +257,7 @@ impl Report {
             self.sword.sprint_hits as f64,
             self.sword.crits as f64,
             self.sword.jump_resets as f64,
+            self.duration_secs,
         ]
     }
 }
@@ -373,6 +379,11 @@ pub fn score_with(journal: &Journal, prior: &Prior) -> Report {
         time: duel.time,
         mode: duel.mode,
         engaged_secs: features.engaged_secs,
+        // Vingt ticks par seconde.
+        duration_secs: match (duel.samples.first(), duel.samples.last()) {
+            (Some(first), Some(last)) => last.t.saturating_sub(first.t) as f64 / 20.0,
+            _ => 0.0,
+        },
         mine: Opportunities::of(&features.mine),
         theirs: Opportunities::of(&features.theirs),
         smash_charge: features.smash_charge,
