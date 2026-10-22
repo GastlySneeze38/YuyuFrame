@@ -22,15 +22,16 @@ import java.util.List;
  * <ol>
  *   <li>la barre du haut : retour, titre, icône d'information ({@link PvpInfoModal}) ;</li>
  *   <li>le bilan : la note moyenne en grand et en couleur, quatre chiffres
- *       (victoires, défaites, taux de victoire, meilleure note) et la forme
- *       récente — les dernières notes en barres, la référence en trait ;</li>
+ *       (victoires, défaites, taux de victoire, meilleure note) et la place
+ *       du joueur sur la répartition des notes — une cloche de 0 à 500
+ *       centrée sur 250, ses deux paliers (330, 420) et sa moyenne du mode ;</li>
  *   <li>l'historique des <b>duels notés</b> du mode choisi dans la liste
  *       déroulante, une ligne par duel teintée par son résultat. Un clic sur
  *       une ligne ouvre la page du duel ({@link UiPvpDuelScreen}).</li>
  * </ol>
  *
  * <p>Tout entre en mouvement : les blocs du bilan montent en fondu l'un après
- * l'autre, les chiffres défilent jusqu'à leur valeur, les barres poussent,
+ * l'autre, les chiffres défilent jusqu'à leur valeur, la courbe se trace,
  * les lignes glissent depuis la droite en cascade — et recommencent quand on
  * change de mode.
  *
@@ -42,8 +43,6 @@ import java.util.List;
 public final class UiPvpScoreScreen extends UiScreenBase {
 
     private static final int GLASS_PASSES = 3;
-    /** Nombre de notes dans le graphique de forme récente. */
-    private static final int TREND = 20;
 
     private final Object lastScreen;
     private final DuelHistory history = DuelHistory.load();
@@ -52,6 +51,8 @@ public final class UiPvpScoreScreen extends UiScreenBase {
     private final List<DuelHistory.Duel> scored = new ArrayList<DuelHistory.Duel>();
     private int wins, losses, draws;
     private double best;
+    /** La note moyenne des duels notés du mode, -1 sans duel : le repère posé sur la courbe. */
+    private double modeAverage = -1;
 
     private UiScrollContainer scroll;
     private PvpScoreUi.ModeDropdown modeDropdown;
@@ -83,7 +84,7 @@ public final class UiPvpScoreScreen extends UiScreenBase {
         mode = index;
         scored.clear();
         int w = 0, l = 0, d = 0;
-        double top = -1;
+        double top = -1, sum = 0;
         int code = PvpScoreUi.MODE_CODES[Math.max(0, Math.min(PvpScoreUi.MODE_CODES.length - 1, index))];
         for (DuelHistory.Duel duel : history.duels) {
             if (duel.score() < 0 || duel.mode() != code) continue;
@@ -92,9 +93,13 @@ public final class UiPvpScoreScreen extends UiScreenBase {
             else if (duel.result() == 2) l++;
             else if (duel.result() == 3) d++;
             top = Math.max(top, duel.score());
+            sum += duel.score();
         }
         wins = w; losses = l; draws = d;
         best = top;
+        // Arrondie ici, pour que la grande note et le repère de la courbe
+        // disent exactement le même chiffre.
+        modeAverage = scored.isEmpty() ? -1 : Math.round(sum / scored.size());
         listShownAt = System.nanoTime();
     }
 
@@ -235,21 +240,23 @@ public final class UiPvpScoreScreen extends UiScreenBase {
         float gap = UiTheme.scaled(16f);
         int vw = screenWidth, vh = screenHeight;
 
-        // La moyenne : elle défile jusqu'à sa valeur.
+        // La moyenne du mode choisi, la même que le repère de la courbe : elle
+        // défile jusqu'à sa valeur, et recommence au changement de mode.
         float dy = enter(0.05f);
         float avgRight = left + UiTheme.scaled(300f);
-        UiColor tone = PvpScoreUi.scoreColor(history.average);
+        UiColor tone = PvpScoreUi.scoreColor(modeAverage);
         PvpScoreUi.tintedCard(r, left, bottom + dy, avgRight, top + dy, tone, 0.24f, vw, vh);
         float center = (left + avgRight) / 2f;
         float width = avgRight - left - UiTheme.scaled(24f);
         PvpScoreUi.centered(r, UiFont.BOLD, Lang.tr("NOTE MOYENNE"), center, top + dy - UiTheme.scaled(34f), width,
             UiTheme.TEXT_SECONDARY, UiTheme.scaled(0.44f), vw, vh);
-        String average = history.average >= 0
-            ? String.valueOf(PvpScoreUi.count(history.average, PvpScoreUi.ease(openedAt, 0.15f, 1.1f)))
+        String average = modeAverage >= 0
+            ? String.valueOf(PvpScoreUi.count(modeAverage, PvpScoreUi.ease(listShownAt, 0.15f, 1.1f)))
             : PvpScoreUi.NO_SCORE;
         PvpScoreUi.centered(r, UiFont.BOLD, average, center, bottom + dy + UiTheme.scaled(64f), width,
             tone, UiTheme.scaled(3.3f), vw, vh);
-        String basis = history.scored + " " + Lang.tr(history.scored > 1 ? "duels notés" : "duel noté");
+        int count = scored.size();
+        String basis = count + " " + Lang.tr(count > 1 ? "duels notés" : "duel noté");
         PvpScoreUi.centered(r, UiFont.REGULAR, basis, center, bottom + dy + UiTheme.scaled(24f), width,
             UiTheme.TEXT_SECONDARY, UiTheme.scaled(0.44f), vw, vh);
 
@@ -268,11 +275,11 @@ public final class UiPvpScoreScreen extends UiScreenBase {
         drawTile(r, 3, tilesLeft + tileW + gap, bottom, tilesLeft + 2 * tileW + gap, bottom + tileH, best,
             null, Lang.tr("MEILLEURE NOTE"), PvpScoreUi.scoreColor(best));
 
-        // La forme récente : ce qui reste de la largeur.
+        // Sa place dans la répartition des notes : ce qui reste de la largeur.
         float trendLeft = tilesLeft + 2 * tileW + 2 * gap;
         if (right - trendLeft > UiTheme.scaled(220f)) {
             dy = enter(0.32f);
-            drawTrend(r, trendLeft, bottom + dy, right, top + dy);
+            drawDistribution(r, trendLeft, bottom + dy, right, top + dy);
         }
         PvpScoreUi.alpha = 1f;
     }
@@ -297,46 +304,137 @@ public final class UiPvpScoreScreen extends UiScreenBase {
             UiTheme.scaled(0.36f), screenWidth, screenHeight);
     }
 
-    /**
-     * Les dernières notes en barres, de la plus ancienne à gauche à la plus
-     * récente à droite, chacune dans sa couleur ; un trait marque 250, le
-     * joueur moyen. Les barres poussent l'une après l'autre.
-     */
-    private void drawTrend(UiRenderer r, float left, float bottom, float right, float top) {
-        int vw = screenWidth, vh = screenHeight;
-        PvpScoreUi.card(r, left, bottom, right, top, vw, vh);
-        float pad = UiTheme.scaled(18f);
-        PvpScoreUi.left(r, UiFont.BOLD, Lang.tr("FORME RÉCENTE"), left + pad, top - UiTheme.scaled(32f), right - left - pad * 2f,
-            UiTheme.TEXT_SECONDARY, UiTheme.scaled(0.44f), vw, vh);
+    /** Les paliers de la courbe : au-delà de 330, puis de 420 (environ 21 % et 4 % des joueurs). */
+    private static final double TIER_HIGH = 330.0, TIER_TOP = 420.0;
+    /** Couleurs du trait de la courbe : avant le premier palier, entre les deux, au-delà. */
+    private static final UiColor CURVE_LOW = new UiColor(72, 168, 190, 255);
+    private static final UiColor CURVE_HIGH = new UiColor(236, 110, 214, 255);
+    private static final UiColor CURVE_TOP = new UiColor(244, 224, 112, 255);
 
-        // Les notes, de la plus récente à la plus ancienne.
-        int count = Math.min(TREND, scored.size());
-        float chartTop = top - UiTheme.scaled(50f);
-        float chartBottom = bottom + pad;
+    /**
+     * Où se place le joueur : la répartition des notes de tous les joueurs,
+     * une cloche centrée sur 250 (le joueur moyen) — la note est construite
+     * ainsi, 100 points par écart habituel — et sa note moyenne du mode
+     * choisi posée dessus. Deux paliers teintent le fond. La courbe se trace
+     * de gauche à droite, puis le repère du joueur apparaît.
+     */
+    private void drawDistribution(UiRenderer r, float left, float bottom, float right, float top) {
+        int vw = screenWidth, vh = screenHeight;
+        float alpha = PvpScoreUi.alpha;
+        PvpScoreUi.card(r, left, bottom, right, top, vw, vh);
+        float pad = UiTheme.scaled(14f);
         float chartLeft = left + pad;
         float chartRight = right - pad;
-        if (count == 0) {
-            PvpScoreUi.centered(r, UiFont.REGULAR, Lang.tr("Pas encore de duel noté"), (left + right) / 2f, (chartTop + chartBottom) / 2f,
-                chartRight - chartLeft, UiTheme.TEXT_MUTED, UiTheme.scaled(0.44f), vw, vh);
+        float chartBottom = bottom + UiTheme.scaled(30f);
+        float chartTop = top - pad;
+        float width = chartRight - chartLeft;
+        // La cloche laisse de la place au-dessus d'elle pour la note du joueur.
+        float peak = (chartTop - chartBottom) * 0.78f;
+
+        // Les trois zones du fond.
+        float xHigh = xOf(TIER_HIGH, chartLeft, width);
+        float xTop = xOf(TIER_TOP, chartLeft, width);
+        r.drawGradientRect2D(chartLeft, chartBottom, xHigh, chartTop, 0f,
+            new UiColor(16, 30, 38, 0).multiplyAlpha(alpha), new UiColor(26, 58, 82, 120).multiplyAlpha(alpha),
+            new UiColor(16, 30, 38, 0).multiplyAlpha(alpha), new UiColor(26, 58, 82, 120).multiplyAlpha(alpha), vw, vh);
+        r.drawGradientRect(xHigh, chartBottom, xTop, chartTop, 0f,
+            new UiColor(120, 50, 140, 70).multiplyAlpha(alpha), new UiColor(70, 40, 110, 60).multiplyAlpha(alpha), vw, vh);
+        r.drawGradientRect(xTop, chartBottom, chartRight, chartTop, 0f,
+            new UiColor(170, 170, 160, 70).multiplyAlpha(alpha), new UiColor(110, 115, 115, 50).multiplyAlpha(alpha), vw, vh);
+
+        // La courbe : une colonne de remplissage et un bout de trait tous les
+        // deux pixels, envoyés en deux lots. Elle se trace de gauche à droite.
+        float drawn = PvpScoreUi.ease(openedAt, 0.4f, 1.1f);
+        float step = Math.max(1f, UiTheme.scaled(2f));
+        int columns = Math.max(1, (int) Math.ceil(width / step));
+        int shown = Math.max(0, Math.min(columns, Math.round(columns * drawn)));
+        float thickness = Math.max(1.5f, UiTheme.scaled(2.2f));
+        float[][] fill = new float[shown][];
+        UiColor[] fillColors = new UiColor[shown];
+        float[][] line = new float[shown][];
+        UiColor[] lineColors = new UiColor[shown];
+        for (int i = 0; i < shown; i++) {
+            float x1 = chartLeft + i * step;
+            float x2 = Math.min(chartRight, x1 + step);
+            double s1 = (x1 - chartLeft) / width * NativeCombat.SCORE_MAX;
+            double s2 = (x2 - chartLeft) / width * NativeCombat.SCORE_MAX;
+            float y1 = chartBottom + peak * bell(s1);
+            float y2 = chartBottom + peak * bell(s2);
+            UiColor tone = curveColor((s1 + s2) / 2.0);
+            fill[i] = new float[]{ x1, chartBottom, x2 + 0.5f, Math.min(y1, y2) };
+            fillColors[i] = tone.multiplyAlpha(0.13f * alpha);
+            line[i] = new float[]{ x1, Math.min(y1, y2) - thickness / 2f, x2 + 0.5f, Math.max(y1, y2) + thickness / 2f };
+            lineColors[i] = tone.multiplyAlpha(alpha);
+        }
+        if (shown > 0) {
+            r.drawRoundedRectBatch(fill, fillColors, 0f, vw, vh);
+            r.drawRoundedRectBatch(line, lineColors, 0f, vw, vh);
+        }
+
+        // 250, le joueur moyen : un trait pointillé jusqu'au sommet.
+        float x250 = xOf(250.0, chartLeft, width);
+        float dash = UiTheme.scaled(6f);
+        float dashW = Math.max(1f, UiTheme.scaled(1.4f));
+        UiColor dashColor = new UiColor(255, 255, 255, 70).multiplyAlpha(alpha);
+        for (float y = chartBottom; y < chartBottom + peak; y += dash * 1.8f) {
+            PvpScoreUi.rect(r, x250 - dashW / 2f, y, x250 + dashW / 2f, Math.min(chartBottom + peak, y + dash), 0f, dashColor, vw, vh);
+        }
+
+        // L'axe.
+        PvpScoreUi.rect(r, chartLeft, chartBottom, chartRight, chartBottom + Math.max(1f, UiTheme.scaled(1f)), 0f,
+            new UiColor(255, 255, 255, 30).multiplyAlpha(alpha), vw, vh);
+        float labelY = bottom + UiTheme.scaled(10f);
+        float labelScale = UiTheme.scaled(0.36f);
+        float labelW = UiTheme.scaled(60f);
+        PvpScoreUi.left(r, UiFont.REGULAR, "0", chartLeft, labelY, labelW, UiTheme.TEXT_MUTED, labelScale, vw, vh);
+        for (double mark : new double[]{ 250.0, TIER_HIGH, TIER_TOP }) {
+            PvpScoreUi.centered(r, UiFont.REGULAR, String.valueOf((int) mark), xOf(mark, chartLeft, width), labelY, labelW,
+                UiTheme.TEXT_MUTED, labelScale, vw, vh);
+        }
+        PvpScoreUi.right(r, UiFont.REGULAR, String.valueOf((int) NativeCombat.SCORE_MAX), chartRight, labelY, labelW,
+            UiTheme.TEXT_MUTED, labelScale, vw, vh);
+
+        // Le joueur : sa note moyenne du mode, quand il en a une.
+        if (modeAverage < 0) {
+            PvpScoreUi.centered(r, UiFont.REGULAR, Lang.tr("Pas encore de duel noté"), (chartLeft + chartRight) / 2f,
+                chartBottom + peak + UiTheme.scaled(4f), width, UiTheme.TEXT_MUTED, UiTheme.scaled(0.4f), vw, vh);
             return;
         }
-        float slot = (chartRight - chartLeft) / TREND;
-        float barW = Math.max(UiTheme.scaled(4f), slot * 0.6f);
-        float height = chartTop - chartBottom;
-        float reference = chartBottom + height * 0.5f;
-        PvpScoreUi.rect(r, chartLeft, reference, chartRight, reference + Math.max(1f, UiTheme.scaled(1f)), 0f,
-            new UiColor(255, 255, 255, 40), vw, vh);
-        float alpha = PvpScoreUi.alpha;
-        for (int i = 0; i < count; i++) {
-            // Les barres se rangent à droite : la plus récente toujours au bord.
-            double score = scored.get(count - 1 - i).score();
-            float x = chartRight - (count - i) * slot + (slot - barW) / 2f;
-            float grow = PvpScoreUi.pop(openedAt, 0.45f + 0.035f * i, 0.55f);
-            float h = Math.max(UiTheme.scaled(3f), height * (float) (score / NativeCombat.SCORE_MAX) * Math.max(0f, grow));
-            UiColor tone = PvpScoreUi.scoreColor(score);
-            r.drawGradientRect(x, chartBottom, x + barW, chartBottom + h, Math.min(barW / 2f, UiTheme.scaled(3f)),
-                tone.multiplyAlpha(0.55f * alpha), tone.multiplyAlpha(alpha), vw, vh);
-        }
+        float pop = PvpScoreUi.pop(openedAt, 1.2f, 0.5f);
+        if (pop <= 0f) return;
+        PvpScoreUi.alpha = alpha * Math.min(1f, pop);
+        double score = Math.max(0.0, Math.min(NativeCombat.SCORE_MAX, modeAverage));
+        float x = xOf(score, chartLeft, width);
+        float y = chartBottom + peak * bell(score);
+        float stem = Math.max(1f, UiTheme.scaled(1.6f));
+        r.drawGradientRect(x - stem / 2f, chartBottom, x + stem / 2f, y, 0f,
+            new UiColor(255, 255, 255, 0), new UiColor(255, 255, 255, 230).multiplyAlpha(PvpScoreUi.alpha), vw, vh);
+        float dot = UiTheme.scaled(5.5f) * Math.max(0f, pop);
+        r.drawRoundedRect(x - dot, y - dot, x + dot, y + dot, dot, new UiColor(255, 255, 255, 255).multiplyAlpha(PvpScoreUi.alpha), vw, vh);
+        PvpScoreUi.centered(r, UiFont.BOLD, String.valueOf(Math.round(score)), x, y + UiTheme.scaled(12f), labelW * 2f,
+            UiTheme.TEXT_PRIMARY, UiTheme.scaled(0.42f), vw, vh);
+        PvpScoreUi.alpha = alpha;
+    }
+
+    /** L'abscisse d'une note sur l'axe de 0 à 500. */
+    private static float xOf(double score, float left, float width) {
+        return left + (float) (score / NativeCombat.SCORE_MAX) * width;
+    }
+
+    /** La hauteur de la cloche à une note, 1 à 250 : 100 points valent un écart habituel. */
+    private static float bell(double score) {
+        double z = (score - 250.0) / 100.0;
+        return (float) Math.exp(-0.5 * z * z);
+    }
+
+    /** La couleur du trait à une note, fondue sur 20 points autour de chaque palier. */
+    private static UiColor curveColor(double score) {
+        double blend = 20.0;
+        if (score < TIER_HIGH - blend) return CURVE_LOW;
+        if (score < TIER_HIGH + blend) return UiColor.lerp(CURVE_LOW, CURVE_HIGH, (float) ((score - TIER_HIGH + blend) / (2 * blend)));
+        if (score < TIER_TOP - blend) return CURVE_HIGH;
+        if (score < TIER_TOP + blend) return UiColor.lerp(CURVE_HIGH, CURVE_TOP, (float) ((score - TIER_TOP + blend) / (2 * blend)));
+        return CURVE_TOP;
     }
 
     // ── Le compétitif ────────────────────────────────────────────────────────
