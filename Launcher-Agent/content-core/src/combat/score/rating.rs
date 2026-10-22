@@ -49,7 +49,9 @@ use super::parse::Mode;
 // Version 17 (2026-10-22) : la force connue de l'adversaire sort de la note
 // (gardée pour le classement) ; cinq familles.
 // Version 18 (2026-10-22) : l'épée est notée.
-pub const SCORE_VERSION: u32 = 18;
+// Version 19 (2026-10-22) : l'élargissement se déduit de la corrélation
+// mesurée entre familles (masse 1,37, épée 1,37 au lieu de 2,0).
+pub const SCORE_VERSION: u32 = 19;
 
 /// Poids du lissage : une famille observée sur `K` événements est tirée à
 /// moitié vers l'attendu. Ramené de 5 à 2 le 2026-10-15 : sur peu de
@@ -65,11 +67,10 @@ pub(super) struct Scale {
     /// un écart de note. Dans l'ordre des cases du résumé — les quatre
     /// premières servent aussi à l'adversaire.
     pub spread: [f64; 5],
-    /// De la moyenne des écarts à l'écart de la note. Une moyenne de
-    /// familles est plus resserrée qu'une famille seule, il faut donc
-    /// l'élargir — mais pas comme si elles étaient indépendantes (×√5) : un
-    /// joueur bon dans l'une l'est souvent dans les autres.
-    pub factor: f64,
+    /// À quel point les familles montent ensemble chez un même joueur
+    /// (corrélation moyenne entre deux familles), mesuré par `calibration`.
+    /// C'est elle qui donne l'élargissement (`factor`) : jamais posé à la main.
+    pub correlation: f64,
     /// Combien de familles font la note, les premières cases du résumé.
     pub families: usize,
     /// En dessous de ce nombre de situations, le duel n'est pas noté.
@@ -85,19 +86,38 @@ pub(super) struct Scale {
 /// sur ces duels (ce qui donne à la note un écart de 100), à 1,68 avec
 /// l'initiative et les échanges, qui lient un peu plus les familles, puis à
 /// 1,40 quand la force connue de l'adversaire est sortie de la moyenne (cinq
-/// familles au lieu de six : la même échelle). La confiance garde son
-/// échelle d'origine : 5 opportunités donnent 50 %, 20 en donnent 80 %.
-const MACE: Scale = Scale { spread: [0.365, 0.708, 0.256, 0.249, 0.211], factor: 1.40, families: 5, min_evidence: 3, k_confidence: 5.0 };
+/// familles au lieu de six : la même échelle). Depuis le 2026-10-22 il se
+/// déduit de la corrélation entre familles, mesurée sur ces 31 joueurs :
+/// 0,412, soit un élargissement de 1,37. La confiance garde son échelle
+/// d'origine : 5 opportunités donnent 50 %, 20 en donnent 80 %.
+const MACE: Scale = Scale { spread: [0.365, 0.708, 0.256, 0.249, 0.211], correlation: 0.412, families: 5, min_evidence: 3, k_confidence: 5.0 };
 /// L'épée (2026-10-22) : combos, qualité du coup, défense, placement — pas
 /// de ressources, le kit noté n'a que l'épée. Écarts relevés sur 23 duels à
 /// l'épée partagés (kits avec totems compris : les coups sont les mêmes) ;
-/// seuls 8 sont à l'épée seule, trop peu pour calibrer dessus. Ces 23 duels
-/// montraient des familles presque indépendantes (élargissement 2,26 pour
-/// cinq, √5 = 2,24) : pour quatre, 2,0 (√4). *À recalibrer* sur les duels à
-/// l'épée seule (`YF_MODE=sword`) dès qu'il y en aura une cinquantaine. Les
-/// situations sont les coups échangés : 6 au moins, et 12 donnent une
-/// confiance de 50 %.
-const SWORD: Scale = Scale { spread: [0.304, 0.416, 0.287, 0.298, 1.0], factor: 2.0, families: 4, min_evidence: 6, k_confidence: 12.0 };
+/// seuls 8 sont à l'épée seule, trop peu pour calibrer dessus. Corrélation
+/// entre familles : +0,227 mesurée sur ces 8 joueurs (±0,34), tirée vers
+/// celle de la masse comme si elle valait 30 joueurs, soit 0,373 et un
+/// élargissement de 1,37. (Un 2,0 posé à la main la supposait nulle : un
+/// joueur bon partout passait au-dessus de toutes ses familles, et au
+/// plafond.) *À recalibrer* sur les duels à l'épée seule (`YF_MODE=sword`)
+/// dès qu'il y en aura une cinquantaine. Les situations sont les coups
+/// échangés : 6 au moins, et 12 donnent une confiance de 50 %.
+const SWORD: Scale = Scale { spread: [0.304, 0.416, 0.287, 0.298, 1.0], correlation: 0.373, families: 4, min_evidence: 6, k_confidence: 12.0 };
+
+impl Scale {
+    /// De la moyenne des écarts à l'écart de la note, comme un QI total est
+    /// recalé sur la répartition des totaux et non sur celle d'un indice :
+    /// une moyenne de familles est plus resserrée qu'une famille seule, et
+    /// d'autant moins qu'elles montent ensemble. Avec n familles de
+    /// corrélation moyenne ρ, l'écart de leur moyenne vaut
+    /// √((1 + (n − 1)ρ) / n) ; l'élargissement en est l'inverse, de sorte
+    /// que la note ait le même étalement qu'une famille (100 points).
+    /// Indépendantes, √n ; parfaitement liées, 1 (la moyenne).
+    pub fn factor(&self) -> f64 {
+        let n = self.families as f64;
+        (n / (1.0 + (n - 1.0) * self.correlation)).sqrt()
+    }
+}
 
 pub(super) fn scale_of(mode: Mode) -> &'static Scale {
     match mode {
@@ -114,7 +134,7 @@ pub const MAX: f64 = 500.0;
 /// mode sont à poids égaux. La force connue de l'adversaire n'y entre plus
 /// (2026-10-22) : elle est gardée pour le classement.
 fn points_per_z(s: &Scale) -> f64 {
-    PER_Z * s.factor / s.families as f64
+    PER_Z * s.factor() / s.families as f64
 }
 
 /// Un écart, sur l'échelle de la note.
@@ -246,9 +266,9 @@ pub fn rate(features: &Features, prior: &Prior) -> Rating {
     let opponent_known = Sub { gap: prior.z, count: prior.duels as f64, smoothed: prior.z, z: prior.z, score: scale(prior.z).round(), points: 0.0 };
     let counted = &subs[..s.families];
     let mean = counted.iter().map(|s| s.z).sum::<f64>() / s.families as f64;
-    let z = mean * s.factor;
+    let z = mean * s.factor();
     let n = features.evidence as f64;
-    let own = combined(counted, n, s.factor);
+    let own = combined(counted, n, s.factor());
     let base_score = reason.is_none().then(|| scale(z).round());
     // Le bonus s'ajoute à la note des cinq familles, plafonné à +50 (déjà
     // fait à l'extraction), la note restant plafonnée à 500.
@@ -301,7 +321,7 @@ fn opponent_level(features: &Features, s: &Scale) -> (Sub, [Sub; 4]) {
     let foe = &features.foe;
     let measures = [foe.conversion, foe.smash_quality, foe.exposure, foe.vertical];
     let subs = [0, 1, 2, 3].map(|i| sub(measures[i], s.spread[i], 0.0));
-    (combined(&subs, features.evidence as f64, s.factor), subs)
+    (combined(&subs, features.evidence as f64, s.factor()), subs)
 }
 
 #[cfg(test)]
@@ -359,6 +379,19 @@ mod tests {
     /// Contre un adversaire jamais affronté.
     fn unknown(features: &Features) -> Rating {
         rate(features, &Prior::default())
+    }
+
+    #[test]
+    fn l_elargissement_suit_la_correlation_entre_familles() {
+        let with = |correlation: f64| Scale { spread: [1.0; 5], correlation, families: 4, min_evidence: 0, k_confidence: 1.0 }.factor();
+        // Indépendantes : √4 ; parfaitement liées : la simple moyenne.
+        assert!((with(0.0) - 2.0).abs() < 1e-9);
+        assert!((with(1.0) - 1.0).abs() < 1e-9);
+        // Le duel qui touchait le plafond : familles 456, 252, 442, 447.
+        let mean = [2.06, 0.02, 1.92, 1.97].iter().sum::<f64>() / 4.0;
+        assert_eq!(scale(mean * with(0.0)), MAX);
+        let now = scale(mean * SWORD.factor());
+        assert!(now > 440.0 && now < 460.0, "{now}");
     }
 
     #[test]

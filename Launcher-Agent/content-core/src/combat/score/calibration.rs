@@ -458,6 +458,27 @@ fn quantile(sorted: &[f64], q: f64) -> f64 {
     sorted[((sorted.len() - 1) as f64 * q).round() as usize]
 }
 
+/// Combien de joueurs vaut la corrélation de la masse quand un autre mode
+/// en a peu : (1 − 0,39²)² / 0,17² ≈ 25, arrondi à 30. Au-delà de 30
+/// joueurs, la mesure du mode l'emporte.
+#[cfg(test)]
+const CORRELATION_PRIOR_SIDES: f64 = 30.0;
+
+/// La corrélation de Pearson entre deux séries de même longueur (0 si
+/// l'une ne varie pas).
+#[cfg(test)]
+fn pearson(a: &[f64], b: &[f64]) -> f64 {
+    let n = a.len().min(b.len()).max(1) as f64;
+    let (ma, mb) = (a.iter().sum::<f64>() / n, b.iter().sum::<f64>() / n);
+    let (mut cov, mut va, mut vb) = (0.0, 0.0, 0.0);
+    for (x, y) in a.iter().zip(b) {
+        cov += (x - ma) * (y - mb);
+        va += (x - ma).powi(2);
+        vb += (y - mb).powi(2);
+    }
+    if va <= 0.0 || vb <= 0.0 { 0.0 } else { cov / (va * vb).sqrt() }
+}
+
 /// Propose les valeurs à poser, d'après les duels de `YF_MATCHES` (écrit
 /// aussi dans `YF_CALIB_OUT/proposition.txt` s'il est donné) :
 ///
@@ -639,9 +660,46 @@ fn proposition_de_calibrage() {
     // 4. La note qui en sortirait : la moyenne de mes cinq familles.
     let families = rating::scale_of(mode).families;
     let means_z: Vec<f64> = per_duel.iter().map(|g| g.iter().zip(&family_spread).take(families).map(|(g, s)| g / s).sum::<f64>() / families as f64).collect();
+    // L'élargissement se déduit de la corrélation entre familles, comme un
+    // QI total est recalé sur la répartition réelle des totaux. La mesure est
+    // la moyenne des corrélations deux à deux : elle ne dépend pas de l'écart
+    // de chaque famille, mal connu sur peu de joueurs. Celle que suppose
+    // l'écart des moyennes n'est affichée que pour la vérifier (les deux se
+    // rejoignent quand les joueurs sont nombreux : 0,41 et 0,39 en masse).
     let (_, spread_of_mean) = sd(&means_z);
-    let factor = 1.0 / spread_of_mean;
-    let _ = writeln!(text, "\n## Élargissement : SPREAD_FACTOR = {factor:.3} (pour un écart de note de 100 ; actuel {})", rating::scale_of(mode).factor);
+    let n = families as f64;
+    let implied = (n * spread_of_mean * spread_of_mean - 1.0) / (n - 1.0);
+    let zs: Vec<Vec<f64>> = (0..families).map(|i| per_duel.iter().map(|g| g[i] / family_spread[i]).collect()).collect();
+    let mut pairs = Vec::new();
+    for i in 0..families {
+        for j in i + 1..families {
+            pairs.push(pearson(&zs[i], &zs[j]));
+        }
+    }
+    let measured = pairs.iter().sum::<f64>() / pairs.len().max(1) as f64;
+    let sides = per_duel.len() as f64;
+    // La masse a le plus de duels : c'est elle qui sert de point de départ
+    // aux autres modes, comme deux situations moyennes lissent une famille.
+    // Une corrélation mesurée sur N joueurs a un écart d'environ
+    // (1 − ρ²) / √N ; l'écart qu'on admet entre deux modes (0,17) vaut
+    // CORRELATION_PRIOR_SIDES joueurs.
+    let correlation = if mode == parse::Mode::Mace {
+        measured
+    } else {
+        let prior = rating::scale_of(parse::Mode::Mace).correlation;
+        (sides * measured + CORRELATION_PRIOR_SIDES * prior) / (sides + CORRELATION_PRIOR_SIDES)
+    };
+    let correlation = correlation.clamp(0.0, 1.0);
+    let factor = (n / (1.0 + (n - 1.0) * correlation)).sqrt();
+    let current = rating::scale_of(mode);
+    let _ = writeln!(text, "\n## Corrélation entre familles : correlation = {correlation:.3}");
+    let _ = writeln!(
+        text,
+        "mesurée {measured:+.3} sur {sides} joueurs (d'après l'écart des moyennes : {implied:+.3}, écart attendu ±{:.2}) ; actuelle {:.3}",
+        (1.0 - measured * measured).abs() / sides.max(1.0).sqrt(),
+        current.correlation
+    );
+    let _ = writeln!(text, "Élargissement qui en sort : {factor:.3} (actuel {:.3})", current.factor());
     let mut notes: Vec<f64> = means_z.iter().map(|m| (rating::CENTER + 100.0 * m * factor).clamp(0.0, rating::MAX)).collect();
     notes.sort_by(f64::total_cmp);
     let above = |limit: f64| 100.0 * notes.iter().filter(|n| **n >= limit).count() as f64 / notes.len().max(1) as f64;
