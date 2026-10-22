@@ -27,7 +27,8 @@ use super::writer::send;
 /// 12 (2026-10-15) : le résumé passe à 50 nombres (coups et totems échangés).
 /// 13 (2026-10-18) : `yf_combat_share`, le partage des duels pour la calibration.
 /// 14 (2026-10-22) : notes sur 500, et lignes `action` dans le détail d'un duel.
-const ABI_VERSION: u32 = 14;
+/// 15 (2026-10-22) : le mode épée — neuf chiffres de plus dans le résumé.
+const ABI_VERSION: u32 = 15;
 
 /// Autres joueurs transmis par tick, au plus.
 const MAX_OTHERS: usize = 16;

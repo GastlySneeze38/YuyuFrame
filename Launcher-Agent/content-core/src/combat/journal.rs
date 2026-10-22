@@ -49,7 +49,14 @@ use super::record::*;
 /// critique (`entity.player.attack.crit`). Le format ne change pas ; la
 /// version dit seulement qu'une absence de critique veut dire « aucun », et
 /// non « pas encore capturé ».
-pub const TELEMETRY_VERSION: u32 = 3;
+///
+/// Version 4 (2026-10-22, mode épée) : les lignes `n` portent aussi les sons
+/// d'un coup que le serveur joue aux pieds de celui qui frappe
+/// (`Player.attack`, jar 26.3) — `entity.player.attack.knockback` (coup
+/// sprinté, barre au-dessus de 0,9), `.strong` (barre pleine), `.weak`
+/// (barre pas pleine), `.sweep`, `.nodamage` (coup sans effet). Ce sont les
+/// seules traces de la charge et du sprint de l'adversaire à son coup.
+pub const TELEMETRY_VERSION: u32 = 4;
 /// Un autre joueur à moins de cette distance : on est engagé.
 const ENGAGE_BLOCKS: f64 = 16.0;
 /// Lignes gardées avant l'ouverture du duel (10 s d'échantillons).

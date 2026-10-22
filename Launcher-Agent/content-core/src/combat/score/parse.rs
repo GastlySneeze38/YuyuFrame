@@ -17,6 +17,8 @@ const STATUS_TOTEM: i64 = 35;
 const STATUS_DEATH: i64 = 3;
 /// Le son du coup critique, joué sur celui qui frappe.
 const CRIT_SOUND: &str = "entity.player.attack.crit";
+/// Le début du nom des autres sons d'un coup (version 4).
+const ATTACK_SOUND: &str = "entity.player.attack.";
 
 /// Un tick du duel : notre joueur, et l'adversaire quand il était transmis.
 pub struct Sample {
@@ -144,6 +146,11 @@ pub struct Duel {
     /// n'étaient rattachés à personne. Un critique part avec un coup : c'est
     /// au coup confirmé du même tick qu'il est rattaché (`smash::crit_heard`).
     pub crits: Vec<u64>,
+    /// Les autres sons d'un coup (version 4, mode épée) : (tick, fin du nom —
+    /// `knockback` coup sprinté, `strong` / `weak` selon la charge, `sweep`,
+    /// `nodamage`). Comme les critiques, rattachés au coup confirmé du même
+    /// tick, pas au joueur le plus proche.
+    pub attack_sounds: Vec<(u64, String)>,
     /// Objets que notre joueur a utilisés : (tick, identifiant).
     pub uses: Vec<(u64, String)>,
     /// L'équipement de chacun, à chaque changement.
@@ -177,12 +184,20 @@ impl Duel {
     pub fn sees_crits(&self) -> bool {
         self.version >= 3
     }
+
+    /// Le journal porte-t-il les sons de charge et de sprint d'un coup (version 4) ?
+    pub fn sees_attack_sounds(&self) -> bool {
+        self.version >= 4
+    }
 }
 
 /// Le mode d'un duel, reconnu à l'arme en main des deux duellistes : une
 /// masse vue une seule fois dans une main suffit — on la sort pour frapper,
 /// on tient une charge de vent ou une élytre le reste du temps. Sans masse,
-/// une épée fait un duel à l'épée ; sinon, c'est autre chose.
+/// un duel à l'épée est celui où chacun n'a QUE son épée (2026-10-22) :
+/// rien d'autre en main ni dans l'autre main, aucun objet utilisé, aucun
+/// totem. Un kit épée avec totems, pommes ou perles est un autre mode, pas
+/// encore noté.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Mode {
@@ -275,6 +290,7 @@ pub fn parse(text: &str) -> Option<Duel> {
         shield_sounds: Vec::new(),
         shield_cooldowns: Vec::new(),
         crits: Vec::new(),
+        attack_sounds: Vec::new(),
         uses: Vec::new(),
         my_gear: Vec::new(),
         foe_gear: Vec::new(),
@@ -285,7 +301,7 @@ pub fn parse(text: &str) -> Option<Duel> {
         time: header["time"].as_u64(),
         start: header["t"].as_u64().unwrap_or(0),
     };
-    let (mut saw_mace, mut saw_sword) = (false, false);
+    let (mut saw_mace, mut saw_sword, mut saw_other) = (false, false, false);
     for line in &lines {
         let t = line["t"].as_u64().unwrap_or(0);
         match line["k"].as_str().unwrap_or("") {
@@ -319,6 +335,8 @@ pub fn parse(text: &str) -> Option<Duel> {
                 if sound == CRIT_SOUND {
                     // Quel que soit le joueur sur qui Java l'a rattaché (voir `crits`).
                     duel.crits.push(t);
+                } else if let Some(kind) = sound.strip_prefix(ATTACK_SOUND) {
+                    duel.attack_sounds.push((t, kind.to_string()));
                 } else if sound.starts_with("item.shield") && (on_me || (foe.is_some() && int(&line["entity"]) == foe)) {
                     duel.shield_sounds.push(ShieldSound { t, on_me, broke: sound.ends_with("break") });
                 }
@@ -372,13 +390,22 @@ pub fn parse(text: &str) -> Option<Duel> {
                     let hand = main_hand(equipment);
                     saw_mace |= hand == "mace";
                     saw_sword |= hand.ends_with("_sword");
+                    let offhand = equipment.split(';').nth(5).map(item_of).unwrap_or("");
+                    saw_other |= !(hand.is_empty() || hand.ends_with("_sword")) || !offhand.is_empty();
                 }
             }
             "r" => duel.result = line["result"].as_str().map(str::to_string),
             _ => {}
         }
     }
-    duel.mode = if saw_mace { Mode::Mace } else if saw_sword { Mode::Sword } else { Mode::Other };
+    let only_swords = !saw_other && duel.uses.is_empty() && duel.my_totems.is_empty() && duel.foe_totems.is_empty();
+    duel.mode = if saw_mace {
+        Mode::Mace
+    } else if saw_sword && only_swords {
+        Mode::Sword
+    } else {
+        Mode::Other
+    };
     duel.samples.sort_by_key(|s| s.t);
     duel.hits.sort_by_key(|h| h.t);
     duel.attacks.sort_by_key(|a| a.t);
@@ -386,6 +413,7 @@ pub fn parse(text: &str) -> Option<Duel> {
     duel.shield_sounds.sort_by_key(|s| s.t);
     duel.shield_cooldowns.sort_unstable();
     duel.crits.sort_unstable();
+    duel.attack_sounds.sort_by_key(|s| s.0);
     duel.my_falls.sort_unstable();
     duel.my_totems.sort_unstable();
     duel.foe_totems.sort_unstable();
@@ -441,6 +469,10 @@ mod tests {
         };
         assert_eq!(parse(&journal("wind_charge", "mace")).unwrap().mode, Mode::Mace, "une masse dans une main suffit");
         assert_eq!(parse(&journal("diamond_sword", "netherite_sword")).unwrap().mode, Mode::Sword);
+        // Une épée et autre chose (un totem dans l'autre main, une pomme mangée) : pas un duel à l'épée seule.
+        assert_eq!(parse(&journal("diamond_sword", "netherite_sword;totem_of_undying")).unwrap().mode, Mode::Other);
+        let apple = journal("diamond_sword", "netherite_sword") + "{\"k\":\"u\",\"item\":\"golden_apple\",\"t\":5}\n";
+        assert_eq!(parse(&apple).unwrap().mode, Mode::Other);
         // La masse d'un spectateur (id 99) ne compte pas.
         assert_eq!(parse(&journal("bow", "")).unwrap().mode, Mode::Other);
         let duel = parse(&journal("mace", "mace")).unwrap();

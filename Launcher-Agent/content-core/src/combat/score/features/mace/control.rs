@@ -9,7 +9,7 @@
 //! B se placer au sommet, D se déplacer à l'horizontale, E enchaîner et
 //! reconstruire. Chez l'adversaire, A, B, C et E se mesurent en miroir.
 
-use super::super::parse::{gear_at, Duel, Gear, SLOT_HAND};
+use super::{gear_at, Duel, Gear, SLOT_HAND};
 use super::{descents, family, logistic, Family, Item, Norm, Opportunity, Part, View, BIG_FALL, GAP_TICKS, HEIGHT_ADVANTAGE, HIT_DELAY_TICKS, MIN_FALL, REACH, Y};
 
 // Poids des groupes (décision du 2026-10-14), *à calibrer*.
@@ -557,8 +557,8 @@ mod tests {
 
     #[test]
     fn l_armure_netherite_attend_moins_de_hauteur() {
-        let plain = super::super::super::parse::Gear { t: 0, slots: Default::default() };
-        let mut heavy = super::super::super::parse::Gear { t: 0, slots: Default::default() };
+        let plain = Gear { t: 0, slots: Default::default() };
+        let mut heavy = Gear { t: 0, slots: Default::default() };
         for slot in heavy.slots[..4].iter_mut() {
             *slot = "netherite_boots".to_string();
         }

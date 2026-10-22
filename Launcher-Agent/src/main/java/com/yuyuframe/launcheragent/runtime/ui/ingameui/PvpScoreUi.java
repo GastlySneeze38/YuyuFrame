@@ -390,18 +390,20 @@ public final class PvpScoreUi {
     // ── Le choix du mode ─────────────────────────────────────────────────────
 
     /**
-     * Les modes de jeu notés, dans l'ordre de la liste déroulante. Seule la
-     * masse l'est pour l'instant ; un mode s'ajoute ici le jour où le noyau
-     * sait le noter (et où l'historique dit de quel mode est chaque duel).
+     * Les modes de jeu notés, dans l'ordre de la liste déroulante : la masse,
+     * et l'épée seule depuis le 2026-10-22 (un kit où chacun n'a que son
+     * épée). Un mode s'ajoute ici le jour où le noyau sait le noter.
      */
-    static final String[] MODES = { "Masse" };
+    static final String[] MODES = { "Masse", "Épée" };
     /** Le code de chaque mode dans le résumé du noyau ({@code NativeCombat.REPORT_MODE}), dans l'ordre de {@link #MODES}. */
-    static final int[] MODE_CODES = { 1 };
+    static final int[] MODE_CODES = { 1, 2 };
 
     /** Pourquoi un duel n'a pas de note, en deux lignes ({@code NativeCombat.REPORT_REASON}). */
-    public static String[] reasonLines(double reason) {
+    public static String[] reasonLines(double[] report) {
+        double reason = report[NativeCombat.REPORT_REASON];
         if (reason == 1) return new String[]{ "Duel trop court", "pour être noté" };
-        if (reason == 3) return new String[]{ "Pas de masse :", "ce mode n'est pas noté" };
+        if (reason == 3) return new String[]{ "Ce mode de jeu", "n'est pas encore noté" };
+        if (PvpScoreModule.isSword(report)) return new String[]{ "Trop peu de coups", "pour être noté" };
         return new String[]{ "Trop peu d'opportunités", "pour être noté" };
     }
 

@@ -305,11 +305,15 @@ public final class CombatTracker {
      * ({@code item.shield.break}) — est joué aux pieds de celui qui bloque ;
      * celui du coup critique ({@code entity.player.attack.crit}) aux pieds de
      * celui qui frappe ({@code Player.attackVisualEffects}, jar 26.3) : c'est
-     * la seule trace du critique de l'adversaire. Les autres sons ne sont pas
+     * la seule trace du critique de l'adversaire. Depuis le 2026-10-22 (mode
+     * épée), tous les sons d'un coup ({@code entity.player.attack.*} :
+     * {@code knockback} pour un coup sprinté, {@code strong} / {@code weak}
+     * selon la charge, {@code sweep}, {@code nodamage}) : les seules traces de
+     * la charge et du sprint de l'adversaire. Les autres sons ne sont pas
      * transmis.
      */
     private static void combatSound(SoundPlayed sound) {
-        if (sound.sound == null || !(sound.sound.startsWith("item.shield") || sound.sound.equals(CRIT_SOUND))) {
+        if (sound.sound == null || !(sound.sound.startsWith("item.shield") || sound.sound.startsWith(ATTACK_SOUNDS))) {
             return;
         }
         Object players = AccessorRegistry.get(AccessPoint.LEVEL_PLAYERS, null);
@@ -335,8 +339,8 @@ public final class CombatTracker {
 
     /** Distance au-delà de laquelle un son n'est rattaché à aucun joueur. */
     private static final double SOUND_MATCH = 2.0;
-    /** Le son du coup critique ({@code SoundEvents.PLAYER_ATTACK_CRIT}). */
-    private static final String CRIT_SOUND = "entity.player.attack.crit";
+    /** Les sons d'un coup ({@code SoundEvents.PLAYER_ATTACK_*}), critique compris. */
+    private static final String ATTACK_SOUNDS = "entity.player.attack.";
 
     private static int selfFlags(Object self) {
         boolean[] move = PlayerData.movementFlags();

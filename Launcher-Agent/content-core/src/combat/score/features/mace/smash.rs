@@ -8,8 +8,10 @@
 //! frapper mal chargé y coûtent, frapper avec la charge accumulée sur l'objet
 //! d'avant (attribute swap) y compte comme un coup bien chargé.
 
-use super::super::parse::{gear_at, Duel, SLOT_HAND};
-use super::{family, flag, sample_at, smash_bonus, Family, Norm, Opportunity, Part, View, IN_WATER, ME_CHARGE, ME_FLAGS, ME_PITCH, PASSENGER, SPRINTING};
+use super::{
+    attack_tick, charge_factor, crit_heard, family, flag, gear_at, sample_at, smash_bonus, Duel, Family, Norm, Opportunity, Part, View, IN_WATER, ME_CHARGE, ME_FLAGS, ME_PITCH,
+    PASSENGER, SLOT_HAND, SPRINTING,
+};
 
 /// Ce qu'on attend d'un smash réussi : 0,664 des dégâts possibles, relevé
 /// sur 379 smashs de 31 duels partagés le 2026-10-22 (0,63 sur nos 89 du
@@ -34,18 +36,8 @@ const MACE_BASE: f64 = 6.0;
 /// l'eau, pas en monture, pas en sprint).
 const CRIT: f64 = 1.5;
 const CRIT_CHARGE: f64 = 0.9;
-/// Un coup donné et son paquet de dégâts : au plus ce délai, ping compris.
-const ATTACK_TO_HIT_TICKS: u64 = 4;
-/// Écart toléré entre le son d'un critique et le paquet de dégâts du coup.
-const CRIT_SOUND_TICKS: u64 = 2;
 /// Durée maximale d'approche d'une charge de lance qu'on remonte.
 const APPROACH_TICKS: u64 = 100;
-
-/// Le facteur que le jeu applique aux dégâts de base selon la charge :
-/// `0,2 + 0,8 × charge²` (`Player.baseDamageScaleFactor`, jar 26.3).
-fn charge_factor(charge: f64) -> f64 {
-    0.2 + 0.8 * charge * charge
-}
 
 /// Multiplicateur de vitesse de la charge de chaque lance
 /// (`Item.Properties.spear`, second paramètre, jar 26.3).
@@ -68,14 +60,6 @@ fn spear_damage(speed: f64, multiplier: f64) -> f64 {
     1.0 + (speed.max(0.0) * multiplier).floor()
 }
 
-/// La charge telle que le jeu la compte au coup : celle du dernier tick
-/// relevé avant le coup. Elle suit les attributs de l'objet tenu jusque-là —
-/// c'est le principe de l'attribute swap : la barre repart à zéro au tick
-/// SUIVANT un changement d'objet (`Player.tick`, jar 26.3).
-fn attack_tick(duel: &Duel, hit: u64, ping: u64) -> Option<u64> {
-    duel.attacks.iter().rev().find(|a| a.on_foe && a.t <= hit && hit - a.t <= ATTACK_TO_HIT_TICKS + ping).map(|a| a.t)
-}
-
 /// Un smash réussi, tel que la famille le juge (relevé pour l'outil de calibration).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Smash {
@@ -90,16 +74,6 @@ pub struct Smash {
     pub sprinting: Option<bool>,
     /// Dégâts tirés ÷ dégâts possibles.
     pub ratio: f64,
-}
-
-/// Un critique entendu avec ce coup : le son part du serveur au moment du
-/// coup, avec le paquet de dégâts (deux ticks de marge). C'est le coup qui
-/// dit qui a frappé — pas la position du son (voir `Duel::crits`). Si un
-/// coup de l'autre tombe dans les mêmes ticks, le son reste ambigu : il
-/// n'est donné à personne.
-fn crit_heard(duel: &Duel, hit: u64, by_me: bool) -> bool {
-    let near = |t: u64| t.abs_diff(hit) <= CRIT_SOUND_TICKS;
-    duel.crits.iter().any(|t| near(*t)) && !duel.hits.iter().any(|h| h.by_me != by_me && near(h.t))
 }
 
 /// Mes gros coups : la famille, et chaque smash jugé.
@@ -276,13 +250,6 @@ fn relative_speed(duel: &Duel, v: &View, mine: bool) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn la_charge_suit_la_formule_du_jeu() {
-        assert!((charge_factor(1.0) - 1.0).abs() < 1e-12);
-        assert!((charge_factor(0.0) - 0.2).abs() < 1e-12);
-        assert!((charge_factor(0.5) - 0.4).abs() < 1e-12);
-    }
 
     #[test]
     fn aucun_smash_sur_des_ouvertures_vaut_zero() {

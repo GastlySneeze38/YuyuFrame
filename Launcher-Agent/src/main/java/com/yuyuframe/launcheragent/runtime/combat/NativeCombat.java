@@ -33,7 +33,7 @@ import java.util.UUID;
 public final class NativeCombat {
 
     /** Même valeur que {@code ABI_VERSION} dans combat/bridge.rs. */
-    private static final int ABI_VERSION = 14;
+    private static final int ABI_VERSION = 15;
 
     /** Place réservée au texte de l'historique : deux cents duels en tiennent bien moins. */
     private static final int HISTORY_BYTES = 256 * 1024;
@@ -42,7 +42,7 @@ public final class NativeCombat {
      * Le résumé d'un duel, en nombres — {@code Report::numbers} dans
      * combat/score/mod.rs, même ordre.
      */
-    public static final int REPORT_LEN = 50;
+    public static final int REPORT_LEN = 59;
     /**
      * Note sur {@link #SCORE_MAX} (500 depuis l'ABI 14), bonus bug use compris,
      * ou −1 si le duel n'est pas noté. {@link #SCORE_CENTER} : le joueur moyen.
@@ -115,6 +115,22 @@ public final class NativeCombat {
     /** Totems que je lui ai fait sauter, et les miens qui ont sauté (hors note). */
     public static final int REPORT_TOTEMS_FORCED = 48;
     public static final int REPORT_TOTEMS_LOST = 49;
+    /**
+     * Le mode épée (ABI 15, hors note, zéro ailleurs) : mes W-taps tentés puis
+     * réussis ; mon plus long combo et mes combos de deux coups ou plus ; mes
+     * coups à l'épée, ceux à barre pleine, ceux sprintés, mes critiques ; mes
+     * jump resets. À l'épée, les familles 0 à 3 sont combos, qualité du coup,
+     * défense, placement, et la cinquième ne mesure rien.
+     */
+    public static final int REPORT_SWORD_WTAPS = 50;
+    public static final int REPORT_SWORD_WTAPS_LANDED = 51;
+    public static final int REPORT_SWORD_LONGEST_COMBO = 52;
+    public static final int REPORT_SWORD_COMBOS = 53;
+    public static final int REPORT_SWORD_HITS = 54;
+    public static final int REPORT_SWORD_FULL_HITS = 55;
+    public static final int REPORT_SWORD_SPRINT_HITS = 56;
+    public static final int REPORT_SWORD_CRITS = 57;
+    public static final int REPORT_SWORD_JUMP_RESETS = 58;
 
     /** Nombres décrivant notre joueur à un tick — {@code ME_LEN} dans combat/record.rs, même ordre. */
     public static final int ME_LEN = 21;

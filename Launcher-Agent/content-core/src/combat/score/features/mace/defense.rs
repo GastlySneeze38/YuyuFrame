@@ -11,9 +11,9 @@
 //! proprement, la reprise après un coup. Les dégâts évités résument les
 //! trois premières : affichés, hors note.
 
-use super::super::parse::{Duel, SLOT_HAND, SLOT_OFFHAND};
 use super::{
-    conversion, descents, family, logistic, sample_at, smash_bonus, Family, Item, Norm, Opportunity, Part, View, HEIGHT_ADVANTAGE, HIT_DELAY_TICKS, ME_HEALTH, MIN_FALL, NO_CONTEXT, REACH,
+    conversion, descents, exchanges, family, logistic, sample_at, smash_bonus, Duel, Family, Gear, Item, Norm, Opportunity, Part, View, HEIGHT_ADVANTAGE, HIT_DELAY_TICKS, ME_HEALTH,
+    MIN_FALL, NO_CONTEXT, REACH, SLOT_HAND, SLOT_OFFHAND,
 };
 
 // Poids des mesures, posés au jugé (décision du 2026-10-14), *à calibrer*.
@@ -23,10 +23,7 @@ const W_VULNERABLE: f64 = 0.15;
 const W_DODGE: f64 = 0.15;
 const W_LANDING: f64 = 0.10;
 const W_RECOVERY: f64 = 0.05;
-/// Tenir les échanges (2026-10-22) : chaque coup du duel, toutes armes
-/// confondues, porté ou reçu. Ajouté après l'étude des duels partagés — qui
-/// gagne les échanges garde l'écart entre deux joueurs sur un duel long, là
-/// où les taux par occasion se resserrent. Proche du résultat (c'est en
+/// Tenir les échanges (`features::exchange`). Proche du résultat (c'est en
 /// touchant qu'on gagne), mais 0,6 (un tiers de la défense) faisait mieux
 /// que 0,3 sur 31 duels : écart sur les duels longs et stabilité par joueur.
 /// À revoir sur plus de duels.
@@ -57,8 +54,6 @@ pub const DODGE: Norm = Norm::new("defense.dodge", 0.222, 0.416);
 /// que coûter.
 pub const LANDING: Norm = Norm::new("defense.landing", 1.0, 0.39);
 pub const RECOVERY: Norm = Norm::new("defense.recovery", 0.839, 0.234);
-/// Chaque coup du duel : porté (1) ou reçu (0) — 0,5 par symétrie.
-pub const EXCHANGE: Norm = Norm::new("defense.exchange", 0.5, 0.5);
 
 /// La chance d'esquiver une descente, d'après sa situation au départ :
 /// distance horizontale et hauteur de l'attaquant au-dessus. Apprise le
@@ -244,8 +239,7 @@ impl Defender<'_> {
 
     /// Les échanges : chaque coup porté vaut 1, chaque coup reçu 0.
     fn exchanges(&self) -> Part {
-        let dealt = self.hits_dealt.iter().map(|t| (Some(*t), 1.0));
-        Part::of(EXCHANGE, dealt.chain(self.hits_taken.iter().map(|t| (Some(*t), 0.0))))
+        exchanges(self.hits_dealt.iter().copied(), self.hits_taken.iter().copied())
     }
 
     fn family(&self, landing: Part) -> Family {
@@ -306,7 +300,7 @@ fn landing_damage(duel: &Duel, mine: &[Opportunity]) -> Vec<(u64, f64)> {
     out
 }
 
-fn holds_shield(gear: &[super::super::parse::Gear]) -> bool {
+fn holds_shield(gear: &[Gear]) -> bool {
     gear.iter().any(|g| g.item(SLOT_HAND) == "shield" || g.item(SLOT_OFFHAND) == "shield")
 }
 

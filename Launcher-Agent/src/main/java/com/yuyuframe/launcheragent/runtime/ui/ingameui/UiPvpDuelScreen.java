@@ -48,8 +48,10 @@ public final class UiPvpDuelScreen extends UiScreenBase {
     private static final String[] ANALYSIS = { "Points forts", "Points faibles", "À améliorer" };
     private static final UiColor[] ANALYSIS_TONES = { PvpScoreUi.GOOD, PvpScoreUi.BAD, new UiColor(168, 152, 255, 255) };
 
-    /** Les lignes du face-à-face : mes cinq familles ; l'adversaire n'a que les quatre premières. */
+    /** Au plus, les lignes du face-à-face : mes cinq familles ; l'adversaire n'a que les quatre premières. */
     private static final int ROWS = NativeCombat.FAMILY_COUNT - 1;
+    /** Les lignes de ce duel : cinq à la masse, quatre à l'épée. */
+    private final int rows;
 
     private final Object lastScreen;
     private final DuelHistory.Duel duel;
@@ -75,6 +77,7 @@ public final class UiPvpDuelScreen extends UiScreenBase {
         this.lastScreen = lastScreen;
         this.escapeTarget = lastScreen;
         this.duel = duel;
+        this.rows = PvpScoreModule.familyRows(duel.report);
         for (int i = 0; i < ROWS; i++) familyHover[i] = new UiAnimatedFloat(0f, 16f);
     }
 
@@ -128,14 +131,14 @@ public final class UiPvpDuelScreen extends UiScreenBase {
         bannerTop = c[2] - UiTheme.scaled(24f);
         bannerBottom = bannerTop - bannerHeight();
         float mainTop = bannerBottom - gap();
-        mainBottom = mainTop - faceHeader() - ROWS * rowHeight() - UiTheme.scaled(16f);
+        mainBottom = mainTop - faceHeader() - rows * rowHeight() - UiTheme.scaled(16f);
         scoreRight = left + UiTheme.scaled(330f);
         figuresBottom = mainBottom - gap() - figuresBlock();
 
         // Une zone cliquable par ligne du face-à-face, et une sur l'en-tête de l'adversaire.
         float faceLeft = scoreRight + gap();
         float rowTop = mainTop - faceHeader();
-        for (int i = 0; i < ROWS; i++) {
+        for (int i = 0; i < rows; i++) {
             final int family = i;
             familyHits[i] = new Hit(faceLeft, rowTop - (i + 1) * rowHeight(), right - faceLeft, rowHeight(),
                 () -> openFamily(family));
@@ -306,7 +309,7 @@ public final class UiPvpDuelScreen extends UiScreenBase {
                 new UiColor(168, 152, 255, 255), vw, vh);
         } else {
             PvpScoreUi.centered(r, UiFont.BOLD, PvpScoreUi.NO_SCORE, center, top - UiTheme.scaled(150f), width, tone, UiTheme.scaled(3f), vw, vh);
-            String[] reason = PvpScoreUi.reasonLines(duel.report[NativeCombat.REPORT_REASON]);
+            String[] reason = PvpScoreUi.reasonLines(duel.report);
             PvpScoreUi.centered(r, UiFont.REGULAR, Lang.tr(reason[0]), center,
                 bottom + UiTheme.scaled(64f), width, UiTheme.TEXT_PRIMARY, body, vw, vh);
             PvpScoreUi.centered(r, UiFont.REGULAR, Lang.tr(reason[1]), center, bottom + UiTheme.scaled(36f), width,
@@ -374,7 +377,7 @@ public final class UiPvpDuelScreen extends UiScreenBase {
         float value = UiTheme.scaled(0.6f);
         float barH = UiTheme.scaled(10f);
         float cardAlpha = PvpScoreUi.alpha;
-        for (int i = 0; i < ROWS; i++) {
+        for (int i = 0; i < rows; i++) {
             UiWidget hit = familyHits[i];
             float rowIn = progress(0.32f + 0.07f * i, 0.45f);
             PvpScoreUi.alpha = cardAlpha * rowIn;
@@ -398,7 +401,7 @@ public final class UiPvpDuelScreen extends UiScreenBase {
             PvpScoreUi.barLeftward(r, myBarLeft, mid - barH / 2f, myBarRight - UiTheme.scaled(12f), barH, measured ? PvpScoreUi.percent(mine) * grow : 0, tone, vw, vh);
 
             float nameScale = name * (1f + 0.06f * hv);
-            PvpScoreUi.centered(r, hv > 0.5f ? UiFont.BOLD : UiFont.REGULAR, Lang.tr(PvpScoreModule.FAMILIES[i]), center,
+            PvpScoreUi.centered(r, hv > 0.5f ? UiFont.BOLD : UiFont.REGULAR, Lang.tr(PvpScoreModule.familyName(i, duel.report)), center,
                 PvpScoreUi.middle(mid, nameScale), labelHalf * 2f - UiTheme.scaled(20f),
                 UiColor.lerp(UiTheme.TEXT_SECONDARY, UiTheme.TEXT_PRIMARY, hv), nameScale, vw, vh);
 
@@ -434,7 +437,7 @@ public final class UiPvpDuelScreen extends UiScreenBase {
         double charge = report[NativeCombat.REPORT_SMASH_CHARGE];
         double avoided = report[NativeCombat.REPORT_AVOIDED];
         float n = progress(0.5f, 1f);
-        String[][] figures = {
+        String[][] figures = PvpScoreModule.isSword(report) ? swordFigures(report, n) : new String[][] {
             { "OPPORTUNITÉS CONVERTIES", ratio(report, NativeCombat.REPORT_MY_CONVERTED, NativeCombat.REPORT_MY_OPENED, n) },
             { "GROSSES OUVERTURES", ratio(report, NativeCombat.REPORT_BIG_CONVERTED, NativeCombat.REPORT_BIG_OPENED, n) },
             { "PETITES OUVERTURES", ratio(report, NativeCombat.REPORT_SMALL_CONVERTED, NativeCombat.REPORT_SMALL_OPENED, n) },
@@ -468,6 +471,22 @@ public final class UiPvpDuelScreen extends UiScreenBase {
                 UiTheme.TEXT_SECONDARY, UiTheme.scaled(0.36f), vw, vh);
         }
         PvpScoreUi.alpha = 1f;
+    }
+
+    /** Les chiffres d'un duel à l'épée : le W-tap et les combos d'abord, c'est le cœur du mode. */
+    private static String[][] swordFigures(double[] report, float n) {
+        return new String[][] {
+            { "W-TAPS RÉUSSIS", ratio(report, NativeCombat.REPORT_SWORD_WTAPS_LANDED, NativeCombat.REPORT_SWORD_WTAPS, n) },
+            { "PLUS LONG COMBO", PvpScoreUi.count(report[NativeCombat.REPORT_SWORD_LONGEST_COMBO], n) + " " + Lang.tr("coups") },
+            { "COMBOS", String.valueOf(PvpScoreUi.count(report[NativeCombat.REPORT_SWORD_COMBOS], n)) },
+            { "COUPS PORTÉS / REÇUS", ratio(report, NativeCombat.REPORT_HITS_DEALT, NativeCombat.REPORT_HITS_TAKEN, n) },
+            { "BARRE PLEINE", ratio(report, NativeCombat.REPORT_SWORD_FULL_HITS, NativeCombat.REPORT_SWORD_HITS, n) },
+            { "COUPS SPRINTÉS", String.valueOf(PvpScoreUi.count(report[NativeCombat.REPORT_SWORD_SPRINT_HITS], n)) },
+            { "CRITIQUES", String.valueOf(PvpScoreUi.count(report[NativeCombat.REPORT_SWORD_CRITS], n)) },
+            { "JUMP RESETS", String.valueOf(PvpScoreUi.count(report[NativeCombat.REPORT_SWORD_JUMP_RESETS], n)) },
+            { "TEMPS AU CONTACT", PvpScoreUi.duration(report[NativeCombat.REPORT_ENGAGED_SECS] * n) },
+            { "PING", report[NativeCombat.REPORT_PING] >= 0 ? PvpScoreUi.count(report[NativeCombat.REPORT_PING], n) + " ms" : PvpScoreUi.NO_SCORE },
+        };
     }
 
     /**

@@ -14,6 +14,7 @@
 //! formules ne se mélangent jamais.
 
 use super::features::{Features, Measure};
+use super::parse::Mode;
 
 /// Version de la formule. Tout changement de coefficient ou de référence
 /// l'incrémente.
@@ -47,49 +48,74 @@ use super::features::{Features, Measure};
 // dans la défense, et le calibrage qui va avec.
 // Version 17 (2026-10-22) : la force connue de l'adversaire sort de la note
 // (gardée pour le classement) ; cinq familles.
-pub const SCORE_VERSION: u32 = 17;
+// Version 18 (2026-10-22) : l'épée est notée.
+pub const SCORE_VERSION: u32 = 18;
 
 /// Poids du lissage : une famille observée sur `K` événements est tirée à
 /// moitié vers l'attendu. Ramené de 5 à 2 le 2026-10-15 : sur peu de
 /// matière, la moyenne effaçait ce qui s'était passé. Un seul événement
 /// compte pour un tiers.
 pub(super) const K: f64 = 2.0;
-/// La confiance affichée garde son échelle d'origine : 5 opportunités
-/// donnent 50 %, 20 en donnent 80 %. Elle dit sur combien la note repose,
-/// indépendamment du lissage.
-const K_CONFIDENCE: f64 = 5.0;
-/// En dessous, le duel n'est pas noté.
-const MIN_OPPORTUNITIES: usize = 3;
 const MIN_ENGAGED_SECS: f64 = 20.0;
 
-/// De combien une famille s'écarte d'ordinaire d'un duel à l'autre, après
-/// lissage (dans l'unité de `Measure::gap`) : ce qui la ramène à un écart
-/// de note. Dans l'ordre : conversion, qualité du smash, défense, contrôle,
-/// ressources — les quatre premières servent aussi à l'adversaire. Relevés
-/// le 2026-10-22 sur 31 duels notés partagés, les deux joueurs
-/// (`calibration`, test `proposition_de_calibrage`). Celui de la qualité du
-/// smash est large : un duel sans aucun smash sur ses ouvertures y pèse lourd.
-const FAMILY_SPREAD: [f64; 5] = [0.365, 0.708, 0.256, 0.249, 0.211];
+/// L'échelle d'un mode : ce qui ramène ses familles à la note.
+pub(super) struct Scale {
+    /// De combien une famille s'écarte d'ordinaire d'un duel à l'autre,
+    /// après lissage (dans l'unité de `Measure::gap`) : ce qui la ramène à
+    /// un écart de note. Dans l'ordre des cases du résumé — les quatre
+    /// premières servent aussi à l'adversaire.
+    pub spread: [f64; 5],
+    /// De la moyenne des écarts à l'écart de la note. Une moyenne de
+    /// familles est plus resserrée qu'une famille seule, il faut donc
+    /// l'élargir — mais pas comme si elles étaient indépendantes (×√5) : un
+    /// joueur bon dans l'une l'est souvent dans les autres.
+    pub factor: f64,
+    /// Combien de familles font la note, les premières cases du résumé.
+    pub families: usize,
+    /// En dessous de ce nombre de situations, le duel n'est pas noté.
+    pub min_evidence: usize,
+    /// La confiance : situations / (situations + ce nombre).
+    pub k_confidence: f64,
+}
 
-/// De la moyenne des écarts à l'écart de la note. Une moyenne de familles
-/// est plus resserrée qu'une famille seule, il faut donc l'élargir — mais
-/// pas comme si elles étaient indépendantes (×√6) : un joueur bon dans l'une
-/// l'est souvent dans les autres. Posé à 1,3 au jugé ; relevé le 2026-10-22
-/// à 1,83 sur 31 duels (ce qui donne à la note un écart de 100), à 1,68 avec
+/// La masse. Écarts relevés le 2026-10-22 sur 31 duels notés partagés, les
+/// deux joueurs (`calibration`, test `proposition_de_calibrage`) — celui de
+/// la qualité du smash est large : un duel sans aucun smash sur ses
+/// ouvertures y pèse lourd. Élargissement posé à 1,3 au jugé, relevé à 1,83
+/// sur ces duels (ce qui donne à la note un écart de 100), à 1,68 avec
 /// l'initiative et les échanges, qui lient un peu plus les familles, puis à
 /// 1,40 quand la force connue de l'adversaire est sortie de la moyenne (cinq
-/// familles au lieu de six : la même échelle).
-pub(super) const SPREAD_FACTOR: f64 = 1.40;
+/// familles au lieu de six : la même échelle). La confiance garde son
+/// échelle d'origine : 5 opportunités donnent 50 %, 20 en donnent 80 %.
+const MACE: Scale = Scale { spread: [0.365, 0.708, 0.256, 0.249, 0.211], factor: 1.40, families: 5, min_evidence: 3, k_confidence: 5.0 };
+/// L'épée (2026-10-22) : combos, qualité du coup, défense, placement — pas
+/// de ressources, le kit noté n'a que l'épée. Écarts relevés sur 23 duels à
+/// l'épée partagés (kits avec totems compris : les coups sont les mêmes) ;
+/// seuls 8 sont à l'épée seule, trop peu pour calibrer dessus. Ces 23 duels
+/// montraient des familles presque indépendantes (élargissement 2,26 pour
+/// cinq, √5 = 2,24) : pour quatre, 2,0 (√4). *À recalibrer* sur les duels à
+/// l'épée seule (`YF_MODE=sword`) dès qu'il y en aura une cinquantaine. Les
+/// situations sont les coups échangés : 6 au moins, et 12 donnent une
+/// confiance de 50 %.
+const SWORD: Scale = Scale { spread: [0.304, 0.416, 0.287, 0.298, 1.0], factor: 2.0, families: 4, min_evidence: 6, k_confidence: 12.0 };
+
+pub(super) fn scale_of(mode: Mode) -> &'static Scale {
+    match mode {
+        Mode::Sword => &SWORD,
+        _ => &MACE,
+    }
+}
 
 /// La note d'un joueur moyen, ce que vaut un écart, et le plafond.
 pub const CENTER: f64 = 250.0;
 const PER_Z: f64 = 100.0;
 pub const MAX: f64 = 500.0;
-/// Mes cinq familles à poids égaux : ce que pèse un écart d'une seule
-/// famille dans la note. La force connue de l'adversaire n'y entre plus
-/// (2026-10-22) : elle est gardée pour le classement, pas pour la note.
-pub(super) const FAMILIES: f64 = 5.0;
-const POINTS_PER_Z: f64 = PER_Z * SPREAD_FACTOR / FAMILIES;
+/// Ce que pèse un écart d'une seule famille dans la note : les familles du
+/// mode sont à poids égaux. La force connue de l'adversaire n'y entre plus
+/// (2026-10-22) : elle est gardée pour le classement.
+fn points_per_z(s: &Scale) -> f64 {
+    PER_Z * s.factor / s.families as f64
+}
 
 /// Un écart, sur l'échelle de la note.
 fn scale(z: f64) -> f64 {
@@ -111,11 +137,11 @@ pub struct Sub {
     pub points: f64,
 }
 
-fn sub(measure: Measure, spread: f64) -> Sub {
+fn sub(measure: Measure, spread: f64, per_z: f64) -> Sub {
     // Peu d'événements : l'écart est tiré vers l'attendu. Aucun : c'est l'attendu.
     let smoothed = measure.gap * measure.count / (measure.count + K);
     let z = smoothed / spread;
-    Sub { gap: measure.gap, count: measure.count, smoothed, z, score: scale(z).round(), points: POINTS_PER_Z * z }
+    Sub { gap: measure.gap, count: measure.count, smoothed, z, score: scale(z).round(), points: per_z * z }
 }
 
 /// Une action et ce qu'elle a rapporté à la note. Les points de toutes les
@@ -202,25 +228,27 @@ impl Prior {
 }
 
 pub fn rate(features: &Features, prior: &Prior) -> Rating {
+    let s = scale_of(features.mode);
+    let per_z = points_per_z(s);
     let measures = [features.conversion, features.smash_quality, features.exposure, features.vertical, features.resources];
-    let subs: Vec<Sub> = measures.iter().zip(FAMILY_SPREAD).map(|(m, spread)| sub(*m, spread)).collect();
-    let (opponent, opponent_families) = opponent_level(features);
-    let opportunities = features.mine.len() + features.theirs.len();
+    let subs: Vec<Sub> = measures.iter().zip(s.spread).map(|(m, spread)| sub(*m, spread, per_z)).collect();
+    let (opponent, opponent_families) = opponent_level(features, s);
     let reason = if features.engaged_secs < MIN_ENGAGED_SECS {
         Some("too_short")
-    } else if opportunities < MIN_OPPORTUNITIES {
+    } else if features.evidence < s.min_evidence {
         Some("too_few_opportunities")
     } else {
         None
     };
     // Mes cinq familles à poids égaux, puis la moyenne ramenée à l'échelle
-    // d'un écart (`SPREAD_FACTOR`). La force connue de l'adversaire est
-    // calculée pour le classement, hors de la note.
+    // d'un écart. La force connue de l'adversaire est calculée pour le
+    // classement, hors de la note.
     let opponent_known = Sub { gap: prior.z, count: prior.duels as f64, smoothed: prior.z, z: prior.z, score: scale(prior.z).round(), points: 0.0 };
-    let mean = subs.iter().map(|s| s.z).sum::<f64>() / FAMILIES;
-    let z = mean * SPREAD_FACTOR;
-    let n = opportunities as f64;
-    let own = combined(&subs, n);
+    let counted = &subs[..s.families];
+    let mean = counted.iter().map(|s| s.z).sum::<f64>() / s.families as f64;
+    let z = mean * s.factor;
+    let n = features.evidence as f64;
+    let own = combined(counted, n, s.factor);
     let base_score = reason.is_none().then(|| scale(z).round());
     // Le bonus s'ajoute à la note des cinq familles, plafonné à +50 (déjà
     // fait à l'extraction), la note restant plafonnée à 500.
@@ -230,7 +258,7 @@ pub fn rate(features: &Features, prior: &Prior) -> Rating {
     let mut actions = Vec::new();
     for (family, list) in features.actions.iter().enumerate() {
         let m = measures[family];
-        let per_gap = POINTS_PER_Z / FAMILY_SPREAD[family] * m.count / (m.count + K);
+        let per_gap = per_z / s.spread[family] * m.count / (m.count + K);
         actions.extend(list.iter().map(|a| Scored { family, t: a.t, code: a.code, points: per_gap * a.gap(), value: a.value, expected: a.expected }));
     }
     Rating {
@@ -238,7 +266,7 @@ pub fn rate(features: &Features, prior: &Prior) -> Rating {
         base_score,
         bug_use,
         reason,
-        confidence: n / (n + K_CONFIDENCE),
+        confidence: n / (n + s.k_confidence),
         conversion: subs[0],
         smash_quality: subs[1],
         exposure: subs[2],
@@ -253,9 +281,9 @@ pub fn rate(features: &Features, prior: &Prior) -> Rating {
 }
 
 /// Des familles combinées comme une note : moyenne des écarts, élargie par
-/// `SPREAD_FACTOR`, ramenée sur l'échelle de la note.
-fn combined(subs: &[Sub], count: f64) -> Sub {
-    let z = subs.iter().map(|s| s.z).sum::<f64>() / subs.len() as f64 * SPREAD_FACTOR;
+/// l'élargissement du mode, ramenée sur l'échelle de la note.
+fn combined(subs: &[Sub], count: f64, factor: f64) -> Sub {
+    let z = subs.iter().map(|s| s.z).sum::<f64>() / subs.len() as f64 * factor;
     Sub { gap: z, count, smoothed: z, z, score: scale(z).round(), points: 0.0 }
 }
 
@@ -268,12 +296,12 @@ fn combined(subs: &[Sub], count: f64) -> Sub {
 /// Il n'est pas indépendant de notre jeu : on ne le voit jouer que contre
 /// nous, donc sa conversion est l'envers de notre défense. C'est pourquoi il
 /// n'entre pas dans la note de CE duel ; moyenné sur nos duels précédents
-/// contre lui, il devient sa force connue ([`Prior`]), qui y entre.
-fn opponent_level(features: &Features) -> (Sub, [Sub; 4]) {
+/// contre lui, il devient sa force connue ([`Prior`]), gardée pour le classement.
+fn opponent_level(features: &Features, s: &Scale) -> (Sub, [Sub; 4]) {
     let foe = &features.foe;
     let measures = [foe.conversion, foe.smash_quality, foe.exposure, foe.vertical];
-    let subs = [0, 1, 2, 3].map(|i| sub(measures[i], FAMILY_SPREAD[i]));
-    (combined(&subs, (features.mine.len() + features.theirs.len()) as f64), subs)
+    let subs = [0, 1, 2, 3].map(|i| sub(measures[i], s.spread[i], 0.0));
+    (combined(&subs, features.evidence as f64, s.factor), subs)
 }
 
 #[cfg(test)]
@@ -304,6 +332,9 @@ mod tests {
             chance: 0.5,
         };
         Features {
+            mode: Mode::Mace,
+            evidence: opps,
+            sword: None,
             mine: vec![one; opps],
             theirs: Vec::new(),
             engaged_secs: secs,
@@ -353,9 +384,9 @@ mod tests {
 
     #[test]
     fn peu_d_evenements_ramene_vers_l_attendu() {
-        let two = sub(Measure { gap: 1.0, count: 2.0 }, 0.5);
+        let two = sub(Measure { gap: 1.0, count: 2.0 }, 0.5, 1.0);
         assert!((two.smoothed - 0.5).abs() < 1e-12, "deux événements : à moitié tiré vers l'attendu");
-        let nothing = sub(Measure { gap: 0.0, count: 0.0 }, 0.5);
+        let nothing = sub(Measure { gap: 0.0, count: 0.0 }, 0.5, 1.0);
         assert_eq!(nothing.z, 0.0, "aucun événement : la famille ne pèse rien");
         assert_eq!(nothing.score, CENTER);
     }

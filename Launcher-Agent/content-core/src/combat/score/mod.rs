@@ -29,7 +29,8 @@ pub use rating::Prior;
 // Version 6 (2026-10-22) : chaque famille est faite d'actions jugées face à
 // leur attendu ; `parties.csv` a une ligne par action.
 // Version 7 (2026-10-22) : l'initiative (contrôle) et les échanges (défense).
-pub const EXTRACTOR_VERSION: u32 = 7;
+// Version 8 (2026-10-22) : les familles de l'épée.
+pub const EXTRACTOR_VERSION: u32 = 8;
 
 /// Le décompte des opportunités d'un joueur.
 #[derive(Debug, Serialize)]
@@ -81,6 +82,8 @@ pub struct Report {
     pub avoided: Option<f64>,
     /// Les coups et les totems échangés (hors note).
     pub exchanges: Exchanges,
+    /// Les chiffres d'un duel à l'épée (hors note) ; zéro pour un autre mode.
+    pub sword: features::SwordFigures,
     /// Les techniques du bonus bug use, les miennes et ce qu'on voit des siennes.
     /// Pas `bug_use` : la note (aplatie dans ce résumé) porte déjà ce nom pour le bonus.
     pub techniques: features::BugUse,
@@ -91,7 +94,7 @@ pub struct Report {
 }
 
 /// Nombre de valeurs de [`Report::numbers`].
-pub const REPORT_LEN: usize = 50;
+pub const REPORT_LEN: usize = 59;
 
 /// Ce qui s'est échangé entre les deux duellistes, tel quel : les coups
 /// confirmés par le serveur dans un sens et dans l'autre, toutes armes
@@ -166,6 +169,13 @@ impl Report {
     /// Puis (ABI 12) : les coups portés et reçus entre les deux duellistes,
     /// toutes armes confondues ; les totems que je lui ai fait sauter, et
     /// les miens qui ont sauté. Des comptes, hors note.
+    ///
+    /// Puis (ABI 15, mode épée) : mes W-taps tentés puis réussis ; mon plus
+    /// long combo, et mes combos de deux coups ou plus ; mes coups à l'épée,
+    /// ceux à barre pleine, ceux sprintés, mes critiques ; mes jump resets.
+    /// Zéro hors de l'épée. À l'épée, les cinq familles (index 4 à 8) sont
+    /// combos, qualité du coup, défense, placement, ressources, et les
+    /// opportunités de smash valent zéro.
     pub fn numbers(&self) -> [f64; REPORT_LEN] {
         let result = match self.result.as_deref() {
             Some("win") => 1.0,
@@ -233,6 +243,15 @@ impl Report {
             self.exchanges.hits_taken as f64,
             self.exchanges.totems_forced as f64,
             self.exchanges.totems_lost as f64,
+            self.sword.wtaps as f64,
+            self.sword.wtaps_landed as f64,
+            self.sword.longest_combo as f64,
+            self.sword.combos as f64,
+            self.sword.my_hits as f64,
+            self.sword.full_hits as f64,
+            self.sword.sprint_hits as f64,
+            self.sword.crits as f64,
+            self.sword.jump_resets as f64,
         ]
     }
 }
@@ -336,10 +355,10 @@ pub fn score_with(journal: &Journal, prior: &Prior) -> Report {
     // Le ping est le quinzième nombre de chaque tick ; −1 quand le jeu ne le connaît pas.
     let pings: Vec<f64> = duel.samples.iter().map(|s| s.me[14]).filter(|p| *p >= 0.0).collect();
     let mut rating = rating::rate(&features, prior);
-    // La note est faite pour la masse : un duel sans masse (à l'épée) est
-    // reconnu et gardé, mais pas noté. Un duel déjà trop court garde cette
-    // raison-là, plus parlante.
-    if duel.mode != Mode::Mace && rating.score.is_some() {
+    // La masse et l'épée sont notées (l'épée depuis le 2026-10-22) ; un
+    // autre mode est reconnu et gardé, mais pas noté. Un duel déjà trop
+    // court garde cette raison-là, plus parlante.
+    if duel.mode == Mode::Other && rating.score.is_some() {
         rating.score = None;
         rating.base_score = None;
         rating.reason = Some(UNSCORED_MODE);
@@ -360,6 +379,7 @@ pub fn score_with(journal: &Journal, prior: &Prior) -> Report {
         split: features.split,
         avoided: features.avoided,
         exchanges: Exchanges::of(duel),
+        sword: features.sword.unwrap_or_default(),
         techniques: features.bug_use,
         rating,
     }

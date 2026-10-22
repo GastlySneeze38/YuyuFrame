@@ -304,6 +304,7 @@ final class PvpInfoModal {
     // ── Les sujets ───────────────────────────────────────────────────────────
 
     private static List<Topic> topics(double[] report) {
+        if (report != null && PvpScoreModule.isSword(report)) return swordTopics(report);
         List<Topic> list = new ArrayList<Topic>();
         list.add(new Topic("Vue d'ensemble",
             "La note résume un duel à la masse sur 500. 250, c'est le joueur moyen : au-dessus, vous avez mieux joué que lui ; en dessous, moins bien. Elle monte en ligne droite : 50 points de plus valent le même progrès, que vous soyez à 200 ou à 400. 500 est rare.",
@@ -318,7 +319,7 @@ final class PvpInfoModal {
             "Vert à partir de 290 : un bon duel. Ambre de 235 à 289 : dans la moyenne. Rouge en dessous de 235 : un duel difficile. Gris : pas de note. Les barres bleues sont celles de l'adversaire.",
             "# Quand un duel est reconnu",
             "Un duel commence au premier échange de coups avec un vrai joueur. Il se termine quand l'un des deux perd son équipement à la fin de la manche. Un adversaire qui quitte le duel compte comme un match nul : il ne s'est pas vraiment battu.",
-            "Le mode se reconnaît à l'arme en main : dès qu'une masse apparaît dans la main de l'un des deux, c'est un duel à la masse. Les autres (à l'épée par exemple) sont enregistrés, mais pas notés."));
+            "Le mode se reconnaît à l'arme en main : dès qu'une masse apparaît dans la main de l'un des deux, c'est un duel à la masse. Un duel où chacun n'a que son épée est noté en mode épée (voir « Mode épée »). Les autres sont enregistrés, mais pas notés."));
         list.add(new Topic("Opportunités",
             "Une opportunité, c'est un moment où un smash est possible : vous tombez d'au moins 1,5 bloc, vous êtes en train de descendre, vous êtes au-dessus de l'adversaire et à moins de 3,5 blocs de lui à l'horizontale.",
             "Elle est convertie si un coup de masse touche pendant ce moment. Les mêmes règles valent pour l'adversaire : ses opportunités sont celles que vous lui laissez.",
@@ -422,10 +423,113 @@ final class PvpInfoModal {
             "La note moyenne de l'historique ne compte que les duels notés."));
         list.add(new Topic("Limites",
             "La note n'est pas encore calibrée : ce qu'on attend de chaque action a été posé à partir de quelques duels. Les duels partagés par les joueurs servent à l'ajuster, et les notes pourront bouger.",
-            "Elle est pensée pour la masse en 1 contre 1. Un duel à l'épée est reconnu à l'arme en main et n'est pas noté.",
+            "Elle est pensée pour la masse et l'épée en 1 contre 1. Un duel qui mêle d'autres objets (épée et bouclier, pommes, totems…) est enregistré mais pas noté.",
             "Le ping est affiché, jamais corrigé. Un ping élevé peut faire baisser la conversion.",
             "La note ne regarde que ce que votre jeu voit : positions, chutes, coups confirmés, sons du bouclier, objets en main. Elle ne sait rien de ce qui se passe hors de vue.",
             "Les duels enregistrés avant l'arrivée de ces mesures n'ont ni les coups arrêtés au bouclier ni l'objet en main au moment du coup : les parties qui en dépendent (bouclier, charge, barre d'inventaire, bug use) n'y comptent pas.",
+            "Les journaux de vos duels sont dans le dossier de l'instance, sous yuyuframe/matches."));
+        if (report == null) list.add(swordOverview());
+        return list;
+    }
+
+    // ── L'épée ───────────────────────────────────────────────────────────────
+
+    /** Le mode épée en un sujet : celui que montre l'historique, qui mêle les deux modes. */
+    private static Topic swordOverview() {
+        return new Topic("Mode épée",
+            "Un duel où chacun n'a que son épée en main (ou la main vide), rien dans l'autre main et aucun objet utilisé, est noté en mode épée. Même échelle sur 500, même principe : chaque action est comparée à ce qu'en tire un joueur moyen.",
+            "Quatre familles, qui pèsent autant : combos, qualité du coup, défense, placement. Pas de ressources : le seul objet est l'épée.",
+            "Ouvrez un duel à l'épée pour voir le détail de chaque famille et du W-tap.");
+    }
+
+    /**
+     * Les sujets d'un duel à l'épée, aux mêmes places que ceux de la masse
+     * ({@link #FAMILY_TOPICS}) : la cinquième place, celle des ressources,
+     * dit pourquoi il n'y en a pas.
+     */
+    private static List<Topic> swordTopics(double[] report) {
+        List<Topic> list = new ArrayList<Topic>();
+        list.add(new Topic("Vue d'ensemble",
+            "La note résume un duel à l'épée sur 500. 250, c'est le joueur moyen : au-dessus, vous avez mieux joué que lui ; en dessous, moins bien. Elle monte en ligne droite. 500 est rare.",
+            "# Chaque action rapporte",
+            "Chaque coup, chaque W-tap, chaque combo est comparé à ce qu'en tire un joueur moyen. Mieux que lui, il rapporte des points ; moins bien, il en coûte. Le détail de chaque famille montre les actions qui ont le plus compté.",
+            "# Les familles",
+            "Quatre familles, qui pèsent autant : combos, qualité du coup, défense, placement. Elle juge votre jeu seulement : la force de votre adversaire n'y entre pas. Pas de bonus bug use en épée.",
+            "# Quel duel est noté",
+            "Seul l'épée pure est notée : chacun n'a que son épée en main (ou la main vide), rien dans l'autre main, et n'utilise aucun objet. Un bouclier, une pomme, un totem, une perle : le duel est enregistré mais pas noté.",
+            "# Les couleurs",
+            "Vert à partir de 290, ambre de 235 à 289, rouge en dessous. Les barres bleues sont celles de l'adversaire."));
+        list.add(new Topic("Le W-tap",
+            "Un coup porté en sprint, barre pleine, donne un recul en plus. Mais juste après, le jeu coupe votre sprint et vous ralentit. Pour que le coup suivant pousse encore autant, il faut relancer le sprint entre les deux : c'est le W-tap. Il garde l'adversaire à distance et vous laisse frapper le premier, encore et encore.",
+            "# Comment il est jugé",
+            "Pas à la touche, à son effet dans le combo. Après chacun de vos coups : si votre coup suivant est sprinté et arrive avant le sien, le W-tap est réussi. S'il vous touche avant, il est raté, et ça coûte.",
+            "Un coup suivant sans sprint n'est pas un W-tap. Rien dans le délai (pas de coup suivant) : c'est un W-tap dans le vide, il ne compte pas.",
+            "Chaque W-tap a une chance de réussite, celle d'un joueur moyen : elle monte quand le coup part loin de lui et quand il revient vite vers vous. Un joueur moyen en réussit environ un sur quatre : c'est le geste difficile du mode.",
+            "# Pourquoi il rate",
+            "Le détail donne la raison de chaque W-tap raté : rentré dans l'adversaire (moins d'un demi-bloc entre vous, la distance est perdue), barre pas rechargée quand il a frappé, ou coup suivant trop tard alors que la barre était pleine.",
+            "Les W-taps de l'adversaire ne se jugent qu'avec des journaux récents, qui entendent le son de ses coups."));
+        list.add(family(report, 0, "Combos",
+            "Gardez-vous la main ? Trois mesures : garder la main (35 %), le W-tap (40 %), la longueur des combos (25 %).",
+            "Garder la main : après chacun de vos coups, le coup suivant du duel est encore le vôtre. Un joueur moyen la garde 57 % du temps.",
+            "Un combo, ce sont vos coups enchaînés à moins d'une seconde et demie, sans qu'il vous touche entre deux. Un combo de 4 coups ou plus vaut le maximum.",
+            "Pour la monter : relancez le sprint entre chaque coup et frappez dès que la barre est pleine."));
+        list.add(family(report, 1, "Qualité du coup",
+            "Ce que vaut chacun de vos coups (60 %) et le recul réellement donné (40 %).",
+            "Un coup complet a la barre pleine et est critique ou sprinté. Barre pleine sans l'un ni l'autre, il vaut 0,6. Barre pas pleine, il vaut la part des dégâts qu'il garde. Un joueur moyen est à 70 %.",
+            "Le recul se lit sur ses déplacements juste après le coup, face à celui d'un coup sprinté. Ses positions arrivent avec un peu de retard : cette mesure est approximative.",
+            "Pour la monter : ne frappez pas avant que la barre soit pleine."));
+        list.add(family(report, 2, "Défense",
+            "Cassez-vous ses combos et tenez-vous les échanges ? Trois mesures : casser ses combos (30 %), les échanges (40 %), le jump reset (30 %).",
+            "Casser : après chacun de ses coups, le coup suivant est le vôtre. Échanges : chaque coup du duel rapporte s'il est porté et coûte s'il est reçu.",
+            "Jump reset : sauter au moment où un coup vous touche au sol, ce qui réduit le recul. Un coup reçu en l'air ne compte pas : il n'y avait pas de saut possible.",
+            "Pour la monter : sautez au moment de son coup et répondez tout de suite."));
+        list.add(family(report, 3, "Placement",
+            "Où êtes-vous quand le coup part ? Quatre mesures : le premier coup de l'échange (35 %), la portée (25 %), l'espacement (20 %), le strafe (20 %).",
+            "Un échange s'arrête après 2 secondes sans coup. Le premier coup de chacun rapporte s'il est à vous, coûte s'il est à lui.",
+            "Portée : frapper près des 3 blocs, là où il ne touche pas encore, plutôt que collé à lui (1,5 bloc ou moins). Espacement : entre deux de vos coups, ne pas lui rentrer dedans. Strafe : quand il est à moins de 5 blocs, la part de votre déplacement de côté plutôt que droit sur lui.",
+            "Pour la monter : gardez la distance de portée et tournez autour de lui."));
+        list.add(new Topic("Pas de ressources",
+            "En épée, le seul objet est l'épée : il n'y a pas de ressources à juger. Cette famille n'existe qu'en masse, et la note de l'épée n'est faite que des quatre autres."));
+
+        Topic opponent = new Topic("Niveau adverse",
+            "# Pendant le duel",
+            "Le niveau de votre adversaire, lu de ce qu'il a fait contre vous : ses quatre familles, jugées avec les mêmes attendus que les vôtres. Il n'entre pas dans votre note : on ne le voit jouer que contre vous, c'est en partie le miroir de votre jeu.",
+            "# Avant le duel",
+            "Sa force connue avant le duel est la moyenne de son niveau dans vos duels précédents contre lui. Elle n'entre pas dans votre note ; elle est gardée pour le classement.",
+            "# Ce qu'il faut savoir",
+            "Sa barre et son sprint se lisent au son de ses coups, seulement dans les journaux récents. Sans eux, ses W-taps ne sont pas jugés.");
+        opponent.paragraphs.add("# Dans ce duel");
+        int met = (int) report[NativeCombat.REPORT_FOE_KNOWN_DUELS];
+        opponent.paragraphs.add(met > 0
+            ? Lang.tr("Force connue avant le duel :") + " " + Math.round(report[NativeCombat.REPORT_FOE_KNOWN]) + ", " + Lang.tr("sur") + " " + met + " "
+                + Lang.tr(met > 1 ? "duels passés contre lui." : "duel passé contre lui.")
+            : Lang.tr("Premier duel contre lui : sa force n'est pas encore connue."));
+        StringBuilder detail = new StringBuilder(Lang.tr("Niveau pendant le duel") + " " + Math.round(report[NativeCombat.REPORT_FAMILIES + 5]) + " : ");
+        for (int i = 0; i < NativeCombat.FOE_FAMILY_COUNT; i++) {
+            if (i > 0) detail.append(", ");
+            detail.append(Lang.tr(PvpScoreModule.familyName(i, report)).toLowerCase(java.util.Locale.ROOT)).append(" ")
+                .append(Math.round(report[NativeCombat.REPORT_FOE_FAMILIES + i]));
+        }
+        detail.append(".");
+        opponent.paragraphs.add(detail.toString());
+        list.add(opponent);
+
+        list.add(new Topic("Du chiffre à la note",
+            "# 1. Chaque action",
+            "Chaque action est comparée à ce qu'en tire un joueur moyen, en nombre d'écarts habituels entre joueurs. Une famille fait la somme de ses actions.",
+            "# 2. Lissage",
+            "Une famille mesurée sur peu de coups est tirée vers la moyenne : on compte 2 situations moyennes de plus.",
+            "# 3. Combinaison",
+            "Les quatre familles sont moyennées, puis élargies de 2 fois : une moyenne de quatre est plus resserrée qu'une famille seule.",
+            "# 4. Note",
+            "La note vaut 250, plus 100 par écart, en ligne droite, de 0 à 500. Chaque action dit ce qu'elle a rapporté."));
+        list.add(new Topic("Confiance et seuils",
+            "La confiance dit sur combien de coups la note repose : n / (n + 12), où n compte les coups du duel. 12 coups donnent 50 %, 48 en donnent 80 %.",
+            "Un duel n'est pas noté s'il a duré moins de 20 secondes au contact, ou s'il compte moins de 6 coups en tout."));
+        list.add(new Topic("Limites",
+            "La note de l'épée a été posée sur peu de duels : ce qu'on attend de chaque action sera ajusté avec les duels partagés, et les notes pourront bouger.",
+            "Le recul, la portée et le strafe se lisent dans ses positions, qui arrivent avec du retard : ce sont les mesures les moins précises.",
+            "Le ping est affiché, jamais corrigé.",
             "Les journaux de vos duels sont dans le dossier de l'instance, sous yuyuframe/matches."));
         return list;
     }

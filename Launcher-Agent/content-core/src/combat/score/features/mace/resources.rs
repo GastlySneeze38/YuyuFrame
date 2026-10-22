@@ -7,7 +7,7 @@
 //! justifiée et utile. Mesurée du côté du joueur : les objets de
 //! l'adversaire ne se voient pas.
 
-use super::super::parse::{gear_at, Duel, Gear, SLOT_CHEST, SLOT_HAND, SLOT_OFFHAND};
+use super::{gear_at, Duel, Gear, Sample, SLOT_CHEST, SLOT_HAND, SLOT_OFFHAND};
 use super::{
     family, flag, sample_at, view_at, Family, Norm, Opportunity, Part, View, GAP_TICKS, HEIGHT_ADVANTAGE, HIT_DELAY_TICKS, LOW_HEALTH, ME_FALL, ME_FLAGS, ME_FOOD, ME_HEALTH,
     ME_MAX_HEALTH, ME_SPEED, ME_STRENGTH, ON_GROUND, REACH, X, Y, Z,
@@ -243,7 +243,7 @@ fn food_and_life(duel: &Duel, theirs: &[View]) -> [(f64, Part); 5] {
 /// L'effet actif au contact, la potion reprise à temps, bue à l'abri.
 fn potions(duel: &Duel, mine: &[View], theirs: &[View]) -> [Part; 3] {
     let (mut active, mut renew, mut safe) = (Part::new(POTION_ACTIVE), Part::new(POTION_RENEW), Part::new(POTION_SAFE));
-    let effect = |s: &super::super::parse::Sample| s.me[ME_STRENGTH] > 0.0 || s.me[ME_SPEED] > 0.0;
+    let effect = |s: &Sample| s.me[ME_STRENGTH] > 0.0 || s.me[ME_SPEED] > 0.0;
     // Si aucune potion n'est utilisée, la partie ne compte pas : un kit sans
     // potions n'est pas pénalisé. Des effets sans potion bue viennent du
     // serveur (vu sur Minemen le 2026-10-15 : force et vitesse II données

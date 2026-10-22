@@ -186,7 +186,7 @@ final class PvpFamilyModal {
         PvpScoreUi.text(r, UiFont.BOLD, value, right - valueW, top - UiTheme.scaled(56f),
             measured ? PvpScoreUi.scoreColor(score) : PvpScoreUi.NEUTRAL, scoreScale, vw, vh);
         float textW = right - left - valueW - UiTheme.scaled(24f);
-        PvpScoreUi.left(r, UiFont.BOLD, Lang.tr(PvpScoreModule.FAMILIES[family]).toUpperCase(Locale.ROOT), left, top - UiTheme.scaled(20f),
+        PvpScoreUi.left(r, UiFont.BOLD, Lang.tr(PvpScoreModule.familyName(family, report)).toUpperCase(Locale.ROOT), left, top - UiTheme.scaled(20f),
             textW, UiTheme.TEXT_MUTED, label, vw, vh);
         PvpScoreUi.left(r, UiFont.BOLD, Lang.tr(verdict(score, measured)), left, top - UiTheme.scaled(54f), textW, UiTheme.TEXT_PRIMARY,
             UiTheme.scaled(0.66f), vw, vh);
@@ -307,7 +307,7 @@ final class PvpFamilyModal {
     private void drawAdvice(UiRenderer r, float left, float right, float top, float bottom, int vw, int vh) {
         List<DuelDetail.Fact> down = detail.facts(family, false);
         String advice = down.isEmpty() ? null : ADVICE.get(down.get(0).code);
-        if (advice == null) advice = FAMILY_ADVICE[family];
+        if (advice == null) advice = (PvpScoreModule.isSword(report) ? SWORD_FAMILY_ADVICE : FAMILY_ADVICE)[family];
         float scale = UiTheme.scaled(0.42f);
         float y = top - UiTheme.scaled(14f);
         for (String line : PvpScoreUi.wrap(r, UiFont.REGULAR, Lang.tr(advice), scale, right - left)) {
@@ -383,6 +383,19 @@ final class PvpFamilyModal {
         ACTIONS.put("resources.potion_renew", new String[]{ "Potion reprise à temps", "Potion reprise tard" });
         ACTIONS.put("resources.potion_safe", new String[]{ "Potion bue à l'abri", "Potion bue sous sa menace" });
         ACTIONS.put("resources.rocket", new String[]{ "Fusée qui mène à une ouverture", "Fusée sans ouverture" });
+        // L'épée.
+        ACTIONS.put("sword.keep", new String[]{ "Main gardée après votre coup", "Main perdue après votre coup" });
+        ACTIONS.put("sword.wtap", new String[]{ "W-tap réussi", "W-tap raté" });
+        ACTIONS.put("sword.length", new String[]{ "Long combo", "Combo court" });
+        ACTIONS.put("sword.hit", new String[]{ "Coup complet", "Coup mal chargé" });
+        ACTIONS.put("sword.knockback", new String[]{ "Coup qui le repousse", "Coup sans recul" });
+        ACTIONS.put("sword.break", new String[]{ "Son combo cassé", "Son combo continue" });
+        ACTIONS.put("sword.jump_reset", new String[]{ "Jump reset", "Coup reçu sans jump reset" });
+        ACTIONS.put("sword.first_hit", new String[]{ "Échange ouvert par vous", "Échange ouvert par lui" });
+        ACTIONS.put("sword.range", new String[]{ "Coup au bout de la portée", "Coup collé à lui" });
+        ACTIONS.put("sword.spacing", new String[]{ "Distance gardée", "Vous lui êtes rentré dedans" });
+        ACTIONS.put("sword.strafe", new String[]{ "Déplacements de côté", "Déplacements droit sur lui" });
+        CHANCES.put("sword.wtap", false);
 
         CHANCES.put("conversion.opening", false);
         CHANCES.put("control.reached", false);
@@ -435,6 +448,14 @@ final class PvpFamilyModal {
         "Suivez-le pendant votre chute pour que le gros coup passe du premier coup.",
         "Chaque charge de vent doit servir : monter pour attaquer, casser son smash ou vous dégager.",
     };
+    /** Les conseils de l'épée, famille par famille (la cinquième n'existe pas). */
+    private static final String[] SWORD_FAMILY_ADVICE = {
+        "Après chaque coup, relancez le sprint et attendez la barre pleine : le coup suivant le repousse avant qu'il puisse répondre.",
+        "Frappez barre pleine, en sprint pour le repousser, ou en tombant pour un critique.",
+        "Quand il enchaîne, sautez au moment du coup reçu pour prendre moins de recul, et reprenez la main vite.",
+        "Touchez-le au bout de votre portée, puis ne lui rentrez pas dedans : gardez la distance entre deux coups.",
+        "",
+    };
 
     static {
         FACTS.put("conversion.converted", "{0} ouverture{s0} convertie{s0} sur {1}, un joueur moyen en aurait converti {2}");
@@ -460,6 +481,21 @@ final class PvpFamilyModal {
         FACTS.put("control.rebuild", "{0} s en moyenne pour retrouver une ouverture");
         FACTS.put("control.initiative", "{0} ouverture{s0} créée{s0}, {1} pour lui");
         FACTS.put("defense.exchange", "{0} coup{s0} porté{s0}, {1} reçu{s1}");
+        FACTS.put("sword.keep", "Main gardée après {0} de vos {1} coups");
+        FACTS.put("sword.wtap", "{0} W-tap{s0} réussi{s0} sur {1}");
+        FACTS.put("sword.wtap_distance", "{0} W-tap{s0} raté{s0} : vous lui êtes rentré dedans");
+        FACTS.put("sword.wtap_charge", "{0} W-tap{s0} raté{s0} : barre pas rechargée à temps");
+        FACTS.put("sword.wtap_late", "{0} W-tap{s0} raté{s0} : coup suivant trop tard");
+        FACTS.put("sword.length", "Plus long combo : {0} coups, {1} combo{s1} de deux coups ou plus");
+        FACTS.put("sword.full", "{0} coup{s0} sur {1} à barre pleine");
+        FACTS.put("sword.kinds", "{0} coup{s0} sprinté{s0}, {1} critique{s1}");
+        FACTS.put("sword.knockback", "Le recul donné par vos coups");
+        FACTS.put("sword.break", "{0} de ses {1} enchaînements cassés");
+        FACTS.put("sword.jump_reset", "{0} jump reset{s0} sur {1} coups reçus au sol");
+        FACTS.put("sword.first_hit", "{0} échange{s0} ouvert{s0} sur {1}");
+        FACTS.put("sword.range", "Coups donnés à {0} blocs en moyenne");
+        FACTS.put("sword.spacing", "{0} fois rentré dedans entre deux coups");
+        FACTS.put("sword.strafe", "Vos déplacements de côté face à lui");
         FACTS.put("resources.useful", "{0} charge{s0} de vent et perle{s0} utile{s0} sur {1}");
         FACTS.put("resources.mace_ready", "Masse en main à temps : {0} fois sur {1}");
         FACTS.put("resources.apples", "{0} pomme{s0} d'or sur {1} mangée{s0} au bon moment");
@@ -474,6 +510,9 @@ final class PvpFamilyModal {
         VERSUS.put("control.first_time", "{0} gros coup{s0} sur {1} du premier coup");
         VERSUS.put("resources.totem_refill", "Totem remis en {0} s");
         VERSUS.put("control.initiative", "{0} ouverture{s0} créée{s0}");
+        VERSUS.put("sword.longest", "Plus long combo : {0}");
+        VERSUS.put("sword.crits", "{0} critique{s0}");
+        VERSUS.put("sword.jump_reset", "{0} jump reset{s0} sur {1}");
 
         ADVICE.put("conversion.easy_missed", "Une ouverture facile, c'est collé à lui sur une chute courte : frappez-la sans attendre.");
         ADVICE.put("smash.none", "Une ouverture qui passe sans coup ne rapporte rien : frappez pendant la chute, même trop tôt plutôt que jamais.");
@@ -490,6 +529,15 @@ final class PvpFamilyModal {
         ADVICE.put("control.retake", "Quand il passe au-dessus de vous, reprenez la hauteur tout de suite.");
         ADVICE.put("control.initiative", "Prenez la hauteur le premier : celui qui se crée les ouvertures mène le duel.");
         ADVICE.put("defense.exchange", "Ne restez pas à portée quand vous ne pouvez pas frapper : chaque coup reçu compte.");
+        ADVICE.put("sword.wtap", "Relancez le sprint entre deux coups, et frappez dès que la barre est pleine : c'est ce qui le repousse avant qu'il réponde.");
+        ADVICE.put("sword.wtap_distance", "Après votre coup, relâchez l'avant ou reculez un instant : ne lui rentrez pas dedans.");
+        ADVICE.put("sword.wtap_charge", "Attendez la barre pleine : un coup trop tôt ne donne pas de recul, et il revient sur vous.");
+        ADVICE.put("sword.wtap_late", "Frappez dès qu'il revient dans votre portée, barre pleine : plus tard, c'est lui qui touche.");
+        ADVICE.put("sword.keep", "Après chaque coup, gardez la distance et la barre pleine pour retoucher avant lui.");
+        ADVICE.put("sword.break", "Quand il enchaîne, sautez au moment du coup et reprenez la main au lieu d'encaisser.");
+        ADVICE.put("sword.jump_reset", "Sautez au moment où son coup arrive : vous prenez moins de recul et revenez plus vite.");
+        ADVICE.put("sword.first_hit", "Entrez dans sa portée au moment où votre barre est pleine, pour porter le premier coup.");
+        ADVICE.put("sword.spacing", "Entre deux coups, relâchez l'avant : lui rentrer dedans le laisse répondre.");
         ADVICE.put("resources.useful", "Chaque charge de vent doit servir : monter pour attaquer, casser son smash ou vous dégager.");
         ADVICE.put("resources.mace_ready", "Passez à la masse dès que l'ouverture se dessine.");
         ADVICE.put("resources.totem_refill", "Remettez un totem dans l'autre main dès que le premier saute.");
@@ -530,6 +578,16 @@ final class PvpFamilyModal {
                 return v.length > 0 && v[0] >= 0
                     ? new String[]{ Lang.tr("Totem sauté"), fill("remis en {0} s", v) }
                     : new String[]{ Lang.tr("Totem sauté"), Lang.tr("pas remis") };
+            case "sword.wtap_failed": {
+                int reason = v.length > 0 ? (int) v[0] : 0;
+                String why = reason == 1 ? "Rentré dans l'adversaire"
+                    : reason == 2 ? "Barre pas rechargée au coup suivant"
+                    : reason == 3 ? "Coup suivant trop tard"
+                    : "Coup reçu après le W-tap";
+                return new String[]{ Lang.tr(why), Lang.tr("W-tap raté") };
+            }
+            case "sword.combo":
+                return new String[]{ fill("Combo de {0} coups", v), Lang.tr("tenu") };
             default:
                 return new String[]{ m.code, "" };
         }

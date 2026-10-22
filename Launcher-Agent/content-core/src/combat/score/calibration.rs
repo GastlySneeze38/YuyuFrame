@@ -312,7 +312,7 @@ fn releve_de_calibration() {
 /// nombre de critères de leur modèle. Les ouvertures laissées de la défense
 /// sont l'envers des ouvertures : elles suivent leur modèle.
 #[cfg(test)]
-const MODELS: [(&str, usize); 3] = [("conversion.opening", 5), ("defense.dodge", 2), ("control.reached", 2)];
+const MODELS: [(&str, usize); 4] = [("conversion.opening", 5), ("defense.dodge", 2), ("control.reached", 2), ("sword.wtap", 2)];
 
 /// Les critères d'une ouverture que le modèle n'apprend pas (2026-10-22) :
 /// la durée de la fenêtre et sa chute. La fenêtre se ferme au coup, donc
@@ -481,12 +481,18 @@ fn proposition_de_calibrage() {
     use std::collections::HashMap;
     let matches = std::env::var("YF_MATCHES").expect("YF_MATCHES : le dossier des journaux ou des exports");
     let (duels, skipped) = load_duels(&matches);
-    // Seuls les duels notés : à la masse, assez longs, assez d'opportunités.
-    // Un duel à l'épée ou de dix secondes apprendrait des attendus à des
-    // situations que la note ne juge jamais.
+    // Un mode à la fois (`YF_MODE` : `mace` par défaut, ou `sword`) : ses
+    // familles et ses attendus sont les siens.
+    let mode = match std::env::var("YF_MODE").as_deref() {
+        Ok("sword") => parse::Mode::Sword,
+        _ => parse::Mode::Mace,
+    };
+    // Seuls les duels notés de ce mode : assez longs, assez de situations.
+    // Un duel de dix secondes apprendrait des attendus à des situations que
+    // la note ne juge jamais.
     let scored: Vec<Features> = duels
         .iter()
-        .filter(|(_, d)| d.mode == parse::Mode::Mace)
+        .filter(|(_, d)| d.mode == mode)
         .map(|(_, d)| features::extract(d))
         .filter(|f| rating::rate(f, &Prior::default()).reason.is_none())
         .collect();
@@ -496,7 +502,8 @@ fn proposition_de_calibrage() {
     // entier). Il apprendrait que « aucun smash » est la norme : il ne sert
     // qu'aux sortes d'action qui n'en dépendent pas (`SMASH_DEPENDENT`), et
     // jamais aux écarts des familles ni à la forme de la note.
-    let (extracted, blind): (Vec<Features>, Vec<Features>) = scored.into_iter().partition(|f| f.mine.iter().chain(&f.theirs).any(|o| o.converted));
+    let (extracted, blind): (Vec<Features>, Vec<Features>) =
+        scored.into_iter().partition(|f| mode != parse::Mode::Mace || f.mine.iter().chain(&f.theirs).any(|o| o.converted));
     let mut text = format!(
         "{} duels relus, {skipped} illisibles, {} notés complets, {} sans aucun smash relevé (actions hors smashs seulement).\n",
         duels.len(),
@@ -553,7 +560,9 @@ fn proposition_de_calibrage() {
     for code in codes {
         let pool = &pools[*code];
         let weight: f64 = pool.values.iter().map(|(_, w)| w).sum();
-        if weight <= 0.0 {
+        // À l'épée, les sortes partagées avec la masse (échanges, ressources)
+        // gardent leurs attendus : ils se calibrent sur les duels à la masse.
+        if weight <= 0.0 || (mode == parse::Mode::Sword && !code.starts_with("sword.")) {
             continue;
         }
         let raw_mean = pool.values.iter().map(|(v, w)| v * w).sum::<f64>() / weight;
@@ -613,7 +622,11 @@ fn proposition_de_calibrage() {
         let mean = list.iter().sum::<f64>() / n;
         (mean, (list.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / n).sqrt().max(0.05))
     };
-    let names = ["conversion", "qualité du smash", "défense", "contrôle", "ressources"];
+    let names = if mode == parse::Mode::Sword {
+        ["combos", "qualité du coup", "défense", "placement", "ressources"]
+    } else {
+        ["conversion", "qualité du smash", "défense", "contrôle", "ressources"]
+    };
     let mut family_spread = [0.0; 5];
     let _ = writeln!(text, "\n## Familles (écart après lissage) : FAMILY_SPREAD");
     for (i, gaps) in family_gaps.iter().enumerate() {
@@ -624,10 +637,11 @@ fn proposition_de_calibrage() {
     let _ = writeln!(text, "FAMILY_SPREAD = {:?}", family_spread.map(|s| (s * 1000.0).round() / 1000.0));
 
     // 4. La note qui en sortirait : la moyenne de mes cinq familles.
-    let means_z: Vec<f64> = per_duel.iter().map(|g| g.iter().zip(&family_spread).map(|(g, s)| g / s).sum::<f64>() / rating::FAMILIES).collect();
+    let families = rating::scale_of(mode).families;
+    let means_z: Vec<f64> = per_duel.iter().map(|g| g.iter().zip(&family_spread).take(families).map(|(g, s)| g / s).sum::<f64>() / families as f64).collect();
     let (_, spread_of_mean) = sd(&means_z);
     let factor = 1.0 / spread_of_mean;
-    let _ = writeln!(text, "\n## Élargissement : SPREAD_FACTOR = {factor:.3} (pour un écart de note de 100 ; actuel {})", rating::SPREAD_FACTOR);
+    let _ = writeln!(text, "\n## Élargissement : SPREAD_FACTOR = {factor:.3} (pour un écart de note de 100 ; actuel {})", rating::scale_of(mode).factor);
     let mut notes: Vec<f64> = means_z.iter().map(|m| (rating::CENTER + 100.0 * m * factor).clamp(0.0, rating::MAX)).collect();
     notes.sort_by(f64::total_cmp);
     let above = |limit: f64| 100.0 * notes.iter().filter(|n| **n >= limit).count() as f64 / notes.len().max(1) as f64;

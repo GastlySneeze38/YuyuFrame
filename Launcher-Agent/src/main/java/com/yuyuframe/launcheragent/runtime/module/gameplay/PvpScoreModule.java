@@ -51,6 +51,36 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
     public static final String[] SHORT_FAMILIES = {
         "Conversion", "Qualité du smash", "Défense", "Contrôle", "Ressources", "Niveau adverse",
     };
+    /**
+     * Les familles de l'épée (2026-10-22), dans les mêmes cases du résumé. La
+     * cinquième n'existe pas : le kit noté n'a que l'épée, il n'y a pas de
+     * ressources à juger.
+     */
+    public static final String[] SWORD_FAMILIES = {
+        "Combos", "Qualité du coup", "Défense", "Placement", "", "Niveau adverse",
+    };
+    public static final String[] SWORD_SHORT_FAMILIES = {
+        "Combos", "Qualité du coup", "Défense", "Placement", "", "Niveau adverse",
+    };
+
+    /** Un duel à l'épée ({@link NativeCombat#REPORT_MODE} 2) ? */
+    public static boolean isSword(double[] report) {
+        return report[NativeCombat.REPORT_MODE] == 2;
+    }
+
+    /** Le libellé de la famille {@code i} dans le mode de ce duel. */
+    public static String familyName(int i, double[] report) {
+        return (isSword(report) ? SWORD_FAMILIES : FAMILIES)[i];
+    }
+
+    public static String shortFamilyName(int i, double[] report) {
+        return (isSword(report) ? SWORD_SHORT_FAMILIES : SHORT_FAMILIES)[i];
+    }
+
+    /** Combien de mes familles ce duel a : cinq à la masse, quatre à l'épée. */
+    public static int familyRows(double[] report) {
+        return isSword(report) ? 4 : NativeCombat.FAMILY_COUNT - 1;
+    }
     /** Libellés des résultats, par code ({@link NativeCombat#REPORT_RESULT}). */
     public static final String[] RESULTS = { "", "Victoire", "Défaite", "Match nul", "" };
 
@@ -266,7 +296,7 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
                 centered(r, UiFont.REGULAR, confidence, center, bottom + (withBonus ? 11f : 14f) * s, fit, UiTheme.TEXT_SECONDARY, 0.3f * s, vw, vh);
             } else {
                 centered(r, UiFont.BOLD, PvpScoreUi.NO_SCORE, center, bottom + 46f * s, fit, tone, 1.1f * s, vw, vh);
-                String[] reason = PvpScoreUi.reasonLines(report[NativeCombat.REPORT_REASON]);
+                String[] reason = PvpScoreUi.reasonLines(report);
                 centered(r, UiFont.REGULAR, Lang.tr(reason[0]), center, bottom + 26f * s, fit,
                     UiTheme.TEXT_SECONDARY, 0.3f * s, vw, vh);
                 centered(r, UiFont.REGULAR, Lang.tr(reason[1]), center, bottom + 13f * s, fit, UiTheme.TEXT_MUTED, 0.3f * s, vw, vh);
@@ -281,6 +311,8 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
             float barRight = right - inner - 24f * s;
             float rowTop = top - 5f * s;
             for (int i = 0; i < NativeCombat.FAMILY_COUNT; i++) {
+                // À l'épée, pas de cinquième famille : la ligne n'est pas dessinée.
+                if (i >= familyRows(report) && i < NativeCombat.FAMILY_COUNT - 1) continue;
                 float middle = rowTop - ROW * s / 2f;
                 rowTop -= ROW * s;
                 double family = Math.max(0, Math.min(NativeCombat.SCORE_MAX, report[NativeCombat.REPORT_FAMILIES + i]));
@@ -292,7 +324,7 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
                 if (!measured) family = 0;
                 UiColor familyTone = opponent ? PvpScoreUi.FOE : measured ? PvpScoreUi.scoreColor(family) : PvpScoreUi.NEUTRAL;
                 float baseline = middle - HALF_CAP * label;
-                r.drawText(Lang.tr(SHORT_FAMILIES[i]), cardLeft + inner, baseline,
+                r.drawText(Lang.tr(shortFamilyName(i, report)), cardLeft + inner, baseline,
                     opponent ? UiTheme.TEXT_MUTED : UiTheme.TEXT_SECONDARY, label, vw, vh);
                 float barY = middle - 2.5f * s;
                 float barTop = middle + 2.5f * s;
