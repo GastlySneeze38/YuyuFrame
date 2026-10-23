@@ -103,7 +103,9 @@ fn duels(matches: &Path) -> (Vec<(Report, Option<Change>)>, Ladder) {
                 eprintln!("[YuyuFrame] résumé du duel {} non mis à jour : {e}", path.display());
             }
         }
-        let change = played(&report, &foe).and_then(|p| ladder.play(&p));
+        // Un duel casual ne touche pas au classement : on calcule seulement ce
+        // qu'il aurait rapporté, pour le montrer.
+        let change = played(&report, &foe).and_then(|p| if report.casual { ladder.preview(&p) } else { ladder.play(&p) });
         out.push((report, change));
     }
     out.reverse();
@@ -112,12 +114,13 @@ fn duels(matches: &Path) -> (Vec<(Report, Option<Change>)>, Ladder) {
 }
 
 /// Nombre de valeurs de [`ranked_of`].
-pub const RANKED_LEN: usize = 12;
+pub const RANKED_LEN: usize = 13;
 
 /// Ce qu'un duel du dossier `matches` a rapporté au classement, pour le
 /// panneau de fin de duel : `total, base, jeu, adversaire, répétition`, puis
 /// la position avant (`division, points, duels`) et après (`division, points,
-/// duels, placement terminé`). `None` s'il n'y compte pas.
+/// duels, placement terminé`), puis 1 s'il a été joué en casual (les points
+/// sont alors ceux qu'il aurait rapportés). `None` s'il n'y compte pas.
 ///
 /// Rejoue tout l'historique (le classement d'un duel dépend de tous ceux
 /// d'avant) : quelques millisecondes par duel, à appeler hors du fil du jeu.
@@ -138,6 +141,7 @@ pub fn ranked_of(matches: &Path, time: u64) -> Option<[f64; RANKED_LEN]> {
         a.points as f64,
         a.duels as f64,
         a.placed() as u8 as f64,
+        change.casual as u8 as f64,
     ])
 }
 
@@ -203,8 +207,10 @@ pub fn detail(instance_dir: &Path, time: u64) -> String {
 /// que pour le panneau de fin de duel. Une ligne `rank` par mode classé
 /// (masse, épée), même sans duel. Le classement d'un duel, vide s'il n'y
 /// compte pas : `total,base,jeu,adversaire,répétition,division après,points
-/// après,placement` — placement 0 après le placement, 1 duel de placement,
-/// 2 joué pendant le placement sans y compter (voir `ranked::Change`).
+/// après,placement,casual` — placement 0 après le placement, 1 duel de
+/// placement, 2 joué pendant le placement sans y compter ; casual 1 pour un
+/// duel joué en casual, dont les points sont ceux qu'il AURAIT rapportés
+/// (voir `ranked::Change`).
 pub fn history(instance_dir: &Path) -> String {
     let (reports, ladder) = duels(&instance_dir.join("yuyuframe").join("matches"));
     let scores: Vec<f64> = reports.iter().filter_map(|(r, _)| r.rating.score).collect();
@@ -222,8 +228,9 @@ pub fn history(instance_dir: &Path) -> String {
         let ranked = change
             .map(|c| {
                 format!(
-                    "{},{},{},{},{},{},{},{}",
-                    c.total, c.base, c.play, c.foe_factor, c.repeat_factor, c.after.division, c.after.points, c.placement.code()
+                    "{},{},{},{},{},{},{},{},{}",
+                    c.total, c.base, c.play, c.foe_factor, c.repeat_factor, c.after.division, c.after.points, c.placement.code(),
+                    c.casual as u8
                 )
             })
             .unwrap_or_default();

@@ -172,6 +172,9 @@ pub struct Duel {
     /// Le tick d'ouverture du duel : le zéro des moments montrés au joueur
     /// (les dix secondes gardées avant sont en négatif).
     pub start: u64,
+    /// Joué en casual : noté, mais hors du classement. Un journal d'avant le
+    /// choix (sans `ranked` dans l'en-tête) est compétitif.
+    pub casual: bool,
 }
 
 impl Duel {
@@ -300,6 +303,7 @@ pub fn parse(text: &str) -> Option<Duel> {
         foe_name: foe_line.and_then(|l| l["name"].as_str()).map(str::to_string),
         time: header["time"].as_u64(),
         start: header["t"].as_u64().unwrap_or(0),
+        casual: header["ranked"].as_bool() == Some(false),
     };
     let (mut saw_mace, mut saw_sword, mut saw_other) = (false, false, false);
     for line in &lines {
@@ -455,6 +459,14 @@ mod tests {
         assert!(gear_at(&list, 9).is_none());
         assert_eq!(gear_at(&list, 19).unwrap().t, 10);
         assert_eq!(gear_at(&list, 20).unwrap().item(SLOT_HAND), "wind_charge");
+    }
+
+    #[test]
+    fn un_duel_est_casual_seulement_si_l_en_tete_le_dit() {
+        assert!(parse("{\"k\":\"h\",\"me\":1,\"t\":0,\"ranked\":false}").unwrap().casual);
+        assert!(!parse("{\"k\":\"h\",\"me\":1,\"t\":0,\"ranked\":true}").unwrap().casual);
+        // Un journal d'avant le choix : compétitif.
+        assert!(!parse("{\"k\":\"h\",\"me\":1,\"t\":0}").unwrap().casual);
     }
 
     #[test]

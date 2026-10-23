@@ -33,7 +33,7 @@ import java.util.UUID;
 public final class NativeCombat {
 
     /** Même valeur que {@code ABI_VERSION} dans combat/bridge.rs. */
-    private static final int ABI_VERSION = 16;
+    private static final int ABI_VERSION = 17;
 
     /** Place réservée au texte de l'historique : deux cents duels en tiennent bien moins. */
     private static final int HISTORY_BYTES = 256 * 1024;
@@ -42,7 +42,7 @@ public final class NativeCombat {
      * Le résumé d'un duel, en nombres — {@code Report::numbers} dans
      * combat/score/mod.rs, même ordre.
      */
-    public static final int REPORT_LEN = 60;
+    public static final int REPORT_LEN = 61;
     /**
      * Note sur {@link #SCORE_MAX} (500 depuis l'ABI 14), bonus bug use compris,
      * ou −1 si le duel n'est pas noté. {@link #SCORE_CENTER} : le joueur moyen.
@@ -133,15 +133,19 @@ public final class NativeCombat {
     public static final int REPORT_SWORD_JUMP_RESETS = 58;
     /** Durée du duel en secondes, du premier au dernier tick enregistré (ABI 16) — pas seulement le temps au contact. */
     public static final int REPORT_DURATION_SECS = 59;
+    /** 1 si le duel a été joué en casual : noté, hors du classement (ABI 17). */
+    public static final int REPORT_CASUAL = 60;
 
     /**
      * Ce que le dernier duel a rapporté au classement — {@code history::ranked_of}
      * dans content-core, même ordre (docs/scoring/classement.md) : total, base,
      * jeu, adversaire (multiplicateur), répétition, puis la position avant
      * (division, points, duels) et après (division, points, duels, placement
-     * terminé 0 ou 1). Division : 0 = Bois 1, trois par rang, 18 = Champion.
+     * terminé 0 ou 1), puis 1 si le duel a été joué en casual — les points
+     * sont alors ceux qu'il AURAIT rapportés. Division : 0 = Bois 1, trois par
+     * rang, 18 = Champion.
      */
-    public static final int RANKED_LEN = 12;
+    public static final int RANKED_LEN = 13;
     public static final int RANKED_TOTAL = 0;
     public static final int RANKED_BASE = 1;
     public static final int RANKED_PLAY = 2;
@@ -154,6 +158,7 @@ public final class NativeCombat {
     public static final int RANKED_AFTER_POINTS = 9;
     public static final int RANKED_AFTER_DUELS = 10;
     public static final int RANKED_PLACED = 11;
+    public static final int RANKED_CASUAL = 12;
 
     /** Nombres décrivant notre joueur à un tick — {@code ME_LEN} dans combat/record.rs, même ordre. */
     public static final int ME_LEN = 21;
@@ -237,6 +242,8 @@ public final class NativeCombat {
     private static MethodHandle event;
     private static MethodHandle close;
     private static MethodHandle share;
+    private static MethodHandle competitive;
+    private static MethodHandle liveMode;
 
     private static final boolean READY = load();
     private static boolean errorLogged;
@@ -298,6 +305,9 @@ public final class NativeCombat {
             close = linker.downcallHandle(lib.find("yf_combat_close").orElseThrow(), FunctionDescriptor.ofVoid());
             share = linker.downcallHandle(lib.find("yf_combat_share").orElseThrow(),
                 FunctionDescriptor.ofVoid(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT), heap);
+            competitive = linker.downcallHandle(lib.find("yf_combat_competitive").orElseThrow(),
+                FunctionDescriptor.ofVoid(ValueLayout.JAVA_INT));
+            liveMode = linker.downcallHandle(lib.find("yf_combat_live_mode").orElseThrow(), FunctionDescriptor.of(ValueLayout.JAVA_INT));
             return true;
         } catch (Throwable error) {
             LauncherLog.err("[COMBAT] Noyau natif indisponible — aucun journal de combat ne sera écrit", error);
@@ -459,6 +469,38 @@ public final class NativeCombat {
         }
         try {
             return (int) ranked.invokeExact(MemorySegment.ofArray(out), out.length);
+        } catch (Throwable error) {
+            failed(error);
+            return 0;
+        }
+    }
+
+    /**
+     * Compétitif ({@code true} : les duels comptent pour le rang) ou casual.
+     * Vaut pour les duels ouverts ensuite — celui en cours garde son type.
+     */
+    public static void competitive(boolean on) {
+        if (!READY) {
+            return;
+        }
+        try {
+            competitive.invokeExact(on ? 1 : 0);
+        } catch (Throwable error) {
+            failed(error);
+        }
+    }
+
+    /**
+     * Le mode du duel ouvert, deviné à ce que le joueur tient : 1 masse, 2
+     * épée, 3 autre, 0 sans duel. Pour l'annonce de début de duel : le vrai
+     * mode se décide à la note.
+     */
+    public static int liveMode() {
+        if (!READY) {
+            return 0;
+        }
+        try {
+            return (int) liveMode.invokeExact();
         } catch (Throwable error) {
             failed(error);
             return 0;

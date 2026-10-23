@@ -29,7 +29,9 @@ use super::writer::send;
 /// 14 (2026-10-22) : notes sur 500, et lignes `action` dans le détail d'un duel.
 /// 15 (2026-10-22) : le mode épée — neuf chiffres de plus dans le résumé.
 /// 16 (2026-10-22) : durée du duel au bout du résumé, `yf_combat_ranked`.
-const ABI_VERSION: u32 = 16;
+/// 17 (2026-10-23) : compétitif ou casual — `yf_combat_competitive`,
+/// `yf_combat_live_mode`, « casual » au bout du résumé et du classement.
+const ABI_VERSION: u32 = 17;
 
 /// Autres joueurs transmis par tick, au plus.
 const MAX_OTHERS: usize = 16;
@@ -188,6 +190,21 @@ pub unsafe extern "C" fn yf_combat_detail(dir: *const u8, dir_len: i32, time: i6
 #[no_mangle]
 pub extern "C" fn yf_combat_recording() -> i32 {
     super::writer::recording() as i32
+}
+
+/// Le mode du duel ouvert, deviné à ce que le joueur tient : 1 masse, 2 épée,
+/// 3 autre, 0 sans duel. Pour l'annonce de début de duel seulement.
+#[no_mangle]
+pub extern "C" fn yf_combat_live_mode() -> i32 {
+    super::writer::live_mode() as i32
+}
+
+/// Le choix du joueur : 1 compétitif (ses duels comptent pour son rang), 0
+/// casual. Vaut pour les duels ouverts ensuite ; appelé au démarrage et à
+/// chaque changement.
+#[no_mangle]
+pub extern "C" fn yf_combat_competitive(on: i32) {
+    send(Record::Competitive { on: on != 0 });
 }
 
 /// Un tick du jeu. `me` : `ME_LEN` nombres (`record.rs`). `others` :

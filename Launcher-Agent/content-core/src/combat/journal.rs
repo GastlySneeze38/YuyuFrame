@@ -133,6 +133,9 @@ pub struct Journal {
     /// Avant ce tick, un échange n'ouvre pas de duel : celui qui vient de se
     /// terminer laisse parfois partir un dernier coup.
     quiet_until: u64,
+    /// Le choix du joueur, compétitif ou casual : figé dans l'en-tête de
+    /// chaque duel à son ouverture. Compétitif tant que Java n'a rien dit.
+    competitive: bool,
 }
 
 impl Journal {
@@ -155,6 +158,7 @@ impl Journal {
             foe_seen: 0,
             foe_near: 0,
             quiet_until: 0,
+            competitive: true,
         }
     }
 
@@ -170,6 +174,8 @@ impl Journal {
                 self.mc = mc;
             }
             Record::World | Record::Close => self.end_world(&mut out),
+            // Le duel ouvert garde le type de son en-tête : le choix vaut au suivant.
+            Record::Competitive { on } => self.competitive = on,
             Record::Match { start: true } => {
                 self.finish("unknown", "key", &mut out);
                 self.start_match(now_ms, "key", &mut out);
@@ -269,6 +275,24 @@ impl Journal {
         self.recording
     }
 
+    /// Le mode du duel ouvert, deviné à ce qu'on tient : 1 masse, 2 épée,
+    /// 3 autre ; 0 sans duel. Une estimation pour l'annonce de début de duel —
+    /// le vrai mode se décide à la note, sur tout le duel (`score::parse`).
+    pub fn live_mode(&self) -> u8 {
+        if !self.recording {
+            return 0;
+        }
+        let Some(gear) = self.me.and_then(|me| self.equipment.get(&me)) else { return 3 };
+        let hands: Vec<&str> = gear.split(';').skip(4).take(2).filter_map(|slot| slot.split(',').next()).collect();
+        if hands.iter().any(|item| item.ends_with("mace")) {
+            1
+        } else if hands.iter().any(|item| item.ends_with("_sword")) {
+            2
+        } else {
+            3
+        }
+    }
+
     /// Ce paquet de dégâts est-il un coup entre notre joueur et un autre vrai
     /// joueur, dans un sens ou dans l'autre ? Rend l'autre joueur.
     fn exchange(&self, entity: i32, cause: i32) -> Option<i32> {
@@ -321,7 +345,7 @@ impl Journal {
         let Some(dir) = self.dir.clone() else { return };
         self.recording = true;
         out.push(Out::Open(dir.join("yuyuframe").join("matches").join(format!("{now_ms}.events.ndjson.zst"))));
-        let header = json!({ "k": "h", "v": TELEMETRY_VERSION, "server": self.server, "mc": self.mc, "time": now_ms, "me": self.me, "t": self.tick, "open": by });
+        let header = json!({ "k": "h", "v": TELEMETRY_VERSION, "server": self.server, "mc": self.mc, "time": now_ms, "me": self.me, "t": self.tick, "open": by, "ranked": self.competitive });
         out.push(Out::Line(header.to_string()));
         self.write_identities(out);
         let oldest = self.tick.saturating_sub(PREROLL_TICKS);
@@ -543,6 +567,7 @@ mod tests {
         assert_eq!(header["server"], "minemen.club:25565");
         assert_eq!(header["me"], ME);
         assert_eq!(header["open"], "auto");
+        assert_eq!(header["ranked"], true, "compétitif tant que rien d'autre n'est dit");
         // Ensuite, tout part aussitôt, sans rien répéter.
         assert_eq!(kinds(&journal.feed(tick(2.0), 3000)), "s");
         assert_eq!(kinds(&journal.feed(hit(ME, FOE), 3000)), "d");

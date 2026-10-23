@@ -49,6 +49,8 @@ public final class UiPvpScoreScreen extends UiScreenBase {
     /** Le mode affiché ({@link PvpScoreUi#MODES}), et ses duels notés, du plus récent au plus ancien. */
     private int mode;
     private final List<DuelHistory.Duel> scored = new ArrayList<DuelHistory.Duel>();
+    /** Les lignes de la liste : en compétitif, sans les duels joués en casual (ils n'ont pas compté). */
+    private final List<DuelHistory.Duel> listed = new ArrayList<DuelHistory.Duel>();
     private int wins, losses, draws;
     private double best;
     /** La note moyenne des duels notés du mode, -1 sans duel : le repère posé sur la courbe. */
@@ -57,6 +59,10 @@ public final class UiPvpScoreScreen extends UiScreenBase {
     private UiScrollContainer scroll;
     private PvpScoreUi.ModeDropdown modeDropdown;
     private PvpScoreUi.PlayTypeToggle playType;
+    /** Compétitif ou casual — ce qu'on joue —, sur la carte du rang ; nul hors de la page du compétitif. */
+    private PvpScoreUi.PlayingSwitch playing;
+    /** La souris à cette image : la carte du rang dessine l'interrupteur elle-même. */
+    private double mouseX, mouseY;
     /** La page du compétitif est affichée à la place du bilan et de l'historique. */
     private boolean competitive;
     private PvpInfoModal info;
@@ -102,8 +108,14 @@ public final class UiPvpScoreScreen extends UiScreenBase {
     /** Champ du classement d'un duel : 1 duel de placement, 2 joué pendant le placement sans y compter. */
     private static final int RANKED_PLACEMENT = 7;
 
-    /** La place d'un duel dans le placement (0 s'il est joué après, ou sans classement). */
+    /** Joué en casual : noté, hors du classement. */
+    static boolean isCasual(DuelHistory.Duel duel) {
+        return duel.report[NativeCombat.REPORT_CASUAL] >= 1;
+    }
+
+    /** La place d'un duel dans le placement (0 s'il est joué après, en casual, ou sans classement). */
     static int placementOf(DuelHistory.Duel duel) {
+        if (isCasual(duel)) return 0;
         return duel.ranked != null && duel.ranked.length > RANKED_PLACEMENT ? (int) duel.ranked[RANKED_PLACEMENT] : 0;
     }
 
@@ -171,6 +183,8 @@ public final class UiPvpScoreScreen extends UiScreenBase {
             lastW = screenWidth; lastH = screenHeight; lastScale = UiTheme.UI_SCALE;
         }
         if (info != null && info.closed()) info = null;
+        this.mouseX = mouseX;
+        this.mouseY = mouseY;
         UiRenderer renderer = UiRenderer.get(getClass().getClassLoader());
         renderer.beginGlassFrame(GLASS_PASSES, screenWidth, screenHeight);
         try {
@@ -189,9 +203,11 @@ public final class UiPvpScoreScreen extends UiScreenBase {
                 drawHero(renderer, c[0], c[1], c[2] - UiTheme.scaled(24f));
             }
             drawListTitle(renderer, c[0], c[1]);
-            if (scored.isEmpty()) {
+            if (listed.isEmpty()) {
                 PvpScoreUi.alpha = PvpScoreUi.ease(listShownAt, 0.3f, 0.5f);
-                String empty = Lang.tr("Aucun duel noté pour l'instant : ils apparaîtront ici dès le premier.");
+                String empty = Lang.tr(competitive && !scored.isEmpty()
+                    ? "Aucun duel classé pour l'instant : ceux joués en casual sont dans l'onglet Casual."
+                    : "Aucun duel noté pour l'instant : ils apparaîtront ici dès le premier.");
                 PvpScoreUi.centered(renderer, UiFont.REGULAR, empty, screenWidth / 2f, (listTop + c[3]) / 2f, c[1] - c[0],
                     UiTheme.TEXT_MUTED, UiTheme.scaled(0.56f), screenWidth, screenHeight);
                 PvpScoreUi.alpha = 1f;
@@ -223,6 +239,11 @@ public final class UiPvpScoreScreen extends UiScreenBase {
         widgets.add(PvpScoreUi.helpButton(screenWidth, screenHeight,
             () -> info = new PvpInfoModal(null, PvpInfoModal.OVERVIEW)));
         widgets.add(PvpScoreUi.shareSwitch(screenWidth, screenHeight));
+        com.yuyuframe.launcheragent.runtime.module.gameplay.PvpScoreModule module =
+            com.yuyuframe.launcheragent.runtime.module.gameplay.PvpScoreModule.instance();
+        if (module != null) {
+            widgets.add(PvpScoreUi.settingsButton(screenWidth, screenHeight, () -> closeTo(new UiModConfigScreen(this, module))));
+        }
 
         float[] c = PvpScoreUi.content(screenWidth, screenHeight);
         heroBottom = c[2] - UiTheme.scaled(24f) - heroHeight();
@@ -248,6 +269,24 @@ public final class UiPvpScoreScreen extends UiScreenBase {
             });
         widgets.add(modeDropdown);
         widgets.add(playType);
+        playing = null;
+        if (competitive) {
+            // Sur la carte du rang (moitié gauche du haut de page, voir drawCompetitive) :
+            // en compétitif une pastille en haut à droite, en casual un grand
+            // bouton centré en bas.
+            float split = c[0] + (c[1] - c[0]) * 0.5f;
+            float pad = UiTheme.scaled(26f);
+            float cardTop = c[2] - UiTheme.scaled(24f);
+            if (PvpScoreUi.PlayingSwitch.playing()) {
+                float w = UiTheme.scaled(260f), h = UiTheme.scaled(34f);
+                playing = new PvpScoreUi.PlayingSwitch(split - pad - w, cardTop - UiTheme.scaled(16f) - h, w, h, this::buildLayout);
+                playing.tooltip = Lang.tr("Passer en casual : tes duels seront notés sans toucher à ton rang.");
+            } else {
+                float w = UiTheme.scaled(320f), h = UiTheme.scaled(50f);
+                playing = new PvpScoreUi.PlayingSwitch(c[0] + (split - c[0] - w) / 2f, heroBottom + UiTheme.scaled(26f), w, h, this::buildLayout);
+            }
+            widgets.add(playing);
+        }
         buildList();
     }
 
@@ -259,8 +298,12 @@ public final class UiPvpScoreScreen extends UiScreenBase {
         float vpW = c[1] - c[0];
         scroll = new UiScrollContainer(c[0], c[3], vpW, Math.max(1f, listTop - c[3]));
         float rowW = vpW - UiTheme.scaled(18f);
-        for (int i = 0; i < scored.size(); i++) {
-            DuelHistory.Duel duel = scored.get(i);
+        listed.clear();
+        for (DuelHistory.Duel duel : scored) {
+            if (!competitive || !isCasual(duel)) listed.add(duel);
+        }
+        for (int i = 0; i < listed.size(); i++) {
+            DuelHistory.Duel duel = listed.get(i);
             scroll.add(new DuelRow(c[0], -(i * (rowH + gap)) - rowH, rowW, rowH, duel, i,
                 () -> closeTo(new UiPvpDuelScreen(this, duel)), c[3], listTop));
         }
@@ -545,8 +588,11 @@ public final class UiPvpScoreScreen extends UiScreenBase {
         float textLeft = badgeX + badge + UiTheme.scaled(24f);
         float textRight = split - pad;
         float textW = textRight - textLeft;
+        boolean playingRanked = PvpScoreUi.PlayingSwitch.playing();
+        // La pastille « TU JOUES EN COMPÉTITIF » occupe le haut à droite : le titre s'arrête avant.
+        float titleW = playing != null && playingRanked ? Math.max(UiTheme.scaled(60f), playing.x - UiTheme.scaled(14f) - textLeft) : textW;
         PvpScoreUi.left(r, UiFont.BOLD, Lang.tr("COMPÉTITIF") + "  ·  " + modeName.toUpperCase(java.util.Locale.ROOT),
-            textLeft, cardTop - UiTheme.scaled(40f), textW, tone, UiTheme.scaled(0.42f), vw, vh);
+            textLeft, cardTop - UiTheme.scaled(40f), titleW, tone, UiTheme.scaled(0.42f), vw, vh);
         if (placed) {
             PvpScoreUi.left(r, UiFont.BOLD, PvpRank.name(division), textLeft, cardTop - UiTheme.scaled(96f), textW,
                 tone, UiTheme.scaled(1.55f), vw, vh);
@@ -585,6 +631,21 @@ public final class UiPvpScoreScreen extends UiScreenBase {
                 textLeft, pipY - UiTheme.scaled(30f), textW, UiTheme.TEXT_SECONDARY, UiTheme.scaled(0.46f), vw, vh);
             PvpScoreUi.left(r, UiFont.REGULAR, Lang.tr("Au plus 2 duels contre un même adversaire comptent"),
                 textLeft, pipY - UiTheme.scaled(56f), textW, UiTheme.TEXT_MUTED, UiTheme.scaled(0.38f), vw, vh);
+        }
+
+        if (playing != null) {
+            if (!playingRanked) {
+                // En casual, la carte se ternit — le rang n'est pas en jeu — et
+                // ne dit plus qu'une chose, au centre, au-dessus du bouton.
+                PvpScoreUi.rect(r, left, cardBottom, split, cardTop, UiTheme.scaled(14f), new UiColor(8, 8, 12, 205), vw, vh);
+                float center = (left + split) / 2f;
+                PvpScoreUi.centered(r, UiFont.BOLD, Lang.tr("TU JOUES EN CASUAL"), center, playing.y + playing.h + UiTheme.scaled(62f),
+                    split - left - pad * 2f, UiTheme.TEXT_PRIMARY, UiTheme.scaled(0.62f), vw, vh);
+                PvpScoreUi.centered(r, UiFont.REGULAR, Lang.tr("Tes duels sont notés, mais ne comptent pas pour ton rang."),
+                    center, playing.y + playing.h + UiTheme.scaled(30f), split - left - pad * 2f, UiTheme.TEXT_SECONDARY,
+                    UiTheme.scaled(0.42f), vw, vh);
+            }
+            playing.paint(r, mouseX, mouseY, tone, vw, vh);
         }
 
         // ── Sa place parmi les joueurs ──
@@ -704,7 +765,7 @@ public final class UiPvpScoreScreen extends UiScreenBase {
     private void drawListTitle(UiRenderer r, float left, float right) {
         int vw = screenWidth, vh = screenHeight;
         PvpScoreUi.alpha = PvpScoreUi.ease(openedAt, 0.3f, 0.5f);
-        if (!scored.isEmpty()) {
+        if (!listed.isEmpty()) {
             float[] col = DuelRow.columns(left, right - left - UiTheme.scaled(18f));
             float small = UiTheme.scaled(0.34f);
             float hy = heroBottom - UiTheme.scaled(74f);

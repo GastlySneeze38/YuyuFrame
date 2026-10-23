@@ -165,6 +165,9 @@ pub struct Change {
     pub before: Standing,
     pub after: Standing,
     pub placement: Placement,
+    /// Joué en casual : ce que le duel AURAIT rapporté en compétitif
+    /// ([`Ladder::preview`]) ; rien n'a été appliqué.
+    pub casual: bool,
 }
 
 /// Les points d'un duel, sans le toucher au classement.
@@ -231,7 +234,7 @@ fn place(mut s: Standing, total: i32) -> Standing {
 }
 
 /// Le classement rejoué duel après duel, un par mode classé.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Ladder {
     standings: HashMap<Mode, Standing>,
     /// (mode, adversaire, jour) → duels déjà classés.
@@ -279,12 +282,19 @@ impl Ladder {
                 (before, 0, Placement::Ignored)
             };
             self.standings.insert(played.mode, after);
-            return Some(Change { base, play, foe_factor, repeat_factor, total, before, after, placement });
+            return Some(Change { base, play, foe_factor, repeat_factor, total, before, after, placement, casual: false });
         }
         let (base, play, foe_factor, total) = points(&before, played, repeat_factor);
         let after = advance(before, total, played.outcome == Outcome::Loss);
         self.standings.insert(played.mode, after);
-        Some(Change { base, play, foe_factor, repeat_factor, total, before, after, placement: Placement::No })
+        Some(Change { base, play, foe_factor, repeat_factor, total, before, after, placement: Placement::No, casual: false })
+    }
+
+    /// Ce qu'un duel joué en casual aurait rapporté en compétitif, sans rien
+    /// toucher au classement : ni la position, ni les adversaires déjà vus.
+    pub fn preview(&self, played: &Played) -> Option<Change> {
+        let mut copy = self.clone();
+        copy.play(played).map(|change| Change { casual: true, ..change })
     }
 
     pub fn standing(&self, mode: Mode) -> Standing {
@@ -466,6 +476,19 @@ mod tests {
             .collect();
         assert_eq!(placements, [Placement::Counted, Placement::Counted, Placement::Ignored, Placement::Ignored]);
         assert_eq!(ladder.standing(Mode::Sword).duels, 2);
+    }
+
+    #[test]
+    fn un_duel_casual_montre_ses_points_sans_rien_changer() {
+        let mut ladder = placed_ladder();
+        let mut d = duel(Outcome::Win, 250.0, 250.0);
+        d.foe_key = Some("abc".into());
+        let preview = ladder.preview(&d).unwrap();
+        assert!(preview.casual);
+        assert_eq!(preview.total, 25);
+        assert_eq!(ladder.standing(Mode::Sword), at(0, 0));
+        // Le même adversaire ensuite, en compétitif : plein tarif, le casual n'a pas compté.
+        assert_eq!(ladder.play(&d).unwrap().total, 25);
     }
 
     #[test]

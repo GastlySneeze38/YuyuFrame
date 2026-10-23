@@ -69,4 +69,7 @@ pub enum Record {
     Event { kind: i32, a: i32, b: i32, c: i32, text: String },
     /// Le suivi s'arrête (module éteint) : le journal en cours se termine.
     Close,
+    /// Compétitif (`true`) ou casual : vaut pour les duels ouverts ensuite,
+    /// écrit dans leur en-tête (docs/scoring/classement.md).
+    Competitive { on: bool },
 }

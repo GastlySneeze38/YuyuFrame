@@ -162,6 +162,22 @@ public final class PvpScoreUi {
         return widget;
     }
 
+    /**
+     * « Réglages », à gauche de l'interrupteur de partage : les réglages du
+     * module (compétitif ou casual, sa touche, le partage). La carte du module
+     * ouvre cette page, pas ses réglages — c'est leur seule entrée.
+     */
+    static UiWidget settingsButton(int screenWidth, int screenHeight, Runnable open) {
+        float[] c = content(screenWidth, screenHeight);
+        float h = UiTheme.scaled(40f);
+        float w = UiTheme.scaled(150f);
+        float y = screenHeight - topBarHeight() / 2f - h / 2f;
+        float shareLeft = c[1] - UiTheme.scaled(40f) - UiTheme.scaled(14f) - UiTheme.scaled(250f);
+        UiButton button = new UiButton(shareLeft - UiTheme.scaled(14f) - w, y, w, h, Lang.tr("Réglages"), open);
+        button.tooltip = Lang.tr("Compétitif ou casual, sa touche, le partage des duels");
+        return button;
+    }
+
     private static final class ShareSwitch extends UiWidget {
         private final UiAnimatedFloat hover = new UiAnimatedFloat(0f, 16f);
         private final UiAnimatedFloat on;
@@ -617,6 +633,82 @@ public final class PvpScoreUi {
             if (clicked == selected) return;
             selected = clicked;
             if (onChange != null) onChange.accept(clicked);
+        }
+    }
+
+    // ── Ce que le joueur joue ────────────────────────────────────────────────
+
+    /**
+     * Le choix compétitif / casual sur la carte du rang — ce que le joueur
+     * JOUE, pas ce qu'il regarde ({@link PlayTypeToggle}). En compétitif : une
+     * pastille « TU JOUES EN COMPÉTITIF » dans la couleur du rang, interrupteur
+     * allumé. En casual : un grand bouton « REPASSER EN COMPÉTITIF » qui
+     * respire. Le réglage est celui du module
+     * ({@code PvpScoreModule#competitive}).
+     *
+     * <p>La carte du rang est dessinée APRÈS les widgets de la page : ce
+     * widget ne dessine donc rien dans {@link #draw}, la page l'appelle par
+     * {@link #paint} une fois la carte posée. Il garde la zone cliquable.
+     */
+    static final class PlayingSwitch extends UiWidget {
+        private final Runnable onChange;
+        private final UiAnimatedFloat hover = new UiAnimatedFloat(0f, 16f);
+        private final long createdAt = System.nanoTime();
+
+        PlayingSwitch(float x, float y, float w, float h, Runnable onChange) {
+            super(x, y, w, h);
+            this.onChange = onChange;
+        }
+
+        static boolean playing() {
+            com.yuyuframe.launcheragent.runtime.module.gameplay.PvpScoreModule module =
+                com.yuyuframe.launcheragent.runtime.module.gameplay.PvpScoreModule.instance();
+            return module == null || module.competitive();
+        }
+
+        @Override
+        public void draw(UiRenderer r, double mouseX, double mouseY, int vw, int vh) {
+            // Dessiné par la page, par-dessus la carte : voir paint.
+        }
+
+        /** {@code tone} : la couleur du rang du mode affiché. */
+        void paint(UiRenderer r, double mouseX, double mouseY, UiColor tone, int vw, int vh) {
+            hover.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
+            float t = hover.get();
+            float radius = h / 2f;
+            if (playing()) {
+                r.drawRoundedRect(x - 1f, y - 1f, x + w + 1f, y + h + 1f, radius + 1f, a(tone.withAlpha(0.55f + 0.35f * t)), vw, vh);
+                r.drawRoundedRect(x, y, x + w, y + h, radius, a(UiColor.lerp(UiTheme.CARD_BG, tone.withAlpha(0.3f), 0.6f + 0.4f * t)), vw, vh);
+                float trackH = h * 0.5f;
+                float trackW = trackH * 1.8f;
+                float pad = (h - trackH) / 2f;
+                float tx = x + w - pad - trackW, ty = y + pad;
+                r.drawRoundedRect(tx, ty, tx + trackW, ty + trackH, trackH / 2f, a(tone), vw, vh);
+                float knob = trackH - 4f;
+                float kx = tx + trackW - knob - 2f;
+                r.drawRoundedRect(kx, ty + 2f, kx + knob, ty + 2f + knob, knob / 2f, a(UiTheme.TEXT_PRIMARY), vw, vh);
+                float scale = UiTheme.scaled(0.4f);
+                left(r, UiFont.BOLD, Lang.tr("TU JOUES EN COMPÉTITIF"), x + UiTheme.scaled(14f), middle(y + h / 2f, scale),
+                    tx - x - UiTheme.scaled(22f), UiTheme.TEXT_PRIMARY, scale, vw, vh);
+            } else {
+                // Le bouton qui ramène au compétitif : il respire pour appeler le clic.
+                float breath = 0.5f + 0.5f * (float) Math.sin((System.nanoTime() - createdAt) / 1e9 * 2.4);
+                r.drawGlow(x, y, x + w, y + h, h * 0.35f, 0.25f + 0.2f * breath, a(UiTheme.ACCENT.withAlpha(0.8f)), vw, vh);
+                r.drawRoundedRect(x, y, x + w, y + h, UiTheme.scaled(10f),
+                    a(UiColor.lerp(UiTheme.ACCENT.withAlpha(0.8f), UiTheme.ACCENT, Math.max(t, 0.4f * breath))), vw, vh);
+                float scale = UiTheme.scaled(0.52f);
+                centered(r, UiFont.BOLD, Lang.tr("REPASSER EN COMPÉTITIF"), x + w / 2f, middle(y + h / 2f, scale), w - UiTheme.scaled(24f),
+                    UiTheme.TEXT_PRIMARY, scale, vw, vh);
+            }
+        }
+
+        @Override
+        public void onClick() {
+            com.yuyuframe.launcheragent.runtime.module.gameplay.PvpScoreModule module =
+                com.yuyuframe.launcheragent.runtime.module.gameplay.PvpScoreModule.instance();
+            if (module == null) return;
+            module.setCompetitive(!module.competitive());
+            if (onChange != null) onChange.run();
         }
     }
 

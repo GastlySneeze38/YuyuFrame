@@ -35,6 +35,14 @@ pub fn recording() -> bool {
     RECORDING.load(std::sync::atomic::Ordering::Relaxed)
 }
 
+/// Le mode deviné du duel ouvert (`Journal::live_mode`), tenu à jour comme
+/// [`RECORDING`].
+static LIVE_MODE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+pub fn live_mode() -> u8 {
+    LIVE_MODE.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// Le résumé du dernier duel fermé, et son numéro : l'interface en jeu le
 /// relit à chaque tick et n'affiche que ce qui est nouveau.
 static LAST_REPORT: std::sync::Mutex<(i32, [f64; super::score::REPORT_LEN])> = std::sync::Mutex::new((0, [0.0; super::score::REPORT_LEN]));
@@ -192,6 +200,7 @@ fn run(records: std::sync::mpsc::Receiver<Record>) {
             }
         }
         RECORDING.store(journal.recording(), std::sync::atomic::Ordering::Relaxed);
+        LIVE_MODE.store(journal.live_mode(), std::sync::atomic::Ordering::Relaxed);
         // Un bloc par seconde, à l'horloge : les ticks arrivent vingt fois par
         // seconde, le fil ne connaît donc jamais de silence, et attendre la
         // taille seule laissait la fin d'un duel en mémoire — perdue si le jeu

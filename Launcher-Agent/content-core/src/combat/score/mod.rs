@@ -73,6 +73,8 @@ pub struct Report {
     pub engaged_secs: f64,
     /// Durée du duel, du premier au dernier tick enregistré (secondes).
     pub duration_secs: f64,
+    /// Joué en casual : noté, hors du classement.
+    pub casual: bool,
     pub mine: Opportunities,
     pub theirs: Opportunities,
     /// Charge d'attaque moyenne à mes smashs, telle que le jeu la compte au coup.
@@ -96,7 +98,7 @@ pub struct Report {
 }
 
 /// Nombre de valeurs de [`Report::numbers`].
-pub const REPORT_LEN: usize = 60;
+pub const REPORT_LEN: usize = 61;
 
 /// Ce qui s'est échangé entre les deux duellistes, tel quel : les coups
 /// confirmés par le serveur dans un sens et dans l'autre, toutes armes
@@ -181,6 +183,8 @@ impl Report {
     ///
     /// Puis (ABI 16) : la durée du duel en secondes, du premier au dernier
     /// tick enregistré — pas seulement le temps au contact.
+    ///
+    /// Puis (ABI 17) : 1 si le duel a été joué en casual (hors classement).
     pub fn numbers(&self) -> [f64; REPORT_LEN] {
         let result = match self.result.as_deref() {
             Some("win") => 1.0,
@@ -258,6 +262,7 @@ impl Report {
             self.sword.crits as f64,
             self.sword.jump_resets as f64,
             self.duration_secs,
+            self.casual as u8 as f64,
         ]
     }
 }
@@ -384,6 +389,7 @@ pub fn score_with(journal: &Journal, prior: &Prior) -> Report {
             (Some(first), Some(last)) => last.t.saturating_sub(first.t) as f64 / 20.0,
             _ => 0.0,
         },
+        casual: duel.casual,
         mine: Opportunities::of(&features.mine),
         theirs: Opportunities::of(&features.theirs),
         smash_charge: features.smash_charge,

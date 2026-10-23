@@ -88,6 +88,13 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
     private final Summary summary = new Summary();
     private final HudElement element = new HudElement("pvp-score", "Score PvP", HudAnchor.TOP_CENTER, 0f, 36f,
         (HudElement.CustomRenderer) summary);
+    /** L'annonce de début de duel et du changement compétitif / casual. */
+    private final Banner banner = new Banner();
+    private final HudElement bannerElement = new HudElement("pvp-duel-banner", "Annonce de duel", HudAnchor.TOP_CENTER, 0f, 8f,
+        (HudElement.CustomRenderer) banner);
+    /** Un duel était ouvert au tick précédent : son ouverture se voit au passage à vrai. */
+    private boolean wasRecording;
+    private boolean keyHeld;
 
     private final double[] incoming = new double[NativeCombat.REPORT_LEN];
     /** Le numéro du dernier résumé reçu — celui d'avant le lancement n'est pas montré. */
@@ -120,6 +127,8 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
         // touché n'est pas relu du fichier, donc aucun setter ne la donnerait.
         // Une valeur sauvegardée arrive ensuite et la remplace.
         NativeCombat.share(shareDuels);
+        NativeCombat.competitive(competitive);
+        refreshRanks();
     }
 
     @Override
@@ -150,8 +159,42 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
         com.yuyuframe.launcheragent.runtime.ui.HudConfigStore.save();
     }
 
+    /**
+     * Compétitif (les duels comptent pour le rang) ou casual (notés, hors du
+     * classement) — docs/scoring/classement.md. Compétitif par défaut : c'est
+     * le mode qu'on veut voir jouer. Le choix vaut pour les duels ouverts
+     * ensuite, le noyau l'écrit dans l'en-tête de chacun.
+     */
+    private boolean competitive = true;
+    /** La touche qui bascule de l'un à l'autre, hors des écrans. */
+    private String competitiveKey = "K";
+    private static final String NO_KEY = "NONE";
+
+    public boolean competitive() {
+        return competitive;
+    }
+
+    public void setCompetitive(boolean value) {
+        if (value == competitive) return;
+        competitive = value;
+        NativeCombat.competitive(value);
+        com.yuyuframe.launcheragent.runtime.ui.HudConfigStore.save();
+        banner.switched(value, CombatTracker.recording(), bestRank());
+    }
+
+    /** Le nom de la touche de bascule, ou vide si aucune n'est choisie. */
+    public String competitiveKey() {
+        return competitiveKey == null || competitiveKey.trim().isEmpty() || NO_KEY.equals(competitiveKey) ? "" : competitiveKey;
+    }
+
     @Override
     protected void settings(com.yuyuframe.launcheragent.runtime.ui.config.SettingList s) {
+        s.toggle("competitive", "Jouer en compétitif",
+            "Vos duels comptent pour votre rang. Éteint (casual), ils sont notés sans toucher au rang",
+            "Classement", null, () -> competitive, v -> { competitive = v; NativeCombat.competitive(v); });
+        s.keybind("competitiveKey", "Touche compétitif / casual",
+            "Bascule entre compétitif et casual en jeu. Le duel en cours garde son type",
+            "Classement", null, () -> competitiveKey, v -> competitiveKey = v);
         s.toggle("shareDuels", "Partager mes duels",
             "Envoie vos duels, anonymisés, pour calibrer la note — sans pseudo, ni UUID, ni adresse de serveur",
             "Calibration", null, () -> shareDuels, v -> { shareDuels = v; NativeCombat.share(v); });
@@ -160,8 +203,69 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
     @Override
     protected void onEnabledChanged(boolean enabled) {
         CombatTracker.setActive(enabled);
-        if (enabled) HudRegistry.register(element);
-        else HudRegistry.unregister(element);
+        if (enabled) {
+            HudRegistry.register(element);
+            HudRegistry.register(bannerElement);
+            refreshRanks();
+        } else {
+            HudRegistry.unregister(element);
+            HudRegistry.unregister(bannerElement);
+        }
+    }
+
+    // ── Le rang de chaque mode, pour l'annonce ───────────────────────────────
+
+    /** Les rangs connus (masse, épée), relus de l'historique hors du fil du jeu ; vide avant la première lecture. */
+    private static volatile java.util.List<com.yuyuframe.launcheragent.runtime.combat.DuelHistory.Rank> ranks = java.util.List.of();
+
+    /**
+     * Relit les rangs sur un fil à part : le noyau rejoue tout l'historique,
+     * quelques millisecondes par duel — trop pour le fil du jeu.
+     */
+    private static void refreshRanks() {
+        Thread thread = new Thread(() -> {
+            try {
+                ranks = com.yuyuframe.launcheragent.runtime.combat.DuelHistory.load().ranks;
+            } catch (Throwable error) {
+                com.yuyuframe.launcheragent.base.log.LauncherLog.err("[COMBAT] Rangs illisibles pour l'annonce de duel", error);
+            }
+        }, "yf-pvp-ranks");
+        thread.setDaemon(true);
+        thread.start();
+    }
+
+    /** Le rang d'un mode (1 masse, 2 épée), {@code null} s'il n'est pas connu. */
+    private static com.yuyuframe.launcheragent.runtime.combat.DuelHistory.Rank rankOf(int mode) {
+        for (com.yuyuframe.launcheragent.runtime.combat.DuelHistory.Rank rank : ranks) {
+            if (rank.mode == mode) return rank;
+        }
+        return null;
+    }
+
+    /** Le rang le plus avancé, tous modes confondus : un rang dévoilé avant un placement. */
+    private static com.yuyuframe.launcheragent.runtime.combat.DuelHistory.Rank bestRank() {
+        com.yuyuframe.launcheragent.runtime.combat.DuelHistory.Rank best = null;
+        double bestKey = -1;
+        for (com.yuyuframe.launcheragent.runtime.combat.DuelHistory.Rank rank : ranks) {
+            if (rank.duels == 0) continue;
+            double key = (rank.placed ? 1e9 : 0) + PvpRank.cumulative(rank.division, rank.points) * 1e3 + rank.duels;
+            if (key > bestKey) {
+                bestKey = key;
+                best = rank;
+            }
+        }
+        return best;
+    }
+
+    /** « Or 2 », « Placement 4 / 10 », ou « Non classé » sans duel. */
+    static String rankLabel(com.yuyuframe.launcheragent.runtime.combat.DuelHistory.Rank rank) {
+        if (rank == null || rank.duels == 0) return Lang.tr("Non classé");
+        if (!rank.placed) return Lang.tr("Placement") + " " + rank.duels + " / " + PvpRank.PLACEMENT_DUELS;
+        return PvpRank.name(rank.division);
+    }
+
+    static UiColor rankColor(com.yuyuframe.launcheragent.runtime.combat.DuelHistory.Rank rank) {
+        return rank != null && rank.placed ? PvpRank.color(rank.division) : UiTheme.ACCENT;
     }
 
     /**
@@ -180,7 +284,37 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
         if (ranked != lastRanked) {
             lastRanked = ranked;
             summary.ranked(ranked, incomingRanked);
+            refreshRanks();
         }
+
+        // Un duel vient de s'ouvrir : on annonce ce qui est en jeu. Le panneau
+        // du duel d'avant n'a plus lieu d'être.
+        boolean recording = CombatTracker.recording();
+        if (recording && !wasRecording) {
+            int mode = NativeCombat.liveMode();
+            // Un duel ni à la masse ni à l'épée n'est ni noté ni classé : rien à annoncer.
+            if (mode == 1 || mode == 2) {
+                summary.hide();
+                banner.duelStarted(competitive, rankOf(mode));
+            }
+        }
+        wasRecording = recording;
+
+        pollKey();
+    }
+
+    /** La touche compétitif / casual, sur son front montant, hors des écrans (tchat, champs de texte). */
+    private void pollKey() {
+        String key = competitiveKey();
+        com.yuyuframe.launcheragent.apigraphic.platform.lwjgl3.UiInputPollerModern poller =
+            com.yuyuframe.launcheragent.apigraphic.platform.lwjgl3.UiInputPollerModern.ACTIVE;
+        if (key.isEmpty() || poller == null || com.yuyuframe.launcheragent.runtime.game.ClientData.screenObject() != null) {
+            keyHeld = false;
+            return;
+        }
+        boolean down = poller.isKeyDownByName(key);
+        if (down && !keyHeld) setCompetitive(!competitive);
+        keyHeld = down;
     }
 
     /**
@@ -237,7 +371,7 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
         }
 
         /** Les points de l'exemple de l'éditeur : une victoire qui fait monter d'Or 1 à Or 2. */
-        private static final double[] SAMPLE_RANKED = { 31, 20, 6, 1.2, 1, 9, 478, 40, 10, 9, 41, 1 };
+        private static final double[] SAMPLE_RANKED = { 31, 20, 6, 1.2, 1, 9, 478, 40, 10, 9, 41, 1, 0 };
         /** Le temps d'une boucle de l'animation d'exemple, dans l'éditeur de HUD. */
         private static final long SAMPLE_LOOP_NANOS = 4_000_000_000L;
 
@@ -271,11 +405,25 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
         /** Après l'arrivée des points : de quoi voir défiler le gain et la barre. */
         private static final long RANKED_SHOWN_NANOS = 10_000_000_000L;
 
-        /** Ce duel compte-t-il au classement ? Noté, avec un verdict, à la masse ou à l'épée. */
-        private static boolean rankable(double[] report) {
+        /** Un nouveau duel commence : le panneau du précédent s'efface. */
+        void hide() {
+            received = false;
+        }
+
+        /** Noté, avec un verdict, à la masse ou à l'épée : de quoi compter au classement — ou y avoir compté. */
+        private static boolean classable(double[] report) {
             int result = (int) report[NativeCombat.REPORT_RESULT];
             int mode = (int) report[NativeCombat.REPORT_MODE];
             return report[NativeCombat.REPORT_SCORE] >= 0 && result >= 1 && result <= 3 && (mode == 1 || mode == 2);
+        }
+
+        private static boolean casual(double[] report) {
+            return report[NativeCombat.REPORT_CASUAL] >= 1;
+        }
+
+        /** Ce duel compte-t-il au classement ? Classable, et joué en compétitif. */
+        private static boolean rankable(double[] report) {
+            return classable(report) && !casual(report);
         }
 
         @Override
@@ -310,10 +458,54 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
                 // la même mise en page, points en attente.
                 float since = rankedReceived ? (System.nanoTime() - rankedAtNanos) / 1e9f : -1f;
                 drawRanked(r, report, rankedReceived ? ranked : null, since, x, x + w, bottom - GAP * s, s, vw, vh);
+            } else if (classable(report) && casual(report)) {
+                // Casual : la note et les familles, puis ce que le duel aurait
+                // rapporté en compétitif à la place des chiffres.
+                bottom = drawScoreAndFamilies(r, report, x, x + w, bottom - GAP * s, s, vw, vh);
+                drawMissed(r, report, rankedReceived ? ranked : null, x, x + w, bottom - GAP * s, s, vw, vh);
             } else {
                 bottom = drawScoreAndFamilies(r, report, x, x + w, bottom - GAP * s, s, vw, vh);
                 drawFigures(r, report, x, x + w, bottom - GAP * s, s, vw, vh);
             }
+        }
+
+        /**
+         * Un duel casual : « En compétitif : +24 RR » (ou ce qu'il aurait
+         * coûté, ou le placement qu'il aurait fait avancer), et comment y
+         * passer. {@code values} : ce que le noyau a calculé sans l'appliquer,
+         * nul tant qu'il n'est pas arrivé.
+         */
+        private void drawMissed(UiRenderer r, double[] report, double[] values, float left, float right, float top, float s,
+                                int vw, int vh) {
+            float bottom = top - FIGURES_H * s;
+            float inner = 12f * s;
+            r.drawRoundedRect(left, bottom, right, top, RADIUS * s, UiTheme.CARD_BG, vw, vh);
+            String text;
+            UiColor tone;
+            if (values == null) {
+                text = Lang.tr("En compétitif : calcul…");
+                tone = UiTheme.TEXT_SECONDARY;
+            } else if (values[NativeCombat.RANKED_BEFORE_DUELS] < PvpRank.PLACEMENT_DUELS) {
+                text = Lang.tr("En compétitif, ce duel aurait compté pour ton placement");
+                tone = UiTheme.ACCENT;
+            } else {
+                long total = Math.round(values[NativeCombat.RANKED_TOTAL]);
+                String points = (total > 0 ? "+" : total < 0 ? "-" : "") + Math.abs(total) + " RR";
+                text = Lang.tr(total >= 0 ? "En compétitif, ce duel t'aurait rapporté" : "En compétitif, ce duel t'aurait coûté")
+                    + " " + points;
+                tone = total > 0 ? PvpScoreUi.GOOD : total < 0 ? PvpScoreUi.BAD : UiTheme.TEXT_SECONDARY;
+            }
+            // Rétréci s'il dépasse : une traduction plus longue reste dans la case.
+            float scale = 0.3f * s;
+            float full = r.textWidth(UiFont.BOLD, text, scale);
+            float room = right - left - inner * 2f;
+            if (full > room && full > 0f) scale *= room / full;
+            r.drawText(UiFont.BOLD, text, left + inner, bottom + 19f * s, tone, scale, vw, vh);
+            PvpScoreModule module = instance;
+            String key = module == null ? "" : module.competitiveKey();
+            String how = key.isEmpty() ? Lang.tr("Passe en compétitif depuis la page Score PvP")
+                : "[" + key + "] " + Lang.tr("passer en compétitif");
+            r.drawText(UiFont.REGULAR, how, left + inner, bottom + 6f * s, UiTheme.TEXT_MUTED, 0.25f * s, vw, vh);
         }
 
         private static float ease(float since, float delay, float duration) {
@@ -655,5 +847,105 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
             }
             r.drawText(font, text, center - width / 2f, y, color, scale, vw, vh);
         }
+    }
+
+    /**
+     * L'annonce, en haut de l'écran pendant deux secondes et demie : ce qui
+     * est en jeu au début d'un duel (« DUEL CLASSÉ · Or 2 » dans la couleur du
+     * rang, « DUEL CASUAL » en gris), et le choix qui vient de changer par la
+     * touche ou la page. Le compétitif a la couleur, le casual reste neutre.
+     */
+    private static final class Banner implements HudElement.CustomRenderer {
+
+        private static final float WIDTH = 300f;
+        private static final float HEIGHT = 30f;
+        private static final float SHOWN_SECONDS = 2.6f;
+
+        private String title = "";
+        private String detail = "";
+        private UiColor tone = UiTheme.ACCENT;
+        private long shownAtNanos;
+        private boolean active;
+
+        void duelStarted(boolean competitive, com.yuyuframe.launcheragent.runtime.combat.DuelHistory.Rank rank) {
+            if (competitive) show(Lang.tr("DUEL CLASSÉ"), rankLabel(rank), rankColor(rank));
+            else show(Lang.tr("DUEL CASUAL"), Lang.tr("ton rang n'est pas en jeu"), PvpScoreUi.NEUTRAL);
+        }
+
+        void switched(boolean competitive, boolean inDuel, com.yuyuframe.launcheragent.runtime.combat.DuelHistory.Rank best) {
+            String later = inDuel ? "  ·  " + Lang.tr("au prochain duel") : "";
+            if (competitive) show(Lang.tr("COMPÉTITIF"), rankLabel(best) + later, rankColor(best));
+            else show(Lang.tr("CASUAL"), Lang.tr("ton rang n'est pas en jeu") + later, PvpScoreUi.NEUTRAL);
+        }
+
+        private void show(String title, String detail, UiColor tone) {
+            this.title = title;
+            this.detail = detail;
+            this.tone = tone;
+            shownAtNanos = System.nanoTime();
+            active = true;
+        }
+
+        private float since() {
+            return (System.nanoTime() - shownAtNanos) / 1e9f;
+        }
+
+        @Override
+        public float[] naturalSize() {
+            return new float[]{ WIDTH, HEIGHT };
+        }
+
+        /** En jeu, seulement le temps de l'annonce. L'éditeur de HUD l'affiche toujours. */
+        @Override
+        public boolean hasContent() {
+            return active && since() < SHOWN_SECONDS;
+        }
+
+        @Override
+        public boolean skipBackground() {
+            return true;
+        }
+
+        @Override
+        public void draw(UiRenderer r, float x, float y, float w, float h, float s, int vw, int vh) {
+            boolean live = active && since() < SHOWN_SECONDS;
+            // Hors annonce, on n'est ici que par l'éditeur de HUD : un exemple.
+            String head = live ? title : Lang.tr("DUEL CLASSÉ");
+            String tail = live ? detail : PvpRank.name(10);
+            UiColor color = live ? tone : PvpRank.color(10);
+            float t = live ? since() : 1f;
+            // Apparaît vite, s'efface en douceur.
+            float alpha = live ? Math.min(1f, t / 0.15f) * Math.min(1f, (SHOWN_SECONDS - t) / 0.45f) : 1f;
+            if (alpha <= 0.01f) return;
+
+            float titleScale = 0.44f * s;
+            float detailScale = 0.36f * s;
+            String separator = "  ·  ";
+            float titleW = r.textWidth(UiFont.BOLD, head, titleScale);
+            float sepW = r.textWidth(UiFont.REGULAR, separator, detailScale);
+            float detailW = r.textWidth(UiFont.REGULAR, tail, detailScale);
+            float content = titleW + sepW + detailW;
+            float pad = 16f * s;
+            float pillW = Math.min(w, content + pad * 2f + 10f * s);
+            float left = x + (w - pillW) / 2f;
+            float right = left + pillW;
+            r.drawRoundedRect(left, y, right, y + h, h / 2f, new UiColor(14, 12, 20, 215).multiplyAlpha(alpha), vw, vh);
+            r.drawGradientRect2D(left, y, right, y + h, h / 2f, color.withAlpha(0.35f * alpha), color.withAlpha(0.08f * alpha),
+                color.withAlpha(0.35f * alpha), color.withAlpha(0.08f * alpha), vw, vh);
+            // Le point de couleur, à gauche : le compétitif a la sienne, le casual reste gris.
+            float dot = 6f * s;
+            float dotX = left + pad - 2f * s;
+            r.drawRoundedRect(dotX, y + (h - dot) / 2f, dotX + dot, y + (h + dot) / 2f, dot / 2f, color.multiplyAlpha(alpha), vw, vh);
+
+            float baseline = y + h / 2f - HALF_CAP * titleScale;
+            float textX = dotX + dot + 8f * s;
+            r.drawText(UiFont.BOLD, head, textX, baseline, color.multiplyAlpha(alpha), titleScale, vw, vh);
+            float detailBaseline = y + h / 2f - HALF_CAP * detailScale;
+            r.drawText(UiFont.REGULAR, separator + tail, textX + titleW, detailBaseline,
+                UiTheme.TEXT_PRIMARY.multiplyAlpha(alpha), detailScale, vw, vh);
+        }
+
+        /** Ce qu'un texte occupe au-dessus de sa ligne de base, par unité d'échelle — comme dans le panneau. */
+        private static final float HALF_CAP = 11f;
     }
 }
