@@ -205,6 +205,9 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
         NativeCombat.competitive(value);
         com.yuyuframe.launcheragent.runtime.ui.HudConfigStore.save();
         banner.switched(value, CombatTracker.recording(), bestRank());
+        // Un clic, et une note qui monte vers le compétitif ou descend vers le casual.
+        PvpSounds.play(PvpSounds.CLICK, 1f, 0.5f);
+        PvpSounds.play(PvpSounds.PLING, value ? 1.5f : 0.8f, 0.5f);
     }
 
     /** Le nom de la touche de bascule, ou vide si aucune n'est choisie. */
@@ -226,6 +229,10 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
         s.toggle("sounds", "Sons",
             "Les sons des bons coups, des points gagnés et des nouveaux rangs",
             "Pendant le duel", null, () -> PvpSounds.enabled, v -> PvpSounds.enabled = v);
+        s.slider("soundVolume", "Volume des sons (%)",
+            "Le volume de tous les sons du Score PvP, par rapport à leur niveau normal",
+            "Pendant le duel", 0f, 100f, 5f, () -> PvpSounds.enabled,
+            () -> PvpSounds.volume * 100f, v -> PvpSounds.volume = v / 100f);
         // Les records personnels (plus long combo, plus haut smash) : édités par le jeu, pas par l'écran.
         s.opaque("records", callouts::records, callouts::loadRecords);
         s.toggle("shareDuels", "Partager mes duels",
@@ -501,6 +508,8 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
                 ceremony = true;
                 ceremonyBeat = -1;
                 ceremonyBurst = false;
+                ceremonyResonate = false;
+                ceremonyTile = false;
                 // Une montée laisse d'abord la barre se remplir jusqu'au bord ; un
                 // rang dévoilé n'a rien à remplir, la cérémonie vient plus tôt.
                 ceremonyAtNanos = rankedAtNanos + (long) ((reveal ? CEREMONY_DELAY_REVEAL : CEREMONY_DELAY) * 1e9);
@@ -538,9 +547,11 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
         private long countedShown;
         private long lastCountSoundNanos;
         private boolean divisionSoundPlayed;
-        /** Dans la cérémonie : le dernier saut du couvercle sonné, et l'éclat. */
+        /** Dans la cérémonie : la lueur, le dernier saut du couvercle sonné, l'éclat, la tuile. */
         private int ceremonyBeat = -1;
+        private boolean ceremonyResonate;
         private boolean ceremonyBurst;
+        private boolean ceremonyTile;
 
         /**
          * Les sons, à chaque image, au rythme des animations du panneau : un
@@ -573,21 +584,45 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
                     divisionSoundPlayed = true;
                     PvpSounds.play(PvpSounds.LEVEL_UP, 1.3f, 0.6f);
                 }
+                // Une division perdue : grave et discret, quand la barre passe le bord.
+                if (!placement && after < before && !divisionSoundPlayed && since > 1.3f) {
+                    divisionSoundPlayed = true;
+                    PvpSounds.play(PvpSounds.DIDGERIDOO, 0.9f, 0.5f);
+                }
+                // Un duel de placement compté : un cran plus haut à chacun, de 1 à 10.
+                int duelsAfter = (int) ranked[NativeCombat.RANKED_AFTER_DUELS];
+                if (placement && !ceremony && duelsAfter > (int) ranked[NativeCombat.RANKED_BEFORE_DUELS]
+                        && !divisionSoundPlayed && since > 0.4f) {
+                    divisionSoundPlayed = true;
+                    PvpSounds.play(PvpSounds.XYLOPHONE, 0.7f + 0.09f * Math.min(duelsAfter, PvpRank.PLACEMENT_DUELS), 0.55f);
+                }
             }
             if (inCeremony()) {
                 float t = (now - ceremonyAtNanos) / 1e9f;
                 float u = t - Ceremony.TRAVEL_SECONDS;
                 if (u >= 0f && t < Ceremony.BURST_SECONDS) {
-                    // Un coup à chaque saut du couvercle, de plus en plus serrés.
+                    // La lueur qui monte au fond du coffre, une fois au début du suspense.
+                    if (!ceremonyResonate) {
+                        ceremonyResonate = true;
+                        PvpSounds.play(PvpSounds.RESONATE, 0.8f, 0.6f);
+                    }
+                    // Le cliquetis du coffre à chaque saut du couvercle, de plus en plus serrés et aigus.
                     int beat = Ceremony.beat(u);
                     if (beat != ceremonyBeat) {
                         ceremonyBeat = beat;
-                        PvpSounds.play(PvpSounds.DRUM, 0.8f + 0.1f * beat, 0.7f);
+                        PvpSounds.play(PvpSounds.CHEST_LOCKED, 0.8f + 0.08f * beat, 0.5f + 0.05f * beat);
                     }
                 } else if (t >= Ceremony.BURST_SECONDS && !ceremonyBurst) {
                     ceremonyBurst = true;
                     PvpSounds.play(PvpSounds.CHEST_OPEN, 0.9f, 0.9f);
                     PvpSounds.play(PvpSounds.CHALLENGE, 1f, 0.9f);
+                    if (ranked[NativeCombat.RANKED_AFTER_DIVISION] >= PvpRank.CHAMPION) {
+                        PvpSounds.play(PvpSounds.BEACON, 1.1f, 0.8f);
+                    }
+                } else if (t >= Ceremony.BURST_SECONDS + 0.35f && !ceremonyTile) {
+                    // La tuile sort du coffre.
+                    ceremonyTile = true;
+                    PvpSounds.play(PvpSounds.TWINKLE, 1.1f, 0.7f);
                 }
             }
         }

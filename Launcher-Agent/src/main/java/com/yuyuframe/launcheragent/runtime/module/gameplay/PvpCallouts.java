@@ -125,17 +125,49 @@ final class PvpCallouts implements HudElement.CustomRenderer {
     private void sound(int kind, int tier, int value, long now) {
         if (now - lastSoundNanos < SOUND_GAP_NANOS) return;
         lastSoundNanos = now;
+        // Des sons qui disent « bravo ! » : le « ding » d'une flèche qui touche
+        // un joueur (le son du PvP), et des accords MAJEURS au carillon par-dessus
+        // — deux ou trois notes ensemble sonnent comme une petite fanfare, là où
+        // une note seule sonnait comme une notification.
         if (kind == COMBO) {
-            // Un ton plus haut à chaque coup du combo : on veut entendre la suivante.
-            PvpSounds.play(PvpSounds.PLING, 0.9f + 0.12f * (value - 3), 0.7f);
+            // La gamme qui monte, une note par coup : on veut entendre la suivante.
+            int step = Math.max(0, Math.min(MAJOR_SCALE.length - 1, value - 3));
+            float note = 0.75f * MAJOR_SCALE[step];
+            PvpSounds.play(PvpSounds.DING, 0.9f + 0.06f * step, 0.45f);
+            PvpSounds.play(PvpSounds.CHIME, note, 0.65f);
+            if (value >= 8) PvpSounds.play(PvpSounds.CHIME, note * 1.26f, 0.5f);
             return;
         }
         switch (tier) {
-            case 1 -> PvpSounds.play(PvpSounds.PLING, 1.5f, 0.5f);
-            case 2 -> PvpSounds.play(PvpSounds.BELL, 1.3f, 0.6f);
-            case 3 -> PvpSounds.play(PvpSounds.ORB, 0.9f, 0.8f);
-            default -> PvpSounds.play(PvpSounds.LEVEL_UP, 1.2f, 0.7f);
+            case 1 -> {
+                PvpSounds.play(PvpSounds.DING, 1.1f, 0.5f);
+                PvpSounds.play(PvpSounds.CHIME, 1.5f, 0.45f);
+            }
+            case 2 -> {
+                PvpSounds.play(PvpSounds.DING, 1.0f, 0.55f);
+                chord(1.0f, 0.55f, false);
+            }
+            case 3 -> {
+                PvpSounds.play(PvpSounds.DING, 0.95f, 0.6f);
+                chord(1.0f, 0.6f, true);
+                PvpSounds.play(PvpSounds.ORB, 1.2f, 0.5f);
+            }
+            default -> {
+                PvpSounds.play(PvpSounds.LEVEL_UP, 1.4f, 0.6f);
+                chord(1.5f, 0.6f, true);
+                PvpSounds.play(PvpSounds.TWINKLE, 1.2f, 0.6f);
+            }
         }
+    }
+
+    /** Rapports de hauteur de la gamme majeure, sur une octave. */
+    private static final float[] MAJOR_SCALE = { 1f, 1.122f, 1.26f, 1.335f, 1.498f, 1.682f, 1.888f, 2f };
+
+    /** Un accord majeur au carillon sur {@code root} : tonique et tierce, plus la quinte si {@code full}. */
+    private static void chord(float root, float volume, boolean full) {
+        PvpSounds.play(PvpSounds.CHIME, root, volume);
+        PvpSounds.play(PvpSounds.CHIME, root * 1.26f, volume * 0.85f);
+        if (full) PvpSounds.play(PvpSounds.CHIME, root * 1.498f, volume * 0.75f);
     }
 
     /** Le meilleur moment du duel (le plus rare, puis la plus grosse valeur), et les records. */

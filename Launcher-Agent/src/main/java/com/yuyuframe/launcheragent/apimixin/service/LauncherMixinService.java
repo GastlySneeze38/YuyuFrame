@@ -326,6 +326,9 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
             "net/minecraft/client/render/Camera", "setRotation", "(FF)V"),
         RefmapEntry.invoker("com/yuyuframe/launcheragent/apimixin/v1_21_11/freelook/EntityInvoker1211",
             "net/minecraft/entity/Entity", "changeLookDirection", "(DD)V"),
+        // Un son par son identifiant (SOUND_PLAY_UI) : « of » a trois surcharges, le descripteur choisit la bonne.
+        RefmapEntry.invoker("com/yuyuframe/launcheragent/apimixin/v1_21_11/core/SoundEventAccessor1211",
+            "net/minecraft/sound/SoundEvent", "of", "(Lnet/minecraft/util/Identifier;)Lnet/minecraft/sound/SoundEvent;"),
 
         // ── apimixin 1.21.11 : module « Joueur » (logo devant le pseudo, nametag) ──
         new RefmapEntry("com/yuyuframe/launcheragent/apimixin/v1_21_11/player/PlayerLabelMixin1211",

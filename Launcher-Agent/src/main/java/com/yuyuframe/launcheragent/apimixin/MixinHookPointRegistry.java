@@ -138,6 +138,7 @@ public final class MixinHookPointRegistry {
         always("26.1.2", "v26_1_2.core.ChatComponentAccessor261");
         always("26.1.2", "v26_1_2.core.FogRendererAccessor261");
         always("26.1.2", "v26_1_2.core.GuiGraphicsExtractorAccessor261");
+        always("26.1.2", "v26_1_2.core.SoundEventAccessor261");
         // Modèles du jeu pour la brique 3D de l'API graphique (point d'accès VANILLA_MODEL).
         always("26.1.2", "v26_1_2.model.ModelPartAccessor261");
         always("26.1.2", "v26_1_2.model.ModelPartCubeAccessor261");
@@ -297,6 +298,7 @@ public final class MixinHookPointRegistry {
         always("26.1", "v26_1_0.core.ChatComponentAccessor2610");
         always("26.1", "v26_1_0.core.FogRendererAccessor2610");
         always("26.1", "v26_1_0.core.GuiGraphicsExtractorAccessor2610");
+        always("26.1", "v26_1_0.core.SoundEventAccessor2610");
         always("26.1", "v26_1_0.render.VertexFormatElementAccessor2610");
         always("26.1", "v26_1_0.render.GameRendererAccessor2610");
         always("26.1", "v26_1_0.render.GuiRendererAccessor2610");
@@ -409,6 +411,7 @@ public final class MixinHookPointRegistry {
         always("26.1.1", "v26_1_1.core.ChatComponentAccessor2611");
         always("26.1.1", "v26_1_1.core.FogRendererAccessor2611");
         always("26.1.1", "v26_1_1.core.GuiGraphicsExtractorAccessor2611");
+        always("26.1.1", "v26_1_1.core.SoundEventAccessor2611");
         always("26.1.1", "v26_1_1.render.VertexFormatElementAccessor2611");
         always("26.1.1", "v26_1_1.render.GameRendererAccessor2611");
         always("26.1.1", "v26_1_1.render.GuiRendererAccessor2611");
@@ -527,6 +530,7 @@ public final class MixinHookPointRegistry {
         always("26.2", "v26_2.core.ChatComponentAccessor262");
         always("26.2", "v26_2.core.FogRendererAccessor262");
         always("26.2", "v26_2.core.GuiGraphicsExtractorAccessor262");
+        always("26.2", "v26_2.core.SoundEventAccessor262");
         // 26.2 : VertexFormatElement n'a plus de constantes, les formats
         // d'attributs sont lus sur DefaultVertexFormat.
         always("26.2", "v26_2.render.DefaultVertexFormatAccessor262");
@@ -646,6 +650,7 @@ public final class MixinHookPointRegistry {
         always("26.3", "v26_3.core.ChatComponentAccessor263");
         always("26.3", "v26_3.core.FogRendererAccessor263");
         always("26.3", "v26_3.core.GuiGraphicsExtractorAccessor263");
+        always("26.3", "v26_3.core.SoundEventAccessor263");
         // Modèles du jeu pour la brique 3D de l'API graphique (point d'accès VANILLA_MODEL).
         always("26.3", "v26_3.model.ModelPartAccessor263");
         always("26.3", "v26_3.model.ModelPartCubeAccessor263");
@@ -786,6 +791,7 @@ public final class MixinHookPointRegistry {
 
         // ── Infrastructure : hub de rendu, écran-titre ─────────────────────
         always("1.21.11", "v1_21_11.core.TitleScreenMixin1211");
+        always("1.21.11", "v1_21_11.core.SoundEventAccessor1211");
         always("1.21.11", "v1_21_11.core.GlobalUiRenderMixin1211");
         always("1.21.11", "v1_21_11.core.GlobalUiPresentMixin1211");
         always("1.21.11", "v1_21_11.core.GuiFlushMixin1211");

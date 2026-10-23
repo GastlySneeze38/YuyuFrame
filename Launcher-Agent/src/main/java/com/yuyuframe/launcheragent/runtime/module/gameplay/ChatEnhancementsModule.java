@@ -64,10 +64,17 @@ public final class ChatEnhancementsModule extends LauncherModule {
 
     public boolean stackRepeats = true;
 
+    /** Volume du ping, en pourcentage du volume plein (25 = le niveau d'origine). */
+    public float pingVolume = 25f;
+
     @Override
     protected void settings(SettingList s) {
         s.toggle("pingOnMention", "Ping quand mon pseudo est mentionné", "Réglages",
             () -> pingOnMention, v -> pingOnMention = v);
+        s.slider("pingVolume", "Volume du ping (%)",
+            "Le volume du son joué quand votre pseudo est mentionné",
+            "Réglages", 0f, 100f, 5f, () -> pingOnMention,
+            () -> pingVolume, v -> pingVolume = v);
         s.toggle("stackRepeats", "Regrouper les messages répétés", "Réglages",
             () -> stackRepeats, v -> stackRepeats = v);
     }
@@ -301,7 +308,8 @@ public final class ChatEnhancementsModule extends LauncherModule {
         // d'accès, lui, demande les trois. Ne pas la rétablir aurait monté le
         // ping à plein volume sans que personne ne l'ait demandé.
         try {
-            ClientData.playUiSound("minecraft:entity.experience_orb.pickup", 1.0f, 0.25f);
+            float volume = Math.max(0f, Math.min(100f, pingVolume)) / 100f;
+            if (volume > 0.001f) ClientData.playUiSound("minecraft:entity.experience_orb.pickup", 1.0f, volume);
         } catch (Throwable t) {
             if (!pingErrorLogged) {
                 pingErrorLogged = true;

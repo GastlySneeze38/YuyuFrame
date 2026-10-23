@@ -688,10 +688,25 @@ public final class AccessorBindings1211 {
      */
     private static SoundEvent soundById(Object id) {
         if (!(id instanceof String)) return null;
-        if ("minecraft:block.amethyst_block.chime".equals(id)) return SoundEvents.BLOCK_AMETHYST_BLOCK_CHIME;
-        if ("minecraft:entity.experience_orb.pickup".equals(id)) return SoundEvents.ENTITY_EXPERIENCE_ORB_PICKUP;
-        return null;
+        String name = (String) id;
+        SoundEvent cached = SOUNDS.get(name);
+        if (cached != null) return cached;
+        // N'importe quel identifiant de sounds.json — voir AccessorBindings261.soundById.
+        // Identifier.of(ns, path) : le fromNamespaceAndPath des noms Yarn.
+        if (!name.matches("[a-z0-9_.-]+:[a-z0-9_./-]+")) return null;
+        int colon = name.indexOf(':');
+        try {
+            SoundEvent sound = SoundEventAccessor1211.la$create(
+                Identifier.of(name.substring(0, colon), name.substring(colon + 1)));
+            if (sound != null) SOUNDS.put(name, sound);
+            return sound;
+        } catch (Throwable t) {
+            LauncherLog.err("[AccessorBindings1211] son " + name + " : " + t);
+            return null;
+        }
     }
+
+    private static final java.util.Map<String, SoundEvent> SOUNDS = new java.util.concurrent.ConcurrentHashMap<>();
 
     /**
      * Identifiant de registre → constante d'effet de CETTE version.

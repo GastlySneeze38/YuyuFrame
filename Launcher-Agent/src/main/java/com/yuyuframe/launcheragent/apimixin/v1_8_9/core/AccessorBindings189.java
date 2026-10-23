@@ -559,8 +559,10 @@ public final class AccessorBindings189 {
             MinecraftClient c = mc(null);
             SoundManager manager = c == null ? null : c.getSoundManager();
             if (sound == null || manager == null) return null;
-            float volume = ((Number) a[1]).floatValue();
-            float pitch = ((Number) a[2]).floatValue();
+            // Ordre du contrat : identifiant, HAUTEUR, volume (AccessPoint.SOUND_PLAY_UI).
+            // Lus à l'envers jusqu'au 2026-10-23 : le ping du chat sortait fort et grave.
+            float pitch = ((Number) a[1]).floatValue();
+            float volume = ((Number) a[2]).floatValue();
             // Pas de son « d'interface » à volume libre : master() fixe le
             // volume à 0,25. Avec un joueur, on joue donc le son À SA POSITION
             // — l'écouteur de 1.8.9 est posé sur l'entité, distance nulle,
@@ -768,6 +770,12 @@ public final class AccessorBindings189 {
      */
     private static Identifier soundById(Object id) {
         if ("minecraft:entity.experience_orb.pickup".equals(id)) return new Identifier("minecraft", "random.orb");
+        // Les sons d'armure : la 1.8.9 n'a ni l'armure de loup ni l'améthyste.
+        // Équivalents les plus proches (noms vérifiés dans le sounds.json de la 1.8).
+        if ("minecraft:item.wolf_armor.crack".equals(id)) return new Identifier("minecraft", "random.anvil_break");
+        if ("minecraft:item.wolf_armor.damage".equals(id)) return new Identifier("minecraft", "note.pling");
+        if ("minecraft:block.anvil.land".equals(id)) return new Identifier("minecraft", "random.anvil_land");
+        if ("minecraft:block.amethyst_block.chime".equals(id)) return new Identifier("minecraft", "note.pling");
         return null;
     }
 

@@ -56,8 +56,11 @@ public final class ArmorDurabilityModule extends SingleHudModule {
             "Réglages", null, () -> durabilityColor, v -> durabilityColor = v);
 
         s.toggle("lowDurabilityAlert", "Alerte sonore",
-            "Joue un carillon quand une pièce sur le point de casser encaisse un coup.",
+            "Un craquement quand une pièce passe sous le seuil, puis un son à chaque coup qu'elle encaisse, de plus en plus aigu, et un coup d'enclume quand elle va casser. Chaque pièce a sa hauteur : le casque aigu, les bottes graves.",
             "Alerte", null, () -> lowDurabilityAlert, v -> lowDurabilityAlert = v);
+        s.toggle("lowDurabilityEveryHit", "Son à chaque coup",
+            "Éteint, seuls le craquement du passage sous le seuil et l'alerte avant la casse restent.",
+            "Alerte", () -> lowDurabilityAlert, () -> lowDurabilityEveryHit, v -> lowDurabilityEveryHit = v);
         s.slider("lowDurabilityPercent", "Seuil (% restant)",
             "Une pièce est considérée en danger sous ce pourcentage de durabilité.",
             "Alerte", 1f, 50f, 1f, () -> lowDurabilityAlert,
@@ -66,6 +69,10 @@ public final class ArmorDurabilityModule extends SingleHudModule {
             "…ou sous ce nombre de points, quel que soit le pourcentage. Décisif pour les matériaux fragiles : 10% d'une pioche en or ne fait que quelques coups.",
             "Alerte", 0f, 200f, 5f, () -> lowDurabilityAlert,
             () -> lowDurabilityPoints, v -> lowDurabilityPoints = v);
+        s.slider("lowDurabilityVolume", "Volume de l'alerte (%)",
+            "Le volume du carillon d'alerte",
+            "Alerte", 0f, 100f, 5f, () -> lowDurabilityAlert,
+            () -> lowDurabilityVolume, v -> lowDurabilityVolume = v);
     }
 
     /** Voir {@code Renderer.rowColor()}. */
@@ -75,6 +82,10 @@ public final class ArmorDurabilityModule extends SingleHudModule {
     public boolean lowDurabilityAlert = true;
     public float lowDurabilityPercent = 10f;
     public float lowDurabilityPoints = 50f;
+    /** Volume de l'alerte, en pourcentage du volume plein (50 = le niveau d'origine). */
+    public float lowDurabilityVolume = 50f;
+    /** Un son à chaque coup encaissé sous le seuil (sinon : passage du seuil et alerte avant la casse seulement). */
+    public boolean lowDurabilityEveryHit = true;
 
     // Défaut = main secondaire (0) : demandé explicitement par l'utilisateur
     // ("à partir des versions où on a une deuxième main, afficher la
@@ -156,8 +167,8 @@ public final class ArmorDurabilityModule extends SingleHudModule {
      * NOMBRE DE POINTS absolu. Le second est celui qui compte sur les
      * matériaux fragiles — 10 % d'une pioche en or, c'est trois coups.
      *
-     * <p>Le SON, lui, est vanilla ({@code AMETHYST_BLOCK_CHIME}) : celui
-     * d'uku est un asset {@code .ogg} qui leur est propre, et qu'ils tiennent
+     * <p>Les SONS, eux, sont vanilla (voir {@link #playAlert}) : celui d'uku
+     * est un asset {@code .ogg} qui leur est propre, et qu'ils tiennent
      * eux-mêmes de Giselbaer's Durability Viewer.
      */
     private void tickLowDurabilityAlert() {
@@ -171,22 +182,36 @@ public final class ArmorDurabilityModule extends SingleHudModule {
             // masquage. Un recalcul par tick (20/s) au lieu d'un par frame :
             // moins cher que le chemin de rendu, pas plus.
             ItemInfo[] stacks = RENDERER.computeStacks();
-            boolean ring = false;
+            // L'événement le plus important du tick, et la pièce qui le porte :
+            // UN seul son même si plusieurs pièces sont touchées ensemble
+            // (dégâts de zone) — sinon quatre sons superposés.
+            int event = NONE, piece = -1;
+            float wear = 0f;
             for (int i = 0; i < lastDamage.length && i < stacks.length; i++) {
                 ItemInfo stack = stacks[i];
-                if (stack == null || !stack.damageable) { lastDamage[i] = -1; continue; }
+                if (stack == null || !stack.damageable) { lastDamage[i] = -1; wasLow[i] = false; continue; }
 
                 int damage = stack.damage;
                 int previous = lastDamage[i];
                 lastDamage[i] = damage;
-                // Première observation : on mémorise sans sonner, sinon
-                // équiper une pièce déjà usée déclencherait l'alerte.
-                if (previous < 0 || damage <= previous) continue;
-                if (isLowDurability(stack)) ring = true;
+                boolean low = isLowDurability(stack);
+                // Première observation, réparation ou autre pièce : on mémorise
+                // sans sonner, sinon équiper une pièce déjà usée déclencherait
+                // l'alerte.
+                if (previous < 0 || damage < previous) { wasLow[i] = low; continue; }
+                if (damage == previous) continue;
+                int found = NONE;
+                if (low && !wasLow[i]) found = CRACK;
+                else if (isCritical(stack)) found = CRITICAL;
+                else if (low && lowDurabilityEveryHit) found = HIT;
+                wasLow[i] = low;
+                if (found > event) {
+                    event = found;
+                    piece = i;
+                    wear = wearBelowThreshold(stack);
+                }
             }
-            // UN seul son même si plusieurs pièces sont touchées dans la même
-            // frame (dégâts de zone) — sinon quatre carillons superposés.
-            if (ring) playAlert();
+            if (event != NONE) playAlert(event, piece, wear);
         } catch (Throwable t) {
             if (!alertErrorLogged) {
                 alertErrorLogged = true;
@@ -205,14 +230,58 @@ public final class ArmorDurabilityModule extends SingleHudModule {
 
     private static boolean alertErrorLogged;
 
-    private void playAlert() {
-        // Carillon net et bref, choisi parce qu'il est directement un
-        // SoundEvent des deux côtés (beaucoup d'entrées de SoundEvents sont
-        // des Holder$Reference, qui demanderaient une autre surcharge).
-        //
-        // Volume réduit : une alerte permanente à pleine puissance devient
+    // ── Les sons de l'armure (2026-10-23) ──
+    //
+    // Trois moments, du plus important au moins important (un seul par tick) :
+    // la pièce PASSE sous le seuil (craquement, une fois), elle VA CASSER
+    // (enclume + coup), elle encaisse un coup sous le seuil (coup, de plus en
+    // plus aigu à mesure qu'elle s'use). Sons vanilla de l'armure de loup, qui
+    // est faite pour ça ; la 1.8.9, qui ne les a pas, les remplace par
+    // l'enclume et le bloc musical (sa liaison, soundById).
+
+    private static final int NONE = 0, HIT = 1, CRITICAL = 2, CRACK = 3;
+    private static final String SOUND_CRACK = "minecraft:item.wolf_armor.crack";
+    private static final String SOUND_HIT = "minecraft:item.wolf_armor.damage";
+    private static final String SOUND_CRITICAL = "minecraft:block.anvil.land";
+    /** La hauteur de chaque pièce : casque, plastron, jambières, bottes, main. On sait laquelle lâche sans regarder. */
+    private static final float[] PIECE_PITCH = { 1.12f, 1.04f, 0.96f, 0.88f, 1f };
+
+    /** La pièce était-elle déjà sous le seuil au dernier coup ? Pour ne craquer qu'une fois. */
+    private final boolean[] wasLow = new boolean[5];
+
+    /** « Va casser » : sous le tiers des seuils, ou plus que 3 points. */
+    private boolean isCritical(ItemInfo stack) {
+        int max = stack.maxDamage;
+        if (max <= 0) return false;
+        int remaining = stack.remaining();
+        return remaining <= 3
+            || (remaining * 100f / max) <= lowDurabilityPercent / 3f
+            || remaining <= lowDurabilityPoints / 3f;
+    }
+
+    /** De 0 (au seuil) à 1 (cassée) : l'usure sous le seuil, pour faire monter le son. */
+    private float wearBelowThreshold(ItemInfo stack) {
+        int max = stack.maxDamage;
+        if (max <= 0) return 0f;
+        float threshold = Math.max(max * lowDurabilityPercent / 100f, lowDurabilityPoints);
+        if (threshold <= 0f) return 1f;
+        return Math.max(0f, Math.min(1f, 1f - stack.remaining() / threshold));
+    }
+
+    private void playAlert(int event, int piece, float wear) {
+        // Volume réduit par défaut : une alerte à pleine puissance devient
         // vite pénible en combat, moment où elle se déclenche le plus.
-        ClientData.playUiSound("minecraft:block.amethyst_block.chime", 1.0f, 0.5f);
+        float volume = Math.max(0f, Math.min(100f, lowDurabilityVolume)) / 100f;
+        if (volume <= 0.001f) return;
+        float pitch = piece >= 0 && piece < PIECE_PITCH.length ? PIECE_PITCH[piece] : 1f;
+        switch (event) {
+            case CRACK -> ClientData.playUiSound(SOUND_CRACK, pitch, volume);
+            case CRITICAL -> {
+                ClientData.playUiSound(SOUND_CRITICAL, 1.5f * pitch, volume * 0.6f);
+                ClientData.playUiSound(SOUND_HIT, 1.35f * pitch, volume);
+            }
+            default -> ClientData.playUiSound(SOUND_HIT, (0.9f + 0.4f * wear) * pitch, volume);
+        }
     }
 
     @Override

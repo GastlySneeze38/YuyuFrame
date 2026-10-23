@@ -758,10 +758,27 @@ public final class AccessorBindings261 {
      */
     private static SoundEvent soundById(Object id) {
         if (!(id instanceof String)) return null;
-        if ("minecraft:block.amethyst_block.chime".equals(id)) return SoundEvents.AMETHYST_BLOCK_CHIME;
-        if ("minecraft:entity.experience_orb.pickup".equals(id)) return SoundEvents.EXPERIENCE_ORB_PICKUP;
-        return null;
+        String name = (String) id;
+        SoundEvent cached = SOUNDS.get(name);
+        if (cached != null) return cached;
+        // N'importe quel identifiant de sounds.json : le gestionnaire de sons
+        // résout le son par son nom, comme pour chaque entrée de SoundEvents.
+        // Jusqu'au 2026-10-23, une table de deux sons : tous les autres
+        // (blocs musicaux, montée de niveau, coffre…) ne jouaient rien.
+        if (!name.matches("[a-z0-9_.-]+:[a-z0-9_./-]+")) return null;
+        int colon = name.indexOf(':');
+        try {
+            SoundEvent sound = SoundEventAccessor261.la$create(
+                net.minecraft.resources.Identifier.fromNamespaceAndPath(name.substring(0, colon), name.substring(colon + 1)));
+            if (sound != null) SOUNDS.put(name, sound);
+            return sound;
+        } catch (Throwable t) {
+            LauncherLog.err("[AccessorBindings261] son " + name + " : " + t);
+            return null;
+        }
     }
+
+    private static final java.util.Map<String, SoundEvent> SOUNDS = new java.util.concurrent.ConcurrentHashMap<>();
 
     /**
      * Identifiant de registre → constante d'effet de CETTE version.
