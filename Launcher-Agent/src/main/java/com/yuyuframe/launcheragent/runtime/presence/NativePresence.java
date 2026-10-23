@@ -37,7 +37,7 @@ import java.util.UUID;
 public final class NativePresence {
 
     /** Même valeur que {@code ABI_VERSION} dans presence/bridge.rs. */
-    private static final int ABI_VERSION = 2;
+    private static final int ABI_VERSION = 3;
 
     /** On ne sait pas (encore) — ou pas de jeton : jeu lancé hors launcher, joueur sans compte. */
     public static final int UNKNOWN = 0;
@@ -128,6 +128,21 @@ public final class NativePresence {
      * @return {@link #UNKNOWN}, {@link #PRESENT} ou {@link #ABSENT}
      */
     public static int query(UUID uuid, String name) {
+        return raw(uuid, name) & 0xFF;
+    }
+
+    /**
+     * Le logo de ce joueur, tel que le serveur le donne : 0 logo de base (ou
+     * pas présent), 1 à 7 un rang (Bois … Champion), 16 Champion du Choc.
+     * Même cache que {@link #query} : n'envoie rien de plus.
+     */
+    public static int badge(UUID uuid, String name) {
+        int raw = raw(uuid, name);
+        return (raw & 0xFF) == PRESENT ? raw >>> 8 : 0;
+    }
+
+    /** La réponse du noyau : bits 0 à 7 la présence, 8 et suivants le logo (ABI 3). */
+    private static int raw(UUID uuid, String name) {
         if (QUERY == null || uuid == null || name == null || name.isEmpty()) {
             return UNKNOWN;
         }

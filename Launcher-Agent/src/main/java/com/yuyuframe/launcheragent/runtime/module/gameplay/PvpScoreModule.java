@@ -172,6 +172,9 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
      */
     private boolean shareDuels = true;
 
+    /** « Montrer mon rang aux autres » : le serveur donne sinon le logo de base. */
+    private boolean showRank = true;
+
     public boolean shareDuels() {
         return shareDuels;
     }
@@ -223,6 +226,9 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
         s.keybind("competitiveKey", "Touche compétitif / casual",
             "Bascule entre compétitif et casual en jeu. Le duel en cours garde son type",
             "Classement", null, () -> competitiveKey, v -> competitiveKey = v);
+        s.toggle("showRank", "Montrer mon rang aux autres",
+            "Votre rang devient le logo à côté de votre pseudo, pour les autres joueurs YuyuFrame. Éteint, ils voient le logo de base",
+            "Classement", null, () -> showRank, v -> { showRank = v; NativeCombat.showRank(v); });
         s.toggle("callouts", "Mots des bons coups",
             "Un mot surgit en haut de l'écran à chaque bon coup : combo, W-tap, smash, totem arraché…",
             "Pendant le duel", null, () -> showCallouts, v -> { showCallouts = v; callouts.visible = v; });
@@ -247,6 +253,7 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
             HudRegistry.register(element);
             HudRegistry.register(bannerElement);
             HudRegistry.register(calloutElement);
+            NativeCombat.showRank(showRank);
             refreshRanks();
         } else {
             HudRegistry.unregister(element);
@@ -348,6 +355,8 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
             if (callouts.takeRecordsDirty()) com.yuyuframe.launcheragent.runtime.ui.HudConfigStore.save();
         }
         int ranked = NativeCombat.ranked(incomingRanked);
+        // Vérifié par le serveur ou non : il arrive avec les points, ou juste après.
+        summary.rankedStatus = NativeCombat.rankedStatus(ranked);
         if (ranked != lastRanked) {
             lastRanked = ranked;
             summary.ranked(ranked, incomingRanked);
@@ -687,6 +696,11 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
                 // L'exemple de l'éditeur rejoue l'animation en boucle.
                 long since = System.nanoTime() % SAMPLE_LOOP_NANOS;
                 drawRanked(r, report, SAMPLE_RANKED, since / 1e9f, x, x + w, bottom - GAP * s, s, vw, vh);
+            } else if (rankable(report) && rankedReceived && unverified()) {
+                // Compétitif, mais pas vérifié par le serveur : il ne compte pas
+                // (ou pas encore). La note, le point fort, et pourquoi.
+                bottom = drawScoreAndStrengths(r, report, x, x + w, bottom - GAP * s, s, vw, vh);
+                drawUnverified(r, ranked, x, x + w, bottom - GAP * s, s, vw, vh);
             } else if (rankable(report)) {
                 // Les points arrivent un instant après le résumé : en attendant,
                 // la même mise en page, points en attente.
@@ -764,6 +778,60 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
             float baseline = top - height + 9f * s;
             r.drawText(UiFont.BOLD, name, left, baseline, UiTheme.TEXT_PRIMARY, nameScale, vw, vh);
             r.drawText(UiFont.BOLD, number, left + width - numberW, baseline, tone, scale, vw, vh);
+        }
+
+        /** Le statut du classement du duel affiché ({@code NativeCombat.RANKED_STATUS_*}), lu à chaque tick. */
+        volatile int rankedStatus;
+
+        /** Un duel compétitif que le serveur n'a pas (ou pas encore) vérifié : il ne compte pas. */
+        private boolean unverified() {
+            int status = rankedStatus;
+            return status == NativeCombat.RANKED_STATUS_REJECTED || status == NativeCombat.RANKED_STATUS_QUEUED
+                || status == NativeCombat.RANKED_STATUS_NO_ACCOUNT || status == NativeCombat.RANKED_STATUS_OFFLINE_SERVER;
+        }
+
+        /**
+         * Pourquoi ce duel compétitif ne compte pas (ou pas encore), et ce
+         * qu'il aurait rapporté. Même case que {@link #drawMissed}.
+         */
+        private void drawUnverified(UiRenderer r, double[] values, float left, float right, float top, float s, int vw, int vh) {
+            float bottom = top - FIGURES_H * s;
+            float inner = 12f * s;
+            r.drawRoundedRect(left, bottom, right, top, RADIUS * s, UiTheme.CARD_BG, vw, vh);
+            String text, how;
+            UiColor tone;
+            switch (rankedStatus) {
+                case NativeCombat.RANKED_STATUS_REJECTED -> {
+                    text = Lang.tr("Duel non vérifié : il ne compte pas");
+                    how = Lang.tr("Le serveur n'a pas trouvé le même résultat");
+                    tone = PvpScoreUi.BAD;
+                }
+                case NativeCombat.RANKED_STATUS_QUEUED -> {
+                    text = Lang.tr("En attente de vérification");
+                    how = Lang.tr("Il comptera dès que le serveur répondra");
+                    tone = UiTheme.TEXT_SECONDARY;
+                }
+                case NativeCombat.RANKED_STATUS_NO_ACCOUNT -> {
+                    text = Lang.tr("Pas classé : connecte ton compte YuyuFrame");
+                    how = Lang.tr("Le classement est vérifié par le serveur");
+                    tone = UiTheme.ACCENT;
+                }
+                default -> {
+                    text = Lang.tr("Pas classé sur un serveur en mode hors ligne");
+                    how = Lang.tr("Ton compte Minecraft n'y est pas prouvé");
+                    tone = UiTheme.TEXT_SECONDARY;
+                }
+            }
+            if (values != null && values[NativeCombat.RANKED_BEFORE_DUELS] >= PvpRank.PLACEMENT_DUELS) {
+                long total = Math.round(values[NativeCombat.RANKED_TOTAL]);
+                text += " (" + (total > 0 ? "+" : total < 0 ? "-" : "") + Math.abs(total) + " RR)";
+            }
+            float scale = 0.3f * s;
+            float full = r.textWidth(UiFont.BOLD, text, scale);
+            float room = right - left - inner * 2f;
+            if (full > room && full > 0f) scale *= room / full;
+            r.drawText(UiFont.BOLD, text, left + inner, bottom + 19f * s, tone, scale, vw, vh);
+            r.drawText(UiFont.REGULAR, how, left + inner, bottom + 6f * s, UiTheme.TEXT_MUTED, 0.25f * s, vw, vh);
         }
 
         /**

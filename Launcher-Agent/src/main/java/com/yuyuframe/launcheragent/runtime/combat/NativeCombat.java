@@ -33,7 +33,7 @@ import java.util.UUID;
 public final class NativeCombat {
 
     /** Même valeur que {@code ABI_VERSION} dans combat/bridge.rs. */
-    private static final int ABI_VERSION = 19;
+    private static final int ABI_VERSION = 20;
 
     /** Place réservée au texte de l'historique : deux cents duels en tiennent bien moins. */
     private static final int HISTORY_BYTES = 256 * 1024;
@@ -160,6 +160,23 @@ public final class NativeCombat {
     public static final int RANKED_PLACED = 11;
     public static final int RANKED_CASUAL = 12;
 
+    // Le statut du classement d'un duel (combat/ranked_sync.rs, `Status`) :
+    // vérifié par le serveur ou non, et pourquoi.
+    public static final int RANKED_STATUS_NONE = 0;
+    /** Le serveur a fait le même calcul : le duel compte. */
+    public static final int RANKED_STATUS_VERIFIED = 1;
+    /** Le serveur a trouvé autre chose : le duel ne compte pas. */
+    public static final int RANKED_STATUS_REJECTED = 2;
+    /** Pas de réponse : le duel attend et partira plus tard. */
+    public static final int RANKED_STATUS_QUEUED = 3;
+    /** Pas de compte YuyuFrame connecté. */
+    public static final int RANKED_STATUS_NO_ACCOUNT = 4;
+    public static final int RANKED_STATUS_CASUAL = 5;
+    /** L'API ne connaît pas encore le classement vérifié : le classement local d'avant. */
+    public static final int RANKED_STATUS_LEGACY = 6;
+    /** Serveur de jeu en mode hors ligne : identité non prouvée. */
+    public static final int RANKED_STATUS_OFFLINE_SERVER = 7;
+
     /** Nombres décrivant notre joueur à un tick — {@code ME_LEN} dans combat/record.rs, même ordre. */
     public static final int ME_LEN = 21;
     public static final int ME_ID = 0;
@@ -246,6 +263,9 @@ public final class NativeCombat {
     private static MethodHandle liveMode;
     private static MethodHandle kits;
     private static MethodHandle callouts;
+    private static MethodHandle rankedStatus;
+    private static MethodHandle ownBadge;
+    private static MethodHandle showRank;
 
     private static final boolean READY = load();
     private static boolean errorLogged;
@@ -313,6 +333,11 @@ public final class NativeCombat {
             kits = linker.downcallHandle(lib.find("yf_combat_kits").orElseThrow(), FunctionDescriptor.of(ValueLayout.JAVA_INT));
             callouts = linker.downcallHandle(lib.find("yf_combat_callouts").orElseThrow(),
                 FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT), heap);
+            rankedStatus = linker.downcallHandle(lib.find("yf_combat_ranked_status").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT));
+            ownBadge = linker.downcallHandle(lib.find("yf_combat_own_badge").orElseThrow(), FunctionDescriptor.of(ValueLayout.JAVA_INT));
+            showRank = linker.downcallHandle(lib.find("yf_combat_show_rank").orElseThrow(),
+                FunctionDescriptor.ofVoid(ValueLayout.JAVA_INT));
             return true;
         } catch (Throwable error) {
             LauncherLog.err("[COMBAT] Noyau natif indisponible — aucun journal de combat ne sera écrit", error);
@@ -544,6 +569,52 @@ public final class NativeCombat {
         } catch (Throwable error) {
             failed(error);
             return 0;
+        }
+    }
+
+    /**
+     * Le statut du classement du résumé {@code number} : une des constantes
+     * {@code RANKED_STATUS_*}, ou {@link #RANKED_STATUS_NONE} s'il n'est pas
+     * (encore) connu pour ce résumé.
+     */
+    public static int rankedStatus(int number) {
+        if (!READY) {
+            return RANKED_STATUS_NONE;
+        }
+        try {
+            return (int) rankedStatus.invokeExact(number);
+        } catch (Throwable error) {
+            failed(error);
+            return RANKED_STATUS_NONE;
+        }
+    }
+
+    /**
+     * Le logo de notre propre joueur, tel que les autres le voient : 0 de
+     * base, 1 à 7 un rang (Bois … Champion), 16 Champion du Choc — le même
+     * code que {@code NativePresence.badge} pour les autres.
+     */
+    public static int ownBadge() {
+        if (!READY) {
+            return 0;
+        }
+        try {
+            return (int) ownBadge.invokeExact();
+        } catch (Throwable error) {
+            failed(error);
+            return 0;
+        }
+    }
+
+    /** Réglage « Montrer mon rang aux autres » : le serveur donne sinon le logo de base. */
+    public static void showRank(boolean show) {
+        if (!READY) {
+            return;
+        }
+        try {
+            showRank.invokeExact(show ? 1 : 0);
+        } catch (Throwable error) {
+            failed(error);
         }
     }
 

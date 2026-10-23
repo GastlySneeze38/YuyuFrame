@@ -50,7 +50,9 @@ public final class PlayerBadge {
         if (!PlayerStyle.logo) {
             return false;
         }
-        return self ? PlayerStyle.ownStyled : PlayerStyle.applies(id, name);
+        boolean marks = self ? PlayerStyle.ownStyled : PlayerStyle.applies(id, name);
+        lastBadge = marks ? PlayerStyle.badgeOf(id, name, self) : 0;
+        return marks;
     }
 
     /** Sa ligne de la liste Tab prend-elle le logo ? {@code self} : c'est notre propre ligne, marquée sans question au serveur. */
@@ -58,8 +60,18 @@ public final class PlayerBadge {
         if (!PlayerStyle.logo || !PlayerStyle.tab) {
             return false;
         }
-        return self ? PlayerStyle.enabled : PlayerStyle.applies(id, name);
+        boolean marks = self ? PlayerStyle.enabled : PlayerStyle.applies(id, name);
+        lastBadge = marks ? PlayerStyle.badgeOf(id, name, self) : 0;
+        return marks;
     }
+
+    /**
+     * Le logo du dernier joueur que {@link #marksLabel} ou {@link #marksTab} a
+     * accepté : {@link #mark} et {@link #tabMark}, appelés juste après sur le
+     * même fil (celui du rendu), le retiennent avec la place réservée. Évite de
+     * faire passer le logo par le code de chaque version.
+     */
+    private static int lastBadge;
 
     // ── Nametag : son propre pseudo ──────────────────────────────────────────
 
@@ -106,10 +118,13 @@ public final class PlayerBadge {
     private static final class Mark {
         final Object name;
         final float lead;
+        /** Le logo du joueur ({@code PlayerStyle.pixelRects(int, …)}). */
+        final int badge;
 
-        Mark(Object name, float lead) {
+        Mark(Object name, float lead, int badge) {
             this.name = name;
             this.lead = lead;
+            this.badge = badge;
         }
     }
 
@@ -118,7 +133,13 @@ public final class PlayerBadge {
 
     /** @param lead largeur, en pixels de police, de ce qui précède la place du logo dans {@code paddedName} */
     public static void mark(Object state, Object paddedName, float lead) {
-        MARKED.put(state, new Mark(paddedName, lead));
+        MARKED.put(state, new Mark(paddedName, lead, lastBadge));
+    }
+
+    /** Le logo du joueur porté par cet état (voir {@link #markedLead}) ; 0 = de base. */
+    public static int markedBadge(Object state) {
+        Mark mark = MARKED.isEmpty() ? null : MARKED.get(state);
+        return mark == null ? 0 : mark.badge;
     }
 
     public static void unmark(Object state) {
@@ -145,15 +166,19 @@ public final class PlayerBadge {
     private static boolean inTab;
     /** Les pseudos rendus avec la place du logo pendant le dessin en cours, reconnus par identité → où y commence cette place. */
     private static final Map<Object, Float> TAB_NAMES = new IdentityHashMap<>();
+    /** Les mêmes pseudos → le logo de leur joueur. */
+    private static final Map<Object, Integer> TAB_BADGES = new IdentityHashMap<>();
 
     public static void tabBegins() {
         inTab = true;
         TAB_NAMES.clear();
+        TAB_BADGES.clear();
     }
 
     public static void tabEnds() {
         inTab = false;
         TAB_NAMES.clear();
+        TAB_BADGES.clear();
     }
 
     /** Hors du dessin de la liste, les pseudos ne sont pas touchés : la même méthode du jeu sert ailleurs. */
@@ -163,6 +188,13 @@ public final class PlayerBadge {
 
     public static void tabMark(Object paddedName, float lead) {
         TAB_NAMES.put(paddedName, lead);
+        TAB_BADGES.put(paddedName, lastBadge);
+    }
+
+    /** Le logo du joueur de ce pseudo de la liste ; 0 = de base. */
+    public static int tabBadge(Object name) {
+        Integer badge = name == null ? null : TAB_BADGES.get(name);
+        return badge == null ? 0 : badge;
     }
 
     /** Où commence la place du logo dans ce pseudo de la liste, ou une valeur négative s'il n'est pas marqué. */

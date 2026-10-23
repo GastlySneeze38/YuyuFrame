@@ -146,6 +146,7 @@ public final class PlayerBadge263 {
         Component name = state.nameTag;
         Vec3 at = state.nameTagAttachment;
         float lead = at == null ? -1.0F : PlayerBadge.markedLead(state, name);
+        int badge = PlayerBadge.markedBadge(state);
         if (lead < 0.0F) {
             return;
         }
@@ -166,10 +167,10 @@ public final class PlayerBadge263 {
         pose.translate(0.0F, 0.0F, FORWARD);
         if (state.isDiscrete) {
             // Accroupi : comme le pseudo, à demi effacé et jamais à travers les murs.
-            logo(collector, pose, left, offsetY, 0x80, Font.DisplayMode.NORMAL);
+            logo(collector, pose, left, offsetY, badge, 0x80, Font.DisplayMode.NORMAL);
         } else {
-            logo(collector, pose, left, offsetY, 0x40, Font.DisplayMode.SEE_THROUGH);
-            logo(collector, pose, left, offsetY, 0xFF, Font.DisplayMode.NORMAL);
+            logo(collector, pose, left, offsetY, badge, 0x40, Font.DisplayMode.SEE_THROUGH);
+            logo(collector, pose, left, offsetY, badge, 0xFF, Font.DisplayMode.NORMAL);
         }
         pose.popPose();
     }
@@ -181,10 +182,10 @@ public final class PlayerBadge263 {
      * même voie que le texte des étiquettes (vérifié javap sur le jar 26.3).
      * Un appel par rectangle du logo.
      */
-    private static void logo(SubmitNodeCollector collector, PoseStack pose, float left, float top, int alpha,
+    private static void logo(SubmitNodeCollector collector, PoseStack pose, float left, float top, int badge, int alpha,
                              Font.DisplayMode mode) {
         float cell = PlayerBadge.SIZE / PlayerStyle.PIXEL_GRID;
-        PlayerStyle.pixelRects((from, row, to, rgb) -> {
+        PlayerStyle.pixelRects(badge, (from, row, to, rgb) -> {
             float y0 = top + row * cell;
             collector.submitTextBackground(pose, left + from * cell, y0, left + to * cell, y0 + cell,
                 alpha << 24 | rgb, mode, FULL_BRIGHT);
@@ -244,7 +245,7 @@ public final class PlayerBadge263 {
         pose.translate(x + lead, y);
         float cell = PlayerBadge.SIZE / PlayerStyle.PIXEL_GRID;
         pose.scale(cell, cell);
-        PlayerStyle.pixelRects((from, row, to, rgb) -> graphics.fill(from, row, to, row + 1, 0xFF000000 | rgb));
+        PlayerStyle.pixelRects(PlayerBadge.tabBadge(name), (from, row, to, rgb) -> graphics.fill(from, row, to, row + 1, 0xFF000000 | rgb));
         pose.popMatrix();
     }
 }

@@ -156,6 +156,7 @@ public final class PlayerBadge1211 {
         Text name = state.displayName;
         Vec3d at = state.nameLabelPos;
         float lead = at == null ? -1.0F : PlayerBadge.markedLead(state, name);
+        int badge = PlayerBadge.markedBadge(state);
         if (lead < 0.0F) {
             return;
         }
@@ -175,19 +176,19 @@ public final class PlayerBadge1211 {
         if (state.sneaking) {
             // Accroupi : comme le pseudo, à demi effacé et jamais à travers les murs.
             queue.submitCustom(matrices, RenderLayers.textBackground(),
-                (entry, buffer) -> logo(entry, buffer, left, offsetY, 0x80));
+                (entry, buffer) -> logo(entry, buffer, left, offsetY, badge,0x80));
         } else {
             queue.submitCustom(matrices, RenderLayers.textBackgroundSeeThrough(),
-                (entry, buffer) -> logo(entry, buffer, left, offsetY, 0x40));
+                (entry, buffer) -> logo(entry, buffer, left, offsetY, badge,0x40));
             queue.submitCustom(matrices, RenderLayers.textBackground(),
-                (entry, buffer) -> logo(entry, buffer, left, offsetY, 0xFF));
+                (entry, buffer) -> logo(entry, buffer, left, offsetY, badge,0xFF));
         }
         matrices.pop();
     }
 
-    private static void logo(MatrixStack.Entry entry, VertexConsumer buffer, float left, float top, int alpha) {
+    private static void logo(MatrixStack.Entry entry, VertexConsumer buffer, float left, float top, int badge, int alpha) {
         float cell = PlayerBadge.SIZE / PlayerStyle.PIXEL_GRID;
-        PlayerStyle.pixelRects((from, row, to, rgb) -> {
+        PlayerStyle.pixelRects(badge, (from, row, to, rgb) -> {
             int color = alpha << 24 | rgb;
             float x0 = left + from * cell, x1 = left + to * cell;
             float y0 = top + row * cell, y1 = y0 + cell;
@@ -253,7 +254,7 @@ public final class PlayerBadge1211 {
         pose.translate(x + lead, y);
         float cell = PlayerBadge.SIZE / PlayerStyle.PIXEL_GRID;
         pose.scale(cell, cell);
-        PlayerStyle.pixelRects((from, row, to, rgb) -> context.fill(from, row, to, row + 1, 0xFF000000 | rgb));
+        PlayerStyle.pixelRects(PlayerBadge.tabBadge(nameObject), (from, row, to, rgb) -> context.fill(from, row, to, row + 1, 0xFF000000 | rgb));
         pose.popMatrix();
     }
 }

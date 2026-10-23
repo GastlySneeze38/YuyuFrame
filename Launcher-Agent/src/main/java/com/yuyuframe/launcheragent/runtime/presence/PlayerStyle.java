@@ -98,6 +98,21 @@ public final class PlayerStyle {
         return preview || NativePresence.query(id, name) == NativePresence.PRESENT;
     }
 
+    /**
+     * Le logo de ce joueur ({@link #pixelRects(int, RectSink)}) : le sien,
+     * tel que les autres le voient, quand {@code self} ; sinon celui que le
+     * serveur donne. 0 = logo de base.
+     */
+    public static int badgeOf(UUID id, String name, boolean self) {
+        if (self) {
+            return com.yuyuframe.launcheragent.runtime.combat.NativeCombat.ownBadge();
+        }
+        if (id == null || name == null) {
+            return 0;
+        }
+        return NativePresence.badge(id, name);
+    }
+
     private static final long START = System.nanoTime();
 
     /** Secondes écoulées, pour les animations. */
@@ -442,6 +457,77 @@ public final class PlayerStyle {
      * que lui (étiquette et liste Tab gardent l'aspect de vanilla).
      */
     public static void pixelRects(RectSink sink) {
+        pixelRects(0, sink);
+    }
+
+    /**
+     * Le logo {@code badge} (2026-10-23) : 0 le logo de base ; 1 à 7 sa
+     * recoloration au rang du joueur (Bois … Champion) ; 16 Champion du Choc.
+     * Les variantes sont des images de 14 × 14 embarquées
+     * ({@code /textures/badge/}, tirées de {@code design/rank-badges/}), lues
+     * une fois. Une variante absente ou illisible donne le logo de base.
+     */
+    public static void pixelRects(int badge, RectSink sink) {
+        int[][] runs = badge == 0 ? null : variant(badge);
+        if (runs == null) {
+            baseRects(sink);
+            return;
+        }
+        for (int[] run : runs) {
+            sink.rect(run[0], run[1], run[2], run[3]);
+        }
+    }
+
+    private static final String[] VARIANT_FILES = { null, "bois", "pierre", "fer", "or", "diamant", "netherite", "champion" };
+    private static final java.util.Map<Integer, int[][]> VARIANTS = new java.util.concurrent.ConcurrentHashMap<>();
+    /** Marque d'une variante illisible : on ne la relit pas à chaque image. */
+    private static final int[][] MISSING = new int[0][];
+
+    /** Les rectangles d'une variante : {colonne de début, ligne, colonne de fin, couleur}. */
+    private static int[][] variant(int badge) {
+        int[][] runs = VARIANTS.computeIfAbsent(badge, PlayerStyle::loadVariant);
+        return runs == MISSING ? null : runs;
+    }
+
+    private static int[][] loadVariant(int badge) {
+        String file = badge == 16 ? "choc" : badge > 0 && badge < VARIANT_FILES.length ? VARIANT_FILES[badge] : null;
+        if (file == null) {
+            return MISSING;
+        }
+        String resource = "/textures/badge/" + file + ".png";
+        try (java.io.InputStream in = PlayerStyle.class.getResourceAsStream(resource)) {
+            if (in == null) {
+                com.yuyuframe.launcheragent.base.log.LauncherLog.err("[PlayerStyle] logo absent du JAR : " + resource);
+                return MISSING;
+            }
+            java.awt.image.BufferedImage image = javax.imageio.ImageIO.read(in);
+            if (image == null || image.getWidth() != PIXEL_GRID || image.getHeight() != PIXEL_GRID) {
+                com.yuyuframe.launcheragent.base.log.LauncherLog.err("[PlayerStyle] logo illisible ou pas en " + PIXEL_GRID + " × " + PIXEL_GRID + " : " + resource);
+                return MISSING;
+            }
+            java.util.List<int[]> runs = new java.util.ArrayList<>();
+            for (int row = 0; row < PIXEL_GRID; row++) {
+                int start = 0;
+                while (start < PIXEL_GRID) {
+                    int argb = image.getRGB(start, row);
+                    int end = start + 1;
+                    while (end < PIXEL_GRID && image.getRGB(end, row) == argb) {
+                        end++;
+                    }
+                    if ((argb >>> 24) >= 128) {
+                        runs.add(new int[]{ start, row, end, argb & 0xFFFFFF });
+                    }
+                    start = end;
+                }
+            }
+            return runs.toArray(new int[0][]);
+        } catch (Throwable error) {
+            com.yuyuframe.launcheragent.base.log.LauncherLog.err("[PlayerStyle] logo " + resource + " : " + error);
+            return MISSING;
+        }
+    }
+
+    private static void baseRects(RectSink sink) {
         for (int row = 0; row < PIXEL_ROWS.length; row++) {
             String line = PIXEL_ROWS[row];
             int start = 0;
