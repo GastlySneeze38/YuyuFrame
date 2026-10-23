@@ -85,7 +85,11 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
     /** Libellés des résultats, par code ({@link NativeCombat#REPORT_RESULT}). */
     public static final String[] RESULTS = { "", "Victoire", "Défaite", "Match nul", "" };
 
-    private final Summary summary = new Summary();
+    /** Les mots des bons coups, en haut de l'écran pendant le duel. */
+    private final PvpCallouts callouts = new PvpCallouts();
+    private final HudElement calloutElement = new HudElement("pvp-callouts", "Mots des bons coups", HudAnchor.TOP_CENTER, 0f, 42f,
+        (HudElement.CustomRenderer) callouts);
+    private final Summary summary = new Summary(callouts);
     private final HudElement element = new HudElement("pvp-score", "Score PvP", HudAnchor.TOP_CENTER, 0f, 36f,
         (HudElement.CustomRenderer) summary);
     /** L'annonce de début de duel et du changement compétitif / casual. */
@@ -95,6 +99,11 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
     /** Un duel était ouvert au tick précédent : son ouverture se voit au passage à vrai. */
     private boolean wasRecording;
     private boolean keyHeld;
+    /** Le compteur d'équipements du noyau ({@link NativeCombat#kits}) au tick précédent. */
+    private int lastKits = NativeCombat.kits();
+    /** Dernière annonce de duel : au premier coup, on n'annonce pas une seconde fois ce qui vient de l'être. */
+    private long announcedAtNanos;
+    private static final long ANNOUNCE_VALID_NANOS = 20_000_000_000L;
 
     private final double[] incoming = new double[NativeCombat.REPORT_LEN];
     /** Le numéro du dernier résumé reçu — celui d'avant le lancement n'est pas montré. */
@@ -120,6 +129,10 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
             HookPoint.ENTITY_ATTACK, HookPoint.DAMAGE_EVENT, HookPoint.ENTITY_EVENT, HookPoint.ITEM_USE,
             HookPoint.SOUND_PLAYED, HookPoint.ITEM_COOLDOWN);
         iconUrl = icons8("sword");
+        // Jamais à l'écran ensemble : l'éditeur de HUD les montre moment par moment.
+        bannerElement.moment = "Début du duel";
+        calloutElement.moment = "Pendant le duel";
+        element.moment = "Fin du duel";
         CombatTracker.install();
         CombatTracker.setActive(isEnabled());
         instance = this;
@@ -134,6 +147,12 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
     @Override
     public HudElement hudElement() {
         return element;
+    }
+
+    /** Les trois éléments, pour que chacun garde sa place d'une partie à l'autre. */
+    @Override
+    public java.util.List<HudElement> hudElements() {
+        return java.util.List.of(element, bannerElement, calloutElement);
     }
 
     /**
@@ -169,6 +188,8 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
     /** La touche qui bascule de l'un à l'autre, hors des écrans. */
     private String competitiveKey = "K";
     private static final String NO_KEY = "NONE";
+    /** Les mots des bons coups s'affichent (réglage). */
+    private boolean showCallouts = true;
 
     public boolean competitive() {
         return competitive;
@@ -195,6 +216,14 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
         s.keybind("competitiveKey", "Touche compétitif / casual",
             "Bascule entre compétitif et casual en jeu. Le duel en cours garde son type",
             "Classement", null, () -> competitiveKey, v -> competitiveKey = v);
+        s.toggle("callouts", "Mots des bons coups",
+            "Un mot surgit en haut de l'écran à chaque bon coup : combo, W-tap, smash, totem arraché…",
+            "Pendant le duel", null, () -> showCallouts, v -> { showCallouts = v; callouts.visible = v; });
+        s.toggle("sounds", "Sons",
+            "Les sons des bons coups, des points gagnés et des nouveaux rangs",
+            "Pendant le duel", null, () -> PvpSounds.enabled, v -> PvpSounds.enabled = v);
+        // Les records personnels (plus long combo, plus haut smash) : édités par le jeu, pas par l'écran.
+        s.opaque("records", callouts::records, callouts::loadRecords);
         s.toggle("shareDuels", "Partager mes duels",
             "Envoie vos duels, anonymisés, pour calibrer la note — sans pseudo, ni UUID, ni adresse de serveur",
             "Calibration", null, () -> shareDuels, v -> { shareDuels = v; NativeCombat.share(v); });
@@ -206,10 +235,12 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
         if (enabled) {
             HudRegistry.register(element);
             HudRegistry.register(bannerElement);
+            HudRegistry.register(calloutElement);
             refreshRanks();
         } else {
             HudRegistry.unregister(element);
             HudRegistry.unregister(bannerElement);
+            HudRegistry.unregister(calloutElement);
         }
     }
 
@@ -275,32 +306,62 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
      */
     @Override
     public void onTick() {
+        long now = System.nanoTime();
+        // Le serveur nous équipe pour un nouveau duel : le panneau du duel
+        // d'avant s'efface, avant même le premier coup, et on annonce ce qui
+        // est en jeu.
+        int kits = NativeCombat.kits();
+        if (kits != lastKits) {
+            lastKits = kits;
+            summary.hide();
+            announce(now);
+        }
+        // Un duel vient de s'ouvrir (premier échange) : le panneau s'efface
+        // s'il était encore là — serveur qui n'équipe pas, ou duel enchaîné —,
+        // et l'annonce part si l'équipement ne l'a pas déjà fait partir.
+        boolean recording = CombatTracker.recording();
+        if (recording && !wasRecording) {
+            summary.hide();
+            callouts.duelStarted();
+            if (now - announcedAtNanos > ANNOUNCE_VALID_NANOS) announce(now);
+        }
+        wasRecording = recording;
+
+        // Les bons coups, après l'ouverture : le premier mot d'un duel en fait partie.
+        callouts.poll();
+
         int number = NativeCombat.report(incoming);
         if (number != lastReport) {
             lastReport = number;
             summary.show(incoming, number);
+            if (callouts.takeRecordsDirty()) com.yuyuframe.launcheragent.runtime.ui.HudConfigStore.save();
         }
         int ranked = NativeCombat.ranked(incomingRanked);
         if (ranked != lastRanked) {
             lastRanked = ranked;
             summary.ranked(ranked, incomingRanked);
+            // Battre un adversaire bien plus fort : le mot le plus rare, une fois le classement connu.
+            boolean win = summary.shownResult() == 1;
+            if (win && incomingRanked[NativeCombat.RANKED_CASUAL] < 1 && incomingRanked[NativeCombat.RANKED_FOE] >= GIANT_FOE_FACTOR) {
+                callouts.add(PvpCallouts.GIANT, 4, 0);
+            }
             refreshRanks();
         }
-
-        // Un duel vient de s'ouvrir : on annonce ce qui est en jeu. Le panneau
-        // du duel d'avant n'a plus lieu d'être.
-        boolean recording = CombatTracker.recording();
-        if (recording && !wasRecording) {
-            int mode = NativeCombat.liveMode();
-            // Un duel ni à la masse ni à l'épée n'est ni noté ni classé : rien à annoncer.
-            if (mode == 1 || mode == 2) {
-                summary.hide();
-                banner.duelStarted(competitive, rankOf(mode));
-            }
-        }
-        wasRecording = recording;
+        summary.tickSounds();
 
         pollKey();
+    }
+
+    /** Une victoire qui vaut au moins ce multiplicateur d'adversaire (le sien à 350, soit +100 sur la moyenne) : un géant tombé. */
+    private static final double GIANT_FOE_FACTOR = 1.4;
+
+    /** L'annonce de début de duel, si on tient une masse ou une épée (un autre duel n'est ni noté ni classé). */
+    private void announce(long now) {
+        int mode = NativeCombat.liveMode();
+        if (mode != 1 && mode != 2) return;
+        announcedAtNanos = now;
+        banner.duelStarted(competitive, rankOf(mode));
+        PvpSounds.play(PvpSounds.CHIME, competitive ? 1.2f : 0.9f, 0.6f);
     }
 
     /** La touche compétitif / casual, sur son front montant, hors des écrans (tchat, champs de texte). */
@@ -339,8 +400,8 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
      */
     private static final class Summary implements HudElement.CustomRenderer {
 
-        /** Durée d'affichage après un duel. */
-        private static final long SHOWN_NANOS = 12_000_000_000L;
+        /** Durée d'affichage après un duel ordinaire : assez pour lire, pas plus. */
+        private static final long SHOWN_NANOS = 8_000_000_000L;
 
         private static final float WIDTH = 320f;
         private static final float HEADER_H = 30f;
@@ -348,7 +409,21 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
         private static final float ROW = 15f;
         private static final float BODY_H = NativeCombat.FAMILY_COUNT * ROW + 10f;
         private static final float FIGURES_H = 36f;
-        private static final float HEIGHT = HEADER_H + GAP + BODY_H + GAP + FIGURES_H;
+        /** La bande du bas : le meilleur moment du duel, ou le record battu. */
+        private static final float MOMENT_H = 18f;
+        private static final float HEIGHT = HEADER_H + GAP + BODY_H + GAP + FIGURES_H + GAP + MOMENT_H;
+
+        /** Les mots du duel, pour son meilleur moment. */
+        private final PvpCallouts callouts;
+
+        Summary(PvpCallouts callouts) {
+            this.callouts = callouts;
+        }
+
+        /** Le verdict du duel affiché : 1 victoire, 2 défaite, 3 nul ; 0 sans duel. */
+        int shownResult() {
+            return received ? (int) shown[NativeCombat.REPORT_RESULT] : 0;
+        }
         private static final float SCORE_W = 108f;
         private static final float RADIUS = 6f;
 
@@ -390,6 +465,7 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
             shownNumber = number;
             received = true;
             rankedReceived = false;
+            ceremony = false;
         }
 
         /** Les points de classement du résumé {@code number} — ignorés s'ils ne sont pas ceux du duel affiché. */
@@ -398,16 +474,132 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
             System.arraycopy(values, 0, ranked, 0, ranked.length);
             rankedReceived = true;
             rankedAtNanos = System.nanoTime();
-            // Le panneau reste le temps de voir l'animation entière.
-            shownAtNanos = Math.max(shownAtNanos, rankedAtNanos - SHOWN_NANOS + RANKED_SHOWN_NANOS);
+            countedShown = 0;
+            lastCountSoundNanos = 0;
+            divisionSoundPlayed = false;
+            // Le panneau reste le temps de voir l'animation entière — plus
+            // longtemps quand on change de division, c'est un moment à voir.
+            boolean divisionChanged = values[NativeCombat.RANKED_BEFORE_DIVISION] != values[NativeCombat.RANKED_AFTER_DIVISION]
+                && values[NativeCombat.RANKED_BEFORE_DUELS] >= PvpRank.PLACEMENT_DUELS && values[NativeCombat.RANKED_CASUAL] < 1;
+            long stay = divisionChanged ? RANKED_SHOWN_CHANGED_NANOS : RANKED_SHOWN_NANOS;
+            shownAtNanos = Math.max(shownAtNanos, rankedAtNanos - SHOWN_NANOS + stay);
+
+            // Un rang entier franchi (pas une division), ou le rang dévoilé à la
+            // fin du placement : le panneau part au centre pour la cérémonie.
+            boolean wasPlaced = values[NativeCombat.RANKED_BEFORE_DUELS] >= PvpRank.PLACEMENT_DUELS;
+            boolean placedNow = values[NativeCombat.RANKED_PLACED] >= 1;
+            boolean casual = values[NativeCombat.RANKED_CASUAL] >= 1;
+            int before = (int) values[NativeCombat.RANKED_BEFORE_DIVISION];
+            int after = (int) values[NativeCombat.RANKED_AFTER_DIVISION];
+            reveal = !wasPlaced && placedNow;
+            boolean promoted = wasPlaced && PvpRank.tier(after) > PvpRank.tier(before);
+            if (!casual && (reveal || promoted)) {
+                ceremony = true;
+                ceremonyBeat = -1;
+                ceremonySlot = -1;
+                ceremonyBurst = false;
+                // Une montée laisse d'abord la barre se remplir jusqu'au bord ; un
+                // rang dévoilé n'a rien à remplir, la cérémonie vient plus tôt.
+                ceremonyAtNanos = rankedAtNanos + (long) ((reveal ? CEREMONY_DELAY_REVEAL : CEREMONY_DELAY) * 1e9);
+                long end = ceremonyAtNanos + (long) (Ceremony.LENGTH * 1e9);
+                shownAtNanos = Math.max(shownAtNanos, end - SHOWN_NANOS);
+            }
         }
 
-        /** Après l'arrivée des points : de quoi voir défiler le gain et la barre. */
-        private static final long RANKED_SHOWN_NANOS = 10_000_000_000L;
+        // ── La cérémonie d'un nouveau rang ──
+
+        /** Après l'arrivée des points : la barre monte au bord, puis le panneau part au centre. */
+        private static final float CEREMONY_DELAY = 2.2f;
+        private static final float CEREMONY_DELAY_REVEAL = 1.0f;
+        /** Un nouveau rang (ou le rang dévoilé) à célébrer pour le duel affiché. */
+        private boolean ceremony;
+        private boolean reveal;
+        private long ceremonyAtNanos;
+
+        /** La cérémonie est prévue mais pas commencée : le panneau ne doit pas dévoiler le nouveau rang. */
+        private boolean ceremonyPending() {
+            return ceremony && received && System.nanoTime() < ceremonyAtNanos;
+        }
+
+        private boolean inCeremony() {
+            return ceremony && received && System.nanoTime() >= ceremonyAtNanos;
+        }
+
+        /** Après l'arrivée des points : de quoi voir défiler le gain et la barre ; plus quand la division change. */
+        private static final long RANKED_SHOWN_NANOS = 8_000_000_000L;
+        private static final long RANKED_SHOWN_CHANGED_NANOS = 12_000_000_000L;
+
+        // ── Les sons du panneau ──
+
+        /** Le compteur de points déjà sonné, et quand. */
+        private long countedShown;
+        private long lastCountSoundNanos;
+        private boolean divisionSoundPlayed;
+        /** Dans la cérémonie : le dernier battement sonné, le dernier insigne de la machine à sous, l'éclat. */
+        private int ceremonyBeat = -1;
+        private int ceremonySlot = -1;
+        private boolean ceremonyBurst;
+
+        /**
+         * Les sons, à chaque image, au rythme des animations du panneau : un
+         * « tic » à chaque point du compteur (montant pour un gain,
+         * descendant pour une perte), la montée de division, puis ceux de la
+         * cérémonie (battements, machine à sous, éclat). Les temps sont ceux
+         * du dessin (mêmes formules), pour que son et image tombent ensemble.
+         */
+        void tickSounds() {
+            if (!received) return;
+            long now = System.nanoTime();
+            if (rankedReceived && !casual(shown) && rankable(shown) && !inCeremony()) {
+                float since = (now - rankedAtNanos) / 1e9f;
+                boolean placement = ranked[NativeCombat.RANKED_BEFORE_DUELS] < PvpRank.PLACEMENT_DUELS;
+                double total = ranked[NativeCombat.RANKED_TOTAL];
+                if (!placement && total != 0) {
+                    long counted = Math.round(Math.abs(total) * ease(since, 0.1f, 0.8f));
+                    if (counted > countedShown && now - lastCountSoundNanos > 40_000_000L) {
+                        countedShown = counted;
+                        lastCountSoundNanos = now;
+                        float progress = (float) (counted / Math.abs(total));
+                        if (total > 0) PvpSounds.play(PvpSounds.HAT, 0.9f + 0.9f * progress, 0.35f);
+                        else PvpSounds.play(PvpSounds.BASS, 1.2f - 0.5f * progress, 0.35f);
+                    }
+                }
+                // Une division franchie (pas un rang entier : la cérémonie a ses sons).
+                int before = (int) ranked[NativeCombat.RANKED_BEFORE_DIVISION];
+                int after = (int) ranked[NativeCombat.RANKED_AFTER_DIVISION];
+                if (!placement && !ceremony && after > before && !divisionSoundPlayed && since > 1.3f) {
+                    divisionSoundPlayed = true;
+                    PvpSounds.play(PvpSounds.LEVEL_UP, 1.3f, 0.6f);
+                }
+            }
+            if (inCeremony()) {
+                float t = (now - ceremonyAtNanos) / 1e9f;
+                float u = t - Ceremony.TRAVEL_SECONDS;
+                if (u >= 0f && t < Ceremony.BURST_SECONDS) {
+                    if (reveal) {
+                        int slot = Ceremony.slotIndex(ranked, u);
+                        if (slot != ceremonySlot) {
+                            ceremonySlot = slot;
+                            PvpSounds.play(PvpSounds.HAT, 1.4f, 0.5f);
+                        }
+                    } else {
+                        int beat = (int) Math.floor(1.4 * u + 2.2 * u * u);
+                        if (beat != ceremonyBeat) {
+                            ceremonyBeat = beat;
+                            PvpSounds.play(PvpSounds.DRUM, 0.8f + 0.1f * beat, 0.7f);
+                        }
+                    }
+                } else if (t >= Ceremony.BURST_SECONDS && !ceremonyBurst) {
+                    ceremonyBurst = true;
+                    PvpSounds.play(PvpSounds.CHALLENGE, 1f, 0.9f);
+                }
+            }
+        }
 
         /** Un nouveau duel commence : le panneau du précédent s'efface. */
         void hide() {
             received = false;
+            ceremony = false;
         }
 
         /** Noté, avec un verdict, à la masse ou à l'épée : de quoi compter au classement — ou y avoir compté. */
@@ -437,13 +629,24 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
             return received && System.nanoTime() - shownAtNanos < SHOWN_NANOS;
         }
 
+        /** La carte de verre, sauf pendant la cérémonie : le panneau a quitté sa place, il dessine son propre fond au centre. */
         @Override
         public boolean glassCard() {
-            return true;
+            return !inCeremony();
+        }
+
+        @Override
+        public boolean skipBackground() {
+            return inCeremony();
         }
 
         @Override
         public void draw(UiRenderer r, float x, float y, float w, float h, float s, int vw, int vh) {
+            if (inCeremony()) {
+                float t = (System.nanoTime() - ceremonyAtNanos) / 1e9f;
+                Ceremony.draw(r, ranked, reveal, t, x, y, w, h, s, vw, vh);
+                return;
+            }
             // Jamais de duel noté dans cette partie : on n'est ici que par
             // l'éditeur de HUD, qui a besoin d'un panneau plein pour le placer.
             double[] report = received ? shown : SAMPLE;
@@ -459,14 +662,77 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
                 float since = rankedReceived ? (System.nanoTime() - rankedAtNanos) / 1e9f : -1f;
                 drawRanked(r, report, rankedReceived ? ranked : null, since, x, x + w, bottom - GAP * s, s, vw, vh);
             } else if (classable(report) && casual(report)) {
-                // Casual : la note et les familles, puis ce que le duel aurait
-                // rapporté en compétitif à la place des chiffres.
-                bottom = drawScoreAndFamilies(r, report, x, x + w, bottom - GAP * s, s, vw, vh);
+                // Casual : la note, le point fort et ce qui est à travailler,
+                // puis ce que le duel aurait rapporté en compétitif.
+                bottom = drawScoreAndStrengths(r, report, x, x + w, bottom - GAP * s, s, vw, vh);
                 drawMissed(r, report, rankedReceived ? ranked : null, x, x + w, bottom - GAP * s, s, vw, vh);
             } else {
                 bottom = drawScoreAndFamilies(r, report, x, x + w, bottom - GAP * s, s, vw, vh);
                 drawFigures(r, report, x, x + w, bottom - GAP * s, s, vw, vh);
             }
+            drawMoment(r, received ? callouts.moment() : Lang.tr("Meilleur moment :") + " " + PvpCallouts.label(PvpCallouts.PERFECT_SMASH, 0)
+                + " " + Lang.tr("à") + " 0:42", received ? callouts.momentColor() : new UiColor(255, 206, 72, 255), x, x + w, y, s, vw, vh);
+        }
+
+        /** La bande du bas : le meilleur moment du duel, ou le record battu (en or). Rien sans coup marquant. */
+        private void drawMoment(UiRenderer r, String text, UiColor tone, float left, float right, float bottom, float s, int vw, int vh) {
+            if (text.isEmpty()) return;
+            float top = bottom + MOMENT_H * s;
+            tinted(r, left, bottom, right, top, RADIUS * s, tone, 0.18f, vw, vh);
+            float scale = 0.28f * s;
+            centered(r, UiFont.BOLD, text, (left + right) / 2f, (bottom + top) / 2f - HALF_CAP * scale, right - left - 16f * s,
+                tone, scale, vw, vh);
+        }
+
+        /**
+         * Casual : la note dans son cadre, et à sa droite seulement ce qui
+         * sert — la meilleure famille du duel (« TON POINT FORT ») et la plus
+         * faible (« À TRAVAILLER »). Rend le bas de la bande.
+         */
+        private float drawScoreAndStrengths(UiRenderer r, double[] report, float left, float right, float top, float s, int vw, int vh) {
+            float bottom = top - BODY_H * s;
+            float boxRight = drawScoreBox(r, report, left, bottom, top, s, vw, vh);
+            float cardLeft = boxRight + GAP * s;
+            r.drawRoundedRect(cardLeft, bottom, right, top, RADIUS * s, UiTheme.CARD_BG, vw, vh);
+            int best = -1, worst = -1;
+            for (int i = 0; i < familyRows(report); i++) {
+                if (report[NativeCombat.REPORT_MY_COUNTS + i] <= 0) continue;
+                double value = report[NativeCombat.REPORT_FAMILIES + i];
+                if (best < 0 || value > report[NativeCombat.REPORT_FAMILIES + best]) best = i;
+                if (worst < 0 || value < report[NativeCombat.REPORT_FAMILIES + worst]) worst = i;
+            }
+            float inner = 12f * s;
+            float width = right - cardLeft - inner * 2f;
+            if (best < 0) {
+                r.drawText(UiFont.REGULAR, Lang.tr("Pas assez d'actions pour juger"), cardLeft + inner, (top + bottom) / 2f - HALF_CAP * 0.3f * s,
+                    UiTheme.TEXT_SECONDARY, 0.3f * s, vw, vh);
+                return bottom;
+            }
+            float half = (top - bottom) / 2f;
+            strength(r, Lang.tr("TON POINT FORT"), best, report, cardLeft + inner, top, half, width, s, vw, vh);
+            if (worst != best) {
+                strength(r, Lang.tr("À TRAVAILLER"), worst, report, cardLeft + inner, top - half, half, width, s, vw, vh);
+            }
+            return bottom;
+        }
+
+        /** Une moitié de la carte casual : le titre en petit, la famille et sa valeur dans sa couleur. */
+        private void strength(UiRenderer r, String title, int family, double[] report, float left, float top, float height, float width,
+                              float s, int vw, int vh) {
+            double value = report[NativeCombat.REPORT_FAMILIES + family];
+            UiColor tone = PvpScoreUi.scoreColor(value);
+            r.drawText(UiFont.BOLD, title, left, top - 14f * s, UiTheme.TEXT_MUTED, 0.26f * s, vw, vh);
+            float scale = 0.42f * s;
+            String name = Lang.tr(familyName(family, report));
+            String number = String.valueOf(Math.round(value));
+            float numberW = r.textWidth(UiFont.BOLD, number, scale);
+            float nameScale = scale;
+            float nameW = r.textWidth(UiFont.BOLD, name, nameScale);
+            float room = width - numberW - 10f * s;
+            if (nameW > room && nameW > 0f) nameScale *= room / nameW;
+            float baseline = top - height + 9f * s;
+            r.drawText(UiFont.BOLD, name, left, baseline, UiTheme.TEXT_PRIMARY, nameScale, vw, vh);
+            r.drawText(UiFont.BOLD, number, left + width - numberW, baseline, tone, scale, vw, vh);
         }
 
         /**
@@ -567,9 +833,16 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
                 r.drawText(UiFont.BOLD, points, cardLeft + inner, aBottom + 18f * s, tone, big, vw, vh);
                 float after = cardLeft + inner + r.textWidth(UiFont.BOLD, points, big) + 6f * s;
                 r.drawText(UiFont.BOLD, "RR", after, aBottom + 18f * s, tone.multiplyAlpha(0.8f), 0.42f * s, vw, vh);
-                // D'où viennent les points, en une ligne.
-                r.drawText(UiFont.REGULAR, breakdown(values, (int) report[NativeCombat.REPORT_RESULT]), cardLeft + inner, aBottom + 7f * s,
-                    UiTheme.TEXT_MUTED, 0.24f * s, vw, vh);
+                // D'où viennent les points, en une ligne — sauf une défaite que
+                // le jeu a adoucie : c'est ça qu'on dit, en vert.
+                long saved = savedByPlay(values, (int) report[NativeCombat.REPORT_RESULT]);
+                if (saved >= 1) {
+                    r.drawText(UiFont.BOLD, Lang.tr("Ton jeu t'a sauvé") + " " + saved + " RR", cardLeft + inner, aBottom + 7f * s,
+                        PvpScoreUi.GOOD, 0.26f * s, vw, vh);
+                } else {
+                    r.drawText(UiFont.REGULAR, breakdown(values, (int) report[NativeCombat.REPORT_RESULT]), cardLeft + inner, aBottom + 7f * s,
+                        UiTheme.TEXT_MUTED, 0.24f * s, vw, vh);
+                }
             }
 
             drawProgress(r, values, (int) report[NativeCombat.REPORT_RESULT], since, left, right, aBottom - gap, s, vw, vh);
@@ -590,6 +863,17 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
                     .append(String.format(java.util.Locale.FRANCE, "%.2f", v[NativeCombat.RANKED_REPEAT]));
             }
             return text.toString();
+        }
+
+        /**
+         * Ce que le jeu a épargné sur une défaite : la perte sans le terme de
+         * jeu, moins la perte réelle (les mêmes bornes que {@code ranked.rs} :
+         * au moins 5, puis la répétition). 0 hors défaite ou sans jeu positif.
+         */
+        private static long savedByPlay(double[] v, int result) {
+            if (result != 2 || v[NativeCombat.RANKED_PLAY] <= 0) return 0;
+            double withoutPlay = Math.min(-5.0, v[NativeCombat.RANKED_BASE] * v[NativeCombat.RANKED_FOE]) * v[NativeCombat.RANKED_REPEAT];
+            return Math.max(0, Math.round(v[NativeCombat.RANKED_TOTAL]) - Math.round(withoutPlay));
         }
 
         private static String signed(double value) {
@@ -641,11 +925,35 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
                 return;
             }
 
+            if (ceremony && reveal) {
+                // Le rang sera dévoilé par la cérémonie : ici, le placement achevé, rien de plus.
+                r.drawRoundedRect(left, bottom, right, top, RADIUS * s, UiTheme.CARD_BG, vw, vh);
+                r.drawText(UiFont.BOLD, Lang.tr("PLACEMENT TERMINÉ"), left + inner, top - 22f * s, UiTheme.TEXT_PRIMARY, 0.5f * s, vw, vh);
+                float pipGap = 4f * s;
+                float pipW = (right - left - inner * 2f - pipGap * (PvpRank.PLACEMENT_DUELS - 1)) / PvpRank.PLACEMENT_DUELS;
+                float pipY = bottom + 26f * s;
+                for (int i = 0; i < PvpRank.PLACEMENT_DUELS; i++) {
+                    float x = left + inner + i * (pipW + pipGap);
+                    r.drawRoundedRect(x, pipY, x + pipW, pipY + 8f * s, 3f * s, UiTheme.ACCENT, vw, vh);
+                }
+                r.drawText(UiFont.REGULAR, Lang.tr("Ton rang se dévoile…"), left + inner, bottom + 9f * s, UiTheme.TEXT_SECONDARY,
+                    0.3f * s, vw, vh);
+                return;
+            }
+
             double from = PvpRank.cumulative(beforeDivision, v[NativeCombat.RANKED_BEFORE_POINTS]);
             double to = PvpRank.cumulative(afterDivision, v[NativeCombat.RANKED_AFTER_POINTS]);
             // Le rang vient d'être dévoilé (fin du placement) : pas de trajet, il apparaît.
             boolean revealed = v[NativeCombat.RANKED_BEFORE_DUELS] < PvpRank.PLACEMENT_DUELS;
             double now = revealed ? to : from + (to - from) * ease(since, 0.5f, 1.4f);
+            // Un nouveau rang entier : la barre monte jusqu'au bord et s'y arrête,
+            // la cérémonie dira la suite.
+            boolean onTheEdge = false;
+            if (ceremony && !reveal) {
+                double edge = PvpRank.cumulative(PvpRank.tier(afterDivision) * PvpRank.DIVISIONS_PER_TIER, 0) - 0.5;
+                onTheEdge = now >= edge;
+                now = Math.min(now, edge);
+            }
             int division = PvpRank.divisionAt(now);
             double points = PvpRank.pointsAt(now);
             UiColor rank = PvpRank.color(division);
@@ -668,7 +976,8 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
             float textRight = right - inner;
             r.drawText(UiFont.BOLD, PvpRank.name(division).toUpperCase(java.util.Locale.ROOT), textLeft, top - 24f * s, rank,
                 0.52f * s, vw, vh);
-            String status = revealed ? Lang.tr("RANG DÉVOILÉ !") : promoted ? Lang.tr("PROMOTION !") : demoted ? Lang.tr("Rétrogradé") : "";
+            String status = onTheEdge ? Lang.tr("Et maintenant…") : revealed ? Lang.tr("RANG DÉVOILÉ !") : promoted ? Lang.tr("PROMOTION !")
+                : demoted ? Lang.tr("Rétrogradé") : "";
             if (!status.isEmpty()) {
                 float scale = 0.34f * s;
                 UiColor statusTone = demoted ? PvpScoreUi.BAD : rank;
@@ -733,7 +1042,13 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
         private float drawScoreAndFamilies(UiRenderer r, double[] report, float left, float right, float top, float s, int vw, int vh) {
             float height = BODY_H * s;
             float bottom = top - height;
+            float boxRight = drawScoreBox(r, report, left, bottom, top, s, vw, vh);
+            drawFamilies(r, report, boxRight, right, bottom, top, s, vw, vh);
+            return bottom;
+        }
 
+        /** La note dans son cadre, en couleur — ou pourquoi il n'y en a pas. Rend le bord droit du cadre. */
+        private float drawScoreBox(UiRenderer r, double[] report, float left, float bottom, float top, float s, int vw, int vh) {
             float boxRight = left + SCORE_W * s;
             float center = (left + boxRight) / 2f;
             float fit = (SCORE_W - 14f) * s;
@@ -759,8 +1074,11 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
                     UiTheme.TEXT_SECONDARY, 0.3f * s, vw, vh);
                 centered(r, UiFont.REGULAR, Lang.tr(reason[1]), center, bottom + 13f * s, fit, UiTheme.TEXT_MUTED, 0.3f * s, vw, vh);
             }
+            return boxRight;
+        }
 
-            // Les familles : libellé, barre dans la couleur de sa valeur, valeur.
+        /** Les familles, à droite du cadre de la note : libellé, barre dans la couleur de sa valeur, valeur. */
+        private void drawFamilies(UiRenderer r, double[] report, float boxRight, float right, float bottom, float top, float s, int vw, int vh) {
             float cardLeft = boxRight + GAP * s;
             r.drawRoundedRect(cardLeft, bottom, right, top, RADIUS * s, UiTheme.CARD_BG, vw, vh);
             float inner = 10f * s;
@@ -794,7 +1112,6 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
                 String value = measured ? String.valueOf(Math.round(family)) : PvpScoreUi.NO_SCORE;
                 r.drawText(UiFont.BOLD, value, right - inner - r.textWidth(UiFont.BOLD, value, label), baseline, familyTone, label, vw, vh);
             }
-            return bottom;
         }
 
         /** Les chiffres du duel, en quatre cases égales : la valeur, son nom dessous. */
@@ -947,5 +1264,192 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
 
         /** Ce qu'un texte occupe au-dessus de sa ligne de base, par unité d'échelle — comme dans le panneau. */
         private static final float HALF_CAP = 11f;
+    }
+
+    /**
+     * La cérémonie d'un nouveau rang entier (Bois → Pierre, Or → Diamant…) ou
+     * du rang dévoilé à la fin du placement — pas d'une simple division. Le
+     * panneau de fin de duel quitte sa place et vient au centre de l'écran,
+     * qui s'assombrit, puis :
+     *
+     * <ol>
+     *   <li><b>suspense</b> (2,2 s) : l'ancien insigne bat de plus en plus
+     *       vite et tremble, son halo monte ; pour un rang dévoilé, les
+     *       insignes défilent comme une machine à sous et ralentissent ;</li>
+     *   <li><b>éclat</b> : un flash, une onde et des éclats dans la couleur
+     *       du nouveau rang, l'insigne surgit en rebondissant ;</li>
+     *   <li><b>félicitations</b> : « FÉLICITATIONS ! », « TU PASSES EN OR »
+     *       dans sa couleur, et la part des joueurs devancés ;</li>
+     *   <li>tout s'efface.</li>
+     * </ol>
+     *
+     * Sans état : tout se déduit du temps écoulé {@code t} et des points du
+     * duel ({@link NativeCombat#RANKED_LEN} nombres). Repère du moteur :
+     * l'origine est en bas à gauche, y monte.
+     */
+    private static final class Ceremony {
+
+        /** Durée totale, effacement compris. */
+        static final float LENGTH = 9.0f;
+        private static final float TRAVEL = 0.6f;
+        private static final float SUSPENSE = 2.2f;
+        /** L'éclat : après le voyage et le suspense. */
+        private static final float BURST = TRAVEL + SUSPENSE;
+        private static final float FADE = 0.6f;
+        private static final int SPARKS = 28;
+        /** Pour les sons du panneau : le suspense commence après le voyage, l'éclat après le suspense. */
+        static final float TRAVEL_SECONDS = TRAVEL;
+        static final float BURST_SECONDS = BURST;
+
+        private Ceremony() {
+        }
+
+        /** La machine à sous d'un rang dévoilé : l'insigne montré {@code u} secondes après le début du suspense. */
+        static int slotIndex(double[] v, float u) {
+            int newTier = PvpRank.tier((int) v[NativeCombat.RANKED_AFTER_DIVISION]);
+            int steps = 2 * PvpRank.TIERS.length + newTier;
+            return Math.min(steps, (int) Math.floor(steps * easeOut(clamp01(u / SUSPENSE))));
+        }
+
+        private static float clamp01(float v) {
+            return Math.max(0f, Math.min(1f, v));
+        }
+
+        private static float easeOut(float u) {
+            float v = 1f - clamp01(u);
+            return 1f - v * v * v;
+        }
+
+        /** Dépasse un peu sa cible avant d'y revenir : l'insigne qui surgit. */
+        private static float easeOutBack(float u) {
+            float v = clamp01(u) - 1f;
+            float c = 2.2f;
+            return 1f + (c + 1f) * v * v * v + c * v * v;
+        }
+
+        static void draw(UiRenderer r, double[] v, boolean reveal, float t, float x, float y, float w, float h, float s,
+                         int vw, int vh) {
+            int before = (int) v[NativeCombat.RANKED_BEFORE_DIVISION];
+            int after = (int) v[NativeCombat.RANKED_AFTER_DIVISION];
+            int newTier = PvpRank.tier(after);
+            UiColor oldTone = reveal ? UiTheme.ACCENT : PvpRank.color(before);
+            UiColor newTone = PvpRank.color(after);
+            float fade = clamp01((LENGTH - t) / FADE);
+            if (fade <= 0f) return;
+
+            // L'écran s'assombrit, plus encore pendant le suspense.
+            float dim = (0.45f + 0.15f * clamp01((t - TRAVEL) / SUSPENSE) * (t < BURST ? 1f : 0.6f)) * easeOut(t / TRAVEL) * fade;
+            r.drawRoundedRect(0f, 0f, vw, vh, 0f, new UiColor(4, 3, 8, 255).withAlpha(dim), vw, vh);
+
+            // Le panneau voyage de sa place au centre, en grandissant.
+            float k = s * 1.35f;
+            float pw = 400f * k, ph = 270f * k;
+            float cx = vw / 2f, cy = vh / 2f;
+            float travel = easeOut(t / TRAVEL);
+            float left = x + (cx - pw / 2f - x) * travel;
+            float bottom = y + (cy - ph / 2f - y) * travel;
+            float right = left + w + (pw - w) * travel;
+            float top = bottom + h + (ph - h) * travel;
+            UiColor frame = t < BURST ? oldTone : newTone;
+            r.drawShadow(left, bottom, right, top, 18f * k, 30f * k, 0f, new UiColor(0, 0, 0, 160).withAlpha(0.6f * fade), vw, vh);
+            r.drawRoundedRect(left - 1.5f, bottom - 1.5f, right + 1.5f, top + 1.5f, 14f * k + 1.5f, frame.withAlpha(0.7f * fade), vw, vh);
+            r.drawRoundedRect(left, bottom, right, top, 14f * k, new UiColor(16, 14, 24, 255).withAlpha(0.96f * fade), vw, vh);
+            r.drawGradientRect2D(left, bottom, right, top, 14f * k, frame.withAlpha(0.05f * fade), frame.withAlpha(0.22f * fade),
+                frame.withAlpha(0.05f * fade), frame.withAlpha(0.22f * fade), vw, vh);
+            if (t < TRAVEL) return;
+
+            float badge = 96f * k;
+            float badgeCx = cx;
+            float badgeCy = cy + 22f * k;
+            float u = t - TRAVEL;
+
+            if (t < BURST) {
+                // ── Le suspense ──
+                float p = clamp01(u / SUSPENSE);
+                int shown;
+                if (reveal) {
+                    // La machine à sous : deux tours complets, puis le bon rang, de plus en plus lentement.
+                    int tier = slotIndex(v, u) % PvpRank.TIERS.length;
+                    shown = Math.min(PvpRank.CHAMPION, tier * PvpRank.DIVISIONS_PER_TIER + after % PvpRank.DIVISIONS_PER_TIER);
+                } else {
+                    shown = before;
+                }
+                // Un battement qui accélère, un tremblement qui grandit.
+                double phase = 2 * Math.PI * (1.4 * u + 2.2 * u * u);
+                float beat = 1f + 0.06f * p * (float) Math.sin(phase);
+                float shake = 2.5f * k * p * p;
+                float dx = shake * (float) Math.sin(u * 61.0), dy = shake * (float) Math.cos(u * 47.0);
+                float size = badge * beat;
+                UiColor tone = reveal ? PvpRank.color(shown) : oldTone;
+                PvpRank.badge(r, shown, badgeCx - size / 2f + dx, badgeCy - size / 2f + dy, size, 0.2f + 0.8f * p, fade, vw, vh);
+                String hint = reveal ? Lang.tr("Ton rang est…") : Lang.tr("Quelque chose se prépare…");
+                centered(r, UiFont.BOLD, hint, cx, bottom + 40f * k, pw - 40f * k,
+                    UiTheme.TEXT_SECONDARY.multiplyAlpha(0.6f + 0.4f * (float) Math.abs(Math.sin(u * 3.0))), 0.42f * k, vw, vh);
+                if (!reveal) {
+                    centered(r, UiFont.REGULAR, PvpRank.name(before), cx, bottom + 22f * k, pw - 40f * k,
+                        tone.multiplyAlpha(fade), 0.32f * k, vw, vh);
+                }
+                return;
+            }
+
+            // ── L'éclat ──
+            float b = t - BURST;
+            // Le flash, l'onde, les éclats.
+            float flash = clamp01(1f - b / 0.35f);
+            if (flash > 0f) {
+                r.drawRoundedRect(left, bottom, right, top, 14f * k, new UiColor(255, 255, 255, 255).withAlpha(0.55f * flash * fade), vw, vh);
+            }
+            if (b < 1.2f) {
+                r.drawRipple(badgeCx, badgeCy, pw * 0.75f, clamp01(b / 1.2f), 0.85f * fade, newTone, vw, vh);
+            }
+            if (b < 1.6f) {
+                float spread = easeOut(b / 1.1f) * pw * 0.48f;
+                float sparkAlpha = clamp01(1f - b / 1.6f) * fade;
+                float spark = 5f * k;
+                for (int i = 0; i < SPARKS; i++) {
+                    double angle = 2 * Math.PI * i / SPARKS + 0.37 * (i % 3);
+                    float reach = spread * (0.65f + 0.35f * ((i * 7) % 5) / 4f);
+                    float px = badgeCx + (float) Math.cos(angle) * reach;
+                    float py = badgeCy + (float) Math.sin(angle) * reach * 0.8f;
+                    UiColor color = i % 3 == 0 ? new UiColor(255, 255, 255, 255) : newTone;
+                    r.drawRoundedRect(px - spark / 2f, py - spark / 2f, px + spark / 2f, py + spark / 2f, 1.5f * k,
+                        color.withAlpha(sparkAlpha), vw, vh);
+                }
+            }
+            // Le nouvel insigne surgit, puis respire.
+            float pop = easeOutBack(b / 0.55f);
+            float breathe = 1f + 0.02f * (float) Math.sin(b * 2.6);
+            float size = badge * Math.max(0.05f, pop) * breathe;
+            float glow = 0.55f + 0.45f * clamp01(1f - b / 1.5f) + 0.12f * (float) Math.sin(b * 3.0);
+            PvpRank.badge(r, after, badgeCx - size / 2f, badgeCy - size / 2f, size, Math.min(1f, glow), fade, vw, vh);
+
+            // Les félicitations.
+            float words = clamp01((b - 0.3f) / 0.5f) * fade;
+            if (words <= 0f) return;
+            centered(r, UiFont.BOLD, Lang.tr("FÉLICITATIONS !"), cx, top - 36f * k, pw - 40f * k,
+                UiTheme.TEXT_PRIMARY.multiplyAlpha(words), 0.62f * k, vw, vh);
+            String tierName = Lang.tr(PvpRank.TIERS[newTier]).toUpperCase(java.util.Locale.ROOT);
+            String headline = reveal ? Lang.tr("TON RANG :") + " " + PvpRank.name(after).toUpperCase(java.util.Locale.ROOT)
+                : after >= PvpRank.CHAMPION ? Lang.tr("TU DEVIENS") + " " + tierName
+                : Lang.tr("TU PASSES EN") + " " + tierName;
+            centered(r, UiFont.BOLD, headline, cx, bottom + 46f * k, pw - 40f * k, newTone.multiplyAlpha(words), 0.6f * k, vw, vh);
+            double ahead = PvpRank.percentBelow(PvpRank.axisPosition(after, v[NativeCombat.RANKED_AFTER_POINTS]));
+            float detailAlpha = clamp01((b - 0.7f) / 0.5f) * fade;
+            if (ahead >= 1 && detailAlpha > 0f) {
+                centered(r, UiFont.REGULAR, Lang.tr("Devant") + " " + Math.round(ahead) + " % " + Lang.tr("des joueurs"), cx,
+                    bottom + 24f * k, pw - 40f * k, UiTheme.TEXT_SECONDARY.multiplyAlpha(detailAlpha), 0.36f * k, vw, vh);
+            }
+        }
+
+        /** Un texte centré, rétréci s'il dépasse {@code maxWidth}. */
+        private static void centered(UiRenderer r, UiFont font, String text, float center, float y, float maxWidth,
+                                     UiColor color, float scale, int vw, int vh) {
+            float width = r.textWidth(font, text, scale);
+            if (width > maxWidth && width > 0f) {
+                scale *= maxWidth / width;
+                width = maxWidth;
+            }
+            r.drawText(font, text, center - width / 2f, y, color, scale, vw, vh);
+        }
     }
 }

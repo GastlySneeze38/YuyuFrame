@@ -238,7 +238,6 @@ public final class UiPvpScoreScreen extends UiScreenBase {
         widgets.add(PvpScoreUi.backButton(screenWidth, screenHeight, () -> closeTo(lastScreen)));
         widgets.add(PvpScoreUi.helpButton(screenWidth, screenHeight,
             () -> info = new PvpInfoModal(null, PvpInfoModal.OVERVIEW)));
-        widgets.add(PvpScoreUi.shareSwitch(screenWidth, screenHeight));
         com.yuyuframe.launcheragent.runtime.module.gameplay.PvpScoreModule module =
             com.yuyuframe.launcheragent.runtime.module.gameplay.PvpScoreModule.instance();
         if (module != null) {

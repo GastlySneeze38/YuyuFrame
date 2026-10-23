@@ -171,6 +171,14 @@ public class HudElement {
     public boolean locked = false;
     /** Reste visible même quand un écran NON custom (chat, inventaire, tout autre GUI vanilla/mod) est ouvert — voir HudOverlayRenderer.renderPersistent. */
     public boolean showWhenScreenOpen = false;
+    /**
+     * Le moment où l'élément apparaît en jeu (« Début du duel », « Fin du
+     * duel »…), en français, traduit à l'affichage. L'éditeur de HUD s'en sert
+     * pour ne montrer qu'un moment à la fois quand on le lui demande : des
+     * éléments qui ne sont jamais à l'écran ensemble ne s'y empilent plus.
+     * {@code null} : toujours là, montré quel que soit le moment choisi.
+     */
+    public String moment;
     public float paddingX = 0f, paddingY = 0f;
     /** Multiplicateur de taille — SEULE façon de changer w/h, voir setScale(). Ne jamais assigner directement (utiliser setScale, qui recalcule w/h en même temps). */
     public float scale = 1f;

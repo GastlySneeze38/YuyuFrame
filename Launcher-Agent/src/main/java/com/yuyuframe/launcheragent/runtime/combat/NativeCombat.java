@@ -33,7 +33,7 @@ import java.util.UUID;
 public final class NativeCombat {
 
     /** Même valeur que {@code ABI_VERSION} dans combat/bridge.rs. */
-    private static final int ABI_VERSION = 17;
+    private static final int ABI_VERSION = 19;
 
     /** Place réservée au texte de l'historique : deux cents duels en tiennent bien moins. */
     private static final int HISTORY_BYTES = 256 * 1024;
@@ -244,6 +244,8 @@ public final class NativeCombat {
     private static MethodHandle share;
     private static MethodHandle competitive;
     private static MethodHandle liveMode;
+    private static MethodHandle kits;
+    private static MethodHandle callouts;
 
     private static final boolean READY = load();
     private static boolean errorLogged;
@@ -308,6 +310,9 @@ public final class NativeCombat {
             competitive = linker.downcallHandle(lib.find("yf_combat_competitive").orElseThrow(),
                 FunctionDescriptor.ofVoid(ValueLayout.JAVA_INT));
             liveMode = linker.downcallHandle(lib.find("yf_combat_live_mode").orElseThrow(), FunctionDescriptor.of(ValueLayout.JAVA_INT));
+            kits = linker.downcallHandle(lib.find("yf_combat_kits").orElseThrow(), FunctionDescriptor.of(ValueLayout.JAVA_INT));
+            callouts = linker.downcallHandle(lib.find("yf_combat_callouts").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT), heap);
             return true;
         } catch (Throwable error) {
             LauncherLog.err("[COMBAT] Noyau natif indisponible — aucun journal de combat ne sera écrit", error);
@@ -501,6 +506,41 @@ public final class NativeCombat {
         }
         try {
             return (int) liveMode.invokeExact();
+        } catch (Throwable error) {
+            failed(error);
+            return 0;
+        }
+    }
+
+    /**
+     * Combien de fois le serveur a équipé le joueur pour un nouveau duel : un
+     * compteur, dont seul le changement compte. Arrive avant le premier coup —
+     * c'est là que le panneau du duel précédent doit s'effacer.
+     */
+    public static int kits() {
+        if (!READY) {
+            return 0;
+        }
+        try {
+            return (int) kits.invokeExact();
+        } catch (Throwable error) {
+            failed(error);
+            return 0;
+        }
+    }
+
+    /**
+     * Les mots des bons coups repérés depuis le dernier appel
+     * ({@code content-core/src/combat/live.rs}), retirés de la file : trois
+     * entiers chacun dans {@code out} — sorte, rareté (1 à 4), valeur. Rend le
+     * nombre de mots écrits.
+     */
+    public static int callouts(int[] out) {
+        if (!READY || out == null || out.length < 3) {
+            return 0;
+        }
+        try {
+            return (int) callouts.invokeExact(MemorySegment.ofArray(out), out.length);
         } catch (Throwable error) {
             failed(error);
             return 0;

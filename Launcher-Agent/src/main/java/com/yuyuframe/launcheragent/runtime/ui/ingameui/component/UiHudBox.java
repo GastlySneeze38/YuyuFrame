@@ -77,6 +77,18 @@ public class UiHudBox extends UiWidget {
     public void setSelected(boolean selected) { this.selected = selected; }
     public void setOnSelect(Runnable onSelect) { this.onSelect = onSelect; }
 
+    /**
+     * Les commandes de l'éditeur posées par-dessus (menu des moments, boutons
+     * d'un élément) : un clic sur elles ne doit pas aussi saisir la boîte
+     * dessous. Posé par l'éditeur ; {@code null}, rien ne couvre.
+     */
+    private java.util.function.BiPredicate<Double, Double> covered;
+    public void setCovered(java.util.function.BiPredicate<Double, Double> covered) { this.covered = covered; }
+
+    private boolean coveredAt(double mx, double my) {
+        return covered != null && covered.test(mx, my);
+    }
+
     private boolean overGrip(double mx, double my) {
         return mx >= x + w - GRIP_SIZE && mx <= x + w && my >= y && my <= y + GRIP_SIZE;
     }
@@ -152,6 +164,7 @@ public class UiHudBox extends UiWidget {
         }
 
         if (!dragging) {
+            if (input.leftClicked && coveredAt(input.mouseX, input.mouseY)) return;
             if (input.leftClicked && overGrip(input.mouseX, input.mouseY)) {
                 select();
                 resizing = true;

@@ -135,7 +135,23 @@ public final class HudConfigStore {
         if (favoriteStr != null) module.favorite = Boolean.parseBoolean(favoriteStr);
 
         if (module instanceof HudElementOwner) {
-            HudElement element = ((HudElementOwner) module).hudElement();
+            // Le principal sous le nom du module (clés d'avant), les autres sous le leur.
+            java.util.List<HudElement> elements = ((HudElementOwner) module).hudElements();
+            for (int i = 0; i < elements.size(); i++) {
+                applyElement(i == 0 ? id : elements.get(i).id, elements.get(i));
+            }
+        }
+
+        // Réglages déclarés par le module (voir Setting) — chaque type sait
+        // se relire lui-même, il n'y a plus de table annotation→type ici.
+        // Clé = l'id STABLE du réglage, plus le nom du champ Java : renommer
+        // un champ n'efface plus le réglage chez l'utilisateur.
+        applySettings(module);
+    }
+
+    /** La position et l'apparence d'un élément HUD, relues sous {@code id + ".hud."}. */
+    private static void applyElement(String id, HudElement element) {
+        {
             String anchor = DATA.getProperty(id + ".hud.anchor");
             if (anchor != null) {
                 try { element.anchor = HudAnchor.valueOf(anchor); } catch (IllegalArgumentException ignored) {}
@@ -169,11 +185,10 @@ public final class HudConfigStore {
             // setScale (pas une assignation directe) : recalcule w/h depuis naturalSize()*scale, voir HudElement.
             element.setScale(getFloat(id + ".hud.scale", element.scale));
         }
+    }
 
-        // Réglages déclarés par le module (voir Setting) — chaque type sait
-        // se relire lui-même, il n'y a plus de table annotation→type ici.
-        // Clé = l'id STABLE du réglage, plus le nom du champ Java : renommer
-        // un champ n'efface plus le réglage chez l'utilisateur.
+    private static void applySettings(LauncherModule module) {
+        String id = module.id;
         for (Setting setting : module.settings()) {
             if (!setting.persistent) continue;   // voir Setting.persistent
             String raw = DATA.getProperty(id + ".setting." + setting.id);
@@ -371,7 +386,17 @@ public final class HudConfigStore {
         DATA.setProperty(id + ".favorite", String.valueOf(module.favorite));
 
         if (module instanceof HudElementOwner) {
-            HudElement element = ((HudElementOwner) module).hudElement();
+            java.util.List<HudElement> elements = ((HudElementOwner) module).hudElements();
+            for (int i = 0; i < elements.size(); i++) {
+                serializeElement(i == 0 ? id : elements.get(i).id, elements.get(i));
+            }
+        }
+        serializeSettings(module);
+    }
+
+    /** Pendant de {@link #applyElement}. */
+    private static void serializeElement(String id, HudElement element) {
+        {
             DATA.setProperty(id + ".hud.anchor", element.anchor.name());
             if (element.hasPendingLegacyPosition()) {
                 // Jamais rendu depuis le chargement (module jamais affiché) :
@@ -400,7 +425,10 @@ public final class HudConfigStore {
             DATA.setProperty(id + ".hud.paddingX", String.valueOf(element.paddingX));
             DATA.setProperty(id + ".hud.paddingY", String.valueOf(element.paddingY));
         }
+    }
 
+    private static void serializeSettings(LauncherModule module) {
+        String id = module.id;
         // Pendant exact de la boucle de lecture dans applyTo() — même clé,
         // même source de vérité (la liste déclarée par le module), donc plus
         // aucun risque qu'un réglage s'affiche sans jamais être sauvegardé.

@@ -137,103 +137,48 @@ public final class PvpScoreUi {
         return new UiButton(c[0], y, w, h, Lang.tr("Retour"), back);
     }
 
-    /** Le bouton qui ouvre l'explication du calcul, en haut à droite : une simple icône d'information. */
+    /** Le bouton qui ouvre l'explication du calcul, en haut à droite : un rond de verre marqué « i ». */
     static UiWidget helpButton(int screenWidth, int screenHeight, Runnable open) {
         float[] c = content(screenWidth, screenHeight);
         float size = UiTheme.scaled(40f);
         float y = screenHeight - topBarHeight() / 2f - size / 2f;
-        InfoButton button = new InfoButton(c[1] - size, y, size, open);
+        GlassButton button = new GlassButton(c[1] - size, y, size, null, open);
         button.tooltip = Lang.tr("Comment ça marche ?");
         return button;
     }
 
     /**
-     * L'interrupteur « Partager mes duels », dans la barre du haut, à gauche
-     * de l'icône d'information. Son état est le réglage du module
-     * ({@code PvpScoreModule#shareDuels}).
-     */
-    static UiWidget shareSwitch(int screenWidth, int screenHeight) {
-        float[] c = content(screenWidth, screenHeight);
-        float h = UiTheme.scaled(40f);
-        float w = UiTheme.scaled(250f);
-        float y = screenHeight - topBarHeight() / 2f - h / 2f;
-        ShareSwitch widget = new ShareSwitch(c[1] - UiTheme.scaled(40f) - UiTheme.scaled(14f) - w, y, w, h);
-        widget.tooltip = Lang.tr("Vos duels partent anonymisés (sans pseudo, UUID ni adresse de serveur) pour calibrer la note. Un compte YuyuFrame connecté est nécessaire.");
-        return widget;
-    }
-
-    /**
-     * « Réglages », à gauche de l'interrupteur de partage : les réglages du
-     * module (compétitif ou casual, sa touche, le partage). La carte du module
-     * ouvre cette page, pas ses réglages — c'est leur seule entrée.
+     * Les réglages du module (compétitif ou casual, sa touche, les mots, les
+     * sons, le partage des duels), à gauche du « i » : un rond de verre à
+     * engrenage. La carte du module ouvre cette page, pas ses réglages —
+     * c'est leur seule entrée.
      */
     static UiWidget settingsButton(int screenWidth, int screenHeight, Runnable open) {
         float[] c = content(screenWidth, screenHeight);
-        float h = UiTheme.scaled(40f);
-        float w = UiTheme.scaled(150f);
-        float y = screenHeight - topBarHeight() / 2f - h / 2f;
-        float shareLeft = c[1] - UiTheme.scaled(40f) - UiTheme.scaled(14f) - UiTheme.scaled(250f);
-        UiButton button = new UiButton(shareLeft - UiTheme.scaled(14f) - w, y, w, h, Lang.tr("Réglages"), open);
-        button.tooltip = Lang.tr("Compétitif ou casual, sa touche, le partage des duels");
+        float size = UiTheme.scaled(40f);
+        float y = screenHeight - topBarHeight() / 2f - size / 2f;
+        GlassButton button = new GlassButton(c[1] - size - UiTheme.scaled(12f) - size, y, size, GEAR_ICON, open);
+        button.tooltip = Lang.tr("Réglages : compétitif ou casual, sa touche, les mots, les sons, le partage des duels");
         return button;
     }
 
-    private static final class ShareSwitch extends UiWidget {
-        private final UiAnimatedFloat hover = new UiAnimatedFloat(0f, 16f);
-        private final UiAnimatedFloat on;
+    /** L'engrenage, de la même famille d'icônes que celui de l'écran-titre ({@code TitleAccountBar}). */
+    private static final String GEAR_ICON = com.yuyuframe.launcheragent.runtime.ui.LauncherModule.icons8("settings");
 
-        ShareSwitch(float x, float y, float w, float h) {
-            super(x, y, w, h);
-            this.on = new UiAnimatedFloat(sharing() ? 1f : 0f, 14f);
-        }
-
-        private static boolean sharing() {
-            com.yuyuframe.launcheragent.runtime.module.gameplay.PvpScoreModule module =
-                com.yuyuframe.launcheragent.runtime.module.gameplay.PvpScoreModule.instance();
-            return module != null && module.shareDuels();
-        }
-
-        @Override
-        public void draw(UiRenderer r, double mouseX, double mouseY, int vw, int vh) {
-            hover.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
-            on.setTarget(sharing() ? 1f : 0f);
-            float t = hover.get();
-            float o = on.get();
-            float radius = h / 2f;
-            r.drawRoundedRect(x - 1f, y - 1f, x + w + 1f, y + h + 1f, radius + 1f,
-                UiColor.lerp(UiTheme.GLASS_BORDER, UiTheme.ACCENT, Math.max(t * 0.6f, o * 0.8f)), vw, vh);
-            r.drawRoundedRect(x, y, x + w, y + h, radius,
-                UiColor.lerp(UiTheme.CARD_BG, UiTheme.ACCENT.withAlpha(0.28f), o), vw, vh);
-            // La piste et son bouton rond, à droite.
-            float trackH = h * 0.5f;
-            float trackW = trackH * 1.8f;
-            float pad = (h - trackH) / 2f;
-            float tx = x + w - pad - trackW, ty = y + pad;
-            r.drawRoundedRect(tx, ty, tx + trackW, ty + trackH, trackH / 2f,
-                UiColor.lerp(UiTheme.TRACK_OFF, UiTheme.ACCENT, o), vw, vh);
-            float knob = trackH - 4f;
-            float kx = tx + 2f + o * (trackW - knob - 4f);
-            r.drawRoundedRect(kx, ty + 2f, kx + knob, ty + 2f + knob, knob / 2f, UiTheme.TEXT_PRIMARY, vw, vh);
-            float scale = UiTheme.scaled(0.42f);
-            left(r, UiFont.BOLD, Lang.tr("PARTAGER MES DUELS"), x + UiTheme.scaled(16f), middle(y + h / 2f, scale),
-                tx - x - UiTheme.scaled(24f), UiColor.lerp(UiTheme.TEXT_SECONDARY, UiTheme.TEXT_PRIMARY, Math.max(t, o)), scale, vw, vh);
-        }
-
-        @Override
-        public void onClick() {
-            com.yuyuframe.launcheragent.runtime.module.gameplay.PvpScoreModule module =
-                com.yuyuframe.launcheragent.runtime.module.gameplay.PvpScoreModule.instance();
-            if (module != null) module.setShareDuels(!module.shareDuels());
-        }
-    }
-
-    /** Un bouton rond marqué « i ». */
-    private static final class InfoButton extends UiWidget {
+    /**
+     * Un bouton rond en verre (flou du décor, teinte du thème, liseré), qui
+     * se teinte de la couleur d'accent au survol — comme l'engrenage de
+     * l'écran-titre. Porte une icône ({@code icon}, une adresse d'image) ou,
+     * sans icône, la lettre « i ».
+     */
+    private static final class GlassButton extends UiWidget {
+        private final String icon;
         private final Runnable action;
         private final UiAnimatedFloat hover = new UiAnimatedFloat(0f, 16f);
 
-        InfoButton(float x, float y, float size, Runnable action) {
+        GlassButton(float x, float y, float size, String icon, Runnable action) {
             super(x, y, size, size);
+            this.icon = icon;
             this.action = action;
         }
 
@@ -242,12 +187,24 @@ public final class PvpScoreUi {
             hover.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
             float t = hover.get();
             float radius = w / 2f;
+            // Le liseré, puis le verre teinté de l'accent au survol (la couleur donnée est l'aplat de repli).
             r.drawRoundedRect(x - 1f, y - 1f, x + w + 1f, y + h + 1f, radius + 1f,
                 UiColor.lerp(UiTheme.GLASS_BORDER, UiTheme.ACCENT, t), vw, vh);
-            r.drawRoundedRect(x, y, x + w, y + h, radius,
-                UiColor.lerp(UiTheme.CARD_BG, UiTheme.ACCENT.withAlpha(0.45f), t), vw, vh);
+            UiColor fallback = UiColor.lerp(UiTheme.PANEL_BG, UiTheme.ACCENT, t * 0.55f).withAlpha(1f);
+            UiColor tint = UiColor.lerp(UiTheme.GLASS_TINT, UiTheme.ACCENT, t * 0.6f);
+            r.drawGlassPanel(x, y, x + w, y + h, radius, tint, UiTheme.GLASS_STRENGTH_FIELD, fallback, vw, vh);
+            java.awt.image.BufferedImage image = icon == null ? null
+                : com.yuyuframe.launcheragent.apigraphic.asset.UiRemoteImage.get(icon);
+            if (image != null) {
+                // Grossit un peu au survol : seul retour visuel sur un bouton sans libellé.
+                float size = w * (0.5f + 0.06f * t);
+                float off = (w - size) / 2f;
+                r.drawIcon(icon, image, x + off, y + off, size, size, vw, vh);
+                return;
+            }
+            // Sans icône, ou tant que l'image n'est pas arrivée : une lettre.
             float scale = UiTheme.scaled(0.7f);
-            centered(r, UiFont.BOLD, "i", x + w / 2f, middle(y + h / 2f, scale), w, UiTheme.TEXT_PRIMARY, scale, vw, vh);
+            centered(r, UiFont.BOLD, icon == null ? "i" : "...", x + w / 2f, middle(y + h / 2f, scale), w, UiTheme.TEXT_PRIMARY, scale, vw, vh);
         }
 
         @Override

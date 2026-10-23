@@ -43,6 +43,13 @@ pub fn live_mode() -> u8 {
     LIVE_MODE.load(std::sync::atomic::Ordering::Relaxed)
 }
 
+/// `Journal::kits`, tenu à jour comme [`RECORDING`].
+static KITS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+pub fn kits() -> u32 {
+    KITS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// Le résumé du dernier duel fermé, et son numéro : l'interface en jeu le
 /// relit à chaque tick et n'affiche que ce qui est nouveau.
 static LAST_REPORT: std::sync::Mutex<(i32, [f64; super::score::REPORT_LEN])> = std::sync::Mutex::new((0, [0.0; super::score::REPORT_LEN]));
@@ -168,6 +175,7 @@ impl Sink {
 
 fn run(records: std::sync::mpsc::Receiver<Record>) {
     let mut journal = Journal::new();
+    let mut live = super::live::Live::default();
     let mut sink: Option<Sink> = None;
     let mut last_flush = std::time::Instant::now();
     loop {
@@ -179,7 +187,18 @@ fn run(records: std::sync::mpsc::Receiver<Record>) {
         // Une seconde sans rien recevoir : le jeu est en pause ou figé, on
         // met à l'abri ce qui attend.
         let idle = record.is_none();
-        for out in record.map(|r| journal.feed(r, now_ms())).unwrap_or_default() {
+        // Ce qu'il faut aux mots des bons coups, copié avant que le journal ne
+        // consomme l'enregistrement ; ils le lisent après lui (duel ouvert,
+        // joueurs connus).
+        let seen = match &record {
+            Some(Record::Tick { me, .. }) => Some(super::live::Seen::Tick(*me)),
+            Some(Record::Event { kind, a, b, text, .. }) => Some(super::live::Seen::Event { kind: *kind, a: *a, b: *b, text: text.clone() }),
+            _ => None,
+        };
+        let outs = record.map(|r| journal.feed(r, now_ms())).unwrap_or_default();
+        live.observe(seen, &journal);
+        live.publish();
+        for out in outs {
             match out {
                 Out::Open(path) => {
                     close(&mut sink);
@@ -201,6 +220,7 @@ fn run(records: std::sync::mpsc::Receiver<Record>) {
         }
         RECORDING.store(journal.recording(), std::sync::atomic::Ordering::Relaxed);
         LIVE_MODE.store(journal.live_mode(), std::sync::atomic::Ordering::Relaxed);
+        KITS.store(journal.kits(), std::sync::atomic::Ordering::Relaxed);
         // Un bloc par seconde, à l'horloge : les ticks arrivent vingt fois par
         // seconde, le fil ne connaît donc jamais de silence, et attendre la
         // taille seule laissait la fin d'un duel en mémoire — perdue si le jeu

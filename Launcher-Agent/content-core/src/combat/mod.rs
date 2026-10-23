@@ -9,6 +9,7 @@
 //!   record    ce que Java envoie, tel quel
 //!   journal   quoi écrire et quand (aucun fichier, aucune horloge : testable)
 //!   writer    le fil qui tient le fichier
+//!   live      les bons coups repérés pendant le duel, en mots pour l'écran
 //!   bridge    les fonctions `yf_combat_*` appelées par Java
 //!   score     du journal d'un duel à sa note
 //!
@@ -18,6 +19,7 @@
 mod bridge;
 mod history;
 mod journal;
+mod live;
 mod ranked;
 mod record;
 mod score;

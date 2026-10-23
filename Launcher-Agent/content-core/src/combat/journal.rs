@@ -136,6 +136,12 @@ pub struct Journal {
     /// Le choix du joueur, compétitif ou casual : figé dans l'en-tête de
     /// chaque duel à son ouverture. Compétitif tant que Java n'a rien dit.
     competitive: bool,
+    /// Combien de fois notre armure est arrivée hors duel : le serveur nous
+    /// équipe pour un nouveau duel, avant le premier coup. L'interface y
+    /// efface le panneau du duel précédent.
+    kits: u32,
+    /// Le verdict du dernier duel fermé (`win`, `loss`, `draw`, `unknown`).
+    last_result: Option<String>,
 }
 
 impl Journal {
@@ -159,6 +165,8 @@ impl Journal {
             foe_near: 0,
             quiet_until: 0,
             competitive: true,
+            kits: 0,
+            last_result: None,
         }
     }
 
@@ -200,6 +208,7 @@ impl Journal {
                 // contenaient la fin du duel d'avant, avec son adversaire.
                 if Some(id) == self.me && !self.recording && !armor_empty(&text) && old_empty == Some(true) {
                     self.preroll.clear();
+                    self.kits = self.kits.wrapping_add(1);
                 }
                 self.equipment.insert(id, text);
                 if stripped {
@@ -275,15 +284,41 @@ impl Journal {
         self.recording
     }
 
-    /// Le mode du duel ouvert, deviné à ce qu'on tient : 1 masse, 2 épée,
-    /// 3 autre ; 0 sans duel. Une estimation pour l'annonce de début de duel —
-    /// le vrai mode se décide à la note, sur tout le duel (`score::parse`).
+    /// Combien de fois le serveur nous a équipés pour un nouveau duel (voir `kits`).
+    pub fn kits(&self) -> u32 {
+        self.kits
+    }
+
+    /// Notre identifiant réseau, connu au premier tick.
+    pub fn me(&self) -> Option<i32> {
+        self.me
+    }
+
+    /// Un vrai joueur connu dans ce monde (pas un personnage de lobby).
+    pub fn is_player(&self, id: i32) -> bool {
+        self.players.contains_key(&id)
+    }
+
+    /// Ce que nous tenons, en main et dans l'autre main (identifiants sans enchantements).
+    pub fn my_hands(&self) -> Vec<String> {
+        let Some(gear) = self.me.and_then(|me| self.equipment.get(&me)) else { return Vec::new() };
+        gear.split(';').skip(4).take(2).filter_map(|slot| slot.split(',').next()).map(str::to_string).collect()
+    }
+
+    /// Le verdict du dernier duel fermé.
+    pub fn last_result(&self) -> Option<&str> {
+        self.last_result.as_deref()
+    }
+
+    /// Le mode deviné à ce qu'on tient, duel ouvert ou non (l'annonce part
+    /// quand le serveur nous équipe, avant le premier coup) : 1 masse, 2 épée,
+    /// 3 autre ; 0 sans équipement connu. Une estimation — le vrai mode se
+    /// décide à la note, sur tout le duel (`score::parse`).
     pub fn live_mode(&self) -> u8 {
-        if !self.recording {
+        let hands = self.my_hands();
+        if hands.is_empty() {
             return 0;
         }
-        let Some(gear) = self.me.and_then(|me| self.equipment.get(&me)) else { return 3 };
-        let hands: Vec<&str> = gear.split(';').skip(4).take(2).filter_map(|slot| slot.split(',').next()).collect();
         if hands.iter().any(|item| item.ends_with("mace")) {
             1
         } else if hands.iter().any(|item| item.ends_with("_sword")) {
@@ -331,6 +366,7 @@ impl Journal {
         if !self.recording {
             return;
         }
+        self.last_result = result["result"].as_str().map(str::to_string);
         // L'équipement qui vient de changer d'abord : c'est lui qui explique le résultat.
         self.write_identities(out);
         out.push(Out::Line(result.to_string()));
@@ -692,7 +728,9 @@ mod tests {
         journal.feed(tick(1.0), 2000);
         journal.feed(tick(1.0), 2000);
         // …puis le serveur nous équipe : un nouveau duel se prépare.
+        let kits = journal.kits();
         journal.feed(equip(ME, ARMOR), 2000);
+        assert_eq!(journal.kits(), kits + 1, "l'interface l'apprend avant le premier coup");
         journal.feed(tick(1.0), 2000);
         let out = journal.feed(hit(FOE, ME), 3000);
         assert_eq!(kinds(&out).matches('s').count(), 1, "seul l'échantillon d'après l'équipement est écrit");

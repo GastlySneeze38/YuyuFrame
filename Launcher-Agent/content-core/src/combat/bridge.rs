@@ -31,7 +31,10 @@ use super::writer::send;
 /// 16 (2026-10-22) : durée du duel au bout du résumé, `yf_combat_ranked`.
 /// 17 (2026-10-23) : compétitif ou casual — `yf_combat_competitive`,
 /// `yf_combat_live_mode`, « casual » au bout du résumé et du classement.
-const ABI_VERSION: u32 = 17;
+/// 18 (2026-10-23) : `yf_combat_kits`, l'équipement d'un nouveau duel.
+/// 19 (2026-10-23) : `yf_combat_callouts`, les mots des bons coups ;
+/// `yf_combat_live_mode` répond aussi hors duel.
+const ABI_VERSION: u32 = 19;
 
 /// Autres joueurs transmis par tick, au plus.
 const MAX_OTHERS: usize = 16;
@@ -197,6 +200,34 @@ pub extern "C" fn yf_combat_recording() -> i32 {
 #[no_mangle]
 pub extern "C" fn yf_combat_live_mode() -> i32 {
     super::writer::live_mode() as i32
+}
+
+/// Combien de fois le serveur a équipé le joueur pour un nouveau duel (son
+/// armure arrivée hors duel) : un compteur, dont seul le changement compte.
+/// L'interface y efface le panneau du duel précédent, avant le premier coup.
+#[no_mangle]
+pub extern "C" fn yf_combat_kits() -> i32 {
+    super::writer::kits() as i32
+}
+
+/// Les mots des bons coups (`live.rs`) pas encore lus, retirés de la file :
+/// trois entiers chacun — sorte, rareté (1 à 4), valeur (longueur du combo,
+/// chute du smash en dixièmes de bloc…). Rend le nombre de mots écrits dans
+/// `out` (au plus `len / 3`).
+///
+/// # Safety
+/// `out` doit pointer sur `len` entiers inscriptibles (ou être nul).
+#[no_mangle]
+pub unsafe extern "C" fn yf_combat_callouts(out: *mut i32, len: i32) -> i32 {
+    if out.is_null() || len < 3 {
+        return 0;
+    }
+    let words = super::live::take(len as usize / 3);
+    let slice = std::slice::from_raw_parts_mut(out, words.len() * 3);
+    for (i, word) in words.iter().enumerate() {
+        slice[i * 3..i * 3 + 3].copy_from_slice(word);
+    }
+    words.len() as i32
 }
 
 /// Le choix du joueur : 1 compétitif (ses duels comptent pour son rang), 0
