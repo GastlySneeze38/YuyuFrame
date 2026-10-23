@@ -352,6 +352,20 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
             if (values == null) {
                 r.drawText(UiFont.REGULAR, Lang.tr("Calcul des points…"), cardLeft + inner, aBottom + 22f * s, UiTheme.TEXT_SECONDARY,
                     0.36f * s, vw, vh);
+            } else if (values[NativeCombat.RANKED_BEFORE_DUELS] < PvpRank.PLACEMENT_DUELS) {
+                // Un duel de placement : ses points restent cachés jusqu'au rang
+                // de départ, on montre le verdict et où en est le placement.
+                int result = (int) report[NativeCombat.REPORT_RESULT];
+                UiColor verdict = PvpScoreUi.resultColor(result);
+                float pop = 1f + 0.18f * (float) Math.sin(Math.PI * Math.max(0f, Math.min(1f, (since - 0.2f) / 0.3f)));
+                r.drawText(UiFont.BOLD, PvpScoreUi.resultText(result).toUpperCase(java.util.Locale.ROOT), cardLeft + inner,
+                    aBottom + 20f * s, verdict, 0.9f * s * pop, vw, vh);
+                boolean counted = values[NativeCombat.RANKED_AFTER_DUELS] > values[NativeCombat.RANKED_BEFORE_DUELS];
+                int done = (int) values[NativeCombat.RANKED_AFTER_DUELS];
+                String line = !counted ? Lang.tr("Ne compte pas : déjà 2 duels contre lui au placement")
+                    : done >= PvpRank.PLACEMENT_DUELS ? Lang.tr("Placement terminé")
+                    : Lang.tr("Duel de placement") + " " + done + " / " + PvpRank.PLACEMENT_DUELS;
+                r.drawText(UiFont.REGULAR, line, cardLeft + inner, aBottom + 7f * s, UiTheme.TEXT_MUTED, 0.24f * s, vw, vh);
             } else {
                 long shownTotal = Math.round(total * ease(since, 0.1f, 0.8f));
                 String points = (shownTotal > 0 ? "+" : shownTotal < 0 ? "-" : "") + Math.abs(shownTotal);
@@ -366,7 +380,7 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
                     UiTheme.TEXT_MUTED, 0.24f * s, vw, vh);
             }
 
-            drawProgress(r, values, since, left, right, aBottom - gap, s, vw, vh);
+            drawProgress(r, values, (int) report[NativeCombat.REPORT_RESULT], since, left, right, aBottom - gap, s, vw, vh);
         }
 
         /**
@@ -395,9 +409,11 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
          * Le rang, qui progresse : l'insigne, le nom, la barre de la division
          * animée de la position d'avant à celle d'après — en points cumulés,
          * donc une montée passe le bord et recommence à la division suivante —,
-         * et ce qu'il reste à faire. Pendant le placement : dix cases.
+         * et ce qu'il reste à faire. Pendant le placement : dix cases, celle
+         * de ce duel dans la couleur de son verdict ({@code result}).
          */
-        private void drawProgress(UiRenderer r, double[] v, float since, float left, float right, float top, float s, int vw, int vh) {
+        private void drawProgress(UiRenderer r, double[] v, int result, float since, float left, float right, float top, float s,
+                                  int vw, int vh) {
             float bottom = top - 70f * s;
             float inner = 12f * s;
             if (v == null) {
@@ -411,17 +427,20 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
             if (!placed) {
                 // Le placement : le rang est caché, on voit les duels qui restent.
                 r.drawRoundedRect(left, bottom, right, top, RADIUS * s, UiTheme.CARD_BG, vw, vh);
-                r.drawText(UiFont.BOLD, Lang.tr("PLACEMENT"), left + inner, top - 22f * s, UiTheme.TEXT_PRIMARY, 0.5f * s, vw, vh);
+                r.drawText(UiFont.BOLD, Lang.tr("NON CLASSÉ"), left + inner, top - 22f * s, UiTheme.TEXT_PRIMARY, 0.5f * s, vw, vh);
                 int done = (int) v[NativeCombat.RANKED_AFTER_DUELS];
+                boolean counted = done > (int) v[NativeCombat.RANKED_BEFORE_DUELS];
                 float pipGap = 4f * s;
                 float pipW = (right - left - inner * 2f - pipGap * (PvpRank.PLACEMENT_DUELS - 1)) / PvpRank.PLACEMENT_DUELS;
                 float pipY = bottom + 26f * s;
                 for (int i = 0; i < PvpRank.PLACEMENT_DUELS; i++) {
                     float x = left + inner + i * (pipW + pipGap);
                     boolean filled = i < done;
-                    // La case de ce duel s'allume à son tour.
-                    float light = i == done - 1 ? ease(since, 0.6f, 0.6f) : 1f;
-                    UiColor color = filled ? UiColor.lerp(UiTheme.PANEL_BG, UiTheme.ACCENT, light) : UiTheme.PANEL_BG;
+                    boolean current = counted && i == done - 1;
+                    // La case de ce duel s'allume à son tour, dans la couleur de son verdict.
+                    float light = current ? ease(since, 0.6f, 0.6f) : 1f;
+                    UiColor lit = current ? PvpScoreUi.resultColor(result) : UiTheme.ACCENT;
+                    UiColor color = filled ? UiColor.lerp(UiTheme.PANEL_BG, lit, light) : UiTheme.PANEL_BG;
                     r.drawRoundedRect(x, pipY, x + pipW, pipY + 8f * s, 3f * s, color, vw, vh);
                 }
                 int remaining = Math.max(0, PvpRank.PLACEMENT_DUELS - done);

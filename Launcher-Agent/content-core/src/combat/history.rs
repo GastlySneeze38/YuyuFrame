@@ -203,7 +203,8 @@ pub fn detail(instance_dir: &Path, time: u64) -> String {
 /// que pour le panneau de fin de duel. Une ligne `rank` par mode classé
 /// (masse, épée), même sans duel. Le classement d'un duel, vide s'il n'y
 /// compte pas : `total,base,jeu,adversaire,répétition,division après,points
-/// après` (voir `ranked::Change`).
+/// après,placement` — placement 0 après le placement, 1 duel de placement,
+/// 2 joué pendant le placement sans y compter (voir `ranked::Change`).
 pub fn history(instance_dir: &Path) -> String {
     let (reports, ladder) = duels(&instance_dir.join("yuyuframe").join("matches"));
     let scores: Vec<f64> = reports.iter().filter_map(|(r, _)| r.rating.score).collect();
@@ -219,7 +220,12 @@ pub fn history(instance_dir: &Path) -> String {
         // n'écrit que des pseudos valides), mais on ne s'y fie pas pour le format.
         let name: String = report.foe_name.as_deref().unwrap_or("").chars().filter(|c| !c.is_control()).collect();
         let ranked = change
-            .map(|c| format!("{},{},{},{},{},{},{}", c.total, c.base, c.play, c.foe_factor, c.repeat_factor, c.after.division, c.after.points))
+            .map(|c| {
+                format!(
+                    "{},{},{},{},{},{},{},{}",
+                    c.total, c.base, c.play, c.foe_factor, c.repeat_factor, c.after.division, c.after.points, c.placement.code()
+                )
+            })
             .unwrap_or_default();
         text.push_str(&format!("duel\t{}\t{}\t{}\t{ranked}\n", report.time.unwrap_or(0), name, numbers.join(",")));
     }
@@ -257,8 +263,8 @@ mod tests {
         let average: f64 = head[1].parse().unwrap();
         assert!((0.0..=500.0).contains(&average));
 
-        // Le classement : deux défaites à la masse, toujours en Bois 1 (on
-        // ne descend pas sous 0) ; l'épée, sans duel.
+        // Le classement : deux duels de placement à la masse, le rang encore
+        // caché ; l'épée, sans duel.
         assert_eq!(all[1], "rank\t1\t0\t0\t2\t0");
         assert_eq!(all[2], "rank\t2\t0\t0\t0\t0");
         let lines = &all[2..];
@@ -267,6 +273,7 @@ mod tests {
         assert!(first[0] <= -5.0, "une défaite coûte : {first:?}");
         assert_eq!(first[4], 1.0, "premier duel contre lui ce jour-là");
         assert_eq!(newer[4], 0.5, "le même adversaire le même jour : la moitié");
+        assert_eq!((first[7], newer[7]), (1.0, 1.0), "deux duels de placement");
 
         // Ce que le panneau de fin de duel reçoit pour ce duel : les mêmes points.
         let time: u64 = lines[1].split('\t').nth(1).unwrap().parse().unwrap();

@@ -99,6 +99,26 @@ public final class UiPvpScoreScreen extends UiScreenBase {
         return best;
     }
 
+    /** Champ du classement d'un duel : 1 duel de placement, 2 joué pendant le placement sans y compter. */
+    private static final int RANKED_PLACEMENT = 7;
+
+    /** La place d'un duel dans le placement (0 s'il est joué après, ou sans classement). */
+    static int placementOf(DuelHistory.Duel duel) {
+        return duel.ranked != null && duel.ranked.length > RANKED_PLACEMENT ? (int) duel.ranked[RANKED_PLACEMENT] : 0;
+    }
+
+    /** Les verdicts (1, 2, 3) des duels de placement d'un mode, du premier au dernier. */
+    private int[] placementResults(int code) {
+        java.util.List<Integer> results = new java.util.ArrayList<>();
+        // L'historique va du plus récent au plus ancien.
+        for (DuelHistory.Duel duel : history.duels) {
+            if (duel.mode() == code && placementOf(duel) == 1) results.add(0, duel.result());
+        }
+        int[] out = new int[results.size()];
+        for (int i = 0; i < out.length; i++) out[i] = results.get(i);
+        return out;
+    }
+
     /**
      * Les duels notés d'un mode, et ce qu'on en compte. Le mode de chaque
      * duel vient du noyau, qui le reconnaît à l'arme en main.
@@ -545,21 +565,26 @@ public final class UiPvpScoreScreen extends UiScreenBase {
                     UiTheme.TEXT_SECONDARY, UiTheme.scaled(0.44f), vw, vh);
             }
         } else {
-            PvpScoreUi.left(r, UiFont.BOLD, Lang.tr("Placement"), textLeft, cardTop - UiTheme.scaled(96f), textW,
+            PvpScoreUi.left(r, UiFont.BOLD, Lang.tr("Non classé"), textLeft, cardTop - UiTheme.scaled(96f), textW,
                 UiTheme.TEXT_PRIMARY, UiTheme.scaled(1.4f), vw, vh);
+            // Une case par duel de placement, verte ou rouge selon son verdict.
+            int[] results = placementResults(code);
             float pipGap = UiTheme.scaled(6f);
             float pipW = (textW - pipGap * (PvpRank.PLACEMENT_DUELS - 1)) / PvpRank.PLACEMENT_DUELS;
             float pipY = cardTop - UiTheme.scaled(128f);
             for (int i = 0; i < PvpRank.PLACEMENT_DUELS; i++) {
                 float x = textLeft + i * (pipW + pipGap);
                 float light = i < duels ? PvpScoreUi.ease(openedAt, 0.3f + 0.06f * i, 0.4f) : 0f;
+                UiColor lit = i < results.length ? PvpScoreUi.resultColor(results[i]) : UiTheme.ACCENT;
                 PvpScoreUi.rect(r, x, pipY, x + pipW, pipY + UiTheme.scaled(12f), UiTheme.scaled(4f),
-                    UiColor.lerp(new UiColor(0, 0, 0, 90), UiTheme.ACCENT, light), vw, vh);
+                    UiColor.lerp(new UiColor(0, 0, 0, 90), lit, light), vw, vh);
             }
             int remaining = Math.max(0, PvpRank.PLACEMENT_DUELS - duels);
-            PvpScoreUi.left(r, UiFont.REGULAR, Lang.tr("Ton rang se dévoile dans") + " " + remaining + " "
-                    + Lang.tr(remaining > 1 ? "duels notés" : "duel noté"),
+            PvpScoreUi.left(r, UiFont.REGULAR, Lang.tr("Placement") + " " + duels + " / " + PvpRank.PLACEMENT_DUELS + "  ·  "
+                    + Lang.tr("ton rang se dévoile dans") + " " + remaining + " " + Lang.tr(remaining > 1 ? "duels notés" : "duel noté"),
                 textLeft, pipY - UiTheme.scaled(30f), textW, UiTheme.TEXT_SECONDARY, UiTheme.scaled(0.46f), vw, vh);
+            PvpScoreUi.left(r, UiFont.REGULAR, Lang.tr("Au plus 2 duels contre un même adversaire comptent"),
+                textLeft, pipY - UiTheme.scaled(56f), textW, UiTheme.TEXT_MUTED, UiTheme.scaled(0.38f), vw, vh);
         }
 
         // ── Sa place parmi les joueurs ──
@@ -834,7 +859,14 @@ public final class UiPvpScoreScreen extends UiScreenBase {
             float counting = PvpScoreUi.ease(listShownAt, delay() + 0.1f, 0.8f);
             UiColor chipTone;
             String chip;
-            if (competitive) {
+            int placement = placementOf(duel);
+            if (competitive && placement != 0) {
+                // Un duel de placement n'a pas de points à montrer : ils restent
+                // cachés jusqu'au rang de départ.
+                chipTone = placement == 1 ? UiTheme.ACCENT : PvpScoreUi.NEUTRAL;
+                chip = Lang.tr(placement == 1 ? "PLACEMENT" : "NON COMPTÉ");
+                strong = UiTheme.scaled(0.36f);
+            } else if (competitive) {
                 boolean ranked = duel.ranked != null && duel.ranked.length > 0;
                 double total = ranked ? duel.ranked[0] : 0;
                 chipTone = !ranked ? PvpScoreUi.NEUTRAL : total > 0 ? PvpScoreUi.GOOD : total < 0 ? PvpScoreUi.BAD : PvpScoreUi.NEUTRAL;

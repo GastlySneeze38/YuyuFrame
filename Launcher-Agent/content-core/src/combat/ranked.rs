@@ -15,6 +15,13 @@
 //!   bornes      une victoire rapporte au moins 5, une défaite coûte au moins 5
 //!   répétition  le même adversaire le même jour : ×1, ×½, ×¼…
 //!
+//! Avant d'avoir un rang, un joueur est « non classé » : ses 10 premiers
+//! duels sont le placement. Ils se calculent par la même formule, avec une
+//! base égale pour tous (±20, rien n'est encore généreux ni sévère), et leur
+//! somme, multipliée par 12, part de Pierre 2 à 250 points. Le rang de départ
+//! est borné entre Bois 1 et Or 3 ; au plus 2 duels contre le même adversaire
+//! comptent (voir [`Ladder::play`]).
+//!
 //! Tout est rejoué depuis les journaux, dans l'ordre où les duels ont été
 //! joués ([`Ladder`]), comme les notes elles-mêmes : un changement de formule
 //! s'applique à tout l'historique. Rien n'est stocké, rien n'est envoyé.
@@ -33,8 +40,24 @@ pub const CHAMPION: usize = (TIERS.len() - 1) * DIVISIONS_PER_TIER;
 pub const DIVISION_POINTS: i32 = 500;
 /// Après une descente, on repart de là (moins le déficit).
 const AFTER_DEMOTION: i32 = 400;
-/// Duels avant d'avoir un rang affiché.
+/// Duels de placement avant d'avoir un rang.
 pub const PLACEMENT_DUELS: usize = 10;
+/// La base du placement : la même pour tous, victoire et défaite symétriques
+/// (celle de l'Or) — sans rang, rien ne justifie la générosité du Bois.
+const PLACEMENT_BASE: (f64, f64) = (20.0, -20.0);
+/// Ce que pèse un duel de placement, en multiple de ses points : la somme des
+/// dix (de -220 à +400 environ) devient une position.
+const PLACEMENT_SCALE: i32 = 12;
+/// D'où part la somme, en points cumulés : Pierre 2 à 250 points, un peu sous
+/// le joueur médian (en Fer), pour qu'il reste à grimper.
+const PLACEMENT_START: i32 = 4 * DIVISION_POINTS + 250;
+/// Le plus haut rang de départ : Or 3 à 0 point. Diamant et au-delà se gagnent
+/// en jouant.
+const PLACEMENT_CAP: i32 = 11 * DIVISION_POINTS;
+/// Duels contre un même adversaire qui comptent pour le placement : au-delà,
+/// ils ne le font plus avancer (sinon dix victoires contre un ami complaisant
+/// placeraient en Or 3).
+const PLACEMENT_PER_FOE: u32 = 2;
 
 /// Victoire et défaite de base, par rang (inspiré de Brawl Stars) : en Bois
 /// on monte même en perdant plus d'un duel sur deux, à partir de l'Or il
@@ -81,14 +104,39 @@ pub struct Played {
 /// Où en est un joueur dans un mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Standing {
-    /// De 0 (Bois 1) à [`CHAMPION`].
+    /// De 0 (Bois 1) à [`CHAMPION`] ; 0 pendant le placement.
     pub division: usize,
-    /// Dans la division, de 0 à 499 (sans plafond en Champion).
+    /// Dans la division, de 0 à 499 (sans plafond en Champion) ; 0 pendant le placement.
     pub points: i32,
-    /// Duels classés joués dans ce mode.
+    /// Duels classés dans ce mode — pendant le placement, ceux qui y comptent.
     pub duels: usize,
     /// Vient de monter : la prochaine défaite ne fait pas redescendre.
     shield: bool,
+    /// La somme des points des duels de placement, cachée jusqu'au dixième.
+    placement: i32,
+}
+
+/// La place d'un duel dans le placement.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Placement {
+    /// Joué après le placement : un duel classé ordinaire.
+    No,
+    /// Un des dix duels de placement.
+    Counted,
+    /// Joué pendant le placement, mais contre un adversaire déjà affronté
+    /// [`PLACEMENT_PER_FOE`] fois : il n'y compte pas.
+    Ignored,
+}
+
+impl Placement {
+    /// 0, 1 ou 2, pour le texte de l'historique.
+    pub fn code(self) -> u8 {
+        match self {
+            Placement::No => 0,
+            Placement::Counted => 1,
+            Placement::Ignored => 2,
+        }
+    }
 }
 
 impl Standing {
@@ -111,15 +159,21 @@ pub struct Change {
     pub foe_factor: f64,
     /// Même adversaire le même jour : 1, ½, ¼…
     pub repeat_factor: f64,
-    /// Le total, arrondi : ce qui s'ajoute aux points.
+    /// Le total, arrondi : ce qui s'ajoute aux points (pendant le placement, à
+    /// la somme cachée ; 0 pour un duel qui n'y compte pas).
     pub total: i32,
     pub before: Standing,
     pub after: Standing,
+    pub placement: Placement,
 }
 
 /// Les points d'un duel, sans le toucher au classement.
 fn points(standing: &Standing, played: &Played, repeat_factor: f64) -> (f64, f64, f64, i32) {
-    let (win, loss) = BASE[standing.tier()];
+    points_with(BASE[standing.tier()], played, repeat_factor)
+}
+
+/// Les points d'un duel avec une base donnée (celle du rang, ou du placement).
+fn points_with((win, loss): (f64, f64), played: &Played, repeat_factor: f64) -> (f64, f64, f64, i32) {
     let play = (PLAY_PER_POINT * (played.score - CENTER)).clamp(-PLAY_CAP, PLAY_CAP);
     let foe = played.foe_score.clamp(0.0, 500.0) - CENTER;
     let win_factor = (1.0 + FOE_WIN_PER_POINT * foe).clamp(FOE_WIN_RANGE.0, FOE_WIN_RANGE.1);
@@ -162,12 +216,28 @@ fn advance(mut s: Standing, total: i32, lost: bool) -> Standing {
     s
 }
 
+/// Ajoute un duel de placement à la somme cachée ; au dixième, la somme
+/// devient le rang de départ.
+fn place(mut s: Standing, total: i32) -> Standing {
+    s.duels += 1;
+    s.placement += total;
+    if s.placed() {
+        let start = (PLACEMENT_START + PLACEMENT_SCALE * s.placement).clamp(0, PLACEMENT_CAP);
+        s.division = (start / DIVISION_POINTS) as usize;
+        s.points = start % DIVISION_POINTS;
+        s.shield = false;
+    }
+    s
+}
+
 /// Le classement rejoué duel après duel, un par mode classé.
 #[derive(Debug, Default)]
 pub struct Ladder {
     standings: HashMap<Mode, Standing>,
     /// (mode, adversaire, jour) → duels déjà classés.
     met: HashMap<(Mode, String, u64), u32>,
+    /// (mode, adversaire) → duels comptés pour le placement.
+    placement_met: HashMap<(Mode, String), u32>,
 }
 
 impl Ladder {
@@ -192,10 +262,29 @@ impl Ladder {
             None => 1.0,
         };
         let before = self.standing(played.mode);
+        if !before.placed() {
+            // Le placement : une base égale pour tous, la somme reste cachée.
+            let counted = match &played.foe_key {
+                Some(key) => {
+                    let seen = self.placement_met.entry((played.mode, key.clone())).or_insert(0);
+                    *seen += 1;
+                    *seen <= PLACEMENT_PER_FOE
+                }
+                None => true,
+            };
+            let (base, play, foe_factor, total) = points_with(PLACEMENT_BASE, played, repeat_factor);
+            let (after, total, placement) = if counted {
+                (place(before, total), total, Placement::Counted)
+            } else {
+                (before, 0, Placement::Ignored)
+            };
+            self.standings.insert(played.mode, after);
+            return Some(Change { base, play, foe_factor, repeat_factor, total, before, after, placement });
+        }
         let (base, play, foe_factor, total) = points(&before, played, repeat_factor);
         let after = advance(before, total, played.outcome == Outcome::Loss);
         self.standings.insert(played.mode, after);
-        Some(Change { base, play, foe_factor, repeat_factor, total, before, after })
+        Some(Change { base, play, foe_factor, repeat_factor, total, before, after, placement: Placement::No })
     }
 
     pub fn standing(&self, mode: Mode) -> Standing {
@@ -212,7 +301,33 @@ mod tests {
     }
 
     fn at(division: usize, points: i32) -> Standing {
-        Standing { division, points, duels: PLACEMENT_DUELS, shield: false }
+        Standing { division, points, duels: PLACEMENT_DUELS, shield: false, placement: 0 }
+    }
+
+    /// Un classement où le placement est déjà fait, en Bois 1 à 0 point.
+    fn placed_ladder() -> Ladder {
+        let mut ladder = Ladder::default();
+        ladder.standings.insert(Mode::Sword, at(0, 0));
+        ladder.standings.insert(Mode::Mace, at(0, 0));
+        ladder
+    }
+
+    /// Joue dix duels de placement contre des adversaires tous différents et
+    /// rend le rang de départ (division, points).
+    fn placement(duels: &[(Outcome, f64, f64)]) -> (usize, i32) {
+        let mut ladder = Ladder::default();
+        for (i, &(outcome, score, foe)) in duels.iter().enumerate() {
+            let mut d = duel(outcome, score, foe);
+            d.foe_key = Some(format!("adversaire {i}"));
+            ladder.play(&d);
+        }
+        let s = ladder.standing(Mode::Sword);
+        assert!(s.placed());
+        (s.division, s.points)
+    }
+
+    fn times(n: usize, d: (Outcome, f64, f64)) -> Vec<(Outcome, f64, f64)> {
+        vec![d; n]
     }
 
     #[test]
@@ -270,7 +385,7 @@ mod tests {
 
     #[test]
     fn le_meme_adversaire_le_meme_jour_rapporte_de_moins_en_moins() {
-        let mut ladder = Ladder::default();
+        let mut ladder = placed_ladder();
         let mut won = |time: u64| {
             let mut d = duel(Outcome::Win, 250.0, 250.0);
             d.foe_key = Some("abc".into());
@@ -283,7 +398,7 @@ mod tests {
 
     #[test]
     fn la_masse_et_l_epee_ont_chacune_leur_rang_et_les_autres_modes_aucun() {
-        let mut ladder = Ladder::default();
+        let mut ladder = placed_ladder();
         let mut mace = duel(Outcome::Win, 250.0, 250.0);
         mace.mode = Mode::Mace;
         ladder.play(&mace);
@@ -302,5 +417,71 @@ mod tests {
             ladder.play(&duel(Outcome::Win, 250.0, 250.0));
         }
         assert!(ladder.standing(Mode::Sword).placed());
+    }
+
+    #[test]
+    fn les_exemples_du_placement() {
+        // 5V-5D, joueur et adversaires moyens : Pierre 2 à 250.
+        let mut even = times(5, (Outcome::Win, 250.0, 250.0));
+        even.extend(times(5, (Outcome::Loss, 250.0, 250.0)));
+        assert_eq!(placement(&even), (4, 250));
+        // 8V-2D, note 350 : +220 → Or 1 à 390.
+        let mut good = times(8, (Outcome::Win, 350.0, 250.0));
+        good.extend(times(2, (Outcome::Loss, 350.0, 250.0)));
+        assert_eq!(placement(&good), (9, 390));
+        // 10V contre des forts : bien au-delà, borné à Or 3.
+        assert_eq!(placement(&times(10, (Outcome::Win, 380.0, 300.0))), (11, 0));
+        // 3V-7D, note 180 : -150 → Bois 1 à 450.
+        let mut weak = times(3, (Outcome::Win, 180.0, 250.0));
+        weak.extend(times(7, (Outcome::Loss, 180.0, 250.0)));
+        assert_eq!(placement(&weak), (0, 450));
+        // 2V-8D, note 150 : -220 → Bois 1 à 0.
+        let mut bad = times(2, (Outcome::Win, 150.0, 250.0));
+        bad.extend(times(8, (Outcome::Loss, 150.0, 250.0)));
+        assert_eq!(placement(&bad), (0, 0));
+    }
+
+    #[test]
+    fn le_rang_reste_cache_pendant_le_placement() {
+        let mut ladder = Ladder::default();
+        for i in 0..PLACEMENT_DUELS - 1 {
+            let mut d = duel(Outcome::Win, 400.0, 400.0);
+            d.foe_key = Some(format!("adversaire {i}"));
+            let change = ladder.play(&d).unwrap();
+            assert_eq!(change.placement, Placement::Counted);
+            assert_eq!((change.after.division, change.after.points), (0, 0));
+        }
+    }
+
+    #[test]
+    fn au_plus_deux_duels_contre_le_meme_adversaire_comptent_au_placement() {
+        let mut ladder = Ladder::default();
+        let mut d = duel(Outcome::Win, 250.0, 250.0);
+        d.foe_key = Some("ami".into());
+        let placements: Vec<_> = (0..4)
+            .map(|day| {
+                d.time = day * DAY_MS;
+                ladder.play(&d).unwrap().placement
+            })
+            .collect();
+        assert_eq!(placements, [Placement::Counted, Placement::Counted, Placement::Ignored, Placement::Ignored]);
+        assert_eq!(ladder.standing(Mode::Sword).duels, 2);
+    }
+
+    #[test]
+    fn apres_le_placement_on_joue_au_tarif_de_son_rang() {
+        let mut duels = times(5, (Outcome::Win, 250.0, 250.0));
+        duels.extend(times(5, (Outcome::Loss, 250.0, 250.0)));
+        let mut ladder = Ladder::default();
+        for (i, &(o, s, f)) in duels.iter().enumerate() {
+            let mut d = duel(o, s, f);
+            d.foe_key = Some(format!("adversaire {i}"));
+            ladder.play(&d);
+        }
+        let change = ladder.play(&duel(Outcome::Win, 250.0, 250.0)).unwrap();
+        assert_eq!(change.placement, Placement::No);
+        // Pierre : +24 de base.
+        assert_eq!(change.total, 24);
+        assert_eq!((change.after.division, change.after.points), (4, 274));
     }
 }
