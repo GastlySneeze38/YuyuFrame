@@ -166,6 +166,15 @@ public final class UiLayerBackend implements UiBackend {
     }
 
     @Override
+    public boolean mesh(String cacheKey, java.awt.image.BufferedImage img,
+                        com.yuyuframe.launcheragent.apigraphic.draw.mesh.UiMeshBatch batch,
+                        int vpWidth, int vpHeight) {
+        if (identity()) return inner.mesh(cacheKey, img, batch, vpWidth, vpHeight);
+        if (invisible()) return true;
+        return inner.mesh(cacheKey, img, batch.transformed(a, bx, by, alpha), vpWidth, vpHeight);
+    }
+
+    @Override
     public boolean glassPanel(float x1, float y1, float x2, float y2,
                               float rTL, float rTR, float rBL, float rBR,
                               UiColor tint, float tintStrength, UiColor fallback, int vpWidth, int vpHeight) {

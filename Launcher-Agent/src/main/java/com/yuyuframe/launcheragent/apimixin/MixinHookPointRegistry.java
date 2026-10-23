@@ -138,6 +138,13 @@ public final class MixinHookPointRegistry {
         always("26.1.2", "v26_1_2.core.ChatComponentAccessor261");
         always("26.1.2", "v26_1_2.core.FogRendererAccessor261");
         always("26.1.2", "v26_1_2.core.GuiGraphicsExtractorAccessor261");
+        // Modèles du jeu pour la brique 3D de l'API graphique (point d'accès VANILLA_MODEL).
+        always("26.1.2", "v26_1_2.model.ModelPartAccessor261");
+        always("26.1.2", "v26_1_2.model.ModelPartCubeAccessor261");
+        always("26.1.2", "v26_1_2.model.ModelPartPolygonAccessor261");
+        always("26.1.2", "v26_1_2.model.ModelPartVertexAccessor261");
+        always("26.1.2", "v26_1_2.model.LayerDefinitionAccessor261");
+        always("26.1.2", "v26_1_2.model.ChestModelAccessor261");
         // Entités, piles et paquets de combat (docs/scoring/capture.md).
         always("26.1.2", "v26_1_2.core.EntityAccessor261");
         always("26.1.2", "v26_1_2.core.LivingEntityAccessor261");
@@ -639,6 +646,13 @@ public final class MixinHookPointRegistry {
         always("26.3", "v26_3.core.ChatComponentAccessor263");
         always("26.3", "v26_3.core.FogRendererAccessor263");
         always("26.3", "v26_3.core.GuiGraphicsExtractorAccessor263");
+        // Modèles du jeu pour la brique 3D de l'API graphique (point d'accès VANILLA_MODEL).
+        always("26.3", "v26_3.model.ModelPartAccessor263");
+        always("26.3", "v26_3.model.ModelPartCubeAccessor263");
+        always("26.3", "v26_3.model.ModelPartPolygonAccessor263");
+        always("26.3", "v26_3.model.ModelPartVertexAccessor263");
+        always("26.3", "v26_3.model.LayerDefinitionAccessor263");
+        always("26.3", "v26_3.model.ChestModelAccessor263");
         // Entités, piles et paquets de combat (docs/scoring/capture.md).
         always("26.3", "v26_3.core.EntityAccessor263");
         always("26.3", "v26_3.core.LivingEntityAccessor263");
@@ -903,6 +917,13 @@ public final class MixinHookPointRegistry {
         always("1.8.9", "v1_8_9.core.GlobalUiRenderMixin189");
         // Accessors des trois seuls champs privés que lit AccessorBindings189.
         always("1.8.9", "v1_8_9.core.HungerManagerAccessor189");
+        // Modèles du jeu pour la brique 3D de l'API graphique (point d'accès VANILLA_MODEL).
+        always("1.8.9", "v1_8_9.model.ChestBlockEntityModelAccessor189");
+        always("1.8.9", "v1_8_9.model.ModelPartAccessor189");
+        always("1.8.9", "v1_8_9.model.ModelBoxAccessor189");
+        always("1.8.9", "v1_8_9.model.TexturedQuadAccessor189");
+        always("1.8.9", "v1_8_9.model.TexturePositionAccessor189");
+        always("1.8.9", "v1_8_9.model.Vec3dAccessor189");
         // Le compte du jeu, pour le changer en cours de route (CLIENT_SET_ACCOUNT).
         always("1.8.9", "v1_8_9.core.MinecraftClientAccessor189");
         always("1.8.9", "v1_8_9.chat.ChatHudAccessor189");

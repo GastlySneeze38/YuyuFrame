@@ -80,6 +80,19 @@ public interface UiBackend {
     boolean icon(String cacheKey, java.awt.image.BufferedImage img, float x, float y, float w, float h,
                  float alpha, int vpWidth, int vpHeight);
 
+    /**
+     * Quads texturés déjà projetés à l'écran — la sortie de la brique 3D
+     * ({@code draw/mesh}). Même image source et même atlas qu'une icône ;
+     * chaque sommet porte sa couleur, qui multiplie la texture. Les quads
+     * sont dessinés dans l'ordre du lot, sans profondeur.
+     *
+     * <p>Une ère qui ne sait pas le faire décline : rien n'est dessiné, le
+     * modèle n'a pas de repli plat.
+     */
+    default boolean mesh(String cacheKey, java.awt.image.BufferedImage img,
+                         com.yuyuframe.launcheragent.apigraphic.draw.mesh.UiMeshBatch batch,
+                         int vpWidth, int vpHeight) { return false; }
+
     // ── Capacités que toutes les ères n'ont pas ───────────────────────────
     //
     // Verre dépoli, lot de texte, vignette : une ère qui ne sait pas les faire

@@ -95,6 +95,103 @@ public final class Gl3Icon {
         }
     }
 
+    // ── Modèle 3D projeté (draw/mesh) ─────────────────────────────────────
+    //
+    // Même atlas que les icônes, mais des quads aux coins libres, chacun
+    // coloré par sommet (l'éclairage calculé par le projecteur) : un second
+    // programme, avec un attribut de couleur.
+
+    private static final String MESH_VERTEX_SRC =
+        "#version 150\n" +
+        "in vec2 aPos;\n" +
+        "in vec2 aTexCoord;\n" +
+        "in vec4 aColor;\n" +
+        "uniform mat4 uProjection;\n" +
+        "out vec2 vTexCoord;\n" +
+        "out vec4 vColor;\n" +
+        "void main() {\n" +
+        "    gl_Position = uProjection * vec4(aPos, 0.0, 1.0);\n" +
+        "    vTexCoord = aTexCoord;\n" +
+        "    vColor = aColor;\n" +
+        "}\n";
+
+    private static final String MESH_FRAGMENT_SRC =
+        "#version 150\n" +
+        "uniform sampler2D u_Tex;\n" +
+        "in vec2 vTexCoord;\n" +
+        "in vec4 vColor;\n" +
+        "out vec4 fragColor;\n" +
+        "void main() {\n" +
+        "    vec4 c = texture(u_Tex, vTexCoord) * vColor;\n" +
+        "    if (c.a < 0.004) discard;\n" +
+        "    fragColor = c;\n" +
+        "}\n";
+
+    private final Gl3VertexStream meshStream = new Gl3VertexStream(2, 2, 4);
+    private int meshProgram = -1, meshProjection, meshTex;
+    private boolean meshInitFailed;
+
+    /**
+     * Dessine les quads d'un modèle 3D déjà projeté, dans l'ordre du lot.
+     *
+     * @return {@code false} si l'image n'entre pas dans l'atlas ou si le
+     *         programme ne compile pas (déjà journalisé)
+     */
+    public boolean drawMesh(String cacheKey, BufferedImage img,
+                            com.yuyuframe.launcheragent.apigraphic.draw.mesh.UiMeshBatch batch,
+                            int vpWidth, int vpHeight) {
+        if (!ensureMeshProgram()) return false;
+        float[] atlasUv = atlas.uv(cacheKey, img);
+        if (atlasUv == null) return false;
+        try {
+            Gl3Core.uiState();
+            GL20.glUseProgram(meshProgram);
+            Gl3Core.ortho(meshProjection, vpWidth, vpHeight);
+            GL20.glUniform1i(meshTex, 0);
+            Gl3Core.bindTexture0(atlas.texture());
+
+            // L'atlas range le haut de l'image en vTop : v = 0 du modèle y tombe.
+            float u0 = atlasUv[0], vTop = atlasUv[1], du = atlasUv[2] - atlasUv[0], dv = atlasUv[3] - atlasUv[1];
+            int quads = batch.quads();
+            float[] xy = batch.xy(), uv = batch.uv();
+            int[] argb = batch.argb();
+            FloatBuffer out = meshStream.begin(quads * 6);
+            int[] order = { 0, 1, 2, 0, 2, 3 };
+            for (int q = 0; q < quads; q++) {
+                for (int k : order) {
+                    int i = q * 4 + k;
+                    int c = argb[i];
+                    out.put(xy[i * 2]).put(xy[i * 2 + 1]);
+                    out.put(u0 + uv[i * 2] * du).put(vTop + uv[i * 2 + 1] * dv);
+                    out.put(((c >> 16) & 0xFF) / 255f).put(((c >> 8) & 0xFF) / 255f)
+                       .put((c & 0xFF) / 255f).put(((c >>> 24) & 0xFF) / 255f);
+                }
+            }
+            meshStream.drawTriangles();
+            return true;
+        } catch (Throwable t) {
+            if (failureLogs++ < 5) LauncherLog.err("[Gl3Icon] drawMesh '" + cacheKey + "' : " + t);
+            return false;
+        } finally {
+            GL20.glUseProgram(0);
+            Gl3Core.bindTexture0(0);
+        }
+    }
+
+    private boolean ensureMeshProgram() {
+        if (meshProgram != -1) return true;
+        if (meshInitFailed) return false;
+        int p = Gl3Core.program("mesh", MESH_VERTEX_SRC, MESH_FRAGMENT_SRC, "aPos", "aTexCoord", "aColor");
+        if (p == -1) {
+            meshInitFailed = true;
+            return false;
+        }
+        meshProjection = GL20.glGetUniformLocation(p, "uProjection");
+        meshTex = GL20.glGetUniformLocation(p, "u_Tex");
+        meshProgram = p;
+        return true;
+    }
+
     private boolean ensureProgram() {
         if (program != -1) return true;
         if (initFailed) return false;

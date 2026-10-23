@@ -3,6 +3,7 @@ package com.yuyuframe.launcheragent.apigraphic.era.blaze3d.v26_3.vanillagui;
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.v26_3.vanillagui.element.GlassPanelElement;
 import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.v26_3.vanillagui.element.IconElement;
+import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.v26_3.vanillagui.element.MeshElement;
 import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.v26_3.vanillagui.element.RoundedRectElement;
 import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.v26_3.vanillagui.element.TextElement;
 import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.v26_3.vanillagui.element.VignetteElement;
@@ -171,6 +172,27 @@ public final class VanillaGuiLayer {
             return true;
         } catch (Throwable t) {
             reportOnce("icon: " + t);
+            return false;
+        }
+    }
+
+    /** Modèle 3D projeté — voir {@link MeshElement}. Même pipeline et même atlas que {@link #icon}. */
+    public static boolean mesh(Object hookContext, String cacheKey, java.awt.image.BufferedImage img,
+                               float[] xy, float[] uv, int[] argb, int quads) {
+        if (img == null || quads <= 0) return false;
+        GuiRenderState state = renderState(hookContext);
+        if (state == null) return false;
+        try {
+            if (!Blaze3DGuiIcon.ensureCompiled()) {
+                reportOnce("modèle 3D : pipeline indisponible");
+                return false;
+            }
+            Object[] entry = Blaze3DGuiIcon.atlasEntry(cacheKey, img);
+            if (entry == null) return false; // atlas plein / Blaze3D absent, déjà journalisé
+            state.addGuiElement(new MeshElement(xy, uv, argb, quads, (float[]) entry[0], (TextureSetup) entry[1]));
+            return true;
+        } catch (Throwable t) {
+            reportOnce("mesh: " + t);
             return false;
         }
     }

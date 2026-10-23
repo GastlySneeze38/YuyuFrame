@@ -85,6 +85,12 @@ public final class VanillaGuiSink261 implements VanillaGuiSink {
     }
 
     @Override
+    public boolean mesh(Object hookContext, String cacheKey, BufferedImage img,
+                        float[] xy, float[] uv, int[] argb, int quads) {
+        return VanillaGuiLayer.mesh(hookContext, cacheKey, img, xy, uv, argb, quads);
+    }
+
+    @Override
     public boolean vignette(Object hookContext, float x0, float y0, float x1, float y1,
                             float vSize, UiColor color) {
         return VanillaGuiLayer.vignette(hookContext, x0, y0, x1, y1, vSize, color);

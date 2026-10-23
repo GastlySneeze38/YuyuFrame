@@ -317,6 +317,15 @@ public final class Gl3Backend implements UiBackend {
         return true;
     }
 
+    /** Modèle 3D projeté — atlas partagé des icônes ({@link Gl3Icon#drawMesh}). */
+    @Override
+    public boolean mesh(String cacheKey, java.awt.image.BufferedImage img,
+                        com.yuyuframe.launcheragent.apigraphic.draw.mesh.UiMeshBatch batch,
+                        int vpWidth, int vpHeight) {
+        if (img == null || batch == null || batch.quads() == 0) return true;
+        return icons != null && icons.drawMesh(cacheKey, img, batch, vpWidth, vpHeight);
+    }
+
     // ── Clip ──────────────────────────────────────────────────────────────
 
     /** Stencil commun aux ères GL ({@link GlRoundedClip}) ; le masque est dessiné par CETTE ère. */

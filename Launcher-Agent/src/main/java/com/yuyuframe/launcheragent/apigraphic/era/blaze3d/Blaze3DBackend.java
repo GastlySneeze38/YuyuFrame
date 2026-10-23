@@ -166,6 +166,17 @@ public final class Blaze3DBackend implements UiBackend {
         return true;
     }
 
+    /** Même partage que {@link #icon} : l'état de GUI de vanilla quand il est armé, sinon la file Blaze3D. */
+    @Override
+    public boolean mesh(String cacheKey, java.awt.image.BufferedImage img,
+                        com.yuyuframe.launcheragent.apigraphic.draw.mesh.UiMeshBatch batch,
+                        int vpWidth, int vpHeight) {
+        if (img == null || batch == null || batch.quads() == 0) return true;
+        if (VanillaGuiTarget.mesh(cacheKey, img, batch, vpWidth, vpHeight)) return true;
+        Blaze3DRect.queueMesh(cacheKey, img, batch, vpWidth, vpHeight);
+        return true;
+    }
+
     // ── Capacités propres à cette ère ─────────────────────────────────────
     // Verre dépoli et lot de texte n'existent que sur Blaze3D. Les autres ères
     // héritent du défaut qui décline — plus besoin d'un test chez l'appelant.

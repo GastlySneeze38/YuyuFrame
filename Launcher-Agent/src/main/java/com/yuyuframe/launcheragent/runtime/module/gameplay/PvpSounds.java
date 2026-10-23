@@ -21,6 +21,8 @@ final class PvpSounds {
     static final String ORB = "minecraft:entity.experience_orb.pickup";
     static final String LEVEL_UP = "minecraft:entity.player.levelup";
     static final String CHALLENGE = "minecraft:ui.toast.challenge_complete";
+    /** Le coffre qui s'ouvre, à l'éclat de la cérémonie. */
+    static final String CHEST_OPEN = "minecraft:block.chest.open";
 
     /** Le réglage « Sons » du module. */
     static volatile boolean enabled = true;

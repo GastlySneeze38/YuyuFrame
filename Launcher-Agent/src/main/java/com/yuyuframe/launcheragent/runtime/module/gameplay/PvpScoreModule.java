@@ -1,6 +1,8 @@
 package com.yuyuframe.launcheragent.runtime.module.gameplay;
 
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
+import com.yuyuframe.launcheragent.apigraphic.draw.mesh.UiLighting;
+import com.yuyuframe.launcheragent.apigraphic.draw.mesh.UiView3D;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudAnchor;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudElement;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudRegistry;
@@ -15,6 +17,8 @@ import com.yuyuframe.launcheragent.runtime.ui.HudElementOwner;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.PvpRank;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.PvpScoreUi;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.RankChest;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.RankTiles;
 
 /**
  * Score PvP (docs/scoring/) : allumé, le module relève les duels à la masse,
@@ -496,7 +500,6 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
             if (!casual && (reveal || promoted)) {
                 ceremony = true;
                 ceremonyBeat = -1;
-                ceremonySlot = -1;
                 ceremonyBurst = false;
                 // Une montée laisse d'abord la barre se remplir jusqu'au bord ; un
                 // rang dévoilé n'a rien à remplir, la cérémonie vient plus tôt.
@@ -535,9 +538,8 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
         private long countedShown;
         private long lastCountSoundNanos;
         private boolean divisionSoundPlayed;
-        /** Dans la cérémonie : le dernier battement sonné, le dernier insigne de la machine à sous, l'éclat. */
+        /** Dans la cérémonie : le dernier saut du couvercle sonné, et l'éclat. */
         private int ceremonyBeat = -1;
-        private int ceremonySlot = -1;
         private boolean ceremonyBurst;
 
         /**
@@ -576,21 +578,15 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
                 float t = (now - ceremonyAtNanos) / 1e9f;
                 float u = t - Ceremony.TRAVEL_SECONDS;
                 if (u >= 0f && t < Ceremony.BURST_SECONDS) {
-                    if (reveal) {
-                        int slot = Ceremony.slotIndex(ranked, u);
-                        if (slot != ceremonySlot) {
-                            ceremonySlot = slot;
-                            PvpSounds.play(PvpSounds.HAT, 1.4f, 0.5f);
-                        }
-                    } else {
-                        int beat = (int) Math.floor(1.4 * u + 2.2 * u * u);
-                        if (beat != ceremonyBeat) {
-                            ceremonyBeat = beat;
-                            PvpSounds.play(PvpSounds.DRUM, 0.8f + 0.1f * beat, 0.7f);
-                        }
+                    // Un coup à chaque saut du couvercle, de plus en plus serrés.
+                    int beat = Ceremony.beat(u);
+                    if (beat != ceremonyBeat) {
+                        ceremonyBeat = beat;
+                        PvpSounds.play(PvpSounds.DRUM, 0.8f + 0.1f * beat, 0.7f);
                     }
                 } else if (t >= Ceremony.BURST_SECONDS && !ceremonyBurst) {
                     ceremonyBurst = true;
+                    PvpSounds.play(PvpSounds.CHEST_OPEN, 0.9f, 0.9f);
                     PvpSounds.play(PvpSounds.CHALLENGE, 1f, 0.9f);
                 }
             }
@@ -1273,15 +1269,21 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
      * qui s'assombrit, puis :
      *
      * <ol>
-     *   <li><b>suspense</b> (2,2 s) : l'ancien insigne bat de plus en plus
-     *       vite et tremble, son halo monte ; pour un rang dévoilé, les
-     *       insignes défilent comme une machine à sous et ralentissent ;</li>
-     *   <li><b>éclat</b> : un flash, une onde et des éclats dans la couleur
-     *       du nouveau rang, l'insigne surgit en rebondissant ;</li>
+     *   <li><b>suspense</b> (2,2 s) : le coffre du jeu tremble de plus en
+     *       plus fort, son couvercle se soulève par à-coups sur des battements
+     *       de plus en plus serrés, et une lueur s'échappe de la fente ;</li>
+     *   <li><b>éclat</b> : le couvercle s'ouvre d'un coup, la lumière
+     *       jaillit — rayons, flash, onde et éclats dans la couleur du nouveau
+     *       rang — et la tuile du rang sort du coffre en tournant ;</li>
      *   <li><b>félicitations</b> : « FÉLICITATIONS ! », « TU PASSES EN OR »
      *       dans sa couleur, et la part des joueurs devancés ;</li>
      *   <li>tout s'efface.</li>
      * </ol>
+     *
+     * Même scène pour un rang dévoilé et pour une montée, seul le texte
+     * change. Le coffre et la tuile sont de vrais modèles 3D
+     * ({@link RankChest}, {@link RankTiles}), éclairés par une lumière posée
+     * au fond du coffre. Maquette : l'artifact « Cérémonie des rangs ».
      *
      * Sans état : tout se déduit du temps écoulé {@code t} et des points du
      * duel ({@link NativeCombat#RANKED_LEN} nombres). Repère du moteur :
@@ -1296,19 +1298,40 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
         /** L'éclat : après le voyage et le suspense. */
         private static final float BURST = TRAVEL + SUSPENSE;
         private static final float FADE = 0.6f;
-        private static final int SPARKS = 28;
+        private static final int SPARKS = 34;
+        private static final int RAYS = 11;
         /** Pour les sons du panneau : le suspense commence après le voyage, l'éclat après le suspense. */
         static final float TRAVEL_SECONDS = TRAVEL;
         static final float BURST_SECONDS = BURST;
+        /** La lueur du suspense : le rang n'est pas encore connu, elle est d'un blanc chaud. */
+        private static final UiColor WARM = new UiColor(255, 214, 140, 255);
+        /** Texture des rayons : du blanc, teinté par sommet. */
+        private static final java.awt.image.BufferedImage WHITE = white();
 
         private Ceremony() {
         }
 
-        /** La machine à sous d'un rang dévoilé : l'insigne montré {@code u} secondes après le début du suspense. */
-        static int slotIndex(double[] v, float u) {
-            int newTier = PvpRank.tier((int) v[NativeCombat.RANKED_AFTER_DIVISION]);
-            int steps = 2 * PvpRank.TIERS.length + newTier;
-            return Math.min(steps, (int) Math.floor(steps * easeOut(clamp01(u / SUSPENSE))));
+        /** Le saut de couvercle en cours, {@code u} secondes après le début du suspense : un par battement, de plus en plus serrés. */
+        static int beat(float u) {
+            return (int) Math.floor(1.4 * u + 2.2 * u * u);
+        }
+
+        /** L'ouverture du couvercle, en degrés, au temps {@code t}. */
+        private static float lid(float t) {
+            if (t < TRAVEL) return 0f;
+            if (t < BURST) {
+                float u = t - TRAVEL, p = clamp01(u / SUSPENSE);
+                float wave = (float) Math.sin(2 * Math.PI * (1.4 * u + 2.2 * u * u));
+                return Math.max(0f, wave) * (4f + 14f * p);
+            }
+            float b = t - BURST;
+            return 112f * easeOut(b / 0.35f) - 8f * (float) Math.sin(b * 9f) * clamp01(1f - b / 0.8f);
+        }
+
+        private static java.awt.image.BufferedImage white() {
+            java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(4, 4, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+            for (int y = 0; y < 4; y++) for (int x = 0; x < 4; x++) img.setRGB(x, y, 0xFFFFFFFF);
+            return img;
         }
 
         private static float clamp01(float v) {
@@ -1343,7 +1366,7 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
 
             // Le panneau voyage de sa place au centre, en grandissant.
             float k = s * 1.35f;
-            float pw = 400f * k, ph = 270f * k;
+            float pw = 420f * k, ph = 330f * k;
             float cx = vw / 2f, cy = vh / 2f;
             float travel = easeOut(t / TRAVEL);
             float left = x + (cx - pw / 2f - x) * travel;
@@ -1356,75 +1379,131 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
             r.drawRoundedRect(left, bottom, right, top, 14f * k, new UiColor(16, 14, 24, 255).withAlpha(0.96f * fade), vw, vh);
             r.drawGradientRect2D(left, bottom, right, top, 14f * k, frame.withAlpha(0.05f * fade), frame.withAlpha(0.22f * fade),
                 frame.withAlpha(0.05f * fade), frame.withAlpha(0.22f * fade), vw, vh);
-            if (t < TRAVEL) return;
+            if (t < TRAVEL * 0.5f) return;
 
-            float badge = 96f * k;
-            float badgeCx = cx;
-            float badgeCy = cy + 22f * k;
+            boolean burst = t >= BURST;
+            float b = t - BURST;
             float u = t - TRAVEL;
+            float panelCx = (left + right) / 2f;
+            float grow = 0.45f + 0.55f * travel;
+            float open = lid(t);
+            UiColor light = burst ? newTone : WARM;
 
-            if (t < BURST) {
-                // ── Le suspense ──
+            // ── Le coffre ── il tremble de plus en plus pendant le suspense, puis
+            // s'écarte un peu vers le bas pour laisser la place à la tuile.
+            float shakeX = 0f, shakeY = 0f;
+            if (!burst && u >= 0f) {
                 float p = clamp01(u / SUSPENSE);
-                int shown;
-                if (reveal) {
-                    // La machine à sous : deux tours complets, puis le bon rang, de plus en plus lentement.
-                    int tier = slotIndex(v, u) % PvpRank.TIERS.length;
-                    shown = Math.min(PvpRank.CHAMPION, tier * PvpRank.DIVISIONS_PER_TIER + after % PvpRank.DIVISIONS_PER_TIER);
-                } else {
-                    shown = before;
-                }
-                // Un battement qui accélère, un tremblement qui grandit.
-                double phase = 2 * Math.PI * (1.4 * u + 2.2 * u * u);
-                float beat = 1f + 0.06f * p * (float) Math.sin(phase);
-                float shake = 2.5f * k * p * p;
-                float dx = shake * (float) Math.sin(u * 61.0), dy = shake * (float) Math.cos(u * 47.0);
-                float size = badge * beat;
-                UiColor tone = reveal ? PvpRank.color(shown) : oldTone;
-                PvpRank.badge(r, shown, badgeCx - size / 2f + dx, badgeCy - size / 2f + dy, size, 0.2f + 0.8f * p, fade, vw, vh);
+                float amplitude = 5f * k * p * p;
+                shakeX = amplitude * (float) Math.sin(u * 61.0);
+                shakeY = amplitude * (float) Math.cos(u * 47.0);
+            }
+            float sink = burst ? 0.09f * ph * easeOut(b / 0.6f) : 0f;
+            float chestCy = bottom + (top - bottom) * 0.40f - sink;
+            float[] center = RankChest.center();
+            UiView3D view = new UiView3D()
+                .center(panelCx + shakeX, chestCy + shakeY)
+                .scale(4.6f * k * grow)
+                .origin(center[0], center[1], center[2])
+                .rotation((float) Math.toRadians(-28.0 + 6.0 * Math.sin(t * 0.8)), (float) Math.toRadians(24.0), 0f)
+                .eyeDistance(70f);
+            float[] slit = RankChest.slitPoint(view, open);
+
+            // La lumière au fond du coffre : elle suit le couvercle, puis éclate.
+            float inner = burst
+                ? 2.6f * clamp01(b / 0.15f) * (0.7f + 0.3f * clamp01(1f - (b - 0.4f) / 1.5f))
+                : 1.6f * clamp01(open / 12f);
+
+            // Les rayons, derrière le coffre.
+            float rays = burst
+                ? 0.9f * clamp01(b / 0.2f) * (0.75f + 0.25f * (float) Math.sin(b * 4f)) * fade
+                : 0.5f * clamp01(open / 18f) * fade;
+            if (rays > 0.01f) {
+                drawRays(r, slit[0], slit[1], ph * 0.62f * grow, 3f * k, t, light, rays, vw, vh);
+            }
+
+            UiLighting lighting = UiLighting.gui();
+            if (inner > 0.01f) lighting.point(8f, 11.5f, 8f, light.r, light.g, light.b, inner, 20f);
+            float chestAlpha = fade * (burst ? 1f - 0.25f * clamp01((b - 1f) / 1f) : 1f);
+            if (RankChest.available()) {
+                RankChest.draw(r, view, open, lighting, chestAlpha, vw, vh);
+            } else if (!reveal) {
+                // Sans le coffre du jeu (modèle illisible, déjà journalisé) : l'ancien insigne tremble à sa place.
+                float size = 70f * k * grow;
+                PvpRank.badge(r, before, panelCx - size / 2f + shakeX, chestCy - size / 2f + shakeY, size,
+                    clamp01(open / 12f), chestAlpha, vw, vh);
+            }
+
+            // La lueur qui s'échappe de la fente pendant le suspense.
+            if (!burst && open > 0.5f) {
+                float gw = 26f * k * grow, gh = 5f * k * grow;
+                r.drawGlow(slit[0] - gw, slit[1] - gh, slit[0] + gw, slit[1] + gh, 12f * k, clamp01(open / 10f),
+                    light.multiplyAlpha(fade), vw, vh);
+            }
+
+            if (!burst) {
+                // ── Le suspense ──
                 String hint = reveal ? Lang.tr("Ton rang est…") : Lang.tr("Quelque chose se prépare…");
-                centered(r, UiFont.BOLD, hint, cx, bottom + 40f * k, pw - 40f * k,
-                    UiTheme.TEXT_SECONDARY.multiplyAlpha(0.6f + 0.4f * (float) Math.abs(Math.sin(u * 3.0))), 0.42f * k, vw, vh);
+                centered(r, UiFont.BOLD, hint, cx, bottom + 44f * k, pw - 40f * k,
+                    UiTheme.TEXT_SECONDARY.multiplyAlpha((0.6f + 0.4f * (float) Math.abs(Math.sin(u * 3.0))) * fade), 0.42f * k, vw, vh);
                 if (!reveal) {
-                    centered(r, UiFont.REGULAR, PvpRank.name(before), cx, bottom + 22f * k, pw - 40f * k,
-                        tone.multiplyAlpha(fade), 0.32f * k, vw, vh);
+                    centered(r, UiFont.REGULAR, PvpRank.name(before), cx, bottom + 24f * k, pw - 40f * k,
+                        oldTone.multiplyAlpha(fade), 0.32f * k, vw, vh);
                 }
                 return;
             }
 
             // ── L'éclat ──
-            float b = t - BURST;
-            // Le flash, l'onde, les éclats.
             float flash = clamp01(1f - b / 0.35f);
             if (flash > 0f) {
                 r.drawRoundedRect(left, bottom, right, top, 14f * k, new UiColor(255, 255, 255, 255).withAlpha(0.55f * flash * fade), vw, vh);
             }
             if (b < 1.2f) {
-                r.drawRipple(badgeCx, badgeCy, pw * 0.75f, clamp01(b / 1.2f), 0.85f * fade, newTone, vw, vh);
+                r.drawRipple(slit[0], slit[1], pw * 0.75f, clamp01(b / 1.2f), 0.85f * fade, newTone, vw, vh);
             }
             if (b < 1.6f) {
-                float spread = easeOut(b / 1.1f) * pw * 0.48f;
+                float spread = easeOut(b / 1.1f) * pw * 0.5f;
                 float sparkAlpha = clamp01(1f - b / 1.6f) * fade;
                 float spark = 5f * k;
                 for (int i = 0; i < SPARKS; i++) {
                     double angle = 2 * Math.PI * i / SPARKS + 0.37 * (i % 3);
-                    float reach = spread * (0.65f + 0.35f * ((i * 7) % 5) / 4f);
-                    float px = badgeCx + (float) Math.cos(angle) * reach;
-                    float py = badgeCy + (float) Math.sin(angle) * reach * 0.8f;
+                    float reach = spread * (0.6f + 0.4f * ((i * 7) % 5) / 4f);
+                    float px = slit[0] + (float) Math.cos(angle) * reach;
+                    float py = slit[1] + (float) Math.sin(angle) * reach * 0.75f;
                     UiColor color = i % 3 == 0 ? new UiColor(255, 255, 255, 255) : newTone;
                     r.drawRoundedRect(px - spark / 2f, py - spark / 2f, px + spark / 2f, py + spark / 2f, 1.5f * k,
                         color.withAlpha(sparkAlpha), vw, vh);
                 }
             }
-            // Le nouvel insigne surgit, puis respire.
-            float pop = easeOutBack(b / 0.55f);
-            float breathe = 1f + 0.02f * (float) Math.sin(b * 2.6);
-            float size = badge * Math.max(0.05f, pop) * breathe;
-            float glow = 0.55f + 0.45f * clamp01(1f - b / 1.5f) + 0.12f * (float) Math.sin(b * 3.0);
-            PvpRank.badge(r, after, badgeCx - size / 2f, badgeCy - size / 2f, size, Math.min(1f, glow), fade, vw, vh);
+
+            // La tuile sort du coffre en tournant, monte, puis flotte.
+            float rise = easeOut(b / 0.7f);
+            float hover = (float) Math.sin(b * 2.4) * 3f * k * clamp01((b - 0.9f) / 0.4f);
+            float tileCx = slit[0] + (panelCx - slit[0]) * rise;
+            float tileCy = slit[1] + (bottom + ph * 0.68f - slit[1]) * rise + hover;
+            float tileSize = 0.22f * ph * (0.15f + 0.85f * easeOutBack(b / 0.65f));
+            float spin = (float) (4 * Math.PI) * (1f - easeOut(b / 0.9f));
+            float halo = 0.55f + 0.45f * clamp01(1f - b / 1.5f) + 0.12f * (float) Math.sin(b * 3.0);
+            r.drawGlow(tileCx - tileSize / 2f, tileCy - tileSize / 2f, tileCx + tileSize / 2f, tileCy + tileSize / 2f,
+                tileSize * 0.3f, Math.min(1f, halo), newTone.multiplyAlpha(fade), vw, vh);
+            UiLighting tileLight = new UiLighting().ambient(0.5f, 0.5f, 0.52f)
+                .directional(-0.45f, 0.8f, 0.75f, 1f, 0.98f, 0.94f, 0.72f)
+                // La lumière du coffre, par en dessous, qui s'apaise.
+                .directional(0f, -1f, 0.35f, newTone.r, newTone.g, newTone.b, 0.35f + 0.9f * clamp01(1f - b / 1.5f));
+            RankTiles.draw(r, newTier, tileCx, tileCy, tileSize, 0.3f + spin, 0.2f, 0f, tileLight, fade, vw, vh);
+            if (after < PvpRank.CHAMPION && rise > 0.95f) {
+                // La division, comme sur l'insigne.
+                String division = String.valueOf(after % PvpRank.DIVISIONS_PER_TIER + 1);
+                float scale = 0.55f * k;
+                float dw = r.textWidth(UiFont.BOLD, division, scale);
+                float dx = tileCx + tileSize * 0.42f - dw, dy = tileCy - tileSize * 0.5f;
+                float divisionAlpha = clamp01((b - 0.9f) / 0.3f) * fade;
+                r.drawText(UiFont.BOLD, division, dx + 1.5f * k, dy - 1.5f * k, new UiColor(63, 63, 63, 255).withAlpha(divisionAlpha), scale, vw, vh);
+                r.drawText(UiFont.BOLD, division, dx, dy, new UiColor(255, 255, 255, 255).withAlpha(divisionAlpha), scale, vw, vh);
+            }
 
             // Les félicitations.
-            float words = clamp01((b - 0.3f) / 0.5f) * fade;
+            float words = clamp01((b - 0.5f) / 0.5f) * fade;
             if (words <= 0f) return;
             centered(r, UiFont.BOLD, Lang.tr("FÉLICITATIONS !"), cx, top - 36f * k, pw - 40f * k,
                 UiTheme.TEXT_PRIMARY.multiplyAlpha(words), 0.62f * k, vw, vh);
@@ -1439,6 +1518,49 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
                 centered(r, UiFont.REGULAR, Lang.tr("Devant") + " " + Math.round(ahead) + " % " + Lang.tr("des joueurs"), cx,
                     bottom + 24f * k, pw - 40f * k, UiTheme.TEXT_SECONDARY.multiplyAlpha(detailAlpha), 0.36f * k, vw, vh);
             }
+        }
+
+        /**
+         * Les rayons qui sortent du coffre : un éventail de faisceaux vers le
+         * haut, lumineux à leur pied et qui s'éteignent au bout, balancés
+         * lentement. Des quads libres (la brique 3D les dessine), parce qu'aucune
+         * primitive alignée sur l'écran ne sait faire un faisceau incliné.
+         */
+        private static void drawRays(UiRenderer r, float x, float y, float length, float baseHalf, float t,
+                                     UiColor color, float alpha, int vw, int vh) {
+            com.yuyuframe.launcheragent.apigraphic.draw.mesh.UiMeshBatch batch =
+                new com.yuyuframe.launcheragent.apigraphic.draw.mesh.UiMeshBatch();
+            batch.reset();
+            float sway = 0.07f * (float) Math.sin(t * 0.7);
+            float spread = 1.9f;
+            int foot = (Math.round(alpha * 0.55f * 255f) << 24) | rgb(color);
+            int tip = rgb(color);
+            for (int i = 0; i < RAYS; i++) {
+                float angle = (float) (Math.PI / 2) + spread * (i / (float) (RAYS - 1) - 0.5f) + sway
+                    + 0.05f * (float) Math.sin(t * 1.3 + i);
+                float reach = length * (0.7f + 0.3f * ((i * 5) % 3) / 2f);
+                float tipHalf = reach * 0.1f * (0.5f + 0.5f * ((i * 3) % 4) / 3f);
+                float dx = (float) Math.cos(angle), dy = (float) Math.sin(angle);
+                float nx = -dy, ny = dx;
+                float x0 = x - nx * baseHalf, y0 = y - ny * baseHalf;
+                float x1 = x + nx * baseHalf, y1 = y + ny * baseHalf;
+                float x2 = x + dx * reach + nx * tipHalf, y2 = y + dy * reach + ny * tipHalf;
+                float x3 = x + dx * reach - nx * tipHalf, y3 = y + dy * reach - ny * tipHalf;
+                // Sens inverse des aiguilles d'une montre, comme le reste de la brique 3D.
+                float area = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0);
+                if (area >= 0f) {
+                    batch.add(x0, y0, x1, y1, x2, y2, x3, y3, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f,
+                        foot, foot, tip, tip);
+                } else {
+                    batch.add(x0, y0, x3, y3, x2, y2, x1, y1, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f,
+                        foot, tip, tip, foot);
+                }
+            }
+            r.drawTexturedQuads("ceremony-rays", WHITE, batch, vw, vh);
+        }
+
+        private static int rgb(UiColor c) {
+            return (Math.round(c.r * 255f) << 16) | (Math.round(c.g * 255f) << 8) | Math.round(c.b * 255f);
         }
 
         /** Un texte centré, rétréci s'il dépasse {@code maxWidth}. */

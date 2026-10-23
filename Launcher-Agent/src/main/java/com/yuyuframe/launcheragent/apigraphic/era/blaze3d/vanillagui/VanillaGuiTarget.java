@@ -160,6 +160,26 @@ public final class VanillaGuiTarget {
     }
 
     /**
+     * Quads 3D projetés — voir {@code draw/mesh}. Chaque sommet passe du
+     * repère du moteur (Y vers le haut, pixels du framebuffer) à celui de la
+     * GUI (Y vers le bas, pixels GUI), même conversion que {@link #icon}.
+     */
+    public static boolean mesh(String cacheKey, java.awt.image.BufferedImage img,
+                               com.yuyuframe.launcheragent.apigraphic.draw.mesh.UiMeshBatch batch,
+                               int vpWidth, int vpHeight) {
+        if (context == null) return false;
+        int quads = batch.quads();
+        float[] source = batch.xy();
+        float[] gui = new float[quads * 8];
+        for (int i = 0; i < quads * 4; i++) {
+            gui[i * 2] = source[i * 2] / guiScale;
+            gui[i * 2 + 1] = (fbHeight - source[i * 2 + 1]) / guiScale;
+        }
+        if (sink.mesh(context, cacheKey, img, gui, batch.uv(), batch.argb(), quads)) return true;
+        return consumedAfterFailure("modele 3D");
+    }
+
+    /**
      * Dégradé de bord plein écran — voir {@link VignetteElement}.
      *
      * <p>Le quad couvre TOUT l'écran, la conversion se limite donc à une

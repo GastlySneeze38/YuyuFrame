@@ -145,159 +145,43 @@ public final class PvpRank {
         return Lang.tr("Encore") + " ~" + wins + " " + Lang.tr(wins > 1 ? "victoires avant" : "victoire avant") + " " + name(division + 1);
     }
 
-    // ── Les icônes des rangs (prototype, 2026-10-23) ──
+    // ── Les insignes des rangs (2026-10-23) ──
     //
-    // Des objets du jeu, en 16 × 16 : le matériau de chaque rang. Distinctes du
-    // logo YuyuFrame au-dessus des têtes. Références : design/rank-icons/.
+    // Une tuile 3D par rang, habillée du bloc de son matériau ({@link RankTiles}),
+    // et le coffre du jeu pour le placement ({@link RankChest}). Distincts du
+    // logo YuyuFrame au-dessus des têtes, qui sera fait côté serveur.
 
-    /** Un lingot (fer, or, netherite) : la barre en diagonale de la texture du jeu. */
-    private static final String[] INGOT = {
-        "................",
-        "................",
-        "................",
-        "................",
-        ".........kkkk...",
-        ".......kkHHHHk..",
-        ".....kkHHLLLHk..",
-        "...kkHHLLLLMMk..",
-        ".kkHHLLLLLMMDk..",
-        "kHHLLLLLMMDDk...",
-        "kHLLLLMMDDDk....",
-        "kMMMMMDDDkk.....",
-        ".kDDDDDkk.......",
-        "..kkkkk.........",
-        "................",
-        "................",
-    };
-
-    private static PixelIcon ingot(int outline, int highlight, int main, int mid, int dark) {
-        return new PixelIcon(INGOT, 'k', outline, 'H', highlight, 'L', main, 'M', mid, 'D', dark);
-    }
-
-    /** Une icône par rang, de Bois à Champion. */
-    private static final PixelIcon[] ICONS = {
-        // Bois : une bûche de chêne vue de face, ses cernes.
-        new PixelIcon(new String[] {
-            "................",
-            "................",
-            ".....kkkkkk.....",
-            "...kkBBBBBBkk...",
-            "..kBBRRRRRRBBk..",
-            "..kBRRrrrrRRBk..",
-            ".kBRRrRRRRrRRBk.",
-            ".kBRrRRccRRrRBk.",
-            ".kBRrRRccRRrRBk.",
-            ".kBRRrRRRRrRRBk.",
-            "..kBRRrrrrRRBk..",
-            "..kBBRRRRRRBBk..",
-            "...kkBBBBBBkk...",
-            ".....kkkkkk.....",
-            "................",
-            "................",
-        }, 'k', 0x2E1E0E, 'B', 0x6A4A28, 'R', 0xC89C5E, 'r', 0xA07840, 'c', 0x7A5530),
-        // Pierre : un bloc de pierre taillée.
-        new PixelIcon(new String[] {
-            "................",
-            "................",
-            "..kkkkkkkkkkkk..",
-            "..kaabbcaaabck..",
-            "..kabbccabbbck..",
-            "..kcbccaabccak..",
-            "..kaacbbbccaak..",
-            "..kbaacccbaabk..",
-            "..kccbaabcbbck..",
-            "..kabbcaaccabk..",
-            "..kbcaabbcaabk..",
-            "..kcabccbaacck..",
-            "..kkkkkkkkkkkk..",
-            "................",
-            "................",
-            "................",
-        }, 'k', 0x2C2C2C, 'a', 0xB4B4B4, 'b', 0x8A8A8A, 'c', 0x5E5E5E),
-        // Fer, Or : les lingots.
-        ingot(0x2A2A2A, 0xFFFFFF, 0xD8D8D8, 0xA8A8A8, 0x6E6E6E),
-        ingot(0x4A2C04, 0xFFFDA0, 0xFCDB3F, 0xE2A51E, 0xA86A0A),
-        // Diamant : la gemme.
-        new PixelIcon(new String[] {
-            "................",
-            "................",
-            "................",
-            ".....kkkkkk.....",
-            "....kHHLLLLk....",
-            "...kHLLLLLLMk...",
-            "..kHLLLLLLLMMk..",
-            "..kLLLLLLLMMMk..",
-            "...kLLLLLMMMk...",
-            "....kLLLMMMk....",
-            ".....kLMMMk.....",
-            "......kMMk......",
-            ".......kk.......",
-            "................",
-            "................",
-            "................",
-        }, 'k', 0x0E4A47, 'H', 0xE8FFFF, 'L', 0x5DECE1, 'M', 0x2AB3AA),
-        // Netherite : le lingot sombre.
-        ingot(0x111014, 0x7A6E7C, 0x4E464F, 0x3A333B, 0x251F26),
-        // Champion : l'étoile du Nether.
-        new PixelIcon(new String[] {
-            "................",
-            ".......kk.......",
-            "......kWWk......",
-            "......kWWk......",
-            "..kk..kWWk..kk..",
-            "..kWkkWWWWkkWk..",
-            "...kWWWPPWWWk...",
-            "....kWPPPPWk....",
-            "....kWPPPPWk....",
-            "...kWWWPPWWWk...",
-            "..kWkkWWWWkkWk..",
-            "..kk..kWWk..kk..",
-            "......kWWk......",
-            "......kWWk......",
-            ".......kk.......",
-            "................",
-        }, 'k', 0x6E1E68, 'W', 0xFFF6FF, 'P', 0xF070E4),
-    };
-
-    /** Le placement : un coffre — le rang est dedans, on l'ouvrira au dixième duel. */
-    private static final PixelIcon PLACEMENT = new PixelIcon(new String[] {
-        "................",
-        "................",
-        "..kkkkkkkkkkkk..",
-        "..kAAAAAAAAAAk..",
-        "..kAaaaaaaaaAk..",
-        "..kAaaaaaaaaAk..",
-        "..kkkkkkkkkkkk..",
-        "..kAAAAkkAAAAk..",
-        "..kAaaakGkaaAk..",
-        "..kAaaakkkaaAk..",
-        "..kAaaaaaaaaAk..",
-        "..kAaaaaaaaaAk..",
-        "..kAAAAAAAAAAk..",
-        "..kkkkkkkkkkkk..",
-        "................",
-        "................",
-    }, 'k', 0x2A1A0A, 'A', 0x7A5226, 'a', 0xB8833E, 'G', 0xC8C8C8);
+    /** Angle de présentation d'une tuile : un peu de biais, un peu de dessus, pour qu'on voie qu'elle a une épaisseur. */
+    private static final float BADGE_YAW = 0.32f;
+    private static final float BADGE_PITCH = 0.2f;
 
     /**
-     * L'insigne d'un rang : l'icône de son matériau, et la division en bas à
-     * droite, en blanc ombré, comme le nombre d'objets d'une pile dans
-     * l'inventaire du jeu (rien en Champion, qui n'a pas de divisions).
-     * {@code glow} de 0 à 1 l'auréole, pour une montée.
+     * L'insigne d'un rang : sa tuile 3D, et la division en bas à droite, en
+     * blanc ombré, comme le nombre d'objets d'une pile dans l'inventaire du
+     * jeu (rien en Champion, qui n'a pas de divisions). {@code glow} de 0 à 1
+     * l'auréole, pour une montée. {@code (x, y)} est le coin bas-gauche du carré.
      */
     public static void badge(UiRenderer r, int division, float x, float y, float size, float glow, float alpha, int vw, int vh) {
+        badge(r, division, x, y, size, glow, alpha, BADGE_YAW, vw, vh);
+    }
+
+    /** Comme {@link #badge(UiRenderer, int, float, float, float, float, float, int, int)}, avec le lacet de la tuile (en radians). */
+    public static void badge(UiRenderer r, int division, float x, float y, float size, float glow, float alpha,
+                             float yaw, int vw, int vh) {
         if (glow > 0.01f) {
             r.drawGlow(x, y, x + size, y + size, size * 0.28f, glow, color(division).multiplyAlpha(alpha), vw, vh);
         }
-        ICONS[tier(division)].draw(r, x, y, size, alpha, false, vw, vh);
+        // La tuile vue de biais déborde un peu de son carré : on la réduit d'autant.
+        RankTiles.draw(r, tier(division), x + size / 2f, y + size / 2f, size * 0.84f,
+            yaw, BADGE_PITCH, 0f, null, alpha, vw, vh);
         if (division < CHAMPION) {
             stackCount(r, String.valueOf(division % DIVISIONS_PER_TIER + 1), x, y, size, alpha, vw, vh);
         }
     }
 
-    /** L'insigne du placement : le coffre, et un « ? » à la place de la division. */
+    /** L'insigne du placement : le coffre du jeu, fermé, et un « ? » à la place de la division. */
     public static void placementBadge(UiRenderer r, float x, float y, float size, float alpha, int vw, int vh) {
-        PLACEMENT.draw(r, x, y, size, alpha, false, vw, vh);
+        RankChest.icon(r, x + size / 2f, y + size / 2f, size * 0.9f, alpha, vw, vh);
         stackCount(r, "?", x, y, size, alpha, vw, vh);
     }
 

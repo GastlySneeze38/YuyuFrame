@@ -201,4 +201,16 @@ public final class ClientData {
         Object v = AccessorRegistry.invoke(AccessPoint.RESOURCE_BYTES, null, namespace, path);
         return v instanceof byte[] ? (byte[]) v : null;
     }
+
+    /**
+     * Un modèle 3D du jeu ({@code "chest"}…), recopié pour la brique 3D de
+     * l'API graphique — {@code null} s'il est inconnu de cette version ou
+     * illisible (déjà journalisé par la version).
+     */
+    public static com.yuyuframe.launcheragent.apigraphic.draw.mesh.UiModel vanillaModel(String name) {
+        if (name == null) return null;
+        Object v = AccessorRegistry.invoke(AccessPoint.VANILLA_MODEL, null, name);
+        return v instanceof com.yuyuframe.launcheragent.apigraphic.draw.mesh.UiModel
+            ? (com.yuyuframe.launcheragent.apigraphic.draw.mesh.UiModel) v : null;
+    }
 }

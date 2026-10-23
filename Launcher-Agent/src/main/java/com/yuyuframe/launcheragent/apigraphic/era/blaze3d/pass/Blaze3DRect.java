@@ -380,6 +380,99 @@ public final class Blaze3DRect {
         }
     }
 
+    // ── Modèle 3D projeté (draw/mesh) — même pipeline et même atlas que
+    // drawIcon, mais N quads aux coins libres, chacun coloré par sommet.
+
+    /**
+     * Empile les quads d'un modèle 3D déjà projeté. Le lot est lu au vidage
+     * de la file, plus tard dans l'image : l'appelant en donne un neuf à
+     * chaque dessin (voir {@code UiRenderer.drawModel}).
+     */
+    public static void queueMesh(String cacheKey, BufferedImage img,
+                                 com.yuyuframe.launcheragent.apigraphic.draw.mesh.UiMeshBatch batch,
+                                 int vpWidth, int vpHeight) {
+        if (!isAvailable() || img == null || batch.quads() == 0) return;
+        Blaze3DCore.enqueue(() -> drawMesh(cacheKey, img, batch, vpWidth, vpHeight));
+    }
+
+    private static boolean drawMesh(String cacheKey, BufferedImage img,
+                                    com.yuyuframe.launcheragent.apigraphic.draw.mesh.UiMeshBatch batch,
+                                    int vpWidth, int vpHeight) {
+        if (!isAvailable() || !resolve()) return false;
+        try {
+            currentStage = "mainColorView(mesh)";
+            Object colorView = gpu.mainColorView();
+            if (colorView == null) return false;
+
+            currentStage = "ensureIconInAtlas(mesh)";
+            float[] atlas = ensureIconInAtlas(cacheKey, img);
+            if (atlas == null) return false; // atlas plein, déjà journalisé
+            currentStage = "ensureWhiteTexture(mesh)";
+            Object[] white = ensureWhiteTexture();
+
+            currentStage = "device(mesh)";
+            Object device = gpu.device();
+            currentStage = "encoder(mesh)";
+            Object encoder = gpu.encoder(device);
+
+            int quads = batch.quads();
+            float[] xy = batch.xy(), uv = batch.uv();
+            int[] argb = batch.argb();
+            float u0 = atlas[0], v0 = atlas[1], du = atlas[2] - atlas[0], dv = atlas[3] - atlas[1];
+            short light0 = 0, light1 = 0;
+            ByteBuffer verts = ensureStagingBuffer(quads * 4 * 28);
+            for (int i = 0; i < quads * 4; i++) {
+                int c = argb[i];
+                // putVertexPCTL attend R dans l'octet de poids faible.
+                int abgr = (c & 0xFF00FF00) | ((c >> 16) & 0xFF) | ((c & 0xFF) << 16);
+                putVertexPCTL(verts, xy[i * 2], xy[i * 2 + 1], abgr,
+                    u0 + uv[i * 2] * du, v0 + uv[i * 2 + 1] * dv, light0, light1);
+            }
+            verts.flip();
+
+            currentStage = "ensureVertexBuffer(mesh)";
+            Object vbo = ensureVertexBuffer(device, verts.remaining());
+            currentStage = "writeToBuffer(mesh)";
+            gpu.write(encoder, gpu.slice(vbo, 0L, verts.remaining()), verts);
+
+            currentStage = "dynamicTransforms(mesh)";
+            Object dynSlice = gpu.dynamicTransforms(1f, 1f, 1f, 1f);
+
+            currentStage = "ensureProjectionBuffer(mesh)";
+            Object projectionBuf = ensureProjectionBuffer(device, encoder, vpWidth, vpHeight);
+            Object projectionSlice = gpu.slice(projectionBuf, 0L, 64L);
+
+            currentStage = "openPass(mesh)";
+            Object pass = gpu.openPass(encoder, "yuyuframe_mesh", colorView);
+            try {
+                currentStage = "setPipeline(mesh)";
+                gpu.precompile(device, homePipeline, homeShaderSource);
+                gpu.setPipeline(pass, homePipeline);
+                gpu.disableScissor(pass);
+                gpu.bindDefaultUniforms(pass);
+                gpu.setUniform(pass, "Projection", projectionSlice);
+                gpu.setUniform(pass, "DynamicTransforms", dynSlice);
+                gpu.bindTexture(pass, "Sampler0", atlasView, atlasSampler);
+                gpu.bindTexture(pass, "Sampler2", white[1], white[2]);
+                gpu.setVertexBuffer(pass, 0, vbo);
+                currentStage = "drawQuads(mesh)";
+                gpu.drawQuads(pass, quads);
+            } finally {
+                currentStage = "closePass(mesh)";
+                gpu.closePass(pass);
+            }
+            return true;
+        } catch (Throwable t) {
+            if (failureLogCount < 5) {
+                failureLogCount++;
+                Throwable cause = t;
+                while (cause.getCause() != null && cause.getCause() != cause) cause = cause.getCause();
+                LauncherLog.err("[UiRenderer] Blaze3DRect.drawMesh a échoué #" + failureLogCount + " à l'étape '" + currentStage + "' : " + t + " | cause réelle : " + cause);
+            }
+            return false;
+        }
+    }
+
     // ── Rects BATCHÉS (roadmap Phase 5.5) — N rects (bornes/couleur propres,
     // MÊME rayon partagé) en UN SEUL draw call, voir Blaze3DCore.RECT_BATCH_
     // FRAGMENT_SRC pour le calcul de SDF en espace local. Empilé dans la

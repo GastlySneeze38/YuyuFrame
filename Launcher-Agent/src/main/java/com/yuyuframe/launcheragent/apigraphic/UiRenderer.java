@@ -474,6 +474,54 @@ public final class UiRenderer {
         backend().icon(cacheKey, img, x, y, w, h, alpha, vpWidth, vpHeight);
     }
 
+    // ── Modèles 3D (draw/mesh) ───────────────────────────────────────────────
+
+    /**
+     * Dessine un modèle 3D texturé : posé ({@code pose}, {@code null} = au
+     * repos), orienté et placé par {@code view}, éclairé par {@code lighting}
+     * ({@code null} = sans ombrage). Toute la géométrie est calculée ici
+     * ({@link com.yuyuframe.launcheragent.apigraphic.draw.mesh.UiMeshProjector}) ;
+     * le moteur de l'ère ne reçoit que des quads plats.
+     *
+     * <p>{@code textureKey} identifie la texture : {@code texture} n'est lue
+     * qu'à la première image avec cette clé.
+     */
+    public void drawModel(com.yuyuframe.launcheragent.apigraphic.draw.mesh.UiModel model,
+                          com.yuyuframe.launcheragent.apigraphic.draw.mesh.UiModelPose pose,
+                          String textureKey, java.awt.image.BufferedImage texture,
+                          com.yuyuframe.launcheragent.apigraphic.draw.mesh.UiView3D view,
+                          com.yuyuframe.launcheragent.apigraphic.draw.mesh.UiLighting lighting,
+                          float alpha, int vpWidth, int vpHeight) {
+        if (model == null || view == null) return;
+        com.yuyuframe.launcheragent.apigraphic.draw.mesh.UiMeshTexture prepared =
+            com.yuyuframe.launcheragent.apigraphic.draw.mesh.UiMeshTexture.of(textureKey, texture);
+        if (prepared == null) return;
+        // Un lot par dessin : la file Blaze3D le lit plus tard dans l'image.
+        com.yuyuframe.launcheragent.apigraphic.draw.mesh.UiMeshBatch batch =
+            new com.yuyuframe.launcheragent.apigraphic.draw.mesh.UiMeshBatch();
+        com.yuyuframe.launcheragent.apigraphic.draw.mesh.UiMeshProjector.project(model, pose, view, lighting,
+            alpha, prepared.uScale(), prepared.whiteU(), batch);
+        if (batch.quads() == 0) return;
+        backend().mesh(prepared.key(), prepared.image(), batch, vpWidth, vpHeight);
+    }
+
+    /**
+     * Dessine des quads déjà placés à l'écran, texturés par {@code img} et
+     * colorés par sommet — la sortie brute de la brique 3D, ouverte pour les
+     * formes libres qu'aucune primitive alignée sur l'écran ne sait faire
+     * (rayons de lumière en éventail, rubans inclinés…). Les {@code uv} sont
+     * de 0 à 1 dans {@code img}.
+     *
+     * <p>Le lot doit être neuf à chaque appel : sur Blaze3D, il est lu plus
+     * tard dans l'image.
+     */
+    public void drawTexturedQuads(String cacheKey, java.awt.image.BufferedImage img,
+                                  com.yuyuframe.launcheragent.apigraphic.draw.mesh.UiMeshBatch batch,
+                                  int vpWidth, int vpHeight) {
+        if (img == null || batch == null || batch.quads() == 0) return;
+        backend().mesh(cacheKey, img, batch, vpWidth, vpHeight);
+    }
+
     // ── Cible « état de GUI vanilla » ────────────────────────────────────────
     //
     // Quand elle est armée (pendant la passe GUI de vanilla, voir

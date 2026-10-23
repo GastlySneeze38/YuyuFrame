@@ -681,6 +681,10 @@ public final class AccessorBindings189 {
             }
         });
 
+        AccessorRegistry.bind(AccessPoint.VANILLA_MODEL, (r, a) ->
+            a.length < 1 || !(a[0] instanceof String) ? null
+                : com.yuyuframe.launcheragent.apimixin.v1_8_9.model.VanillaModels189.model((String) a[0]));
+
         // ── Serveur courant (champs publics) ───────────────────────────────
         AccessorRegistry.bind(AccessPoint.SERVER_IP, (r, a) ->
             r instanceof ServerInfo ? ((ServerInfo) r).address : null);

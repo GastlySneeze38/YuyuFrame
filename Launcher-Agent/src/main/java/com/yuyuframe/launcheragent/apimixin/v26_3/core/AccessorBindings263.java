@@ -442,6 +442,10 @@ public final class AccessorBindings263 {
             }
         });
 
+        AccessorRegistry.bind(AccessPoint.VANILLA_MODEL, (r, a) ->
+            a.length < 1 || !(a[0] instanceof String) ? null
+                : com.yuyuframe.launcheragent.apimixin.v26_3.model.VanillaModels263.model((String) a[0]));
+
         // ── Types de composants d'item (champs STATIQUES) ──────────────────
         AccessorRegistry.bind(AccessPoint.COMPONENT_TYPE_FOOD, (r, a) -> DataComponentsAccessor263.la$food());
         AccessorRegistry.bind(AccessPoint.COMPONENT_TYPE_ENCHANTMENTS, (r, a) -> DataComponentsAccessor263.la$enchantments());

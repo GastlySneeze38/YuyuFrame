@@ -532,6 +532,19 @@ public enum AccessPoint {
      * lui-même, sans jamais nommer {@code Resource} ni {@code Identifier}.
      */
     RESOURCE_BYTES,
+    /**
+     * Un modèle 3D du jeu, recopié dans un {@code UiModel} de l'API graphique
+     * (brique 3D, {@code apigraphic/draw/mesh}) — argument : le nom du modèle
+     * ({@code "chest"}). {@code null} si le modèle est inconnu de cette
+     * version ou illisible.
+     *
+     * <p>Le jeu construit lui-même le modèle ; seul le résultat est lu, face
+     * par face. Repère commun à toutes les versions : pixels, Y vers le haut
+     * (la 1.8.9, qui dessine ses modèles à l'envers, est retournée à la
+     * lecture). Les noms de parties sont les mêmes partout : pour le coffre,
+     * {@code bottom}, {@code lid}, {@code lock}.
+     */
+    VANILLA_MODEL,
 
     // ── Serveur courant (net.minecraft.client.multiplayer.ServerData) ──────
     /** Adresse du serveur — champ {@code ip}. */

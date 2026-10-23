@@ -74,6 +74,17 @@ public interface VanillaGuiSink {
     boolean icon(Object hookContext, String cacheKey, BufferedImage img,
                  float x0, float y0, float x1, float y1, float alpha);
 
+    /**
+     * Quads texturés d'un modèle 3D déjà projeté ({@code draw/mesh}).
+     * {@code xy} en pixels GUI, Y vers le bas, 8 valeurs par quad ; {@code uv}
+     * de 0 à 1 dans {@code img}, 8 par quad ; {@code argb} 4 par quad. Dessinés
+     * dans l'ordre, en un seul élément. Une version qui ne l'a pas décline.
+     */
+    default boolean mesh(Object hookContext, String cacheKey, BufferedImage img,
+                         float[] xy, float[] uv, int[] argb, int quads) {
+        return false;
+    }
+
     /** Dégradé de bord plein écran ; {@code color.a} est l'opacité AU BORD. */
     boolean vignette(Object hookContext, float x0, float y0, float x1, float y1,
                      float vSize, UiColor color);
