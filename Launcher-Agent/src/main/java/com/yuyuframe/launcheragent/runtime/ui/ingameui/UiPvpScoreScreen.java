@@ -577,11 +577,9 @@ public final class UiPvpScoreScreen extends UiScreenBase {
             PvpRank.badge(r, division, badgeX + (badge - size) / 2f, badgeY + (badge - size) / 2f, size,
                 0.25f + 0.2f * breath, PvpScoreUi.alpha, vw, vh);
         } else {
-            // Pendant le placement, l'insigne est un point d'interrogation.
-            PvpScoreUi.rect(r, badgeX, badgeY, badgeX + badge, badgeY + badge, badge * 0.24f,
-                UiTheme.ACCENT.withAlpha(0.25f), vw, vh);
-            PvpScoreUi.centered(r, UiFont.BOLD, "?", badgeX + badge / 2f, badgeY + badge * 0.28f, badge, UiTheme.ACCENT,
-                badge / 44f, vw, vh);
+            // Pendant le placement : le logo de base, gris, et un « ? » à la place de la division.
+            float size = badge * Math.max(0.01f, pop);
+            PvpRank.placementBadge(r, badgeX + (badge - size) / 2f, badgeY + (badge - size) / 2f, size, PvpScoreUi.alpha, vw, vh);
         }
 
         float textLeft = badgeX + badge + UiTheme.scaled(24f);
