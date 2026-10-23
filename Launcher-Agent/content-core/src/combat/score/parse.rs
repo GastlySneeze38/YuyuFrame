@@ -402,7 +402,11 @@ pub fn parse(text: &str) -> Option<Duel> {
             _ => {}
         }
     }
-    let only_swords = !saw_other && duel.uses.is_empty() && duel.my_totems.is_empty() && duel.foe_totems.is_empty();
+    // Un clic droit avec l'épée est un « objet utilisé » comme un autre pour
+    // le jeu : il ne fait pas sortir du kit épée (vu le 2026-10-23, deux clics
+    // droits dans les secondes d'avant le duel le faisaient classer « autre »).
+    let only_sword_uses = duel.uses.iter().all(|(_, item)| item.ends_with("_sword"));
+    let only_swords = !saw_other && only_sword_uses && duel.my_totems.is_empty() && duel.foe_totems.is_empty();
     duel.mode = if saw_mace {
         Mode::Mace
     } else if saw_sword && only_swords {
@@ -485,6 +489,9 @@ mod tests {
         assert_eq!(parse(&journal("diamond_sword", "netherite_sword;totem_of_undying")).unwrap().mode, Mode::Other);
         let apple = journal("diamond_sword", "netherite_sword") + "{\"k\":\"u\",\"item\":\"golden_apple\",\"t\":5}\n";
         assert_eq!(parse(&apple).unwrap().mode, Mode::Other);
+        // Un clic droit avec l'épée reste un duel à l'épée.
+        let right_click = journal("diamond_sword", "netherite_sword") + "{\"k\":\"u\",\"item\":\"diamond_sword\",\"main\":true,\"t\":5}\n";
+        assert_eq!(parse(&right_click).unwrap().mode, Mode::Sword);
         // La masse d'un spectateur (id 99) ne compte pas.
         assert_eq!(parse(&journal("bow", "")).unwrap().mode, Mode::Other);
         let duel = parse(&journal("mace", "mace")).unwrap();

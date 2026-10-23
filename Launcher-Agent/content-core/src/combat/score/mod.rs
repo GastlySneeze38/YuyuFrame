@@ -30,7 +30,9 @@ pub use rating::Prior;
 // leur attendu ; `parties.csv` a une ligne par action.
 // Version 7 (2026-10-22) : l'initiative (contrôle) et les échanges (défense).
 // Version 8 (2026-10-22) : les familles de l'épée.
-pub const EXTRACTOR_VERSION: u32 = 8;
+// Version 9 (2026-10-23) : un clic droit avec l'épée ne fait plus sortir un
+// duel du mode épée.
+pub const EXTRACTOR_VERSION: u32 = 9;
 
 /// Le décompte des opportunités d'un joueur.
 #[derive(Debug, Serialize)]
