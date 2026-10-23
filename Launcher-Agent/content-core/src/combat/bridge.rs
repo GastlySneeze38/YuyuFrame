@@ -34,7 +34,9 @@ use super::writer::send;
 /// 18 (2026-10-23) : `yf_combat_kits`, l'équipement d'un nouveau duel.
 /// 19 (2026-10-23) : `yf_combat_callouts`, les mots des bons coups ;
 /// `yf_combat_live_mode` répond aussi hors duel.
-const ABI_VERSION: u32 = 19;
+/// 20 (2026-10-23) : le classement vérifié par le serveur —
+/// `yf_combat_ranked_status`, `yf_combat_own_badge`, `yf_combat_show_rank`.
+const ABI_VERSION: u32 = 20;
 
 /// Autres joueurs transmis par tick, au plus.
 const MAX_OTHERS: usize = 16;
@@ -137,6 +139,31 @@ pub unsafe extern "C" fn yf_combat_ranked(out: *mut f64, len: i32) -> i32 {
         std::slice::from_raw_parts_mut(out, values.len()).copy_from_slice(&values);
     }
     number
+}
+
+/// Le statut du classement du dernier duel (`ranked_sync::Status` : 1 vérifié,
+/// 2 refusé par le serveur, 3 en attente, 4 sans compte, 5 casual, 6
+/// classement local, 7 serveur de jeu hors ligne), pour le résumé numéro
+/// `number` — 0 si ce n'est pas le sien.
+#[no_mangle]
+pub extern "C" fn yf_combat_ranked_status(number: i32) -> i32 {
+    let (of, status) = super::ranked_sync::status();
+    if of == number { status } else { 0 }
+}
+
+/// Le code du logo de notre propre joueur, tel que les autres le voient
+/// (0 logo de base, 1 à 7 un rang, 16 Champion du Choc) — le même que
+/// `yf_presence_query` donne pour les autres.
+#[no_mangle]
+pub extern "C" fn yf_combat_own_badge() -> i32 {
+    super::ranked_sync::own_badge_code()
+}
+
+/// Le réglage « Montrer mon rang aux autres » : envoyé au serveur, qui
+/// donne alors le logo de base à la place du rang.
+#[no_mangle]
+pub extern "C" fn yf_combat_show_rank(on: i32) {
+    super::ranked_sync::set_show_rank(on != 0);
 }
 
 /// L'historique des duels de l'instance, pour l'écran du module : la moyenne

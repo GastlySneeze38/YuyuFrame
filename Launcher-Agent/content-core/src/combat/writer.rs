@@ -80,10 +80,25 @@ pub fn last_ranked() -> (i32, [f64; super::history::RANKED_LEN]) {
 /// rapporté au classement : rejouer l'historique prend quelques
 /// millisecondes par duel, et le fil d'écriture ne doit pas s'arrêter pendant
 /// ce temps (le duel suivant peut commencer).
-fn rank_later(number: i32, matches: std::path::PathBuf, time: u64) {
+///
+/// Le classement VÉRIFIÉ passe d'abord (`ranked_sync` : même calcul fait par
+/// le serveur, un aller-retour réseau) ; le classement local ne sert plus que
+/// pour un duel qui n'y compte pas, ou tant que l'API ne connaît pas encore
+/// ces routes.
+fn rank_later(number: i32, matches: std::path::PathBuf, time: u64, text: String) {
     let spawned = std::thread::Builder::new().name("yf-ranked".into()).spawn(move || {
+        let instance = matches.parent().and_then(Path::parent).map(Path::to_path_buf);
+        let journal = matches.join(format!("{time}.events.ndjson.zst"));
+        if let Some(instance) = instance {
+            if let Some((values, status)) = super::ranked_sync::on_duel(&instance, &journal, &text) {
+                *LAST_RANKED.lock().unwrap_or_else(|p| p.into_inner()) = (number, values);
+                super::ranked_sync::publish(number, status);
+                return;
+            }
+        }
         if let Some(values) = super::history::ranked_of(&matches, time) {
             *LAST_RANKED.lock().unwrap_or_else(|p| p.into_inner()) = (number, values);
+            super::ranked_sync::publish(number, super::ranked_sync::Status::Legacy);
         }
     });
     if let Err(e) = spawned {
@@ -157,7 +172,7 @@ impl Sink {
         }
         // Après le résumé : le rejeu réécrit les résumés, celui-ci compris.
         if let (Some(dir), Some(time)) = (self.summary.parent(), journal.time()) {
-            rank_later(number, dir.to_path_buf(), time);
+            rank_later(number, dir.to_path_buf(), time, self.text.clone());
         }
     }
 

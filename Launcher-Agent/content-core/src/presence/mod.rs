@@ -33,3 +33,30 @@ mod directory;
 mod fingerprint;
 pub(crate) mod token;
 mod worker;
+
+/// Le code d'un logo pour Java, à partir de celui que rend le serveur (2026-10-23) :
+/// 0 logo de base, 1 à 7 un rang (Bois … Champion), 16 Champion du Choc. Un
+/// code inconnu (titre ajouté après cette version) donne le logo de base.
+pub fn badge_code(badge: &str) -> i32 {
+    const TIERS: [&str; 7] = ["bois", "pierre", "fer", "or", "diamant", "netherite", "champion"];
+    if let Some(tier) = badge.strip_prefix("rank:") {
+        return TIERS.iter().position(|t| *t == tier).map(|i| i as i32 + 1).unwrap_or(0);
+    }
+    match badge {
+        "title:choc" => 16,
+        _ => 0,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn codes_des_logos() {
+        assert_eq!(super::badge_code("base"), 0);
+        assert_eq!(super::badge_code("rank:bois"), 1);
+        assert_eq!(super::badge_code("rank:champion"), 7);
+        assert_eq!(super::badge_code("title:choc"), 16);
+        assert_eq!(super::badge_code("title:inconnu"), 0);
+        assert_eq!(super::badge_code("rank:inconnu"), 0);
+    }
+}

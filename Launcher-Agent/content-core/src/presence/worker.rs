@@ -128,8 +128,8 @@ fn run(shared: &Shared, client: &Client, tokens: &TokenStore) {
         if !batch.is_empty() {
             let fingerprints: Vec<[u8; 32]> = batch.iter().map(|(_, f)| *f).collect();
             match client.lookup(&token, &fingerprints) {
-                Ok(present) => {
-                    shared.directory().apply(&batch, &present, Instant::now());
+                Ok((present, badges)) => {
+                    shared.directory().apply_badges(&batch, &present, &badges, Instant::now());
                     pace.succeeded(shared);
                 }
                 Err(failure) => {

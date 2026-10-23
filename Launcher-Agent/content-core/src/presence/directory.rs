@@ -151,6 +151,8 @@ struct Entry {
     prints: [[u8; 32]; MAX_SERVER_FORMS],
     forms: u8,
     answer: Answer,
+    /// Le logo que le serveur donne à ce joueur (`super::badge_code`), 0 = de base.
+    badge: i32,
     /// Réponses « absent » d'affilée (voir `ABSENT_RECHECKS`).
     absent_streak: u8,
     /// Première fois qu'on a vu ce joueur : son arrivée, de notre point de vue.
@@ -337,7 +339,7 @@ impl Directory {
             return Answer::Unknown;
         }
         let (prints, forms) = self.prints(&key);
-        self.entries.insert(key, Entry { prints, forms, answer: Answer::Unknown, absent_streak: 0, first_seen: now, join_rechecks: 0, checked_at: None, queued: true, asked_at: now });
+        self.entries.insert(key, Entry { prints, forms, answer: Answer::Unknown, badge: 0, absent_streak: 0, first_seen: now, join_rechecks: 0, checked_at: None, queued: true, asked_at: now });
         self.note_join(now);
         if key.offline {
             self.offline_queue.push_back(key);
@@ -345,6 +347,11 @@ impl Directory {
             self.queue.push_back(key);
         }
         Answer::Unknown
+    }
+
+    /// Le logo connu d'un joueur présent (0 = de base, ou pas de réponse).
+    pub fn badge(&self, key: &PlayerKey) -> i32 {
+        self.entries.get(key).filter(|e| e.answer == Answer::Present).map(|e| e.badge).unwrap_or(0)
     }
 
     /// Rouvre les budgets quand l'heure est passée.
@@ -409,16 +416,26 @@ impl Directory {
     /// Les réponses du serveur, dans l'ordre du paquet. Un joueur demandé
     /// sous plusieurs formes est présent dès que l'une d'elles l'est.
     pub fn apply(&mut self, batch: &[(PlayerKey, [u8; 32])], present: &[bool], now: Instant) {
+        self.apply_badges(batch, present, &[], now);
+    }
+
+    /// Comme [`Directory::apply`], avec le logo de chaque réponse (absent = logo de base).
+    pub fn apply_badges(&mut self, batch: &[(PlayerKey, [u8; 32])], present: &[bool], badges: &[i32], now: Instant) {
         let mut i = 0;
         while i < batch.len() {
             let key = batch[i].0;
             let mut found = false;
+            let mut badge = 0;
             let mut j = i;
             while j < batch.len() && batch[j].0 == key {
-                found |= present.get(j).copied().unwrap_or(false);
+                if present.get(j).copied().unwrap_or(false) {
+                    found = true;
+                    badge = badge.max(badges.get(j).copied().unwrap_or(0));
+                }
                 j += 1;
             }
             if let Some(entry) = self.entries.get_mut(&key) {
+                entry.badge = badge;
                 entry.answer = if found { Answer::Present } else { Answer::Absent };
                 entry.absent_streak = if found { 0 } else { entry.absent_streak.saturating_add(1) };
                 entry.checked_at = Some(now);
@@ -434,6 +451,7 @@ impl Directory {
         if round.epoch != self.epoch {
             return;
         }
+        // Rien n'est prouvé hors ligne : toujours le logo de base.
         self.apply(&round.batch, present, now);
         if let Some(secs) = renew_in {
             self.renew = Duration::from_secs(secs.clamp(MIN_RENEW_SECS, MAX_RENEW_SECS));

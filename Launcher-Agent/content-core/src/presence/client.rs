@@ -93,11 +93,23 @@ impl Client {
         Ok(present)
     }
 
-    /// Une réponse par empreinte, dans l'ordre.
-    pub fn lookup(&self, token: &str, fingerprints: &[[u8; 32]]) -> Result<Vec<bool>, Failure> {
+    /// Une réponse par empreinte, dans l'ordre, et le logo de chacun
+    /// (`super::badge_code` du champ `badges` ; 0 quand l'API ne le donne pas
+    /// encore ou que le joueur est absent).
+    pub fn lookup(&self, token: &str, fingerprints: &[[u8; 32]]) -> Result<(Vec<bool>, Vec<i32>), Failure> {
         let body = serde_json::json!({ "fingerprints": fingerprints.iter().map(|f| hex(f)).collect::<Vec<_>>() });
         let parsed = self.post(&self.url, token, body)?;
-        Self::present(&parsed, fingerprints.len())
+        let present = Self::present(&parsed, fingerprints.len())?;
+        let badges = Self::badges(&parsed, fingerprints.len());
+        Ok((present, badges))
+    }
+
+    /// Le champ `badges` (2026-10-23) : un code par empreinte, ou `null`.
+    fn badges(parsed: &serde_json::Value, asked: usize) -> Vec<i32> {
+        let list = parsed.get("badges").and_then(|b| b.as_array());
+        (0..asked)
+            .map(|i| list.and_then(|l| l.get(i)).and_then(|b| b.as_str()).map(super::badge_code).unwrap_or(0))
+            .collect()
     }
 
     /// Serveur de jeu hors ligne : annonce `own` (vide = ne pas s'annoncer)

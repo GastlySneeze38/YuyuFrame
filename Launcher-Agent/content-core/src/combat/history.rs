@@ -15,7 +15,7 @@ use std::collections::HashMap;
 use std::io::Read;
 use std::path::Path;
 
-use super::ranked::{Change, Ladder, Outcome, Played};
+use super::ranked::{Change, Ladder, Played};
 use super::score::{score_with, Journal, Mode, Prior, Report};
 
 /// Duels rendus au plus : les plus récents.
@@ -31,32 +31,14 @@ fn read_journal(path: &Path) -> Option<String> {
     Some(text)
 }
 
-/// Un duel noté, tel que le classement le voit ; `None` s'il n'y compte pas
-/// (pas noté, pas de verdict, mode sans classement).
-///
-/// `foe` : la force de l'adversaire pour le classement — son niveau sur
-/// tous nos duels contre lui, CE DUEL COMPRIS, tiré vers l'attendu tant
-/// qu'on l'a peu vu ([`Prior`]). Pas son niveau de ce seul duel : battre
-/// quelqu'un le fait paraître faible (sur 58 duels, il sortait entre 75 et
-/// 175 dans presque toutes nos victoires), ce qui réduisait chaque victoire
-/// de 40 % — dominer coûtait des points.
+/// Le texte d'un journal sur le disque — pour la file du classement vérifié.
+pub(crate) fn read_journal_text(path: &Path) -> Option<String> {
+    read_journal(path)
+}
+
+/// Voir [`super::ranked::played_of`] — partagé avec le classement vérifié.
 fn played(report: &Report, foe: &Prior) -> Option<Played> {
-    let score = report.rating.score?;
-    let outcome = match report.result.as_deref()? {
-        "win" => Outcome::Win,
-        "loss" => Outcome::Loss,
-        "draw" => Outcome::Draw,
-        _ => return None,
-    };
-    Ladder::ranks(report.mode).then(|| Played {
-        mode: report.mode,
-        outcome,
-        score,
-        // Sans arrondi : le calcul est continu.
-        foe_score: (250.0 + 100.0 * foe.z).clamp(0.0, 500.0),
-        foe_key: report.foe_key(),
-        time: report.time.unwrap_or(0),
-    })
+    super::ranked::played_of(report, foe)
 }
 
 /// Les duels terminés du dossier `matches`, du plus récent au plus ancien,
@@ -216,9 +198,20 @@ pub fn history(instance_dir: &Path) -> String {
     let scores: Vec<f64> = reports.iter().filter_map(|(r, _)| r.rating.score).collect();
     let average = if scores.is_empty() { -1.0 } else { (scores.iter().sum::<f64>() / scores.len() as f64).round() };
     let mut text = format!("avg\t{average}\t{}\t{}\n", scores.len(), reports.len());
-    for mode in [Mode::Mace, Mode::Sword] {
-        let s = ladder.standing(mode);
-        text.push_str(&format!("rank\t{}\t{}\t{}\t{}\t{}\n", mode.code(), s.division, s.points, s.duels, s.placed() as u8));
+    // Le rang affiché est celui du classement VÉRIFIÉ dès qu'un compte a été
+    // synchronisé avec le serveur (`ranked_sync`) ; sinon le classement local.
+    match super::ranked_sync::cached_in(instance_dir) {
+        Some(cache) => {
+            for (code, division, points, duels, placed) in super::verified::standings(&cache.state) {
+                text.push_str(&format!("rank\t{code}\t{division}\t{points}\t{duels}\t{}\n", placed as u8));
+            }
+        }
+        None => {
+            for mode in [Mode::Mace, Mode::Sword] {
+                let s = ladder.standing(mode);
+                text.push_str(&format!("rank\t{}\t{}\t{}\t{}\t{}\n", mode.code(), s.division, s.points, s.duels, s.placed() as u8));
+            }
+        }
     }
     for (report, change) in &reports {
         let numbers: Vec<String> = report.numbers().iter().map(|n| n.to_string()).collect();

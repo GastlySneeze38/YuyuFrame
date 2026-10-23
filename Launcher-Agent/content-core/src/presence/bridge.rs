@@ -18,7 +18,9 @@ use super::worker::{self, Shared};
 /// (`NativePresence.ABI_VERSION`), au lieu de l'appeler de travers.
 /// 2 (2026-10-08) : `yf_presence_context`, et un UUID version 3 n'est plus
 /// « absent » d'office.
-const ABI_VERSION: u32 = 2;
+/// 3 (2026-10-23) : `yf_presence_query` porte aussi le logo du joueur dans
+/// ses bits 8 et suivants (`super::badge_code`).
+const ABI_VERSION: u32 = 3;
 
 /// `None` une fois pour toutes si le jeu n'a pas été lancé par le launcher :
 /// l'environnement du processus ne changera pas en cours de partie.
@@ -74,7 +76,10 @@ pub unsafe extern "C" fn yf_presence_query(uuid_hi: i64, uuid_lo: i64, name: *co
     let name = std::slice::from_raw_parts(name, name_len as usize);
     let uuid = ((uuid_hi as u64 as u128) << 64) | (uuid_lo as u64 as u128);
     let Some(key) = PlayerKey::new(uuid, name) else { return Answer::Absent as i32 };
-    shared.directory().query(key, Instant::now()) as i32
+    let mut directory = shared.directory();
+    let answer = directory.query(key, Instant::now());
+    // Bits 0 à 7 : la réponse ; 8 et suivants : le logo (0 = de base).
+    if answer == Answer::Present { answer as i32 | directory.badge(&key) << 8 } else { answer as i32 }
 }
 
 /// Où l'on joue, et sous quelle identité : ce qui permet de reconnaître les

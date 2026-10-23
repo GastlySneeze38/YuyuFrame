@@ -6,6 +6,9 @@
 pub use self::image::fetch_image_rgba;
 pub use layout::compute_layout_json;
 pub use modrinth::{download_file, get_latest_file, get_project, get_versions, search_modrinth};
+/// Le classement vérifié (`combat/verified.rs`) : le même calcul pour le jeu
+/// et pour LauncherAPI, qui dépend de ce crate pour le refaire à l'identique.
+pub use combat::verified as ranked_verify;
 
 mod combat;
 mod image;

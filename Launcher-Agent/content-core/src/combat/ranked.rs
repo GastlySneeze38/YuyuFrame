@@ -300,6 +300,127 @@ impl Ladder {
     pub fn standing(&self, mode: Mode) -> Standing {
         self.standings.get(&mode).copied().unwrap_or_default()
     }
+
+    /// Le classement sous une forme qui se sauve et se relit à l'identique
+    /// ([`SavedLadder`]) — l'état vérifié que le serveur et le jeu partagent
+    /// (`verified.rs`). Les listes sont triées : deux classements égaux
+    /// donnent le même texte. Les adversaires des jours précédents `today`
+    /// sont oubliés : la répétition ne compte que le même jour.
+    pub fn save(&self, today: u64) -> SavedLadder {
+        let mut standings: Vec<SavedStanding> = self
+            .standings
+            .iter()
+            .map(|(mode, s)| SavedStanding {
+                mode: mode_code(*mode),
+                division: s.division,
+                points: s.points,
+                duels: s.duels,
+                shield: s.shield,
+                placement: s.placement,
+            })
+            .collect();
+        standings.sort_by_key(|s| s.mode);
+        let mut met: Vec<(u8, String, u64, u32)> = self
+            .met
+            .iter()
+            .filter(|((_, _, day), _)| *day >= today)
+            .map(|((mode, foe, day), n)| (mode_code(*mode), foe.clone(), *day, *n))
+            .collect();
+        met.sort();
+        let mut placement_met: Vec<(u8, String, u32)> =
+            self.placement_met.iter().map(|((mode, foe), n)| (mode_code(*mode), foe.clone(), *n)).collect();
+        placement_met.sort();
+        SavedLadder { standings, met, placement_met }
+    }
+
+    /// L'inverse de [`Ladder::save`] ; un mode inconnu est ignoré.
+    pub fn restore(saved: &SavedLadder) -> Ladder {
+        let mut ladder = Ladder::default();
+        for s in &saved.standings {
+            let Some(mode) = mode_of(s.mode) else { continue };
+            ladder.standings.insert(
+                mode,
+                Standing { division: s.division, points: s.points, duels: s.duels, shield: s.shield, placement: s.placement },
+            );
+        }
+        for (mode, foe, day, n) in &saved.met {
+            if let Some(mode) = mode_of(*mode) {
+                ladder.met.insert((mode, foe.clone(), *day), *n);
+            }
+        }
+        for (mode, foe, n) in &saved.placement_met {
+            if let Some(mode) = mode_of(*mode) {
+                ladder.placement_met.insert((mode, foe.clone()), *n);
+            }
+        }
+        ladder
+    }
+}
+
+/// Un classement sauvé (voir [`Ladder::save`]).
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct SavedLadder {
+    pub standings: Vec<SavedStanding>,
+    /// (mode, adversaire, jour, duels classés ce jour-là contre lui).
+    pub met: Vec<(u8, String, u64, u32)>,
+    /// (mode, adversaire, duels comptés pour le placement).
+    pub placement_met: Vec<(u8, String, u32)>,
+}
+
+/// La position d'un mode, sauvée.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SavedStanding {
+    /// Code du mode : 1 masse, 2 épée (`Mode::code`).
+    pub mode: u8,
+    pub division: usize,
+    pub points: i32,
+    pub duels: usize,
+    pub shield: bool,
+    pub placement: i32,
+}
+
+pub fn mode_code(mode: Mode) -> u8 {
+    mode.code() as u8
+}
+
+pub fn mode_of(code: u8) -> Option<Mode> {
+    match code {
+        1 => Some(Mode::Mace),
+        2 => Some(Mode::Sword),
+        3 => Some(Mode::Other),
+        _ => None,
+    }
+}
+
+/// Un duel noté, tel que le classement le voit ; `None` s'il n'y compte pas
+/// (pas noté, pas de verdict, mode sans classement).
+///
+/// `foe` : la force de l'adversaire pour le classement — son niveau sur
+/// tous nos duels contre lui, CE DUEL COMPRIS, tiré vers l'attendu tant
+/// qu'on l'a peu vu ([`Prior`]). Pas son niveau de ce seul duel : battre
+/// quelqu'un le fait paraître faible (sur 58 duels, il sortait entre 75 et
+/// 175 dans presque toutes nos victoires), ce qui réduisait chaque victoire
+/// de 40 % — dominer coûtait des points.
+///
+/// Partagé par l'historique de l'instance et par le classement vérifié : les
+/// deux doivent classer un duel exactement de la même façon.
+pub fn played_of(report: &super::score::Report, foe: &super::score::Prior) -> Option<Played> {
+    let score = report.rating.score?;
+    let outcome = match report.result.as_deref()? {
+        "win" => Outcome::Win,
+        "loss" => Outcome::Loss,
+        "draw" => Outcome::Draw,
+        _ => return None,
+    };
+    Ladder::ranks(report.mode).then(|| Played {
+        mode: report.mode,
+        outcome,
+        score,
+        // Sans arrondi : le calcul est continu.
+        foe_score: (250.0 + 100.0 * foe.z).clamp(0.0, 500.0),
+        foe_key: report.foe_key(),
+        time: report.time.unwrap_or(0),
+    })
 }
 
 #[cfg(test)]
