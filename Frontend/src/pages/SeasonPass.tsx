@@ -7,6 +7,7 @@ import { TopoBackdrop } from '@/components/competitive/TopoBackdrop'
 import { Missions, PASS_COLOR } from '@/components/competitive/Challenges'
 import { demoData, type BattlePass, type Challenge, type PassReward } from '@/lib/competitive'
 import { useStore } from '@/stores/useStore'
+import { useDemo } from '@/stores/useDevFlags'
 import { useT } from '@/i18n'
 
 /** Paliers par chapitre : une rangée à l'écran. */
@@ -29,7 +30,9 @@ type TierState = 'obtained' | 'current' | 'upcoming'
 export default function SeasonPass() {
   const t = useT()
   const username = useStore((s) => s.username)
-  const demo = useMemo(() => (import.meta.env.DEV ? demoData(username ?? 'Steve') : null), [username])
+  // Données de démonstration : interrupteur de l'atelier de développement.
+  const demoOn = useDemo()
+  const demo = useMemo(() => (demoOn ? demoData(username ?? 'Steve') : null), [username, demoOn])
   const pass = demo?.battlePass ?? null
   const season = demo?.seasons?.[0] ?? null
 

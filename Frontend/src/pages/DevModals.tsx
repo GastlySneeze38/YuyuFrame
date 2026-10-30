@@ -3,6 +3,8 @@ import { Button } from '@/components/ui/Button'
 import { useNavigate } from 'react-router-dom'
 import { useModalQueue, type QueuedModal } from '@/stores/useModalQueue'
 import { useFleet } from '@/stores/useFleet'
+import { useDevFlags } from '@/stores/useDevFlags'
+import { Toggle } from '@/components/ui/Toggle'
 import type { FleetAnnouncement } from '@/api/client'
 
 /**
@@ -160,6 +162,8 @@ export default function DevModals() {
   const navigate = useNavigate()
   const devHomeBanner = useFleet((s) => s.devHomeBanner)
   const setDevHomeBanner = useFleet((s) => s.setDevHomeBanner)
+  const demoData = useDevFlags((s) => s.demoData)
+  const setDemoData = useDevFlags((s) => s.setDemoData)
   const push = useModalQueue((s) => s.push)
   const forgetAll = useModalQueue((s) => s.forgetAll)
   const current = useModalQueue((s) => s.current)
@@ -224,6 +228,17 @@ export default function DevModals() {
           demande déposée deux fois serait refusée par la file — ce qui est
           exactement ce qu’on lui demande de faire en vrai.
         </p>
+
+        {/* Un seul interrupteur pour toutes les données de démonstration. */}
+        <div className="flex items-center justify-between gap-4 border-t border-border pt-4">
+          <div className="flex min-w-0 flex-col">
+            <span className="text-[13px] font-semibold text-txt-primary">Données de démonstration</span>
+            <span className="text-[11px] text-txt-muted">
+              Compétitif, missions, passe de saison et amis. Éteint : les vraies routes, et « bientôt » / « indisponible » sans elles.
+            </span>
+          </div>
+          <Toggle checked={demoData} onChange={() => setDemoData(!demoData)} />
+        </div>
 
         {/* Bannière d'accueil : elle passe devant celle du back-office et
             tient jusqu'à ce qu'on la retire ou qu'on relance le launcher. */}

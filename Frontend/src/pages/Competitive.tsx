@@ -14,6 +14,7 @@ import { StatsView } from '@/components/competitive/StatsView'
 import { api } from '@/api/client'
 import { errorCode, errorMessage } from '@/lib/apiError'
 import { useStore } from '@/stores/useStore'
+import { useDemo } from '@/stores/useDevFlags'
 import { SNAP } from '@/lib/motion'
 import { useT } from '@/i18n'
 import {
@@ -39,9 +40,9 @@ import {
  *
  * Le rang vient de LauncherAPI (`GET /v1/ranked/state/{uuid}`, le classement
  * vérifié que le jeu fait avancer). Le reste n'a pas encore de route : hors
- * développement, ces cartes disent « bientôt ». En développement, tout est
- * rempli par des données de démonstration (`demoData`), avec un bouton pour
- * essayer la vraie route.
+ * développement, ces cartes disent « bientôt ». En développement, tout peut
+ * être rempli par des données de démonstration (`demoData`) : interrupteur
+ * dans l'atelier de développement (Ctrl+Maj+M, `stores/useDevFlags.ts`).
  */
 
 // Récompenses (`RewardsView`, saisons et cosmétiques) : retiré de la
@@ -69,7 +70,8 @@ export default function Competitive() {
   const username = useStore((s) => s.username)
   const isOffline = useStore((s) => s.isOffline)
 
-  const [demo, setDemo] = useState<boolean>(import.meta.env.DEV)
+  // Données de démonstration : interrupteur de l'atelier de développement.
+  const demo = useDemo()
   const [status, setStatus] = useState<Status>({ kind: 'loading' })
   const [mode, setMode] = useState<ModeKey | null>(null)
   // L'historique d'abord ; la carte du rang y mène aux statistiques.
@@ -147,17 +149,6 @@ export default function Competitive() {
           <div className="w-[230px] shrink-0">
             <ModeDropdown value={shown} onChange={setMode} standings={data.standings} />
           </div>
-        )}
-        {import.meta.env.DEV && (
-          // Développement seulement : passer des données de démo à la vraie route.
-          <button
-            onClick={() => setDemo((v) => !v)}
-            className={`rounded-full px-3 py-1 text-[10.5px] font-bold transition-colors ${
-              demo ? 'bg-warning/[0.16] text-warning' : 'bg-white/[0.05] text-txt-muted hover:text-txt-secondary'
-            }`}
-          >
-            {demo ? 'Données de démo' : 'Vraie route (dev)'}
-          </button>
         )}
       </PageHeader>
 

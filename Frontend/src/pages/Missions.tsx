@@ -4,6 +4,7 @@ import { PageGlow } from '@/components/PageGlow'
 import { ChallengesView } from '@/components/competitive/Challenges'
 import { demoData } from '@/lib/competitive'
 import { useStore } from '@/stores/useStore'
+import { useDemo } from '@/stores/useDevFlags'
 import { useT } from '@/i18n'
 
 /**
@@ -17,7 +18,9 @@ import { useT } from '@/i18n'
 export default function Missions() {
   const t = useT()
   const username = useStore((s) => s.username)
-  const demo = useMemo(() => (import.meta.env.DEV ? demoData(username ?? 'Steve') : null), [username])
+  // Données de démonstration : interrupteur de l'atelier de développement.
+  const demoOn = useDemo()
+  const demo = useMemo(() => (demoOn ? demoData(username ?? 'Steve') : null), [username, demoOn])
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-bg-primary text-txt-primary">

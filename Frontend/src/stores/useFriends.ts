@@ -5,6 +5,7 @@ import { showNotice } from '@/stores/useErrorToast'
 import { useStore } from '@/stores/useStore'
 import { t } from '@/i18n'
 import { demoFriends } from '@/lib/friendsDemo'
+import { isDemo, useDevFlags } from '@/stores/useDevFlags'
 import type { FriendEvent, FriendList, FriendPresence } from '@/types/friends'
 
 /**
@@ -43,13 +44,17 @@ export const useFriends = create<FriendsStore>((set, get) => ({
   unseenRequests: 0,
 
   refresh: async () => {
+    // Données de démonstration demandées dans l'atelier de développement :
+    // elles remplacent la vraie route (les gestes, eux, échoueront).
+    if (isDemo()) {
+      set({ list: demoFriends() })
+      return
+    }
     try {
       const list = await api.friends.list()
       set({ list })
     } catch {
       // API sans la route, réseau coupé : on garde ce qu'on a, le flux réessaiera.
-      // En développement, des amis de démonstration pour voir le panneau.
-      if (import.meta.env.DEV && !get().list) set({ list: demoFriends() })
     }
   },
 
@@ -99,6 +104,16 @@ export const useFriends = create<FriendsStore>((set, get) => ({
   markRequestsSeen: () => set({ unseenRequests: 0 }),
   clear: () => set({ list: null, unseenRequests: 0 }),
 }))
+
+// L'interrupteur de démo de l'atelier a bougé : on repart de zéro, pour ne pas
+// garder la liste de démonstration une fois éteint.
+if (import.meta.env.DEV) {
+  useDevFlags.subscribe((now, before) => {
+    if (now.demoData === before.demoData) return
+    useFriends.setState({ list: null })
+    void useFriends.getState().refresh()
+  })
+}
 
 /** Écoute le flux relayé par le launcher. Rend de quoi arrêter. */
 export function listenFriendEvents(): Promise<() => void> {
