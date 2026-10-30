@@ -148,7 +148,90 @@ export interface DuelRow {
   rr: number | null
   placement?: boolean
   durationSecs: number
+  /** Adresse du serveur de jeu où le duel s'est joué. */
+  server: string
 }
+
+/** Ce qu'un serveur de jeu a donné, calculé depuis l'historique. */
+export interface ServerStats {
+  server: string
+  duels: number
+  wins: number
+  losses: number
+  avgScore: number
+  /** RR gagnés ou perdus là-bas (hors placement). */
+  rr: number
+  lastPlayed: number
+}
+
+/** La couleur d'une note sur 500, du rouge (faible) au cyan (excellente). */
+export function scoreColor(score: number): string {
+  if (score < 150) return '239 68 68'
+  if (score < 225) return '249 115 22'
+  if (score < 300) return '250 204 21'
+  if (score < 375) return '74 222 128'
+  return '96 232 236'
+}
+
+/** Regroupe les duels par serveur, le plus joué d'abord. */
+export function serverStats(duels: DuelRow[]): ServerStats[] {
+  const by = new Map<string, DuelRow[]>()
+  for (const d of duels) by.set(d.server, [...(by.get(d.server) ?? []), d])
+  return [...by.entries()]
+    .map(([server, list]) => ({
+      server,
+      duels: list.length,
+      wins: list.filter((d) => d.result === 'win').length,
+      losses: list.filter((d) => d.result === 'loss').length,
+      avgScore: Math.round(list.reduce((a, d) => a + d.score, 0) / list.length),
+      rr: list.reduce((a, d) => a + (d.rr ?? 0), 0),
+      lastPlayed: Math.max(...list.map((d) => d.at)),
+    }))
+    .sort((a, b) => b.duels - a.duels)
+}
+
+/** Les sortes de défis ; chacune a sa phrase dans les traductions
+ *  (`competitive.challenges.kinds.<kind>`). */
+export type ChallengeKind = 'winDuels' | 'scoreAbove' | 'streak' | 'servers' | 'beatHigher' | 'playDuels'
+
+export interface Challenge {
+  id: string
+  kind: ChallengeKind
+  period: 'daily' | 'weekly'
+  /** `null` : n'importe quel mode. */
+  mode: ModeKey | null
+  /** La valeur à atteindre (nombre de duels, note…). */
+  target: number
+  /** Où l'on en est, sur `goal`. */
+  progress: number
+  goal: number
+  /** Fin du défi, en millisecondes. */
+  endsAt: number
+  /** XP du passe de saison que rapporte la mission. */
+  xp: number
+}
+
+/** Le passe de saison : des paliers d'XP, chacun avec un cosmétique. Réservé
+ *  aux plans payants ; les missions rapportent de l'XP à tout le monde. */
+export interface BattlePass {
+  tier: number
+  tiers: number
+  xpInTier: number
+  xpPerTier: number
+  /** La récompense mise en avant : celle du palier suivant. */
+  featured: { kind: CosmeticKind; name: string; tier: number }
+  /** XP rapportés par chaque palier des missions du jour (les cases 1 à 4). */
+  checkpointXp: number
+  /** Missions du jour terminées, sur `checkpoints`. */
+  checkpointsDone: number
+  checkpoints: number
+  objectives: PassObjective[]
+}
+
+export type PassObjective =
+  | { kind: 'unlock'; reward: CosmeticKind; name: string; xpLeft: number; ratio: number; endsAt: number }
+  | { kind: 'tiers'; done: number; total: number }
+  | { kind: 'rank'; tier: TierKey; reward: CosmeticKind; ratio: number }
 
 export interface ModeStats {
   wins: number
@@ -162,12 +245,49 @@ export interface ModeStats {
   rrWeek: number
 }
 
+/** Les sortes de cosmétiques donnés en fin de saison ; chacune a son nom et
+ *  son icône (`competitive.seasons.kinds.<kind>`, `CosmeticIcon`). */
+export type CosmeticKind = 'badge' | 'nametag' | 'cape' | 'aura' | 'title'
+
+export interface Season {
+  id: string
+  number: number
+  /** Le nom propre de la saison (« Impact »), pas traduit. */
+  name: string
+  /** Début et fin, en millisecondes ; `null` = pas de date (saison sans route). */
+  start: number | null
+  end: number | null
+  /** Ce que rapporte chaque rang, de Bois à Champion (même ordre que `TIER_KEYS`). */
+  rewards: CosmeticKind[]
+  /** Le meilleur rang atteint dans cette saison (division), `null` sans placement. */
+  peak: number | null
+}
+
+/** Une seule saison, sans dates, quand le serveur ne connaît pas encore les
+ *  saisons : les logos de rang, qui existent déjà en jeu. */
+export function fallbackSeason(standing: Standing): Season {
+  return {
+    id: 'current',
+    number: 1,
+    name: '',
+    start: null,
+    end: null,
+    rewards: ['badge', 'badge', 'badge', 'badge', 'badge', 'badge', 'title'],
+    peak: standing.placed ? standing.division : null,
+  }
+}
+
 export interface CompetitiveData {
   standings: Standing[]
   /** `null` : pas de route pour l'instant. */
   leaderboard: Partial<Record<ModeKey, LeaderboardRow[]>> | null
   duels: DuelRow[] | null
   stats: Partial<Record<ModeKey, ModeStats>> | null
+  challenges: Challenge[] | null
+  /** De la plus récente à la plus ancienne ; `null` : pas encore de route. */
+  seasons: Season[] | null
+  /** `null` : pas encore de route. */
+  battlePass: BattlePass | null
 }
 
 // ── Démonstration (développement seulement) ──────────────────────────────
@@ -207,19 +327,73 @@ function demoLeaderboard(myName: string, me: Standing, seed: number): Leaderboar
   return sorted
 }
 
+/** De vrais serveurs, pour que la démo montre leur vraie icône (récupérée
+ *  par un ping). Adresses directes : le ping du launcher ne suit pas les
+ *  enregistrements SRV (`cocoworld.fr` → `mc.cocoworld.fr`). Avec leur poids :
+ *  le premier est le plus joué. */
+const DEMO_SERVERS: [string, number][] = [
+  ['mc.hypixel.net', 0.45],
+  ['eu.minemen.club', 0.35],
+  ['mc.cocoworld.fr', 0.2],
+]
+
+function pickServer(roll: number): string {
+  let acc = 0
+  for (const [name, weight] of DEMO_SERVERS) {
+    acc += weight
+    if (roll < acc) return name
+  }
+  return DEMO_SERVERS[0][0]
+}
+
+function demoChallenges(): Challenge[] {
+  const now = new Date()
+  const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime()
+  // Le lundi suivant, à minuit.
+  const endOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() + ((8 - now.getDay()) % 7 || 7)).getTime()
+  return [
+    { id: 'd1', kind: 'winDuels', period: 'daily', mode: 'mace', target: 5, progress: 3, goal: 5, endsAt: endOfDay, xp: 1000 },
+    { id: 'd2', kind: 'scoreAbove', period: 'daily', mode: null, target: 350, progress: 1, goal: 1, endsAt: endOfDay, xp: 1000 },
+    { id: 'd3', kind: 'playDuels', period: 'daily', mode: 'sword', target: 3, progress: 0, goal: 3, endsAt: endOfDay, xp: 1000 },
+    { id: 'd4', kind: 'servers', period: 'daily', mode: null, target: 2, progress: 2, goal: 2, endsAt: endOfDay, xp: 1000 },
+    { id: 'w1', kind: 'streak', period: 'weekly', mode: null, target: 5, progress: 3, goal: 5, endsAt: endOfWeek, xp: 4500 },
+    { id: 'w2', kind: 'winDuels', period: 'weekly', mode: null, target: 25, progress: 17, goal: 25, endsAt: endOfWeek, xp: 4500 },
+    { id: 'w3', kind: 'beatHigher', period: 'weekly', mode: 'mace', target: 10, progress: 4, goal: 10, endsAt: endOfWeek, xp: 6000 },
+  ]
+}
+
+function demoBattlePass(): BattlePass {
+  const day = 86_400_000
+  return {
+    tier: 33,
+    tiers: 50,
+    xpInTier: 2112,
+    xpPerTier: 3000,
+    featured: { kind: 'cape', name: 'Impact', tier: 34 },
+    checkpointXp: 1000,
+    checkpointsDone: 2,
+    checkpoints: 4,
+    objectives: [
+      { kind: 'unlock', reward: 'aura', name: 'Impact', xpLeft: 165_300, ratio: 0.18, endsAt: Date.now() + 26 * day },
+      { kind: 'tiers', done: 33, total: 50 },
+      { kind: 'rank', tier: 'diamond', reward: 'aura', ratio: 0.68 },
+    ],
+  }
+}
+
 function demoDuels(): DuelRow[] {
   const rand = seeded(7)
   const now = Date.now()
   const duels: DuelRow[] = []
   let at = now - 25 * 60_000
-  for (let i = 0; i < 24; i++) {
+  for (let i = 0; i < 40; i++) {
     const mode: ModeKey = rand() < 0.62 ? 'mace' : 'sword'
     const roll = rand()
     const result: DuelRow['result'] = roll < 0.58 ? 'win' : roll < 0.97 ? 'loss' : 'draw'
     const score = Math.round(result === 'win' ? 260 + rand() * 180 : result === 'loss' ? 120 + rand() * 150 : 240)
     const rr = result === 'win' ? Math.round(14 + rand() * 18) : result === 'loss' ? -Math.round(9 + rand() * 14) : Math.round(rand() * 6 - 3)
     // Les plus anciens duels à l'épée sont encore ceux du placement.
-    const placement = mode === 'sword' && i >= 20
+    const placement = mode === 'sword' && i >= 34
     duels.push({
       id: `demo-${i}`,
       mode,
@@ -230,6 +404,7 @@ function demoDuels(): DuelRow[] {
       rr: placement ? null : rr,
       placement,
       durationSecs: Math.round(18 + rand() * 70),
+      server: pickServer(rand()),
     })
     at -= Math.round((8 + rand() * 50) * 60_000 + (rand() < 0.2 ? 20 * 3_600_000 : 0))
   }
@@ -278,5 +453,35 @@ export function demoData(myName: string): CompetitiveData {
     },
     duels,
     stats: { mace: statsOf(duels, 'mace'), sword: statsOf(duels, 'sword') },
+    challenges: demoChallenges(),
+    seasons: demoSeasons(standings[0]),
+    battlePass: demoBattlePass(),
   }
+}
+
+/** Deux saisons inventées : celle en cours (le rang de la démo y est le
+ *  meilleur atteint) et une saison terminée, finie en Fer 3. */
+function demoSeasons(current: Standing): Season[] {
+  const day = 86_400_000
+  const now = Date.now()
+  return [
+    {
+      id: 's1',
+      number: 1,
+      name: 'Impact',
+      start: now - 46 * day,
+      end: now + 38 * day,
+      rewards: ['badge', 'badge', 'nametag', 'cape', 'aura', 'aura', 'title'],
+      peak: current.placed ? current.division : null,
+    },
+    {
+      id: 's0',
+      number: 0,
+      name: 'Genesis',
+      start: now - 136 * day,
+      end: now - 46 * day,
+      rewards: ['badge', 'nametag', 'nametag', 'cape', 'cape', 'aura', 'title'],
+      peak: 8,
+    },
+  ]
 }

@@ -32,7 +32,7 @@ export function DuelHistory({ duels }: { duels: DuelRow[] | null }) {
   const language = useStore((s) => s.language)
 
   return (
-    <div className="flex min-w-0 flex-col gap-3 rounded-2xl border border-line bg-surface-1 p-5">
+    <div className="flex h-full min-h-0 min-w-0 flex-col gap-3 rounded-2xl border border-line bg-surface-1 p-5">
       <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-txt-muted">{t('competitive.history.title')}</span>
 
       {duels === null ? (
@@ -40,7 +40,8 @@ export function DuelHistory({ duels }: { duels: DuelRow[] | null }) {
       ) : duels.length === 0 ? (
         <p className="py-10 text-center text-[12px] text-txt-muted">{t('competitive.history.empty')}</p>
       ) : (
-        <div className="flex flex-col gap-1">
+        // Seule la liste défile, jamais la page.
+        <div className="-mx-1 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-1">
           {duels.map((d, i) => (
             <motion.div
               key={d.id}
@@ -55,15 +56,15 @@ export function DuelHistory({ duels }: { duels: DuelRow[] | null }) {
               <SkinFace dataUri={`https://mc-heads.net/skin/${encodeURIComponent(d.opponent)}`} size={22} className="rounded-[4px]" />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[12.5px] font-semibold">{t('competitive.history.vs', { name: d.opponent })}</p>
-                <p className="text-[10.5px] text-txt-muted">
-                  {formatWhen(d.at, language)} · {formatLength(d.durationSecs)}
+                <p className="truncate text-[10.5px] text-txt-muted">
+                  {formatWhen(d.at, language)} · {formatLength(d.durationSecs)} · {d.server}
                 </p>
               </div>
-              <span className="w-[72px] text-right text-[11.5px] tabular-nums text-txt-secondary">
+              <span className="w-[58px] shrink-0 text-right text-[11.5px] tabular-nums text-txt-secondary">
                 {t('competitive.history.score', { score: d.score })}
               </span>
               <span
-                className={`w-[86px] text-right text-[12.5px] font-black tabular-nums ${
+                className={`w-[78px] shrink-0 text-right text-[12.5px] font-black tabular-nums ${
                   d.placement ? 'text-[10px] uppercase tracking-[0.05em] text-accent-hover' : d.rr === null ? 'text-txt-muted' : d.rr > 0 ? 'text-success' : d.rr < 0 ? 'text-danger' : 'text-txt-secondary'
                 }`}
               >
@@ -76,7 +77,7 @@ export function DuelHistory({ duels }: { duels: DuelRow[] | null }) {
                 <button
                   type="button"
                   disabled
-                  className="pointer-events-none flex items-center gap-1.5 rounded-lg bg-white/[0.04] px-2.5 py-1.5 text-[11px] font-semibold text-white/25"
+                  className="pointer-events-none flex items-center gap-1 rounded-lg bg-white/[0.04] px-2 py-1.5 text-[11px] font-semibold text-white/25"
                 >
                   <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
                   {t('competitive.history.replay')}

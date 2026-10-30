@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
 import { useT } from '@/i18n'
+import { TopoBackdrop } from './TopoBackdrop'
 import {
   CHAMPION,
   DIVISION_POINTS,
@@ -8,7 +9,6 @@ import {
   TIER_TEXTURES,
   divisionNumber,
   tierOf,
-  winsToNext,
   type Standing,
 } from '@/lib/competitive'
 
@@ -65,62 +65,81 @@ export function useRankName() {
   }
 }
 
-/** La carte du rang dans le mode choisi : insigne, nom, barre de la division
- *  ou cases du placement, objectif suivant. */
-export function RankCard({ standing }: { standing: Standing }) {
+/** Grain du fond : un bruit fractal en SVG, calculé par le navigateur. */
+const NOISE = `url("data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="3" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.55 0"/></filter><rect width="100%" height="100%" filter="url(#n)"/></svg>',
+)}")`
+
+/** Le fond de la carte : les courbes de niveau d'un relief qui bouge, dans la
+ *  couleur du rang, plus un grain léger. Les courbes s'estompent un peu au
+ *  centre, derrière l'insigne et le nom, pour ne pas les brouiller. */
+function RankBackdrop({ color }: { color: string }) {
+  return (
+    <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+      <div
+        className="absolute inset-0"
+        style={{ maskImage: 'radial-gradient(ellipse 60% 45% at 50% 42%, rgb(0 0 0 / 0.45) 0%, black 100%)' }}
+      >
+        <TopoBackdrop color={color} />
+      </div>
+      <div className="absolute inset-0 opacity-[0.06] mix-blend-overlay" style={{ backgroundImage: NOISE }} />
+    </div>
+  )
+}
+
+/** La carte du rang dans le mode choisi, tout au centre : insigne, nom, duels,
+ *  puis la barre de la division (ou les cases du placement). Elle prend
+ *  toute la place que lui donne sa case. */
+export function RankCard({ standing, onOpen }: { standing: Standing; onOpen?: () => void }) {
   const t = useT()
   const rankName = useRankName()
   const tier = tierOf(standing.division)
   const color = standing.placed ? TIER_COLORS[tier] : '160 150 190'
   const champion = standing.division >= CHAMPION
   const progress = champion ? 1 : Math.min(1, Math.max(0, standing.points / DIVISION_POINTS))
-  const wins = winsToNext(standing)
-  const next = Math.min(CHAMPION, standing.division + 1)
 
   return (
     <div
-      className="relative flex flex-col gap-5 overflow-hidden rounded-2xl border border-line bg-surface-1 p-5"
-      style={{ backgroundImage: `radial-gradient(28rem 16rem at 0% 0%, rgb(${color} / 0.16), transparent 70%)` }}
+      // Cliquable quand on lui donne `onOpen` : la carte mène au hub.
+      role={onOpen ? 'button' : undefined}
+      tabIndex={onOpen ? 0 : undefined}
+      onClick={onOpen}
+      onKeyDown={onOpen ? (e) => (e.key === 'Enter' || e.key === ' ') && onOpen() : undefined}
+      className={`group relative flex h-full min-h-[280px] flex-col items-center justify-evenly gap-6 overflow-hidden rounded-2xl border bg-surface-1 px-7 py-8 text-center transition-colors ${
+        onOpen ? 'cursor-pointer border-line hover:border-white/20' : 'border-line'
+      }`}
+      style={{ backgroundImage: `radial-gradient(22rem 16rem at 50% 38%, rgb(${color} / 0.18), transparent 70%)` }}
     >
-      <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-txt-muted">{t('competitive.rank.label')}</span>
+      <RankBackdrop color={color} />
 
-      <div className="flex items-center gap-5">
-        <motion.div
-          key={`${standing.mode}-${standing.division}-${standing.placed}`}
-          initial={{ scale: 0.85, rotate: -6, opacity: 0 }}
-          animate={{ scale: 1, rotate: 0, opacity: 1 }}
-          transition={{ type: 'spring', stiffness: 260, damping: 18 }}
-          style={{ filter: `drop-shadow(0 0 18px rgb(${color} / 0.45))` }}
+      <motion.div
+        className="relative"
+        key={`${standing.mode}-${standing.division}-${standing.placed}`}
+        initial={{ scale: 0.85, rotate: -6, opacity: 0 }}
+        animate={{ scale: 1, rotate: 0, opacity: 1 }}
+        transition={{ type: 'spring', stiffness: 260, damping: 18 }}
+        style={{ filter: `drop-shadow(0 0 22px rgb(${color} / 0.5))` }}
+      >
+        <RankTile division={standing.division} placed={standing.placed} size={116} />
+      </motion.div>
+
+      <div className="relative">
+        <p
+          className="text-[34px] font-black leading-none tracking-[-0.02em]"
+          style={{ color: `rgb(${color})`, textShadow: `0 0 24px rgb(${color} / 0.35)` }}
         >
-          <RankTile division={standing.division} placed={standing.placed} size={88} />
-        </motion.div>
-        <div className="min-w-0">
-          <p className="text-[28px] font-black leading-none tracking-[-0.02em]" style={{ color: `rgb(${color})` }}>
-            {rankName(standing.division, standing.placed)}
-          </p>
-          <p className="mt-2 text-[12px] text-txt-secondary">
-            {standing.placed
-              ? t('competitive.rank.duels', { count: standing.duels })
-              : t('competitive.rank.placement', { done: standing.duels, total: PLACEMENT_DUELS })}
-          </p>
-        </div>
+          {rankName(standing.division, standing.placed)}
+        </p>
+        <p className="mt-3 text-[12px] text-txt-secondary">
+          {standing.placed
+            ? t('competitive.rank.duels', { count: standing.duels })
+            : t('competitive.rank.placement', { done: standing.duels, total: PLACEMENT_DUELS })}
+        </p>
       </div>
 
       {standing.placed ? (
-        <div className="flex flex-col gap-2">
-          <div className="flex items-baseline justify-between text-[11.5px]">
-            <span className="font-semibold text-txt-primary">
-              {champion
-                ? t('competitive.rank.championPoints', { points: standing.points })
-                : t('competitive.rank.points', { points: standing.points, max: DIVISION_POINTS })}
-            </span>
-            <span className="text-txt-muted">
-              {champion
-                ? t('competitive.rank.top')
-                : t('competitive.rank.nextWins', { count: wins ?? 0, rank: rankName(next, true) })}
-            </span>
-          </div>
-          <div className="h-2.5 overflow-hidden rounded-full bg-white/[0.06]">
+        <div className="relative flex w-full max-w-[300px] flex-col gap-3">
+          <div className="h-2.5 overflow-hidden rounded-full bg-white/[0.07]">
             <motion.div
               className="h-full rounded-full"
               style={{ background: `linear-gradient(90deg, rgb(${color} / 0.55), rgb(${color}))` }}
@@ -129,24 +148,32 @@ export function RankCard({ standing }: { standing: Standing }) {
               transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
             />
           </div>
+          <span className="text-[11.5px] font-semibold tabular-nums text-txt-secondary">
+            {champion
+              ? t('competitive.rank.championPoints', { points: standing.points })
+              : t('competitive.rank.points', { points: standing.points, max: DIVISION_POINTS })}
+          </span>
         </div>
       ) : (
-        <div className="flex flex-col gap-2">
-          <div className="flex gap-1.5">
-            {Array.from({ length: PLACEMENT_DUELS }, (_, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.03 }}
-                className={`h-2.5 flex-1 rounded-full ${i < standing.duels ? 'bg-accent' : 'bg-white/[0.06]'}`}
-              />
-            ))}
-          </div>
-          <p className="text-[11.5px] text-txt-muted">
-            {t('competitive.rank.placementHint', { left: PLACEMENT_DUELS - standing.duels })}
-          </p>
+        <div className="relative flex w-full max-w-[300px] gap-1.5">
+          {Array.from({ length: PLACEMENT_DUELS }, (_, i) => (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.03 }}
+              className={`h-2.5 flex-1 rounded-full ${i < standing.duels ? 'bg-accent' : 'bg-white/[0.06]'}`}
+            />
+          ))}
         </div>
+      )}
+
+      {onOpen && (
+        // Le geste n'est pas évident sur une carte : on le dit au survol.
+        <span className="absolute bottom-3 left-0 right-0 flex items-center justify-center gap-1 text-[10.5px] font-semibold text-txt-muted opacity-0 transition-opacity group-hover:opacity-100">
+          {t('competitive.tabs.openHub')}
+          <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor"><path d="M10 6L8.6 7.4 13.2 12l-4.6 4.6L10 18l6-6z" /></svg>
+        </span>
       )}
     </div>
   )
