@@ -9,7 +9,7 @@ import { RankTile } from './RankCard'
 import { TopoBackdrop } from './TopoBackdrop'
 
 /** Couleur du passe de saison : l'accent du launcher. */
-const PASS_COLOR = '129 120 255'
+export const PASS_COLOR = '129 120 255'
 
 /** L'heure, rafraîchie chaque seconde : pour les comptes à rebours. */
 function useNow(): number {
@@ -56,7 +56,8 @@ export function ChallengesView({
 
 // ── Missions ─────────────────────────────────────────────────────────────
 
-function Missions({ challenges, pass }: { challenges: Challenge[] | null; pass: BattlePass | null }) {
+/** Missions du jour et de la semaine : aussi le volet de la page du passe. */
+export function Missions({ challenges, pass }: { challenges: Challenge[] | null; pass: BattlePass | null }) {
   const t = useT()
   const now = useNow()
   if (challenges === null) {
@@ -238,9 +239,18 @@ function PassHero({ pass, season }: { pass: BattlePass; season: Season | null })
   const locked = !owned
   const daysLeft = season?.end ? Math.max(0, Math.ceil((season.end - Date.now()) / 86_400_000)) : null
   const xpLeft = pass.xpPerTier - pass.xpInTier
+  const openPass = () => navigate('/missions/pass')
 
   return (
-    <div className="relative flex min-h-0 overflow-hidden rounded-2xl border border-line bg-surface-1" style={{ isolation: 'isolate' }}>
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={openPass}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPass() } }}
+      title={t('competitive.pass.seeTiers')}
+      className="group relative flex min-h-0 cursor-pointer overflow-hidden rounded-2xl border border-line bg-surface-1 transition-colors duration-200 hover:border-accent/40"
+      style={{ isolation: 'isolate' }}
+    >
       <div aria-hidden="true" className="absolute inset-0 -z-10">
         <TopoBackdrop color={PASS_COLOR} />
         <div className="absolute inset-0" style={{ background: `radial-gradient(28rem 18rem at 72% 45%, rgb(${PASS_COLOR} / 0.22), transparent 70%)` }} />
@@ -271,7 +281,15 @@ function PassHero({ pass, season }: { pass: BattlePass; season: Season | null })
           </p>
           <div className="flex max-w-[440px] flex-col gap-1.5">
             <div className="flex items-baseline justify-between text-[11.5px] font-bold">
-              <span>{t('competitive.pass.tier', { tier: pass.tier, total: pass.tiers })}</span>
+              <span className="flex items-center gap-2">
+                {t('competitive.pass.tier', { tier: pass.tier, total: pass.tiers })}
+                <span className="flex items-center gap-0.5 text-[10.5px] font-semibold text-txt-muted transition-colors group-hover:text-accent-hover">
+                  {t('competitive.pass.seeTiers')}
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3 transition-transform group-hover:translate-x-0.5">
+                    <path d="M9 6l6 6-6 6" />
+                  </svg>
+                </span>
+              </span>
               <span className="text-success">{t('competitive.pass.xpToGo', { xp: xpLeft.toLocaleString() })}</span>
             </div>
             <div className="h-2 overflow-hidden rounded-full bg-white/[0.08]">
@@ -301,7 +319,11 @@ function PassHero({ pass, season }: { pass: BattlePass; season: Season | null })
           </span>
         ) : (
           <button
-            onClick={() => navigate('/plans')}
+            onClick={(e) => {
+              // La carte entière ouvre les paliers : ce bouton-là mène ailleurs.
+              e.stopPropagation()
+              navigate('/plans')
+            }}
             className="rounded-xl bg-white px-6 py-2.5 text-[12px] font-black uppercase tracking-[0.05em] text-black transition-transform hover:scale-[1.03] active:scale-[0.98]"
           >
             {t('competitive.pass.unlock')}

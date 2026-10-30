@@ -37,7 +37,7 @@ import type { SupportCategory, TicketDetail, TicketStatus, TicketSummary } from 
 
 const DRAFT_KEY = SUPPORT_DRAFT_KEY
 
-type Tab = 'requests' | 'crashes' | 'patchNotes'
+type Tab = 'requests' | 'crashes' | 'patchNotes' | 'videos'
 type Kind = 'question' | 'refund' | 'plan' | 'deletion'
 
 interface KindSpec {
@@ -88,7 +88,7 @@ export default function Support() {
   // l'onglet d'à côté.
   const [tab, setTab] = useState<Tab>(() => {
     const asked = params.get('tab')
-    return asked === 'crashes' || asked === 'patchNotes' ? asked : 'requests'
+    return asked === 'crashes' || asked === 'patchNotes' || asked === 'videos' ? asked : 'requests'
   })
 
   useEffect(() => {
@@ -167,7 +167,9 @@ export default function Support() {
 
       <TabBar tab={tab} onPick={setTab} />
 
-      {tab === 'patchNotes' ? (
+      {tab === 'videos' ? (
+        <VideosSoon />
+      ) : tab === 'patchNotes' ? (
         // Sans compte aussi : les notes de version sont publiques, c'est le
         // même contenu que sur le site.
         <PatchNotesPanel />
@@ -231,7 +233,7 @@ function TabBar({ tab, onPick }: { tab: Tab; onPick: (tab: Tab) => void }) {
   const t = useT()
   return (
     <div className="flex shrink-0 gap-1 border-b border-line-soft px-6">
-      {(['requests', 'crashes', 'patchNotes'] as Tab[]).map((key) => (
+      {(['requests', 'crashes', 'patchNotes', 'videos'] as Tab[]).map((key) => (
         <button
           key={key}
           onClick={() => onPick(key)}
@@ -715,6 +717,33 @@ function RequestModal({
         </Button>
       </div>
     </ModalShell>
+  )
+}
+
+// ── Vidéos ───────────────────────────────────────────────────────────────────
+
+/** Tutoriels vidéo : l'onglet existe déjà, son contenu arrive plus tard. */
+function VideosSoon() {
+  const t = useT()
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+      className="flex flex-1 flex-col items-center justify-center gap-3 px-7 text-center"
+    >
+      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent/12 text-accent-hover">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className="h-7 w-7">
+          <rect x="2.5" y="5" width="19" height="14" rx="3" />
+          <path d="M10 9.5v5l4.5-2.5z" />
+        </svg>
+      </div>
+      <span className="rounded-full bg-accent/15 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-accent-hover">
+        {t('support.videos.badge')}
+      </span>
+      <p className="text-[15px] font-semibold">{t('support.videos.title')}</p>
+      <p className="max-w-sm text-[12px] leading-relaxed text-txt-secondary">{t('support.videos.text')}</p>
+    </motion.div>
   )
 }
 

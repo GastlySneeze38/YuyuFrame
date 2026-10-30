@@ -226,6 +226,14 @@ export interface BattlePass {
   checkpointsDone: number
   checkpoints: number
   objectives: PassObjective[]
+  /** La récompense de chaque palier, du 1er au dernier (`tiers` entrées). */
+  rewards: PassReward[]
+}
+
+export interface PassReward {
+  kind: CosmeticKind
+  /** Nom propre de la récompense (« Impact »), pas traduit. */
+  name: string
 }
 
 export type PassObjective =
@@ -393,6 +401,15 @@ function demoBattlePass(): BattlePass {
       { kind: 'tiers', done: 33, total: 50 },
       { kind: 'rank', tier: 'diamond', reward: 'aura', ratio: 0.68 },
     ],
+    rewards: Array.from({ length: 50 }, (_, i): PassReward => {
+      const tier = i + 1
+      // Une grosse récompense tous les dix paliers, la cape au 34e (celle
+      // mise en avant), des insignes et titres entre les deux.
+      if (tier === 34) return { kind: 'cape', name: 'Impact' }
+      if (tier === 50) return { kind: 'aura', name: 'Impact' }
+      if (tier % 10 === 0) return { kind: 'nametag', name: `Impact ${tier / 10}` }
+      return tier % 3 === 0 ? { kind: 'title', name: `Impact ${tier}` } : { kind: 'badge', name: `Impact ${tier}` }
+    }),
   }
 }
 

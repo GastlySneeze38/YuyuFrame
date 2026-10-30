@@ -171,14 +171,6 @@ export default function Settings() {
             {t('settings.subtitle')}
           </p>
         </div>
-        <div className="ml-auto flex items-center gap-2">
-          <Button size="sm" variant="secondary" onClick={() => setSharing('share')}>
-            {t('settingsShare.shareButton')}
-          </Button>
-          <Button size="sm" onClick={() => setSharing('optimized')}>
-            {t('settingsShare.optimizedButton')}
-          </Button>
-        </div>
       </PageHeader>
 
       {sharing === 'share' && <SettingsShareModal onClose={() => setSharing(null)} onApplied={readAnalytics} />}
@@ -203,7 +195,23 @@ export default function Settings() {
           title={t('settings.sidebarTitle')}
         />
 
-        <div ref={scrollRef} className="min-w-0 flex-1 overflow-y-auto p-8">
+        <div className="relative min-w-0 flex-1">
+        {/* Partager / paramètres optimisés : posés sur la zone qui défile,
+            hors du défilement, pour rester à portée sur toute la page. */}
+        <div className="absolute right-5 top-6 z-10 flex flex-col gap-2">
+          <FloatingAction
+            label={t('settingsShare.shareButton')}
+            onClick={() => setSharing('share')}
+            icon="M18 8a3 3 0 100-6 3 3 0 000 6zM6 15a3 3 0 100-6 3 3 0 000 6zM18 22a3 3 0 100-6 3 3 0 000 6zM8.6 13.5l6.8 4M15.4 6.5l-6.8 4"
+          />
+          <FloatingAction
+            label={t('settingsShare.optimizedButton')}
+            onClick={() => setSharing('optimized')}
+            accent
+            icon="M13 2L4 14h7l-1 8 9-12h-7l1-8z"
+          />
+        </div>
+        <div ref={scrollRef} className="h-full overflow-y-auto py-8 pl-8 pr-20">
         <div className="mx-auto flex max-w-2xl flex-col gap-4">
 
           {/* Lancement */}
@@ -858,6 +866,7 @@ export default function Settings() {
 
         </div>
         </div>
+        </div>
       </div>
 
       <AnimatePresence>
@@ -920,6 +929,39 @@ function SCard({ title, icon, children, onTitleClick }: {
   )
 }
 
+
+/** Bouton rond à icône ; son libellé glisse à sa gauche au survol. */
+function FloatingAction({ label, icon, onClick, accent }: {
+  label: string
+  icon: string
+  onClick: () => void
+  accent?: boolean
+}) {
+  return (
+    <motion.button
+      onClick={onClick}
+      aria-label={label}
+      whileHover="hover"
+      whileTap={{ scale: 0.94 }}
+      className={`group relative flex h-11 w-11 items-center justify-center rounded-xl border shadow-lg shadow-black/40 backdrop-blur transition-colors ${
+        accent
+          ? 'border-accent/60 bg-accent/35 text-white hover:bg-accent/55'
+          : 'border-line-strong bg-surface-2/90 text-txt-secondary hover:border-accent/40 hover:text-white'
+      }`}
+    >
+      <motion.svg
+        variants={{ hover: { scale: 1.12, rotate: -6 } }}
+        transition={{ type: 'spring', stiffness: 420, damping: 18 }}
+        viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"
+      >
+        <path d={icon} />
+      </motion.svg>
+      <span className="pointer-events-none absolute right-full mr-2 whitespace-nowrap rounded-lg border border-line bg-surface-2 px-2.5 py-1 text-[11px] font-semibold text-white opacity-0 shadow-lg transition-all duration-150 translate-x-1 group-hover:translate-x-0 group-hover:opacity-100">
+        {label}
+      </span>
+    </motion.button>
+  )
+}
 
 function IRow({ label, value }: { label: string; value: string }) {
   return (

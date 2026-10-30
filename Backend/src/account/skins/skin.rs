@@ -63,7 +63,10 @@ const PNG_SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', b'\r', b'\n', 0x1a, b'\n
 pub(super) fn http() -> &'static reqwest::Client {
     static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
     CLIENT.get_or_init(|| {
+        // Sans User-Agent, le pare-feu devant api.minecraftservices.com rend une
+        // page HTML « The request is blocked » (403) au lieu de répondre.
         reqwest::Client::builder()
+            .user_agent(concat!("YuyuFrame/", env!("CARGO_PKG_VERSION")))
             .timeout(std::time::Duration::from_secs(15))
             .connect_timeout(std::time::Duration::from_secs(8))
             .build()
@@ -500,29 +503,16 @@ pub(super) async fn account_row(state: &SharedState, uuid: &str) -> Result<db::M
         .ok_or_else(|| "Compte Minecraft introuvable".to_string())
 }
 
-/// Pose le skin chez Mojang pour un compte Microsoft. C'est Mojang qui va
-/// chercher l'URL : elle doit donc être joignable depuis l'extérieur, et une
-/// URL locale sera refusée par eux, pas par nous.
-async fn push_to_mojang(access_token: &str, url: &str, variant: &str) -> Result<(), String> {
-    let resp = http()
-        .post(MC_SKINS_URL)
-        .bearer_auth(access_token)
-        .json(&serde_json::json!({ "variant": variant, "url": url }))
-        .send()
-        .await
-        .map_err(|e| format!("Mojang injoignable : {}", e))?;
-    if resp.status().is_success() {
-        return Ok(());
-    }
-    let status = resp.status();
-    let body = resp.text().await.unwrap_or_default();
-    // Mojang détaille souvent la cause (URL inaccessible, image refusée) : la
-    // transmettre vaut mieux qu'un code nu.
-    Err(if body.trim().is_empty() {
+/// Message d'erreur d'un refus de Mojang. Leur réponse JSON détaille souvent la
+/// cause (image refusée…) ; une page HTML, elle, vient du pare-feu et ne dit
+/// rien d'utile — on ne la recopie pas.
+fn mojang_refusal(status: reqwest::StatusCode, body: &str) -> String {
+    let body = body.trim();
+    if body.is_empty() || body.starts_with('<') {
         format!("Mojang a refusé le skin ({})", status)
     } else {
-        format!("Mojang a refusé le skin ({}) : {}", status, body.trim())
-    })
+        format!("Mojang a refusé le skin ({}) : {}", status, body)
+    }
 }
 
 /// Envoie le PNG lui-même à Mojang, puis relit le profil pour connaître l'URL
@@ -550,11 +540,7 @@ async fn upload_to_mojang(access_token: &str, bytes: Vec<u8>, variant: &str) -> 
     if !resp.status().is_success() {
         let status = resp.status();
         let body = resp.text().await.unwrap_or_default();
-        return Err(if body.trim().is_empty() {
-            format!("Mojang a refusé le skin ({})", status)
-        } else {
-            format!("Mojang a refusé le skin ({}) : {}", status, body.trim())
-        });
+        return Err(mojang_refusal(status, &body));
     }
 
     // La réponse contient déjà le profil mis à jour : on y lit l'URL plutôt que
@@ -599,16 +585,20 @@ pub async fn skin_apply(
 
     // Vérifié avant d'aller plus loin : ce qui n'est pas un skin ne doit ni
     // partir chez Mojang ni entrer en base.
-    let bytes_or_uri = if local {
+    // Les octets sont gardés dans les deux cas : Mojang n'accepte plus qu'on lui
+    // donne une adresse à aller chercher, le skin part toujours en fichier.
+    let bytes = if local {
         let bytes = tokio::fs::read(local_dir().join(&source))
             .await
             .map_err(|e| format!("Skin importé introuvable : {}", e))?;
         validate_skin_png(&bytes)?;
-        Some(bytes)
+        bytes
     } else {
         check_public_url(&source)?;
-        fetch_preview(&source).await?;
-        None
+        let uri = fetch_preview(&source).await?;
+        base64::engine::general_purpose::STANDARD
+            .decode(uri.rsplit(',').next().unwrap_or_default())
+            .map_err(|_| "Image illisible".to_string())?
     };
 
     // Le genre enregistré n'est pas toujours celui demandé : un fichier posé sur
@@ -624,16 +614,8 @@ pub async fn skin_apply(
         db::SkinRef { kind: kind.clone(), source: source.clone(), variant: variant.clone(), origin, hosted }
     } else {
         let session = crate::account::minecraft::fresh_session(&state, &uuid).await?;
-        match bytes_or_uri {
-            Some(bytes) => {
-                let hosted = upload_to_mojang(&session.access_token, bytes, &variant).await?;
-                db::SkinRef { kind: "url".into(), source: hosted, variant: variant.clone(), origin, hosted: None }
-            }
-            None => {
-                push_to_mojang(&session.access_token, &source, &variant).await?;
-                db::SkinRef { kind: "url".into(), source: source.clone(), variant: variant.clone(), origin, hosted: None }
-            }
-        }
+        let hosted = upload_to_mojang(&session.access_token, bytes, &variant).await?;
+        db::SkinRef { kind: "url".into(), source: hosted, variant: variant.clone(), origin, hosted: None }
     };
 
     {

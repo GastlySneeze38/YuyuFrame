@@ -55,6 +55,7 @@ const PAGE_IMPORTS = [
   () => import('@/pages/Backup'),
   () => import('@/pages/Competitive'),
   () => import('@/pages/Missions'),
+  () => import('@/pages/SeasonPass'),
   () => import('@/pages/JvmProfiles'),
   () => import('@/pages/JvmProfileEditor'),
   () => import('@/pages/Skins'),
@@ -92,6 +93,7 @@ const Backup = lazy(() => import('@/pages/Backup'))
 const SyncInstance = lazy(() => import('@/pages/SyncInstance'))
 const Competitive = lazy(() => import('@/pages/Competitive'))
 const Missions = lazy(() => import('@/pages/Missions'))
+const SeasonPass = lazy(() => import('@/pages/SeasonPass'))
 const JvmProfiles = lazy(() => import('@/pages/JvmProfiles'))
 const JvmProfileEditor = lazy(() => import('@/pages/JvmProfileEditor'))
 const Skins = lazy(() => import('@/pages/Skins'))
@@ -653,6 +655,7 @@ export default function App() {
             <Route path="/competitive" element={<Competitive />} />
             {/* Missions et passe de saison, ouverts depuis Outils. */}
             <Route path="/missions" element={<Missions />} />
+            <Route path="/missions/pass" element={<SeasonPass />} />
             <Route path="/jvm" element={<JvmProfiles />} />
             <Route path="/jvm/:profileId" element={<JvmProfileEditor />} />
             {/* Atelier des modales, uniquement en développement (Ctrl+Maj+M). */}
