@@ -1212,6 +1212,8 @@ export const ru: TranslationSchema = {
       winRate: '% побед · ранг',
       you: 'Вы',
       notPlaced: 'Завершите калибровку, чтобы попасть в таблицу.',
+      friend: 'Друг',
+      notPlacedFriend: '{{name}} ещё не завершил калибровку и не попадает в таблицу.',
       soon: 'Таблица лидеров скоро появится.',
     },
     history: {

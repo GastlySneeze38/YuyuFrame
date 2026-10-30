@@ -1210,6 +1210,8 @@ export const fr = {
       winRate: '% de victoires · rang',
       you: 'Toi',
       notPlaced: 'Termine ton placement pour apparaître dans le classement.',
+      friend: 'Ami',
+      notPlacedFriend: "{{name}} n'a pas encore terminé son placement : il n'apparaît pas dans le classement.",
       soon: 'Le classement entre joueurs arrive bientôt.',
     },
     history: {

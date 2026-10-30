@@ -1212,6 +1212,8 @@ export const en: TranslationSchema = {
       winRate: 'Win % · rank',
       you: 'You',
       notPlaced: 'Finish your placement to appear on the leaderboard.',
+      friend: 'Friend',
+      notPlacedFriend: "{{name}} hasn't finished their placement yet, so they're not on the leaderboard.",
       soon: 'The player leaderboard is coming soon.',
     },
     history: {

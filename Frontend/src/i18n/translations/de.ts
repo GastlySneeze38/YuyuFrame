@@ -1212,6 +1212,8 @@ export const de: TranslationSchema = {
       winRate: 'Siegquote · Rang',
       you: 'Du',
       notPlaced: 'Schließe deine Platzierung ab, um in der Rangliste zu erscheinen.',
+      friend: 'Freund',
+      notPlacedFriend: '{{name}} hat die Platzierung noch nicht abgeschlossen und erscheint nicht in der Rangliste.',
       soon: 'Die Rangliste der Spieler kommt bald.',
     },
     history: {

@@ -34,8 +34,9 @@ const CELLS = SEASON_GRID * SEASON_GRID
  *
  * `wins === null` : pas encore de route pour ça. `count` : toutes les
  * victoires de la saison, quand le serveur n'envoie que les meilleures.
+ * `readOnly` : la saison d'un ami, sans le réglage d'affichage au profil.
  */
-export function SeasonRankView({ wins, count, season }: { wins: number[] | null; count?: number; season: Season | null }) {
+export function SeasonRankView({ wins, count, season, readOnly = false }: { wins: number[] | null; count?: number; season: Season | null; readOnly?: boolean }) {
   const t = useT()
   const rankName = useRankName()
   const [showOnProfile, setShowOnProfile] = useState(true)
@@ -136,11 +137,13 @@ export function SeasonRankView({ wins, count, season }: { wins: number[] | null;
           </div>
         </div>
 
-        {/* 3. L'affichage au profil, en dernier. */}
-        <label className="flex cursor-pointer items-center justify-between gap-3 rounded-2xl border border-white/[0.07] bg-black/30 px-5 py-3.5 backdrop-blur-sm">
-          <span className="text-[12px] text-txt-secondary">{t('competitive.season.showOnProfile')}</span>
-          <Toggle checked={showOnProfile} onChange={() => setShowOnProfile((v) => !v)} size="sm" />
-        </label>
+        {/* 3. L'affichage au profil, en dernier — seulement sur ma propre saison. */}
+        {!readOnly && (
+          <label className="flex cursor-pointer items-center justify-between gap-3 rounded-2xl border border-white/[0.07] bg-black/30 px-5 py-3.5 backdrop-blur-sm">
+            <span className="text-[12px] text-txt-secondary">{t('competitive.season.showOnProfile')}</span>
+            <Toggle checked={showOnProfile} onChange={() => setShowOnProfile((v) => !v)} size="sm" />
+          </label>
+        )}
       </div>
 
       <AnimatePresence>{showMax && <MaxModal onClose={() => setShowMax(false)} />}</AnimatePresence>

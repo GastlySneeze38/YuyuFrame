@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useFriends } from '@/stores/useFriends'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { PageGlow } from '@/components/PageGlow'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
@@ -29,7 +30,9 @@ import {
   readStats,
   readSummaryStandings,
   serverStats,
+  type ApiSummary,
   type CompetitiveData,
+  type DuelRow,
   type ModeKey,
   type Standing,
 } from '@/lib/competitive'
@@ -48,6 +51,10 @@ import {
  * développement, ces cartes disent « bientôt ». En développement, tout peut
  * être rempli par des données de démonstration (`demoData`) : interrupteur
  * dans l'atelier de développement (Ctrl+Maj+M, `stores/useDevFlags.ts`).
+ *
+ * `?friend=<identifiant public>` ouvre le même onglet sur un ami (bouton
+ * « Compétitif » de sa fiche) : mêmes écrans, ses données
+ * (`GET /v1/friends/{id}/competitive`), refusé s'il ne les montre pas.
  */
 
 // Récompenses (`RewardsView`, saisons et cosmétiques) : retiré de la
@@ -65,7 +72,24 @@ type Status =
   | { kind: 'offline' }
   | { kind: 'unavailable' }
   | { kind: 'unproven' }
+  | { kind: 'friendHidden' }
+  | { kind: 'friendNoAccount' }
   | { kind: 'error'; message: string }
+
+/** Les données de l'onglet à partir du résumé du serveur (le mien ou celui d'un ami). */
+function fromSummary(s: ApiSummary, duels: DuelRow[] | null, leaderboard: CompetitiveData['leaderboard']): CompetitiveData {
+  return {
+    standings: readSummaryStandings(s),
+    leaderboard,
+    duels,
+    stats: readStats(s),
+    challenges: null,
+    seasons: readSeasons(s),
+    battlePass: null,
+    seasonWins: Object.fromEntries(s.modes.map((m) => [m.mode, m.season_wins])),
+    seasonWinCount: Object.fromEntries(s.modes.map((m) => [m.mode, m.season_win_count])),
+  }
+}
 
 export default function Competitive() {
   const t = useT()
@@ -83,14 +107,42 @@ export default function Competitive() {
   const [view, setView] = useState<View>('history')
   const [server, setServer] = useState<string | null>(null)
 
+  // L'onglet ouvert sur un ami (bouton « Compétitif » de sa fiche).
+  const [params] = useSearchParams()
+  const friendId = params.get('friend')
+  const friendName = useFriends((s) => s.list?.friends.find((f) => f.id === friendId)?.username ?? null)
+
   const load = useCallback(async () => {
     if (demo) {
-      setStatus({ kind: 'ready', data: demoData(username ?? 'Steve') })
+      setStatus({ kind: 'ready', data: demoData(friendId ? friendName ?? 'Steve' : username ?? 'Steve') })
       return
     }
     if (!signedIn) return setStatus({ kind: 'signedOut' })
-    if (!uuid) return setStatus({ kind: 'noAccount' })
     if (isOffline) return setStatus({ kind: 'offline' })
+    if (friendId) {
+      setStatus({ kind: 'loading' })
+      try {
+        const [answer, boardMace, boardSword] = await Promise.allSettled([
+          api.friends.competitive(friendId),
+          api.ranked.leaderboard('mace'),
+          api.ranked.leaderboard('sword'),
+        ])
+        if (answer.status === 'rejected') throw answer.reason
+        const { account, summary, recent } = answer.value
+        if (!summary || !account) return setStatus({ kind: 'friendNoAccount' })
+        // Sa ligne est marquée (« Ami ») s'il est dans les premiers.
+        const leaderboard =
+          boardMace.status === 'fulfilled' && boardSword.status === 'fulfilled'
+            ? { mace: readBoard(boardMace.value, account.uuid), sword: readBoard(boardSword.value, account.uuid) }
+            : null
+        setStatus({ kind: 'ready', data: fromSummary(summary, recent.map(readDuel), leaderboard) })
+      } catch (e) {
+        if (errorCode(e) === 'forbidden') setStatus({ kind: 'friendHidden' })
+        else setStatus({ kind: 'error', message: errorMessage(e) })
+      }
+      return
+    }
+    if (!uuid) return setStatus({ kind: 'noAccount' })
     setStatus({ kind: 'loading' })
     try {
       const answer = await api.ranked.state(uuid)
@@ -114,17 +166,9 @@ export default function Competitive() {
           : null
       setStatus({
         kind: 'ready',
-        data: {
-          standings: s ? readSummaryStandings(s) : readStandings(answer),
-          leaderboard,
-          duels,
-          stats: s ? readStats(s) : null,
-          challenges: null,
-          seasons: s ? readSeasons(s) : null,
-          battlePass: null,
-          seasonWins: s ? Object.fromEntries(s.modes.map((m) => [m.mode, m.season_wins])) : null,
-          seasonWinCount: s ? Object.fromEntries(s.modes.map((m) => [m.mode, m.season_win_count])) : undefined,
-        },
+        data: s
+          ? fromSummary(s, duels, leaderboard)
+          : { standings: readStandings(answer), leaderboard, duels, stats: null, challenges: null, seasons: null, battlePass: null, seasonWins: null },
       })
     } catch (e) {
       const code = errorCode(e)
@@ -132,7 +176,7 @@ export default function Competitive() {
       else if (code === 'ranked_unproven') setStatus({ kind: 'unproven' })
       else setStatus({ kind: 'error', message: errorMessage(e) })
     }
-  }, [demo, signedIn, uuid, isOffline, username])
+  }, [demo, signedIn, uuid, isOffline, username, friendId, friendName])
 
   useEffect(() => {
     void load()
@@ -159,7 +203,9 @@ export default function Competitive() {
           mode. Le contenu n'a ainsi plus de bande au-dessus de lui. */}
       <PageHeader>
         <PageHeaderSeparator />
-        <h1 className="shrink-0 text-[16px] font-black leading-[1.2] tracking-[-0.01em]">{t('competitive.title')}</h1>
+        <h1 className="shrink-0 text-[16px] font-black leading-[1.2] tracking-[-0.01em]">
+          {friendId ? t('friends.profile.competitiveTitle', { name: friendName ?? '…' }) : t('competitive.title')}
+        </h1>
         <nav className="flex min-w-0 flex-1 justify-center">
           {data && (
             <div className="flex rounded-xl bg-white/[0.04] p-1">
@@ -195,7 +241,7 @@ export default function Competitive() {
               <ButtonSpinner size={32} color="#818cf8" trackColor="rgba(255,255,255,0.08)" />
             </div>
           ) : !data ? (
-            <StatusCard status={status} onRetry={load} onSignIn={() => navigate('/yuyu?mode=login')} onAccounts={() => navigate('/login')} />
+            <StatusCard status={status} friendName={friendName ?? '…'} onRetry={load} onSignIn={() => navigate('/yuyu?mode=login')} onAccounts={() => navigate('/login')} />
           ) : (
             <>
               <motion.div
@@ -212,9 +258,10 @@ export default function Competitive() {
                     wins={data.seasonWins ? data.seasonWins[shown] ?? [] : null}
                     count={data.seasonWinCount?.[shown]}
                     season={data.seasons?.[0] ?? null}
+                    readOnly={!!friendId}
                   />
                 ) : view === 'leaderboard' ? (
-                  <Leaderboard rows={data.leaderboard ? data.leaderboard[shown] ?? [] : null} placed={standing.placed} />
+                  <Leaderboard rows={data.leaderboard ? data.leaderboard[shown] ?? [] : null} placed={standing.placed} subject={friendId ? friendName ?? '…' : undefined} />
                 ) : (
                   // Le rang à gauche, l'historique au milieu, les serveurs à
                   // droite : trois colonnes de toute la hauteur.
@@ -335,11 +382,13 @@ function ModeDropdown({
 /** Pourquoi il n'y a rien à montrer, et quoi faire. */
 function StatusCard({
   status,
+  friendName,
   onRetry,
   onSignIn,
   onAccounts,
 }: {
   status: Status
+  friendName: string
   onRetry: () => void
   onSignIn: () => void
   onAccounts: () => void
@@ -356,7 +405,11 @@ function StatusCard({
             ? t('competitive.status.unavailable')
             : status.kind === 'unproven'
               ? t('competitive.status.unproven')
-              : status.kind === 'error'
+              : status.kind === 'friendHidden'
+                ? t('friends.profile.competitiveHidden', { name: friendName })
+                : status.kind === 'friendNoAccount'
+                  ? t('friends.profile.competitiveNoAccount', { name: friendName })
+                  : status.kind === 'error'
                 ? status.message
                 : ''
   return (

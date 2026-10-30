@@ -1212,6 +1212,8 @@ export const it: TranslationSchema = {
       winRate: '% di vittorie · grado',
       you: 'Tu',
       notPlaced: 'Completa il piazzamento per comparire in classifica.',
+      friend: 'Amico',
+      notPlacedFriend: '{{name}} non ha ancora completato il piazzamento: non compare in classifica.',
       soon: 'La classifica tra giocatori arriverà presto.',
     },
     history: {

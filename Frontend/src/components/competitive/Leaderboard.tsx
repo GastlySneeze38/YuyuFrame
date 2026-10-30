@@ -19,7 +19,9 @@ const skinOf = (name: string) => `https://mc-heads.net/skin/${encodeURIComponent
  *
  * `rows === null` : le serveur n'a pas encore de route pour ça.
  */
-export function Leaderboard({ rows, placed }: { rows: LeaderboardRow[] | null; placed: boolean }) {
+/** `subject` : le pseudo de l'ami dont on regarde l'onglet ; sa ligne (`me`)
+ *  est marquée « Ami » au lieu de « Toi ». */
+export function Leaderboard({ rows, placed, subject }: { rows: LeaderboardRow[] | null; placed: boolean; subject?: string }) {
   const t = useT()
 
   if (rows === null) {
@@ -35,6 +37,7 @@ export function Leaderboard({ rows, placed }: { rows: LeaderboardRow[] | null; p
   const rest = rows.filter((r) => r.position <= TOP)
   const me = rows.find((r) => r.me)
   const pinned = me && me.position > TOP ? me : null
+  const mark = subject ? t('competitive.leaderboard.friend') : t('competitive.leaderboard.you')
 
   return (
     <div className="grid h-full grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)] gap-4">
@@ -48,15 +51,19 @@ export function Leaderboard({ rows, placed }: { rows: LeaderboardRow[] | null; p
         <div className="-mx-1 flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden px-1">
           {/* Les lignes se partagent toute la hauteur de la carte. */}
           {rest.map((r, i) => (
-            <Line key={`${r.position}-${r.name}`} row={r} index={i} fill />
+            <Line key={`${r.position}-${r.name}`} row={r} index={i} fill mark={mark} />
           ))}
         </div>
         {pinned && (
           <div className="flex flex-col gap-1 border-t border-white/[0.06] pt-2">
-            <Line row={pinned} index={0} />
+            <Line row={pinned} index={0} mark={mark} />
           </div>
         )}
-        {!placed && <p className="px-2.5 text-[11px] text-txt-muted">{t('competitive.leaderboard.notPlaced')}</p>}
+        {!placed && (
+          <p className="px-2.5 text-[11px] text-txt-muted">
+            {subject ? t('competitive.leaderboard.notPlacedFriend', { name: subject }) : t('competitive.leaderboard.notPlaced')}
+          </p>
+        )}
       </div>
     </div>
   )
@@ -112,7 +119,7 @@ function Podium({ rows }: { rows: LeaderboardRow[] }) {
   )
 }
 
-function Line({ row: r, index, fill = false }: { row: LeaderboardRow; index: number; fill?: boolean }) {
+function Line({ row: r, index, fill = false, mark }: { row: LeaderboardRow; index: number; fill?: boolean; mark: string }) {
   const t = useT()
   const rankName = useRankName()
   const color = TIER_COLORS[tierOf(r.division)]
@@ -132,7 +139,7 @@ function Line({ row: r, index, fill = false }: { row: LeaderboardRow; index: num
       <SkinFace dataUri={skinOf(r.name)} size={24} className="rounded-[4px]" />
       <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">
         {r.name}
-        {r.me && <span className="ml-2 text-[10px] font-bold uppercase tracking-[0.06em] text-accent-hover">{t('competitive.leaderboard.you')}</span>}
+        {r.me && <span className="ml-2 text-[10px] font-bold uppercase tracking-[0.06em] text-accent-hover">{mark}</span>}
       </span>
       <span className="w-14 text-right text-[11.5px] tabular-nums text-txt-muted">{r.winRate} %</span>
       <div className="flex w-[130px] items-center justify-end gap-2">

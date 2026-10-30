@@ -1212,6 +1212,8 @@ export const pl: TranslationSchema = {
       winRate: '% zwycięstw · ranga',
       you: 'Ty',
       notPlaced: 'Ukończ kwalifikacje, aby pojawić się w rankingu.',
+      friend: 'Znajomy',
+      notPlacedFriend: '{{name}} nie ukończył jeszcze kwalifikacji, więc nie ma go w rankingu.',
       soon: 'Ranking graczy pojawi się wkrótce.',
     },
     history: {

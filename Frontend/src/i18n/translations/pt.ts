@@ -1213,6 +1213,8 @@ export const pt: TranslationSchema = {
       winRate: '% de vitórias · rank',
       you: 'Você',
       notPlaced: 'Termine a classificatória para aparecer no ranking.',
+      friend: 'Amigo',
+      notPlacedFriend: '{{name}} ainda não terminou a classificatória: não aparece no ranking.',
       soon: 'O ranking entre jogadores chega em breve.',
     },
     history: {
