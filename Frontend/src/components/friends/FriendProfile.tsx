@@ -7,12 +7,16 @@ import { JoinServerModal } from '@/components/servers/JoinServerModal'
 import { Button } from '@/components/ui/Button'
 import { ModalShell } from '@/components/ui/ModalShell'
 import { STATUS_COLORS, dateLocale, liveCustom, relativeTime, skinOf } from '@/lib/friends'
-import { showError } from '@/stores/useErrorToast'
+import { showError, showNotice } from '@/stores/useErrorToast'
 import { useFriends } from '@/stores/useFriends'
 import { useStore } from '@/stores/useStore'
 import { useT } from '@/i18n'
-import type { Friend } from '@/types/friends'
+import { demoProfile } from '@/lib/friendsDemo'
+import { isDemo } from '@/stores/useDevFlags'
+import type { Friend, PublicProfile, ReportReason } from '@/types/friends'
 import { FriendAvatar, GameTile, activityText } from './FriendBits'
+import { ProfileLayout } from './ProfileLayout'
+import { ProfileShowcase } from './ProfileShowcase'
 
 /**
  * Le profil d'un ami, dans le panneau.
@@ -23,13 +27,15 @@ import { FriendAvatar, GameTile, activityText } from './FriendBits'
  * les gestes rares et définitifs (retirer, bloquer) sont rangés dans le menu
  * « … » et se confirment sur l'élément lui-même.
  *
- * Le bandeau est à la couleur du statut pour l'instant : c'est la place de la
- * bannière que chacun pourra choisir pour son profil.
+ * Le bandeau est la bannière choisie par l'ami (sinon la couleur de son
+ * statut) ; sa bio, sa vitrine (rang, titre) suivent son pseudo, quand il les
+ * montre à ses amis.
  */
 export function FriendProfile({ friend, onDone }: { friend: Friend; onDone: () => void }) {
   const t = useT()
   const language = useStore((s) => s.language)
   const [joining, setJoining] = useState(false)
+  const [profile, setProfile] = useState<PublicProfile | null>(null)
   const p = friend.presence
   const custom = liveCustom(p)
   const color = STATUS_COLORS[p.state]
@@ -37,47 +43,28 @@ export function FriendProfile({ friend, onDone }: { friend: Friend; onDone: () =
   // Rejoindre : il faut qu'il soit sur un serveur ET qu'il me le montre.
   const joinBlocked = !game ? t('friends.profile.joinNotPlaying') : !game.server ? t('friends.profile.joinHidden') : null
 
+  // Son profil se charge à l'ouverture ; la fiche s'affiche sans l'attendre.
+  useEffect(() => {
+    let alive = true
+    const load = isDemo() ? Promise.resolve(demoProfile(friend.id)) : api.friends.profile(friend.id)
+    load.then((p) => alive && setProfile(p)).catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [friend.id])
+
   return (
-    <motion.div initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 16 }} className="flex flex-col">
-      {/* Le menu « … » vit hors du bandeau : celui-ci rogne ce qui dépasse,
-          et le menu déroulé dépasse forcément. Il passe au-dessus de tout,
-          bulle de statut comprise. */}
-      <div className="relative shrink-0">
-        <div className="relative h-[96px] overflow-hidden" style={{ background: `linear-gradient(135deg, ${color}66, ${color}14 75%)` }}>
-          <div className="absolute inset-0 bg-[radial-gradient(70%_100%_at_85%_0%,rgba(255,255,255,0.14),transparent)]" />
-        </div>
-        <div className="absolute right-2 top-2 z-30">
-          <MoreMenu friend={friend} onDone={onDone} />
-        </div>
-      </div>
-
-      <div className="relative z-10 -mt-10 flex items-end gap-1 px-4">
-        <div className="shrink-0 rounded-[30%] bg-[#111116] p-1.5">
-          <FriendAvatar skin={skinOf(friend)} state={p.state} size={72} />
-        </div>
-        {/* Le statut personnalisé en bulle de pensée, accrochée à la tête par
-            deux petits ronds — il « pense » ce qu'il a écrit. */}
-        {custom && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.8, x: -6 }}
-            animate={{ opacity: 1, scale: 1, x: 0 }}
-            transition={{ type: 'spring', stiffness: 420, damping: 26, delay: 0.08 }}
-            style={{ transformOrigin: 'left center' }}
-            // Elle occupe toute la place à droite de la tête, sous le bandeau :
-            // c'est là que la fiche avait un vide.
-            className="relative mb-1.5 ml-7 min-w-0 flex-1"
-          >
-            {/* Deux ronds qui grossissent en montant de la tête vers la bulle. */}
-            <span className="absolute -left-[26px] bottom-0.5 h-3 w-3 rounded-full border border-line bg-[#1d1d26] shadow-[0_4px_10px_rgba(0,0,0,0.35)]" />
-            <span className="absolute -left-[15px] bottom-3.5 h-[18px] w-[18px] rounded-full border border-line bg-[#1d1d26] shadow-[0_4px_10px_rgba(0,0,0,0.35)]" />
-            <div className="relative flex min-h-[54px] w-full items-center rounded-[22px] border border-line bg-[#1d1d26] px-4 py-3 text-[15.5px] font-bold leading-snug text-txt-primary shadow-[0_8px_22px_rgba(0,0,0,0.4)] [overflow-wrap:anywhere]">
-              {custom}
-            </div>
-          </motion.div>
-        )}
-      </div>
-
-      <p className="truncate px-4 pt-2.5 text-[20px] font-black leading-tight">{friend.username}</p>
+    <motion.div initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 16 }} className="h-full">
+      <ProfileLayout
+        banner={profile?.banner ?? null}
+        accent={profile?.accent ?? null}
+        color={color}
+        corner={<MoreMenu friend={friend} onDone={onDone} />}
+        avatar={<FriendAvatar skin={skinOf(friend)} state={p.state} size={72} />}
+        bubble={custom ? <ThoughtBubble accent={profile?.accent ?? null}>{custom}</ThoughtBubble> : null}
+        name={friend.username}
+      >
+      {profile?.bio && <p className="whitespace-pre-line px-4 pt-1.5 text-[12.5px] leading-relaxed text-txt-secondary [overflow-wrap:anywhere]">{profile.bio}</p>}
 
       {/* Ce qu'on vient faire ici : le rejoindre, voir son onglet compétitif. */}
       <div className="grid grid-cols-2 gap-2 px-4 pt-3.5">
@@ -93,9 +80,9 @@ export function FriendProfile({ friend, onDone }: { friend: Friend; onDone: () =
         <ActionButton disabled label={t('friends.profile.competitive')} badge={t('friends.profile.soon')} path="M8 21h8M12 17v4M7 4h10v5a5 5 0 01-10 0V4zM7 6H4v2a3 3 0 003 3M17 6h3v2a3 3 0 01-3 3" />
       </div>
 
-      {/* Ce qu'il fait, puis depuis quand vous êtes amis : deux cartes de
-          même facture. */}
+      {/* Ce qu'il fait, sa vitrine, ses comptes, depuis quand vous êtes amis. */}
       <div className="flex flex-col gap-2 px-4 pb-4 pt-3">
+        {profile && <ProfileShowcase items={profile.showcase} />}
         <div className="flex items-center gap-3 rounded-xl border border-line bg-surface-1 px-3 py-2.5">
           {game ? (
             <>
@@ -134,6 +121,7 @@ export function FriendProfile({ friend, onDone }: { friend: Friend; onDone: () =
           </span>
         </div>
       </div>
+      </ProfileLayout>
 
       {/* La fenêtre de lancement, hors du panneau : il est transformé par son
           animation, et un `fixed` à l'intérieur s'y collerait. */}
@@ -143,6 +131,34 @@ export function FriendProfile({ friend, onDone }: { friend: Friend; onDone: () =
           <JoinServerModal request={{ ip: game.server, mcVersion: game.mc_version, loader: game.loader }} onClose={() => setJoining(false)} />,
           document.body,
         )}
+    </motion.div>
+  )
+}
+
+/**
+ * Le statut personnalisé en bulle de pensée, accrochée à la tête par deux
+ * petits ronds — il « pense » ce qu'il a écrit. Elle occupe la place à droite
+ * de la tête, sous le bandeau.
+ */
+export function ThoughtBubble({ accent, children }: { accent: string | null; children: React.ReactNode }) {
+  const border = accent ? `${accent}66` : undefined
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.8, x: -6 }}
+      animate={{ opacity: 1, scale: 1, x: 0 }}
+      transition={{ type: 'spring', stiffness: 420, damping: 26, delay: 0.08 }}
+      style={{ transformOrigin: 'left center' }}
+      className="relative mb-1.5 ml-7 min-w-0 flex-1"
+    >
+      {/* Deux ronds qui grossissent en montant de la tête vers la bulle. */}
+      <span className="absolute -left-[26px] bottom-0.5 h-3 w-3 rounded-full border border-line bg-[#1d1d26] shadow-[0_4px_10px_rgba(0,0,0,0.35)]" style={{ borderColor: border }} />
+      <span className="absolute -left-[15px] bottom-3.5 h-[18px] w-[18px] rounded-full border border-line bg-[#1d1d26] shadow-[0_4px_10px_rgba(0,0,0,0.35)]" style={{ borderColor: border }} />
+      <div
+        className="relative flex min-h-[54px] w-full items-center rounded-[22px] border border-line bg-[#1d1d26] px-4 py-3 text-[15.5px] font-bold leading-snug text-txt-primary shadow-[0_8px_22px_rgba(0,0,0,0.4)] [overflow-wrap:anywhere]"
+        style={{ borderColor: border }}
+      >
+        {children}
+      </div>
     </motion.div>
   )
 }
@@ -259,6 +275,7 @@ function MoreMenu({ friend, onDone }: { friend: Friend; onDone: () => void }) {
   const refresh = useFriends((s) => s.refresh)
   const [open, setOpen] = useState(false)
   const [confirm, setConfirm] = useState<'remove' | 'block' | null>(null)
+  const [reporting, setReporting] = useState(false)
   const [busy, setBusy] = useState(false)
   const box = useRef<HTMLDivElement>(null)
 
@@ -331,6 +348,15 @@ function MoreMenu({ friend, onDone }: { friend: Friend; onDone: () => void }) {
             <MenuItem danger disabled={busy} onClick={() => ask('block')}>
               {t('friends.profile.block')}
             </MenuItem>
+            <MenuItem
+              disabled={busy}
+              onClick={() => {
+                setOpen(false)
+                setReporting(true)
+              }}
+            >
+              {t('friends.report.action')}
+            </MenuItem>
           </motion.div>
         )}
       </AnimatePresence>
@@ -363,7 +389,74 @@ function MoreMenu({ friend, onDone }: { friend: Friend; onDone: () => void }) {
         </AnimatePresence>,
         document.body,
       )}
+      {createPortal(
+        <AnimatePresence>{reporting && <ReportModal friend={friend} onClose={() => setReporting(false)} />}</AnimatePresence>,
+        document.body,
+      )}
     </div>
+  )
+}
+
+const REPORT_REASONS: ReportReason[] = ['username', 'bio', 'status', 'other']
+
+/**
+ * Signaler un joueur : ce qui pose problème (pseudo, bio, statut, autre) et,
+ * si on veut, quelques mots. L'équipe voit ce qu'il montrait à ce moment-là ;
+ * lui ne sait pas qui l'a signalé.
+ */
+function ReportModal({ friend, onClose }: { friend: Friend; onClose: () => void }) {
+  const t = useT()
+  const [reason, setReason] = useState<ReportReason | null>(null)
+  const [details, setDetails] = useState('')
+  const [sending, setSending] = useState(false)
+
+  async function send() {
+    if (!reason) return
+    setSending(true)
+    try {
+      await api.friends.report(friend.id, reason, details.trim())
+      showNotice(t('friends.report.sent'))
+      onClose()
+    } catch (e) {
+      showError(e)
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <ModalShell title={t('friends.report.title', { name: friend.username })} onClose={() => !sending && onClose()}>
+      <p className="text-[12.5px] leading-relaxed text-txt-secondary">{t('friends.report.intro')}</p>
+      <div className="grid grid-cols-2 gap-2">
+        {REPORT_REASONS.map((r) => (
+          <button
+            key={r}
+            onClick={() => setReason(r)}
+            className={`rounded-xl border px-3 py-2.5 text-left text-[12.5px] font-semibold transition-colors ${
+              reason === r ? 'border-danger/60 bg-danger/15 text-white' : 'border-line bg-surface-1 text-txt-secondary hover:text-white'
+            }`}
+          >
+            {t(`friends.report.reasons.${r}`)}
+          </button>
+        ))}
+      </div>
+      <textarea
+        value={details}
+        maxLength={500}
+        rows={3}
+        onChange={(e) => setDetails(e.target.value)}
+        placeholder={t('friends.report.details')}
+        className="w-full resize-none rounded-xl border border-line bg-surface-2 px-3 py-2 text-[12.5px] outline-none placeholder:text-txt-muted focus:border-accent/60"
+      />
+      <div className="flex justify-end gap-2">
+        <Button variant="ghost" disabled={sending} onClick={onClose}>
+          {t('common.cancel')}
+        </Button>
+        <Button variant="danger" loading={sending} disabled={!reason} onClick={() => void send()}>
+          {t('friends.report.send')}
+        </Button>
+      </div>
+    </ModalShell>
   )
 }
 

@@ -14,8 +14,9 @@ import { FriendAvatar, FriendsIcon, GameTile, PresenceLine } from './FriendBits'
 import { FriendProfile } from './FriendProfile'
 import { FriendSettingsView } from './FriendSettingsView'
 import { MyStatusBar } from './MyStatusBar'
+import { MyProfileView } from './MyProfileView'
 
-type View = { kind: 'list' } | { kind: 'settings' } | { kind: 'profile'; userId: string }
+type View = { kind: 'list' } | { kind: 'settings' } | { kind: 'me' } | { kind: 'profile'; userId: string }
 type Section = 'requests' | 'outgoing' | 'inGame' | 'online' | 'offline'
 
 /**
@@ -119,7 +120,14 @@ function PanelBody({ onClose }: { onClose: () => void }) {
       return next
     })
 
-  const title = view.kind === 'settings' ? t('friends.settings.title') : view.kind === 'profile' ? t('friends.profile.title') : t('friends.title')
+  const title =
+    view.kind === 'settings'
+      ? t('friends.settings.title')
+      : view.kind === 'profile'
+        ? t('friends.profile.title')
+        : view.kind === 'me'
+          ? t('friends.me.title')
+          : t('friends.title')
 
   return (
     <>
@@ -186,6 +194,8 @@ function PanelBody({ onClose }: { onClose: () => void }) {
           loading ? <Empty text={t('common.loading')} /> : <Empty text={t('friends.unavailable')} action={t('friends.retry')} onAction={() => { setLoading(true); void refresh().finally(() => setLoading(false)) }} />
         ) : view.kind === 'settings' ? (
           <FriendSettingsView />
+        ) : view.kind === 'me' ? (
+          <MyProfileView />
         ) : view.kind === 'profile' && profile ? (
           <FriendProfile friend={profile} onDone={() => setView({ kind: 'list' })} />
         ) : (
@@ -258,7 +268,7 @@ function PanelBody({ onClose }: { onClose: () => void }) {
       </div>
 
       {view.kind === 'list' && signedIn && list && tab === 'requests' && <AddFriendBar focusSignal={addFocus} />}
-      {signedIn && list && <MyStatusBar />}
+      {signedIn && list && <MyStatusBar onOpenProfile={() => setView({ kind: 'me' })} />}
     </>
   )
 }

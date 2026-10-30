@@ -125,6 +125,8 @@ export interface MyProfile {
   showcase_visibility: Visibility3
   /** Bio masquée par la modération (lecture seule). */
   bio_hidden: boolean
+  /** Mes comptes Minecraft prouvés, parmi lesquels choisir le principal (lecture seule). */
+  accounts: MinecraftAccount[]
 }
 
 export interface LookupResult {

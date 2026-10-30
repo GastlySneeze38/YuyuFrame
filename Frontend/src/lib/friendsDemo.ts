@@ -2,7 +2,7 @@
 // LauncherAPI ne connaît pas encore les amis (même principe que
 // `lib/competitive.ts` `demoData`). Jamais en production.
 
-import type { Friend, FriendList } from '@/types/friends'
+import type { Friend, FriendList, MyProfile, PublicProfile, ShowcaseItem, ShowcaseView } from '@/types/friends'
 
 const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString()
 
@@ -19,6 +19,73 @@ function friend(id: number, username: string, mc: string | null, presence: Frien
     minecraft: mc ? [{ uuid: mc, name: username, main: true }] : [],
     presence,
     server_shared: shared,
+  }
+}
+
+/**
+ * Un état de classement de démonstration, de la forme que lit `readStandings`
+ * (`state.ladder.standings`, une ligne par mode : 1 masse, 2 épée). Division
+ * 0 = Bois 1 … 18 = Champion ; 10 duels au moins = placement terminé.
+ */
+function demoLadder(mace: number, sword: number): unknown {
+  return {
+    ladder: {
+      standings: [
+        { mode: 1, division: mace, points: 240, duels: 64 },
+        { mode: 2, division: sword, points: 120, duels: 31 },
+      ],
+    },
+  }
+}
+
+const DEMO_TITLE: ShowcaseView = { kind: 'title', code: 'choc', label: 'Champion du Choc' }
+
+/** Le profil d'un ami de démonstration, vitrine comprise. */
+export function demoProfile(id: string): PublicProfile {
+  const n = Number(id.slice(-2))
+  const looks: PublicProfile[] = [
+    {
+      banner: 'nether',
+      accent: '#ff6b8b',
+      bio: 'Main masse depuis la 1.21.\nToujours partant pour un duel.',
+      showcase: [{ kind: 'rank', mode: 'mace', state: demoLadder(17, 12) }, { kind: 'rank', mode: 'sword', state: demoLadder(17, 12) }, DEMO_TITLE],
+    },
+    {
+      banner: 'aurora',
+      accent: '#5ad1ff',
+      bio: 'Speedrun, et parfois du PvP.',
+      showcase: [{ kind: 'rank', mode: 'sword', state: demoLadder(6, 13) }],
+    },
+    {
+      banner: 'forest',
+      accent: '#3ba55d',
+      bio: 'Je construis des trucs énormes.',
+      showcase: [{ kind: 'rank', mode: 'mace', state: demoLadder(4, 2) }, { kind: 'title', code: 'builder', label: 'Bâtisseur de la saison 1' }],
+    },
+    { banner: null, accent: null, bio: null, showcase: [] },
+  ]
+  return looks[n % looks.length]
+}
+
+/** Ma vitrine de démonstration, telle que la verront mes amis : suit ce que je coche. */
+export function demoMyShowcase(items: ShowcaseItem[]): ShowcaseView[] {
+  const state = demoLadder(10, 7)
+  return items.map((item) => (item.kind === 'rank' ? { kind: 'rank', mode: item.mode, state } : DEMO_TITLE))
+}
+
+/** Mon profil de démonstration, à modifier. */
+export function demoMyProfile(): MyProfile {
+  return {
+    main_mc_uuid: null,
+    banner: 'end',
+    accent: '#7b72e9',
+    bio: 'Je fais le launcher.',
+    showcase: [{ kind: 'rank', mode: 'mace' }, { kind: 'title' }],
+    banner_visibility: 'friends',
+    bio_visibility: 'everyone',
+    showcase_visibility: 'friends',
+    bio_hidden: false,
+    accounts: [{ uuid: 'b876ec32e396476ba1158438d83c67d4', name: 'Ghasty', main: true }],
   }
 }
 

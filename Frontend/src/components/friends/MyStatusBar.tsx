@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { api } from '@/api/client'
 import { MY_STATUSES, STATUS_COLORS, liveCustom } from '@/lib/friends'
@@ -11,23 +11,18 @@ import { FriendAvatar } from './FriendBits'
 
 /**
  * Moi, en bas du panneau : ma tête, mon pseudo, mon statut. Un clic ouvre le
- * menu au-dessus — les quatre statuts, et le statut personnalisé.
+ * menu au-dessus — les quatre statuts, et de quoi ouvrir ma fiche.
  */
-export function MyStatusBar() {
+export function MyStatusBar({ onOpenProfile }: { onOpenProfile: () => void }) {
   const t = useT()
   const me = useFriends((s) => s.list?.me)
   const refresh = useFriends((s) => s.refresh)
   const username = useStore((s) => s.yuyuUsername)
   const uuid = useStore((s) => s.uuid)
   const [open, setOpen] = useState(false)
-  const [text, setText] = useState('')
   const [saving, setSaving] = useState(false)
 
   const custom = me ? liveCustom(me) : null
-  useEffect(() => {
-    if (open) setText(custom ?? '')
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
 
   if (!me) return null
 
@@ -44,11 +39,6 @@ export function MyStatusBar() {
   }
 
   const skin = `https://mc-heads.net/skin/${uuid ?? 'MHF_Steve'}`
-  const changed = text.trim() !== (custom ?? '')
-  const save = () => {
-    void apply(me.status, text.trim() || null, null)
-    setOpen(false)
-  }
 
   return (
     <div className="relative shrink-0 border-t border-line-soft bg-black/30 p-2">
@@ -82,28 +72,23 @@ export function MyStatusBar() {
               </button>
             ))}
 
-            {/* Le statut personnalisé : un champ, un bouton. Il reste jusqu'à
-                ce qu'on le change ; vidé puis enregistré, il disparaît. */}
-            <div className="mt-1 flex flex-col gap-2 border-t border-line-soft px-1 pt-2.5">
-              <span className="text-[10.5px] font-bold uppercase tracking-[0.06em] text-txt-muted">{t('friends.custom.title')}</span>
-              <div className="flex gap-2">
-                <input
-                  value={text}
-                  maxLength={60}
-                  onChange={(e) => setText(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && changed && save()}
-                  placeholder={t('friends.custom.placeholder')}
-                  className="min-w-0 flex-1 rounded-lg border border-line bg-black/30 px-2.5 py-2 text-[12.5px] outline-none placeholder:text-txt-muted focus:border-accent/60"
-                />
-                <button
-                  disabled={saving || !changed}
-                  onClick={save}
-                  className="shrink-0 rounded-lg bg-accent px-3 text-[11.5px] font-bold text-white disabled:opacity-40"
-                >
-                  {t('friends.custom.save')}
-                </button>
-              </div>
-            </div>
+            {/* Statut personnalisé, bannière, bio, vitrine : tout se règle
+                dans ma fiche, ouverte dans le panneau. */}
+            <button
+              onClick={() => {
+                setOpen(false)
+                onOpenProfile()
+              }}
+              className="mt-1 flex items-center gap-2.5 rounded-lg border-t border-line-soft px-2.5 pb-2 pt-2.5 text-left transition-colors hover:bg-white/[0.06]"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 shrink-0 text-accent-hover">
+                <path d="M12 12a4 4 0 100-8 4 4 0 000 8zM4 20a8 8 0 0116 0" />
+              </svg>
+              <span className="flex min-w-0 flex-col">
+                <span className="text-[12.5px] font-semibold">{t('friends.me.open')}</span>
+                <span className="text-[11px] text-txt-muted">{t('friends.me.openHint')}</span>
+              </span>
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
