@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
 import type { SupportCategory, TicketDetail, TicketSummary } from '@/types/support'
 import type { FriendList, FriendSettings, LookupResult, MyProfile, MyStatus, MyStatusKind, PublicProfile, ReportReason, RequestSent } from '@/types/friends'
 import type { LocalCrashReport, LocalCrashSummary, RemoteCrashSummary } from '@/types/crash'
+import type { ApiBoard, ApiFriendCompetitive, ApiHistoryPage, ApiSummary, ModeKey } from '@/lib/competitive'
 import type { BackupDetail, BackupOverview, BackupSettings, BackupSummary, InstanceBackupSettings } from '@/types/backup'
 import type { AuthStatus, CompatResult, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, HealthCheck, JavaReport, JavaStatus, JvmProfile, LoaderVersion, McOption, OptionsSummary, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PackInfo, PackKind, PollResponse, SaveInfo, OptionsLinkInfo, ScanResult, SharedOptionsStatus, ShareExport, ShareLinkStatus, ShareImport, SharePreview, ShareScan, ShareSource, StatsData, StatsQuery, ReferencedMod, SyncDiff, SyncInstance, SyncManifest, SystemMemoryInfo, Version } from '@/types'
 
@@ -775,6 +776,10 @@ export const api = {
    *  jeu qui envoie les duels. Réponse brute, lue par `lib/competitive.ts`. */
   ranked: {
     state: (uuid: string) => invoke<unknown>('ranked_state', { uuid }),
+    history: (uuid: string, mode?: ModeKey, before?: number) =>
+      invoke<ApiHistoryPage>('ranked_history', { uuid, mode: mode ?? null, before: before ?? null }),
+    summary: (uuid: string) => invoke<ApiSummary>('ranked_summary', { uuid }),
+    leaderboard: (mode: ModeKey, uuid?: string) => invoke<ApiBoard>('ranked_leaderboard', { mode, uuid: uuid ?? null }),
   },
 
   /** Amis (`/v1/friends`). Les changements arrivent aussi en direct par
@@ -801,6 +806,7 @@ export const api = {
     myProfile: () => invoke<MyProfile>('friends_my_profile'),
     setProfile: (profile: MyProfile) => invoke<MyProfile>('friends_set_profile', { profile }),
     profile: (id: string) => invoke<PublicProfile>('friends_profile', { id }),
+    competitive: (id: string) => invoke<ApiFriendCompetitive>('friends_competitive', { id }),
     report: (id: string, reason: ReportReason, details: string) => invoke<void>('friends_report', { id, reason, details }),
   },
 

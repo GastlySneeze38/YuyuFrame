@@ -15,6 +15,7 @@ import { demoProfile } from '@/lib/friendsDemo'
 import { isDemo } from '@/stores/useDevFlags'
 import type { Friend, PublicProfile, ReportReason } from '@/types/friends'
 import { FriendAvatar, GameTile, activityText } from './FriendBits'
+import { FriendCompetitiveModal } from './FriendCompetitive'
 import { ProfileLayout } from './ProfileLayout'
 import { ProfileShowcase } from './ProfileShowcase'
 
@@ -35,6 +36,7 @@ export function FriendProfile({ friend, onDone }: { friend: Friend; onDone: () =
   const t = useT()
   const language = useStore((s) => s.language)
   const [joining, setJoining] = useState(false)
+  const [competitive, setCompetitive] = useState(false)
   const [profile, setProfile] = useState<PublicProfile | null>(null)
   const p = friend.presence
   const custom = liveCustom(p)
@@ -77,7 +79,7 @@ export function FriendProfile({ friend, onDone }: { friend: Friend; onDone: () =
           path="M7 4.5v15l12.5-7.5L7 4.5z"
           filled
         />
-        <ActionButton disabled label={t('friends.profile.competitive')} badge={t('friends.profile.soon')} path="M8 21h8M12 17v4M7 4h10v5a5 5 0 01-10 0V4zM7 6H4v2a3 3 0 003 3M17 6h3v2a3 3 0 01-3 3" />
+        <ActionButton onClick={() => setCompetitive(true)} label={t('friends.profile.competitive')} path="M8 21h8M12 17v4M7 4h10v5a5 5 0 01-10 0V4zM7 6H4v2a3 3 0 003 3M17 6h3v2a3 3 0 01-3 3" />
       </div>
 
       {/* Ce qu'il fait, sa vitrine, ses comptes, depuis quand vous êtes amis. */}
@@ -131,6 +133,7 @@ export function FriendProfile({ friend, onDone }: { friend: Friend; onDone: () =
           <JoinServerModal request={{ ip: game.server, mcVersion: game.mc_version, loader: game.loader }} onClose={() => setJoining(false)} />,
           document.body,
         )}
+      {competitive && createPortal(<FriendCompetitiveModal friend={friend} onClose={() => setCompetitive(false)} />, document.body)}
     </motion.div>
   )
 }

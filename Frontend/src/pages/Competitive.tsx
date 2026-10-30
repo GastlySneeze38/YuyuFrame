@@ -22,7 +22,12 @@ import {
   bestMode,
   demoData,
   emptyStanding,
+  readBoard,
+  readDuel,
+  readSeasons,
   readStandings,
+  readStats,
+  readSummaryStandings,
   serverStats,
   type CompetitiveData,
   type ModeKey,
@@ -89,9 +94,37 @@ export default function Competitive() {
     setStatus({ kind: 'loading' })
     try {
       const answer = await api.ranked.state(uuid)
+      // Le reste à part : une API qui ne connaît pas encore ces routes laisse
+      // leurs écrans sur « bientôt » sans empêcher d'afficher le rang.
+      const [summary, mace, sword, boardMace, boardSword] = await Promise.allSettled([
+        api.ranked.summary(uuid),
+        api.ranked.history(uuid, 'mace'),
+        api.ranked.history(uuid, 'sword'),
+        api.ranked.leaderboard('mace', uuid),
+        api.ranked.leaderboard('sword', uuid),
+      ])
+      const s = summary.status === 'fulfilled' ? summary.value : null
+      const duels =
+        mace.status === 'fulfilled' && sword.status === 'fulfilled'
+          ? [...mace.value.duels, ...sword.value.duels].map(readDuel).sort((a, b) => b.at - a.at)
+          : null
+      const leaderboard =
+        boardMace.status === 'fulfilled' && boardSword.status === 'fulfilled'
+          ? { mace: readBoard(boardMace.value, uuid), sword: readBoard(boardSword.value, uuid) }
+          : null
       setStatus({
         kind: 'ready',
-        data: { standings: readStandings(answer), leaderboard: null, duels: null, stats: null, challenges: null, seasons: null, battlePass: null, seasonWins: null },
+        data: {
+          standings: s ? readSummaryStandings(s) : readStandings(answer),
+          leaderboard,
+          duels,
+          stats: s ? readStats(s) : null,
+          challenges: null,
+          seasons: s ? readSeasons(s) : null,
+          battlePass: null,
+          seasonWins: s ? Object.fromEntries(s.modes.map((m) => [m.mode, m.season_wins])) : null,
+          seasonWinCount: s ? Object.fromEntries(s.modes.map((m) => [m.mode, m.season_win_count])) : undefined,
+        },
       })
     } catch (e) {
       const code = errorCode(e)
@@ -175,7 +208,11 @@ export default function Competitive() {
                 {view === 'stats' ? (
                   <StatsView duels={modeDuels} />
                 ) : view === 'season' ? (
-                  <SeasonRankView wins={data.seasonWins ? data.seasonWins[shown] ?? [] : null} season={data.seasons?.[0] ?? null} />
+                  <SeasonRankView
+                    wins={data.seasonWins ? data.seasonWins[shown] ?? [] : null}
+                    count={data.seasonWinCount?.[shown]}
+                    season={data.seasons?.[0] ?? null}
+                  />
                 ) : view === 'leaderboard' ? (
                   <Leaderboard rows={data.leaderboard ? data.leaderboard[shown] ?? [] : null} placed={standing.placed} />
                 ) : (

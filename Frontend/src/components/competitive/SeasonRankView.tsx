@@ -32,9 +32,10 @@ const CELLS = SEASON_GRID * SEASON_GRID
  * Le « i » ouvre ce qu'on peut obtenir au mieux. L'affichage de la grille à
  * côté du profil n'est pas fait : l'interrupteur n'est que l'interface.
  *
- * `wins === null` : pas encore de route pour ça.
+ * `wins === null` : pas encore de route pour ça. `count` : toutes les
+ * victoires de la saison, quand le serveur n'envoie que les meilleures.
  */
-export function SeasonRankView({ wins, season }: { wins: number[] | null; season: Season | null }) {
+export function SeasonRankView({ wins, count, season }: { wins: number[] | null; count?: number; season: Season | null }) {
   const t = useT()
   const rankName = useRankName()
   const [showOnProfile, setShowOnProfile] = useState(true)
@@ -51,10 +52,11 @@ export function SeasonRankView({ wins, season }: { wins: number[] | null; season
   const best = [...wins].sort((a, b) => b - a).slice(0, CELLS)
   const top = best[0] ?? null
   const color = top !== null ? TIER_COLORS[tierOf(top)] : '160 150 190'
-  const level = borderLevel(wins.length)
+  const total = Math.max(count ?? 0, wins.length)
+  const level = borderLevel(total)
   const maxed = level >= BORDER_LEVELS
   const nextAt = level * WINS_PER_BORDER
-  const levelProgress = maxed ? 1 : (wins.length - (level - 1) * WINS_PER_BORDER) / WINS_PER_BORDER
+  const levelProgress = maxed ? 1 : (total - (level - 1) * WINS_PER_BORDER) / WINS_PER_BORDER
   const daysLeft = season?.end ? Math.max(0, Math.ceil((season.end - Date.now()) / 86_400_000)) : null
 
   return (
@@ -112,7 +114,7 @@ export function SeasonRankView({ wins, season }: { wins: number[] | null; season
               />
             </div>
             <p className="text-[11px] tabular-nums text-txt-muted">
-              {maxed ? t('competitive.season.maxed') : t('competitive.season.progress', { wins: wins.length, next: nextAt })}
+              {maxed ? t('competitive.season.maxed') : t('competitive.season.progress', { wins: total, next: nextAt })}
             </p>
           </div>
 

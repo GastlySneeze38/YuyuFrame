@@ -195,6 +195,9 @@ fn submit(token: &str, own: &str, text: &str) -> Result<Submitted, Failure> {
             "version": cache.version,
             "journal": super::share::base64(&compressed),
             "claim": applied.outcome,
+            // L'adversaire et le serveur en clair, pour l'historique : le
+            // serveur les recoupe avec les empreintes du journal.
+            "declared": verified::declared(text),
         });
         let answer = api().post(token, "/v1/ranked/duels", body)?;
         let fresh = read_cached(own, &answer).ok_or(Failure::Unavailable)?;

@@ -80,6 +80,13 @@ pub async fn friends_profile(state: tauri::State<'_, SharedState>, id: String) -
     done(api::get(&state, &format!("/friends/{}/profile", public_id(&id)?), &[]).await)
 }
 
+/// La page compétitive d'un ami : `{ account, summary, recent }`. Refusée
+/// (`forbidden`) s'il ne la montre pas à ses amis.
+#[tauri::command]
+pub async fn friends_competitive(state: tauri::State<'_, SharedState>, id: String) -> CmdResult {
+    done(api::get(&state, &format!("/friends/{}/competitive", public_id(&id)?), &[]).await)
+}
+
 /// Signaler un joueur : `reason` = `username`, `bio`, `status` ou `other`.
 #[tauri::command]
 pub async fn friends_report(state: tauri::State<'_, SharedState>, id: String, reason: String, details: String) -> CmdResult {

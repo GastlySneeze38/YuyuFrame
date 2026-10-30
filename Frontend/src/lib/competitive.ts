@@ -14,10 +14,12 @@ import champion from '@/assets/ranks/champion.png'
  * ne fait que LIRE : les constantes sont une copie de celles de `ranked.rs`
  * et de `PvpRank.java`, à faire bouger ensemble.
  *
- * Ce que le serveur sait rendre aujourd'hui : la position du joueur par mode
- * (`GET /v1/ranked/state/{uuid}`). Le classement entre joueurs, l'historique
- * des duels et leurs statistiques n'ont pas encore de route : en
- * développement, l'onglet les montre avec des données de démonstration.
+ * Ce que le serveur rend (`Server/LauncherAPI/src/launcher/ranked/`) : la
+ * position par mode (`/ranked/state`), l'historique des duels vérifiés
+ * (`/ranked/history`), statistiques et saisons (`/ranked/summary`) et le
+ * classement entre joueurs (`/ranked/leaderboard`). Défis et passe de saison
+ * n'ont pas encore de route. Les données de démonstration restent derrière
+ * l'interrupteur de l'atelier de développement.
  */
 
 /** Ordre de `ranked.rs::TIERS` ; la clé sert aux traductions. */
@@ -176,7 +178,8 @@ export function scoreColor(score: number): string {
 /** Regroupe les duels par serveur, le plus joué d'abord. */
 export function serverStats(duels: DuelRow[]): ServerStats[] {
   const by = new Map<string, DuelRow[]>()
-  for (const d of duels) by.set(d.server, [...(by.get(d.server) ?? []), d])
+  // Un duel sans serveur connu (jeu plus ancien) n'a pas de carte de serveur.
+  for (const d of duels) if (d.server) by.set(d.server, [...(by.get(d.server) ?? []), d])
   return [...by.entries()]
     .map(([server, list]) => ({
       server,
@@ -299,6 +302,153 @@ export interface CompetitiveData {
   /** Les victoires classées de la saison en cours, par mode : pour chacune,
    *  la division qu'on avait en la gagnant. `null` : pas encore de route. */
   seasonWins: Partial<Record<ModeKey, number[]>> | null
+  /** Toutes les victoires classées de la saison, quand `seasonWins` n'en
+   *  porte que les meilleures (le serveur en envoie 64 au plus). */
+  seasonWinCount?: Partial<Record<ModeKey, number>>
+}
+
+// ── Les réponses du serveur (`/v1/ranked/…`, `ranked/history.rs`) ────────
+
+export interface ApiDuel {
+  id: number
+  mode: ModeKey
+  at: number
+  result: 'win' | 'loss' | 'draw' | 'unknown' | null
+  score: number | null
+  rr: number | null
+  placement: boolean
+  duration_secs: number
+  ping: number | null
+  opponent: string | null
+  opponent_uuid: string | null
+  server: string | null
+  before_division: number
+  after_division: number
+  after_points: number
+}
+
+export interface ApiHistoryPage {
+  duels: ApiDuel[]
+  next: number | null
+}
+
+export interface ApiModeStats {
+  wins: number
+  losses: number
+  draws: number
+  avg_score: number | null
+  best_score: number | null
+  best_streak: number
+  current_streak: number
+  rr_week: number
+}
+
+export interface ApiSummary {
+  show_rank: boolean
+  modes: {
+    mode: ModeKey
+    standing: { division: number; points: number; duels: number; placed: boolean }
+    stats: ApiModeStats
+    season_wins: number[]
+    season_win_count: number
+  }[]
+  seasons: { id: number; number: number; name: string; start: number; end: number | null; peak_mace: number | null; peak_sword: number | null }[]
+  current_season: number | null
+}
+
+export interface ApiBoardRow {
+  position: number | null
+  uuid: string
+  name: string | null
+  division: number
+  points: number
+  win_rate: number | null
+}
+
+export interface ApiBoard {
+  rows: ApiBoardRow[]
+  me: ApiBoardRow | null
+  total: number
+}
+
+/** La page compétitive d'un ami (`/v1/friends/{id}/competitive`). */
+export interface ApiFriendCompetitive {
+  account: { uuid: string; name: string; main: boolean } | null
+  summary: ApiSummary | null
+  recent: ApiDuel[]
+}
+
+/** Un duel du serveur, comme l'interface le lit. Un résultat inconnu se lit
+ *  nul, une note absente zéro : un duel classé est toujours noté. */
+export function readDuel(d: ApiDuel): DuelRow {
+  return {
+    id: String(d.id),
+    mode: d.mode,
+    at: d.at,
+    opponent: d.opponent ?? '?',
+    result: d.result === 'win' || d.result === 'loss' ? d.result : 'draw',
+    score: Math.round(d.score ?? 0),
+    rr: d.rr,
+    placement: d.placement,
+    durationSecs: Math.round(d.duration_secs),
+    server: d.server ?? '',
+  }
+}
+
+export function readSummaryStandings(s: ApiSummary): Standing[] {
+  return MODES.map((mode) => {
+    const row = s.modes.find((m) => m.mode === mode)
+    return row ? { mode, ...row.standing } : emptyStanding(mode)
+  })
+}
+
+export function readStats(s: ApiSummary): Partial<Record<ModeKey, ModeStats>> {
+  const out: Partial<Record<ModeKey, ModeStats>> = {}
+  for (const m of s.modes) {
+    out[m.mode] = {
+      wins: m.stats.wins,
+      losses: m.stats.losses,
+      draws: m.stats.draws,
+      avgScore: Math.round(m.stats.avg_score ?? 0),
+      bestScore: Math.round(m.stats.best_score ?? 0),
+      bestStreak: m.stats.best_streak,
+      currentStreak: m.stats.current_streak,
+      rrWeek: m.stats.rr_week,
+    }
+  }
+  return out
+}
+
+/** Les saisons du serveur. Un rang par saison : le meilleur des deux modes. */
+export function readSeasons(s: ApiSummary): Season[] {
+  const peakOf = (a: number | null, b: number | null) => (a === null ? b : b === null ? a : Math.max(a, b))
+  return s.seasons.map((season) => ({
+    id: String(season.id),
+    number: season.number,
+    name: season.name,
+    start: season.start,
+    end: season.end,
+    rewards: ['badge', 'badge', 'badge', 'badge', 'badge', 'badge', 'title'],
+    peak: peakOf(season.peak_mace, season.peak_sword),
+  }))
+}
+
+/** Le classement d'un mode : les premiers, et ma ligne derrière eux si je
+ *  n'y suis pas (sans place quand je cache mon rang). */
+export function readBoard(board: ApiBoard, myUuid: string | null): LeaderboardRow[] {
+  const same = (a: string, b: string | null) => !!b && a.replace(/-/g, '') === b.replace(/-/g, '')
+  const rows: LeaderboardRow[] = board.rows.map((r) => ({
+    position: r.position ?? 0,
+    name: r.name ?? '?',
+    division: r.division,
+    points: r.points,
+    winRate: r.win_rate ?? 0,
+    me: same(r.uuid, myUuid) || undefined,
+  }))
+  if (board.me && board.me.position !== null && !rows.some((r) => r.me)) {
+    rows.push({ position: board.me.position, name: board.me.name ?? '?', division: board.me.division, points: board.me.points, winRate: board.me.win_rate ?? 0, me: true })
+  }
+  return rows
 }
 
 /** Cases de la grille de saison (8 × 8) : les meilleures victoires seulement. */

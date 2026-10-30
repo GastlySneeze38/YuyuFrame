@@ -40,3 +40,53 @@ fn explain(e: api::error::ApiError) -> api::error::ApiError {
         _ => e,
     }
 }
+
+/// Un UUID Minecraft propre (32 hexa), ou une erreur.
+fn clean_uuid(uuid: &str) -> Result<String, String> {
+    let uuid: String = uuid.chars().filter(|c| c.is_ascii_hexdigit()).collect();
+    if uuid.len() == 32 {
+        Ok(uuid)
+    } else {
+        Err(String::from(api::error::ApiError::new("bad_request", "UUID Minecraft invalide")))
+    }
+}
+
+/// Un mode du classement : `mace` ou `sword`.
+fn clean_mode(mode: &str) -> Result<String, String> {
+    match mode {
+        "mace" | "sword" => Ok(mode.to_string()),
+        _ => Err(String::from(api::error::ApiError::new("bad_request", "Mode inconnu"))),
+    }
+}
+
+/// L'historique des duels classés d'un compte : `{ duels, next }`, du plus
+/// récent au plus ancien. `before` = le `next` de la page précédente.
+#[tauri::command]
+pub async fn ranked_history(state: tauri::State<'_, SharedState>, uuid: String, mode: Option<String>, before: Option<i64>) -> Result<Value, String> {
+    let uuid = clean_uuid(&uuid)?;
+    let mut query = Vec::new();
+    if let Some(mode) = mode {
+        query.push(("mode", clean_mode(&mode)?));
+    }
+    if let Some(before) = before {
+        query.push(("before", before.to_string()));
+    }
+    api::get(&state, &format!("/ranked/history/{uuid}"), &query).await.map_err(|e| String::from(explain(e)))
+}
+
+/// Positions, statistiques par mode et saisons d'un compte.
+#[tauri::command]
+pub async fn ranked_summary(state: tauri::State<'_, SharedState>, uuid: String) -> Result<Value, String> {
+    let uuid = clean_uuid(&uuid)?;
+    api::get(&state, &format!("/ranked/summary/{uuid}"), &[]).await.map_err(|e| String::from(explain(e)))
+}
+
+/// Le classement entre joueurs d'un mode, et la place de `uuid`.
+#[tauri::command]
+pub async fn ranked_leaderboard(state: tauri::State<'_, SharedState>, mode: String, uuid: Option<String>) -> Result<Value, String> {
+    let mut query = vec![("mode", clean_mode(&mode)?)];
+    if let Some(uuid) = uuid {
+        query.push(("uuid", clean_uuid(&uuid)?));
+    }
+    api::get(&state, "/ranked/leaderboard", &query).await.map_err(|e| String::from(explain(e)))
+}

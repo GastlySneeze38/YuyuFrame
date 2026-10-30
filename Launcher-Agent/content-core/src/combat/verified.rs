@@ -166,6 +166,93 @@ pub struct Applied {
     pub state: LadderState,
     /// Heure d'ouverture du duel.
     pub time: u64,
+    /// Ce que l'historique montre du duel, tiré du même calcul.
+    pub details: Details,
+}
+
+/// Le détail d'un duel pour l'historique : calculé depuis le journal par le
+/// serveur lui-même, donc rien à croire du jeu. Hors de [`Outcome::agrees`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Details {
+    /// `win`, `loss`, `draw`, `unknown` ; absent si le journal s'arrête avant le verdict.
+    pub result: Option<String>,
+    /// La note du duel, sur 500, bonus compris ; absente si le duel n'est pas noté.
+    pub score: Option<f64>,
+    pub duration_secs: f64,
+    /// Ping moyen, en millisecondes.
+    pub ping: Option<f64>,
+}
+
+/// Ce que le jeu déclare en clair à côté du journal anonymisé : l'adversaire
+/// et le serveur, que l'historique affiche. Le serveur ne les croit pas sur
+/// parole : il les recoupe avec les empreintes du journal ([`check_declared`]).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Declared {
+    /// UUID de l'adversaire, sans tirets.
+    pub foe_uuid: Option<String>,
+    pub foe_name: Option<String>,
+    /// Adresse du serveur de jeu, telle que le joueur l'a tapée.
+    pub server: Option<String>,
+}
+
+/// Ce qu'il faut déclarer d'un journal EN CLAIR (avant [`anonymize`]).
+pub fn declared(text: &str) -> Declared {
+    let journal = Journal::read(text);
+    let server = text
+        .lines()
+        .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+        .find(|l| l["k"] == "h")
+        .and_then(|h| h["server"].as_str().map(|s| s.trim().to_string()))
+        .filter(|s| !s.is_empty());
+    Declared {
+        foe_uuid: journal.as_ref().and_then(|j| j.foe_uuid()).map(normalize_uuid),
+        foe_name: journal.as_ref().and_then(|j| j.foe_name()).map(str::to_string),
+        server,
+    }
+}
+
+/// Ce que le jeu déclare correspond-il au journal anonymisé ? L'UUID de
+/// l'adversaire doit donner son pseudonyme sous le sel de l'état, l'adresse
+/// l'empreinte du serveur. Le pseudo, lui, ne se vérifie pas : il doit
+/// seulement avoir la forme d'un pseudo Minecraft.
+pub fn check_declared(anonymized: &str, salt: &str, declared: &Declared) -> bool {
+    let Some(journal) = Journal::read(anonymized) else { return false };
+    let foe_ok = match (journal.foe_uuid(), declared.foe_uuid.as_deref()) {
+        (_, None) => true,
+        (Some(hidden), Some(clear)) => normalize_uuid(hidden) == pseudonym(salt, &normalize_uuid(clear)),
+        (None, Some(_)) => false,
+    };
+    let print = anonymized
+        .lines()
+        .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+        .find(|l| l["k"] == "h")
+        .and_then(|h| h["server"].as_str().map(str::to_string))
+        .unwrap_or_default();
+    let server_ok = match declared.server.as_deref() {
+        None => true,
+        Some(address) => server_print(address) == print,
+    };
+    let name_ok = declared.foe_name.as_deref().map(is_minecraft_name).unwrap_or(true);
+    foe_ok && server_ok && name_ok
+}
+
+/// 3 à 16 lettres, chiffres ou `_` : la forme d'un pseudo Minecraft.
+pub fn is_minecraft_name(name: &str) -> bool {
+    (3..=16).contains(&name.len()) && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+}
+
+fn normalize_uuid(uuid: &str) -> String {
+    uuid.replace('-', "").to_ascii_lowercase()
+}
+
+/// L'empreinte d'une adresse de serveur dans un journal anonymisé (vide sans adresse).
+pub fn server_print(address: &str) -> String {
+    let server = address.trim().to_ascii_lowercase();
+    if server.is_empty() {
+        String::new()
+    } else {
+        format!("srv-{}", &hex(&sha256(&[SERVER_DOMAIN, server.as_bytes()]))[..16])
+    }
 }
 
 /// Applique un journal (anonymisé par [`anonymize`]) à `state`, sans le
@@ -221,7 +308,13 @@ pub fn apply(state: &LadderState, journal: &str) -> Result<Applied, Rejection> {
         placed: change.after.placed(),
         placement: change.placement.code(),
     };
-    Ok(Applied { outcome, state: next, time })
+    let details = Details {
+        result: report.result.clone(),
+        score: report.rating.score.map(|s| (s * 10.0).round() / 10.0),
+        duration_secs: report.duration_secs,
+        ping: report.ping,
+    };
+    Ok(Applied { outcome, state: next, time, details })
 }
 
 /// Ce qu'un duel joué en casual AURAIT rapporté, sans rien changer : le
@@ -265,8 +358,7 @@ pub fn anonymize(text: &str, salt: &str) -> String {
         let Ok(mut value) = serde_json::from_str::<serde_json::Value>(line) else { continue };
         match value["k"].as_str() {
             Some("h") => {
-                let server = value["server"].as_str().unwrap_or("").trim().to_ascii_lowercase();
-                let print = if server.is_empty() { String::new() } else { format!("srv-{}", &hex(&sha256(&[SERVER_DOMAIN, server.as_bytes()]))[..16]) };
+                let print = server_print(value["server"].as_str().unwrap_or(""));
                 value["server"] = serde_json::Value::String(print);
             }
             Some("p") => {
@@ -446,6 +538,31 @@ mod tests {
         assert_eq!(apply(&state, &casual).unwrap_err(), Rejection::Casual);
         let preview = preview(&state, &casual).expect("ce qu'il aurait rapporté");
         assert!(preview.agrees(&apply(&state, defeat()).unwrap().outcome));
+    }
+
+    #[test]
+    fn le_detail_vient_du_journal() {
+        let state = LadderState::new(SALT.into());
+        let applied = apply(&state, &anonymize(defeat(), SALT)).unwrap();
+        assert_eq!(applied.details.result.as_deref(), Some("loss"));
+        assert!(applied.details.duration_secs > 0.0);
+    }
+
+    #[test]
+    fn la_declaration_se_recoupe_avec_le_journal() {
+        let hidden = anonymize(defeat(), SALT);
+        let honest = declared(defeat());
+        assert!(honest.foe_uuid.is_some(), "l'adversaire du duel d'essai est connu");
+        assert!(check_declared(&hidden, SALT, &honest));
+        // Un autre adversaire, un autre serveur : refusé.
+        let other_foe = Declared { foe_uuid: Some("0123456789ab4def8123456789abffff".into()), ..honest.clone() };
+        assert!(!check_declared(&hidden, SALT, &other_foe));
+        let other_server = Declared { server: Some("ailleurs.example".into()), ..honest.clone() };
+        assert!(!check_declared(&hidden, SALT, &other_server) || honest.server.is_none());
+        let bad_name = Declared { foe_name: Some("pas un pseudo !".into()), ..honest };
+        assert!(!check_declared(&hidden, SALT, &bad_name));
+        // Rien de déclaré (ancien jeu) : rien à refuser.
+        assert!(check_declared(&hidden, SALT, &Declared::default()));
     }
 
     #[test]
