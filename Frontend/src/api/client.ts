@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import type { SupportCategory, TicketDetail, TicketSummary } from '@/types/support'
-import type { FriendList, FriendSettings, MyStatus, MyStatusKind, RequestSent } from '@/types/friends'
+import type { FriendList, FriendSettings, LookupResult, MyProfile, MyStatus, MyStatusKind, PublicProfile, ReportReason, RequestSent } from '@/types/friends'
 import type { LocalCrashReport, LocalCrashSummary, RemoteCrashSummary } from '@/types/crash'
 import type { BackupDetail, BackupOverview, BackupSettings, BackupSummary, InstanceBackupSettings } from '@/types/backup'
 import type { AuthStatus, CompatResult, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, HealthCheck, JavaReport, JavaStatus, JvmProfile, LoaderVersion, McOption, OptionsSummary, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PackInfo, PackKind, PollResponse, SaveInfo, OptionsLinkInfo, ScanResult, SharedOptionsStatus, ShareExport, ShareLinkStatus, ShareImport, SharePreview, ShareScan, ShareSource, StatsData, StatsQuery, ReferencedMod, SyncDiff, SyncInstance, SyncManifest, SystemMemoryInfo, Version } from '@/types'
@@ -781,18 +781,27 @@ export const api = {
    *  l'événement `friends_event` (voir `stores/useFriends.ts`). */
   friends: {
     list: () => invoke<FriendList>('friends_list'),
-    request: (name: string) => invoke<RequestSent>('friends_request', { name }),
+    /** Qui est derrière un code ami, avant de l'ajouter. */
+    lookup: (code: string) => invoke<LookupResult>('friends_lookup', { code }),
+    /** Par code ami (« Ghasty#4821 ») ou par l'identifiant public d'un aperçu. */
+    request: (by: { code: string } | { id: string }) =>
+      invoke<RequestSent>('friends_request', 'code' in by ? { code: by.code, id: null } : { code: null, id: by.id }),
+    regenerateCode: () => invoke<{ code: string }>('friends_regenerate_code'),
     accept: (id: number) => invoke<void>('friends_accept', { id }),
     decline: (id: number) => invoke<void>('friends_decline', { id }),
     cancel: (id: number) => invoke<void>('friends_cancel', { id }),
-    remove: (userId: number) => invoke<void>('friends_remove', { userId }),
-    block: (userId: number) => invoke<void>('friends_block', { userId }),
-    unblock: (userId: number) => invoke<void>('friends_unblock', { userId }),
+    remove: (id: string) => invoke<void>('friends_remove', { id }),
+    block: (id: string) => invoke<void>('friends_block', { id }),
+    unblock: (id: string) => invoke<void>('friends_unblock', { id }),
     /** `customMinutes` absent : sans fin. */
     setStatus: (status: MyStatusKind, customText: string | null, customMinutes: number | null) =>
       invoke<MyStatus>('friends_set_status', { status, customText, customMinutes }),
     setSettings: (settings: FriendSettings) => invoke<FriendSettings>('friends_set_settings', { settings }),
-    setServerShare: (userId: number, shared: boolean) => invoke<void>('friends_set_server_share', { userId, shared }),
+    setServerShare: (id: string, shared: boolean) => invoke<void>('friends_set_server_share', { id, shared }),
+    myProfile: () => invoke<MyProfile>('friends_my_profile'),
+    setProfile: (profile: MyProfile) => invoke<MyProfile>('friends_set_profile', { profile }),
+    profile: (id: string) => invoke<PublicProfile>('friends_profile', { id }),
+    report: (id: string, reason: ReportReason, details: string) => invoke<void>('friends_report', { id, reason, details }),
   },
 
   sync: {

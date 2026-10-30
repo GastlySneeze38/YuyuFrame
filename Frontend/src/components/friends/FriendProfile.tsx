@@ -314,7 +314,7 @@ function MoreMenu({ friend, onDone }: { friend: Friend; onDone: () => void }) {
             className="absolute right-0 top-full z-10 mt-1.5 flex w-56 flex-col rounded-xl border border-line bg-[#18181f] p-1.5 shadow-[0_18px_50px_rgba(0,0,0,0.6)]"
           >
             {serverVisibility === 'some' && (
-              <MenuItem disabled={busy} onClick={() => void act(() => api.friends.setServerShare(friend.user_id, !friend.server_shared), false)}>
+              <MenuItem disabled={busy} onClick={() => void act(() => api.friends.setServerShare(friend.id, !friend.server_shared), false)}>
                 <span className="flex-1">{t('friends.profile.shareServer')}</span>
                 <span className={`flex h-4 w-4 items-center justify-center rounded border ${friend.server_shared ? 'border-accent bg-accent' : 'border-line-strong'}`}>
                   {friend.server_shared && (
@@ -352,7 +352,7 @@ function MoreMenu({ friend, onDone }: { friend: Friend; onDone: () => void }) {
                   variant="danger"
                   loading={busy}
                   onClick={() =>
-                    void act(() => (confirm === 'remove' ? api.friends.remove(friend.user_id) : api.friends.block(friend.user_id)), true)
+                    void act(() => (confirm === 'remove' ? api.friends.remove(friend.id) : api.friends.block(friend.id)), true)
                   }
                 >
                   {t(confirm === 'remove' ? 'friends.profile.remove' : 'friends.profile.block')}

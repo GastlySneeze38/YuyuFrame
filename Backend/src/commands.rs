@@ -44,7 +44,13 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         crate::server::ranked::ranked_state,
         // Amis : liste, demandes, blocages, statut, visibilité.
         crate::friends::friends_list,
+        crate::friends::friends_lookup,
         crate::friends::friends_request,
+        crate::friends::friends_regenerate_code,
+        crate::friends::friends_my_profile,
+        crate::friends::friends_set_profile,
+        crate::friends::friends_profile,
+        crate::friends::friends_report,
         crate::friends::friends_accept,
         crate::friends::friends_decline,
         crate::friends::friends_cancel,

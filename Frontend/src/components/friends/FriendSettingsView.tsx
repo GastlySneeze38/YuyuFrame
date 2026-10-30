@@ -35,9 +35,9 @@ export function FriendSettingsView() {
     }
   }
 
-  async function unblock(userId: number) {
+  async function unblock(id: string) {
     try {
-      await api.friends.unblock(userId)
+      await api.friends.unblock(id)
       await refresh()
     } catch (e) {
       showError(e)
@@ -93,8 +93,8 @@ export function FriendSettingsView() {
           <p className="py-1 text-[12px] text-txt-muted">{t('friends.settings.noBlocked')}</p>
         ) : (
           list.blocked.map((b) => (
-            <Row key={b.user_id} label={b.username}>
-              <button onClick={() => void unblock(b.user_id)} className="rounded-lg border border-line px-2.5 py-1 text-[11.5px] font-semibold text-txt-secondary hover:text-white">
+            <Row key={b.id} label={b.username}>
+              <button onClick={() => void unblock(b.id)} className="rounded-lg border border-line px-2.5 py-1 text-[11.5px] font-semibold text-txt-secondary hover:text-white">
                 {t('friends.settings.unblock')}
               </button>
             </Row>

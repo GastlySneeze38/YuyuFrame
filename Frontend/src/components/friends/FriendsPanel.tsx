@@ -9,13 +9,13 @@ import { showError } from '@/stores/useErrorToast'
 import { useFriends } from '@/stores/useFriends'
 import { useStore } from '@/stores/useStore'
 import { useT } from '@/i18n'
-import type { Friend, FriendRequest } from '@/types/friends'
+import type { Friend, FriendRequest, LookupResult } from '@/types/friends'
 import { FriendAvatar, FriendsIcon, GameTile, PresenceLine } from './FriendBits'
 import { FriendProfile } from './FriendProfile'
 import { FriendSettingsView } from './FriendSettingsView'
 import { MyStatusBar } from './MyStatusBar'
 
-type View = { kind: 'list' } | { kind: 'settings' } | { kind: 'profile'; userId: number }
+type View = { kind: 'list' } | { kind: 'settings' } | { kind: 'profile'; userId: string }
 type Section = 'requests' | 'outgoing' | 'inGame' | 'online' | 'offline'
 
 /**
@@ -110,7 +110,7 @@ function PanelBody({ onClose }: { onClose: () => void }) {
   const matches = (r: FriendRequest) => !needle || r.username.toLowerCase().includes(needle)
   const incoming = (list?.incoming ?? []).filter(matches)
   const outgoing = (list?.outgoing ?? []).filter(matches)
-  const profile = view.kind === 'profile' ? list?.friends.find((f) => f.user_id === view.userId) : undefined
+  const profile = view.kind === 'profile' ? list?.friends.find((f) => f.id === view.userId) : undefined
   const toggle = (s: Section) =>
     setCollapsed((prev) => {
       const next = new Set(prev)
@@ -229,21 +229,21 @@ function PanelBody({ onClose }: { onClose: () => void }) {
             {groups.inGame.length > 0 && (
               <Group label={t('friends.sections.inGame')} count={groups.inGame.length} collapsed={collapsed.has('inGame')} onToggle={() => toggle('inGame')}>
                 {groups.inGame.map((f) => (
-                  <FriendRow key={f.user_id} friend={f} onOpen={() => setView({ kind: 'profile', userId: f.user_id })} />
+                  <FriendRow key={f.id} friend={f} onOpen={() => setView({ kind: 'profile', userId: f.id })} />
                 ))}
               </Group>
             )}
             {groups.online.length > 0 && (
               <Group label={t('friends.sections.online')} count={groups.online.length} collapsed={collapsed.has('online')} onToggle={() => toggle('online')}>
                 {groups.online.map((f) => (
-                  <FriendRow key={f.user_id} friend={f} onOpen={() => setView({ kind: 'profile', userId: f.user_id })} />
+                  <FriendRow key={f.id} friend={f} onOpen={() => setView({ kind: 'profile', userId: f.id })} />
                 ))}
               </Group>
             )}
             {groups.offline.length > 0 && (
               <Group label={t('friends.sections.offline')} count={groups.offline.length} collapsed={collapsed.has('offline')} onToggle={() => toggle('offline')}>
                 {groups.offline.map((f) => (
-                  <FriendRow key={f.user_id} friend={f} onOpen={() => setView({ kind: 'profile', userId: f.user_id })} dim />
+                  <FriendRow key={f.id} friend={f} onOpen={() => setView({ kind: 'profile', userId: f.id })} dim />
                 ))}
               </Group>
             )}
@@ -300,7 +300,7 @@ function RequestRow({ request, incoming = false }: { request: FriendRequest; inc
 
   return (
     <div className="mx-2 flex items-center gap-3 rounded-xl px-2 py-2">
-      <FriendAvatar skin={`https://mc-heads.net/skin/MHF_Steve`} state={null} />
+      <FriendAvatar skin={skinOf(request)} state={null} />
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="truncate text-[13.5px] font-bold">{request.username}</span>
         <span className="truncate text-[11.5px] text-txt-muted">
@@ -319,18 +319,25 @@ function RequestRow({ request, incoming = false }: { request: FriendRequest; inc
   )
 }
 
+/** Un code ami bien formé : « Ghasty#4821 ». */
+const CODE_PATTERN = /^[A-Za-z0-9_.-]{3,32}#\d{1,4}$/
+
 /**
- * Ajouter un ami, en bas de l'onglet des demandes : un « # » puis le pseudo.
- * Pour l'instant le « # » n'est qu'un repère : la demande part par le pseudo
- * (YuyuFrame ou Minecraft), comme avant. Un identifiant après le « # » (façon
- * pseudo#1234) viendra avec son backend.
+ * Ajouter un ami, en bas de l'onglet des demandes, par son **code ami**
+ * (« Ghasty#4821 ») — le pseudo seul ne suffit pas, exprès. On cherche
+ * d'abord : l'aperçu montre à qui on s'adresse (sa tête, ce qu'il montre à
+ * tout le monde de son profil), puis on envoie. Au-dessus, mon propre code, à
+ * copier pour le donner.
  */
 function AddFriendBar({ focusSignal }: { focusSignal: number }) {
   const t = useT()
   const refresh = useFriends((s) => s.refresh)
-  const [name, setName] = useState('')
+  const myCode = useFriends((s) => s.list?.me.code ?? null)
+  const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
+  const [found, setFound] = useState<LookupResult | null>(null)
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null)
+  const [copied, setCopied] = useState(false)
   const input = useRef<HTMLInputElement>(null)
 
   // Le bouton « ajouter » de l'en-tête amène ici : le curseur suit.
@@ -338,15 +345,29 @@ function AddFriendBar({ focusSignal }: { focusSignal: number }) {
     if (focusSignal > 0) input.current?.focus()
   }, [focusSignal])
 
-  async function send() {
-    const value = name.trim().replace(/^#/, '')
-    if (!value) return
+  const valid = CODE_PATTERN.test(code.trim().replace(/^#/, ''))
+
+  async function search() {
+    if (!valid) return
     setBusy(true)
     setResult(null)
+    setFound(null)
     try {
-      const sent = await api.friends.request(value)
+      setFound(await api.friends.lookup(code.trim().replace(/^#/, '')))
+    } catch (e) {
+      setResult({ ok: false, text: errorMessage(e) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function send(target: LookupResult) {
+    setBusy(true)
+    try {
+      const sent = await api.friends.request({ id: target.id })
       setResult({ ok: true, text: sent.status === 'friends' ? t('friends.nowFriends', { name: sent.username }) : t('friends.sent', { name: sent.username }) })
-      setName('')
+      setFound(null)
+      setCode('')
       await refresh()
     } catch (e) {
       setResult({ ok: false, text: errorMessage(e) })
@@ -355,27 +376,86 @@ function AddFriendBar({ focusSignal }: { focusSignal: number }) {
     }
   }
 
+  async function copyMine() {
+    if (!myCode) return
+    try {
+      await navigator.clipboard.writeText(myCode)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      // Presse-papiers refusé : le code reste lisible à l'écran.
+    }
+  }
+
   return (
     <div className="shrink-0 border-t border-line-soft px-3 pb-3 pt-2.5">
-      <p className="mb-2 text-[10.5px] font-bold uppercase tracking-[0.06em] text-txt-muted">{t('friends.add')}</p>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-[10.5px] font-bold uppercase tracking-[0.06em] text-txt-muted">{t('friends.add')}</p>
+        {myCode && (
+          <button onClick={() => void copyMine()} title={t('friends.copyMyCode')} className="flex min-w-0 items-center gap-1.5 text-[11px] text-txt-muted hover:text-white">
+            <span className="shrink-0">{t('friends.myCode')}</span>
+            <span className="truncate font-mono font-bold text-accent-hover">{copied ? t('friends.profile.copied') : myCode}</span>
+          </button>
+        )}
+      </div>
+
+      <AnimatePresence initial={false}>
+        {found && (
+          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
+            <LookupCard found={found} busy={busy} onSend={() => void send(found)} onClose={() => setFound(null)} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="flex gap-2">
         <label className="flex min-w-0 flex-1 items-center rounded-lg border border-line bg-black/30 transition-colors focus-within:border-accent/60">
           <span className="select-none pl-3 pr-1 text-[14px] font-black text-accent-hover">#</span>
           <input
             ref={input}
-            value={name}
-            maxLength={32}
-            onChange={(e) => setName(e.target.value.replace(/^#/, ''))}
-            onKeyDown={(e) => e.key === 'Enter' && void send()}
+            value={code}
+            maxLength={40}
+            onChange={(e) => {
+              setCode(e.target.value)
+              setFound(null)
+            }}
+            onKeyDown={(e) => e.key === 'Enter' && void search()}
             placeholder={t('friends.addPlaceholder')}
             className="min-w-0 flex-1 bg-transparent py-2 pr-3 text-[12.5px] outline-none placeholder:text-txt-muted"
           />
         </label>
-        <button disabled={busy || !name.trim()} onClick={() => void send()} className="shrink-0 rounded-lg bg-accent px-3 text-[12px] font-bold text-white disabled:opacity-40">
-          {t('friends.send')}
+        <button disabled={busy || !valid} onClick={() => void search()} className="shrink-0 rounded-lg bg-accent px-3 text-[12px] font-bold text-white disabled:opacity-40">
+          {t('friends.search')}
         </button>
       </div>
       {result && <p className={`mt-1.5 text-[11.5px] ${result.ok ? 'text-[#5fd38d]' : 'text-danger'}`}>{result.text}</p>}
+    </div>
+  )
+}
+
+/** L'aperçu d'un code ami avant d'envoyer la demande. */
+function LookupCard({ found, busy, onSend, onClose }: { found: LookupResult; busy: boolean; onSend: () => void; onClose: () => void }) {
+  const t = useT()
+  // Ce qui empêche (ou rend inutile) d'envoyer une demande.
+  const blocker = found.relation === 'none' || found.relation === 'incoming' ? null : t(`friends.lookup.${found.relation}`)
+  return (
+    <div className="mb-2.5 flex items-center gap-3 rounded-xl border border-line bg-surface-1 p-2.5">
+      <FriendAvatar skin={skinOf(found)} state={null} size={40} />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate text-[13.5px] font-bold">{found.username}</span>
+        <span className="truncate text-[11.5px] text-txt-muted">
+          {blocker ?? found.profile.bio ?? (found.minecraft[0]?.name ? found.minecraft[0].name : t('friends.lookup.noPublic'))}
+        </span>
+      </div>
+      {!blocker && (
+        <button disabled={busy} onClick={onSend} className="shrink-0 rounded-lg bg-[#3ba55d] px-3 py-1.5 text-[12px] font-bold text-white disabled:opacity-50">
+          {found.relation === 'incoming' ? t('friends.accept') : t('friends.send')}
+        </button>
+      )}
+      <button onClick={onClose} aria-label={t('common.close')} className="shrink-0 rounded-lg p-1.5 text-txt-muted hover:bg-white/[0.06] hover:text-white">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" className="h-3.5 w-3.5">
+          <path d="M6 6l12 12M18 6L6 18" />
+        </svg>
+      </button>
     </div>
   )
 }

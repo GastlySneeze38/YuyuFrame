@@ -66,7 +66,8 @@ export const useFriends = create<FriendsStore>((set, get) => ({
         void get().refresh()
         return
       case 'friend_added':
-        showNotice(t('friends.notify.added', { name: event.username }))
+        // C'est moi qui viens d'accepter : je le sais déjà.
+        if (!event.by_you) showNotice(t('friends.notify.added', { name: event.username }))
         void get().refresh()
         return
       case 'request_received': {
@@ -81,7 +82,7 @@ export const useFriends = create<FriendsStore>((set, get) => ({
       case 'presence': {
         const list = get().list
         if (!list) return
-        const friend = list.friends.find((f) => f.user_id === event.user_id)
+        const friend = list.friends.find((f) => f.id === event.id)
         if (!friend) {
           // Un ami qu'on ne connaît pas encore : la liste a changé sans nous.
           void get().refresh()
@@ -93,7 +94,7 @@ export const useFriends = create<FriendsStore>((set, get) => ({
         set({
           list: {
             ...list,
-            friends: list.friends.map((f) => (f.user_id === event.user_id ? { ...f, presence: event.presence } : f)),
+            friends: list.friends.map((f) => (f.id === event.id ? { ...f, presence: event.presence } : f)),
           },
         })
         return
