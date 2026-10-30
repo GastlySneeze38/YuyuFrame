@@ -16,6 +16,11 @@
 //! Ce qui part : en jeu ou non, version de Minecraft et loader de la partie,
 //! duel en cours (classé ou non, mode), et le serveur que le jeu a annoncé
 //! (`game_link`, question `activity`). Jamais le nom de l'instance ni ses mods.
+//!
+//! Plus `idle` : personne n'a touché ce PC depuis 10 minutes (Windows,
+//! `GetLastInputInfo` — clavier et souris, toutes fenêtres). Le serveur montre
+//! alors « absent » à la place d'« en ligne » ; un statut choisi à la main
+//! n'est jamais remplacé, et une partie en cours n'est jamais inactive.
 
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
@@ -90,6 +95,41 @@ pub fn clear_game(instance_id: &str) {
     poke();
 }
 
+/// Sans toucher clavier ni souris depuis ce temps, on passe « absent » —
+/// seulement si l'on a choisi « en ligne », et jamais pendant une partie.
+const IDLE_AFTER: Duration = Duration::from_secs(10 * 60);
+/// L'inactivité se relit à ce rythme : le retour au clavier se voit vite.
+const IDLE_CHECK: Duration = Duration::from_secs(15);
+
+/// Depuis combien de temps personne n'a touché ce PC (toutes fenêtres
+/// confondues : le launcher réduit compte aussi). `None` hors Windows.
+#[cfg(windows)]
+fn input_idle() -> Option<Duration> {
+    #[repr(C)]
+    struct LastInputInfo {
+        cb_size: u32,
+        dw_time: u32,
+    }
+    extern "system" {
+        fn GetLastInputInfo(info: *mut LastInputInfo) -> i32;
+        fn GetTickCount() -> u32;
+    }
+    let mut info = LastInputInfo { cb_size: std::mem::size_of::<LastInputInfo>() as u32, dw_time: 0 };
+    // SAFETY : structure de la taille annoncée, remplie par Windows.
+    let ok = unsafe { GetLastInputInfo(&mut info) } != 0;
+    // Les deux horloges bouclent ensemble tous les 49 jours : la différence reste juste.
+    ok.then(|| Duration::from_millis(u64::from(unsafe { GetTickCount() }.wrapping_sub(info.dw_time))))
+}
+
+#[cfg(not(windows))]
+fn input_idle() -> Option<Duration> {
+    None
+}
+
+fn pc_idle() -> bool {
+    input_idle().is_some_and(|d| d >= IDLE_AFTER)
+}
+
 /// L'activité à annoncer : la première partie en cours, sinon « dans le launcher ».
 async fn current(state: &SharedState) -> Value {
     let (running, user_id, db) = {
@@ -111,14 +151,28 @@ async fn current(state: &SharedState) -> Value {
             "loader": row.loader,
             "duel": game.duel.map(|(ranked, mode)| json!({ "ranked": ranked, "mode": mode })),
             "server": game.server,
+            // Jouer, c'est être là.
+            "idle": false,
         });
     }
-    json!({ "kind": "launcher" })
+    json!({ "kind": "launcher", "idle": pc_idle() })
 }
 
 /// Lance le signal. Une seule fois, au démarrage. Par le moteur de Tauri :
 /// appelée depuis `setup`, hors de tout contexte Tokio, `tokio::spawn` panique.
 pub fn spawn(state: SharedState) {
+    // Le passage absent ↔ présent part tout de suite, sans attendre le signal suivant.
+    tauri::async_runtime::spawn(async {
+        let mut was = pc_idle();
+        loop {
+            tokio::time::sleep(IDLE_CHECK).await;
+            let now = pc_idle();
+            if now != was {
+                was = now;
+                poke();
+            }
+        }
+    });
     tauri::async_runtime::spawn(async move {
         let mut renew = DEFAULT_RENEW;
         loop {

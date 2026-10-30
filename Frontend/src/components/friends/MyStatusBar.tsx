@@ -25,6 +25,9 @@ export function MyStatusBar({ onOpenProfile }: { onOpenProfile: () => void }) {
   const custom = me ? liveCustom(me) : null
 
   if (!me) return null
+  // « En ligne » choisi, mais inactif depuis 10 minutes : mes amis me voient
+  // absent, je le vois aussi (ça repasse tout seul quand je reviens).
+  const autoAway = me.status === 'online' && me.shown === 'away'
 
   async function apply(status: MyStatusKind, customText: string | null, minutes: number | null) {
     setSaving(true)
@@ -94,10 +97,10 @@ export function MyStatusBar({ onOpenProfile }: { onOpenProfile: () => void }) {
       </AnimatePresence>
 
       <button onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-2.5 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-white/[0.05]">
-        <FriendAvatar skin={skin} state={me.status} size={32} ring="#0d0d12" />
+        <FriendAvatar skin={skin} state={autoAway ? 'away' : me.status} size={32} ring="#0d0d12" />
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="truncate text-[13px] font-bold">{username ?? '—'}</span>
-          <span className="truncate text-[11px] text-txt-muted">{custom ?? t(`friends.status.${me.status}`)}</span>
+          <span className="truncate text-[11px] text-txt-muted">{custom ?? (autoAway ? t('friends.status.autoAway') : t(`friends.status.${me.status}`))}</span>
         </span>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" className={`h-4 w-4 text-txt-muted transition-transform ${open ? 'rotate-180' : ''}`}>
           <path d="M6 15l6-6 6 6" />

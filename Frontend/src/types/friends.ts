@@ -72,7 +72,12 @@ export interface FriendSettings {
 }
 
 export interface MyStatus {
+  /** Le statut choisi. */
   status: MyStatusKind
+  /** Celui que voient mes amis : le choisi, ou `away` quand je suis « en
+   *  ligne » mais inactif depuis 10 minutes (absent automatique). Absent
+   *  d'une API plus ancienne. */
+  shown?: PresenceState | 'invisible'
   custom: CustomStatus | null
 }
 
@@ -148,3 +153,9 @@ export type FriendEvent =
   | { type: 'request_received'; request: FriendRequest }
   /** `by_you` : c'est moi qui viens d'accepter — rien à annoncer. */
   | { type: 'friend_added'; id: string; username: string; by_you: boolean }
+  /** Mon statut a changé ailleurs (un autre de mes launchers, mon inactivité). */
+  | { type: 'my_status'; status: MyStatusKind; shown: PresenceState | 'invisible'; custom: CustomStatus | null }
+  /** Un ami aimerait voir mon serveur. */
+  | { type: 'server_requested'; id: string; username: string }
+  /** Mes tickets ou mes rapports de plantage ont bougé : relire. */
+  | { type: 'support_changed' }

@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { api } from '@/api/client'
 import { useModalQueue } from '@/stores/useModalQueue'
+import { doNotDisturb } from '@/lib/doNotDisturb'
 
 /**
  * Surveillance des tickets de support, pour la pastille de la barre de
@@ -80,6 +81,8 @@ export const useSupportWatch = create<SupportWatchStore>()(
           // sans message joint.
           const statusChanged = before?.split('|')[0] !== ticket.status
           if (!statusChanged && !ticket.has_unread) continue
+          // Ne pas déranger : pas de modale, la pastille suffit.
+          if (doNotDisturb()) continue
 
           useModalQueue.getState().push({
             kind: 'support',

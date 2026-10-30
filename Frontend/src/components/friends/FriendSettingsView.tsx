@@ -19,6 +19,8 @@ export function FriendSettingsView() {
   const refresh = useFriends((s) => s.refresh)
   const notifyOnline = useStore((s) => s.friendOnlineNotify)
   const setNotifyOnline = useStore((s) => s.setFriendOnlineNotify)
+  const osNotifications = useStore((s) => s.osNotifications)
+  const setOsNotifications = useStore((s) => s.setOsNotifications)
   const [saving, setSaving] = useState(false)
   if (!list) return null
   const settings = list.settings
@@ -85,6 +87,9 @@ export function FriendSettingsView() {
       <Section title={t('friends.settings.notifications')}>
         <Row label={t('friends.settings.notifyOnline')}>
           <Toggle checked={notifyOnline} onChange={() => setNotifyOnline(!notifyOnline)} />
+        </Row>
+        <Row label={t('friends.settings.osNotifications')} hint={t('friends.settings.osNotificationsHint')}>
+          <Toggle checked={osNotifications} onChange={() => setOsNotifications(!osNotifications)} />
         </Row>
       </Section>
 

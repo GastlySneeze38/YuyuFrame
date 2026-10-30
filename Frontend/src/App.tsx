@@ -529,6 +529,25 @@ export default function App() {
     return () => clearInterval(timer)
   }, [yuyuSignedIn])
 
+  // Notifications Windows (envoyées par le Rust, qui ne voit pas le magasin) :
+  // on lui donne les deux réglages au démarrage et à chaque changement.
+  const osNotifications = useStore((s) => s.osNotifications)
+  const friendOnlineNotify = useStore((s) => s.friendOnlineNotify)
+  useEffect(() => {
+    if (isConsoleWindow) return
+    api.notifications.configure(osNotifications, friendOnlineNotify).catch(() => {})
+  }, [osNotifications, friendOnlineNotify])
+
+  // La pastille de l'icône dans la barre des tâches, comme Discord : demandes
+  // d'ami en attente, réponses du support, rapports de plantage mis à jour.
+  const pendingRequests = useFriends((s) => s.list?.incoming.length ?? 0)
+  const supportUnread = useSupportWatch((s) => s.unread)
+  const crashUpdates = useCrashWatch((s) => s.updates)
+  useEffect(() => {
+    if (isConsoleWindow) return
+    api.notifications.setBadge(pendingRequests + supportUnread + crashUpdates).catch(() => {})
+  }, [pendingRequests, supportUnread, crashUpdates])
+
   // Amis : le launcher relaie le flux temps réel du serveur (`friends_event`) ;
   // le magasin tient la liste et prévient (demande reçue, nouvel ami, ami en
   // ligne). Sans compte, la liste est oubliée. Le premier événement du flux

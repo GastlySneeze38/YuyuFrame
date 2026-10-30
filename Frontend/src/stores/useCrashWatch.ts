@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { api } from '@/api/client'
 import { useModalQueue } from '@/stores/useModalQueue'
+import { doNotDisturb } from '@/lib/doNotDisturb'
 
 /**
  * Surveillance des rapports de plantage envoyés : l'équipe leur donne un
@@ -95,6 +96,8 @@ export const useCrashWatch = create<CrashWatchStore>()(
           // de tout l'historique.
           if (!seenBefore) continue
           if (known[report.id] === signature) continue
+          // Ne pas déranger : pas de modale, la pastille suffit.
+          if (doNotDisturb()) continue
 
           useModalQueue.getState().push({
             kind: 'crashStatus',

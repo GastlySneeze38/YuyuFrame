@@ -83,6 +83,10 @@ export function FriendProfile({ friend, onDone }: { friend: Friend; onDone: () =
         <ActionButton onClick={() => navigate(`/competitive?friend=${friend.id}`)} label={t('friends.profile.competitive')} path="M8 21h8M12 17v4M7 4h10v5a5 5 0 01-10 0V4zM7 6H4v2a3 3 0 003 3M17 6h3v2a3 3 0 01-3 3" />
       </div>
 
+      {/* En jeu sans me montrer son serveur : on dit pourquoi « Rejoindre » est
+          grisé, et on peut le lui demander (il reçoit une notification). */}
+      {game && !game.server && <AskServer friendId={friend.id} />}
+
       {/* Ce qu'il fait, sa vitrine, ses comptes, depuis quand vous êtes amis. */}
       <div className="flex flex-col gap-2 px-4 pb-4 pt-3">
         {profile && <ProfileShowcase items={profile.showcase} />}
@@ -163,6 +167,36 @@ export function ThoughtBubble({ accent, children }: { accent: string | null; chi
         {children}
       </div>
     </motion.div>
+  )
+}
+
+/** « Il ne te montre pas son serveur » et de quoi le lui demander. Une fois
+ *  envoyée, la demande ne se renvoie pas (le serveur en accepte une toutes les
+ *  10 minutes). */
+function AskServer({ friendId }: { friendId: string }) {
+  const t = useT()
+  const [state, setState] = useState<'idle' | 'sending' | 'sent'>('idle')
+  async function ask() {
+    setState('sending')
+    try {
+      if (!isDemo()) await api.friends.requestServer(friendId)
+      setState('sent')
+    } catch (e) {
+      showError(e)
+      setState('idle')
+    }
+  }
+  return (
+    <div className="mx-4 mt-2 flex items-center gap-3 rounded-xl border border-line bg-surface-1 px-3 py-2">
+      <p className="min-w-0 flex-1 text-[11.5px] leading-snug text-txt-muted">{t('friends.profile.serverHiddenWhy')}</p>
+      <button
+        onClick={() => void ask()}
+        disabled={state !== 'idle'}
+        className="shrink-0 rounded-lg border border-line px-2.5 py-1 text-[11.5px] font-semibold text-txt-secondary transition-colors hover:text-white disabled:cursor-default disabled:opacity-60 disabled:hover:text-txt-secondary"
+      >
+        {state === 'sent' ? t('friends.profile.serverAsked') : t('friends.profile.askServer')}
+      </button>
+    </div>
   )
 }
 

@@ -33,6 +33,7 @@ tauri-plugin-process = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-deep-link = "2"
 tauri-plugin-single-instance = "2"
+tauri-plugin-notification = "2"
 tokio = { version = "1", features = ["full"] }
 # `multipart` : envoi d'un PNG de skin à Mojang (voir commands/account/skin.rs
 # — un fichier local devient ainsi un skin hébergé par eux, donc partageable).

@@ -5,7 +5,12 @@ import { useModalQueue, type QueuedModal } from '@/stores/useModalQueue'
 import { useFleet } from '@/stores/useFleet'
 import { useDevFlags } from '@/stores/useDevFlags'
 import { Toggle } from '@/components/ui/Toggle'
-import type { FleetAnnouncement } from '@/api/client'
+import { api, type FleetAnnouncement } from '@/api/client'
+import { useState } from 'react'
+import { useFriends } from '@/stores/useFriends'
+import { showNotice } from '@/stores/useErrorToast'
+import { useStore } from '@/stores/useStore'
+import type { Friend, FriendEvent } from '@/types/friends'
 
 /**
  * Atelier des modales — écran de développement.
@@ -158,6 +163,79 @@ const HOME_BANNERS: { label: string; banner: FleetAnnouncement }[] = [
   },
 ]
 
+/**
+ * Notifications d'amis, rejouées par le launcher comme si elles venaient du
+ * flux (`friends_demo_event`) : la notice dans la fenêtre et la notification
+ * Windows passent par leur vrai chemin, réglages et « Ne pas déranger »
+ * compris. La notification Windows ne s'affiche que si le launcher n'est pas
+ * devant soi : d'où le délai, le temps de le réduire.
+ */
+function FriendNotificationsDemo({ demo }: { demo: boolean }) {
+  const [waiting, setWaiting] = useState<string | null>(null)
+
+  /** Un ami de la liste de démonstration ; hors ligne de préférence. */
+  async function pickFriend() {
+    if (!useFriends.getState().list) await useFriends.getState().refresh()
+    const friends = useFriends.getState().list?.friends ?? []
+    return friends.find((f) => f.presence.state === 'offline') ?? friends[0] ?? null
+  }
+
+  async function run(label: string, delay: number, build: (f: Friend) => FriendEvent | null) {
+    const friend = await pickFriend()
+    if (!friend) return showNotice('Aucun ami dans la liste : allume les données de démonstration.')
+    const event = build(friend)
+    if (!event) return
+    setWaiting(delay ? `${label} dans ${delay} s — réduis le launcher` : null)
+    try {
+      await api.notifications.demo(event, friend.username, delay)
+      // Sans compte YuyuFrame, personne n'écoute `friends_event` (App.tsx) :
+      // on donne l'événement au magasin nous-mêmes.
+      if (!useStore.getState().yuyuSignedIn) useFriends.getState().apply(event)
+    } finally {
+      setWaiting(null)
+    }
+  }
+
+  const cameOnline = (delay: number) =>
+    run('Connexion', delay, (f) => {
+      // Hors ligne depuis deux heures d'abord : sinon l'arrivée ne compte pas
+      // (déjà en ligne, ou parti il y a moins de 10 minutes).
+      useFriends.getState().apply({
+        type: 'presence',
+        id: f.id,
+        presence: { state: 'offline', custom: null, activity: null, last_seen: new Date(Date.now() - 2 * 3_600_000).toISOString() },
+      })
+      return { type: 'presence', id: f.id, presence: { state: 'online', custom: f.presence.custom, activity: { kind: 'launcher' }, last_seen: null } }
+    })
+  const askedServer = (delay: number) => run('Demande de serveur', delay, (f) => ({ type: 'server_requested', id: f.id, username: f.username }))
+
+  return (
+    <div className="flex flex-col gap-2 border-t border-border pt-4">
+      <span className="text-[13px] font-semibold text-txt-primary">Notifications d’amis</span>
+      <span className="text-[11px] text-txt-muted">
+        {demo
+          ? 'Un ami de la démonstration. « Dans 5 s » : réduis le launcher pour voir la notification Windows.'
+          : 'Allume les données de démonstration : les amis viennent de là.'}
+      </span>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button disabled={!demo || !!waiting} onClick={() => void cameOnline(0)}>
+          « X est en ligne »
+        </Button>
+        <Button disabled={!demo || !!waiting} onClick={() => void cameOnline(5)}>
+          … dans 5 s
+        </Button>
+        <Button disabled={!demo || !!waiting} onClick={() => void askedServer(0)}>
+          « X aimerait voir ton serveur »
+        </Button>
+        <Button disabled={!demo || !!waiting} onClick={() => void askedServer(5)}>
+          … dans 5 s
+        </Button>
+      </div>
+      {waiting && <span className="text-[11px] text-accent-hover">{waiting}</span>}
+    </div>
+  )
+}
+
 export default function DevModals() {
   const navigate = useNavigate()
   const devHomeBanner = useFleet((s) => s.devHomeBanner)
@@ -239,6 +317,8 @@ export default function DevModals() {
           </div>
           <Toggle checked={demoData} onChange={() => setDemoData(!demoData)} />
         </div>
+
+        <FriendNotificationsDemo demo={demoData} />
 
         {/* Bannière d'accueil : elle passe devant celle du back-office et
             tient jusqu'à ce qu'on la retire ou qu'on relance le launcher. */}

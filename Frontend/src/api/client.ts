@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import type { SupportCategory, TicketDetail, TicketSummary } from '@/types/support'
-import type { FriendList, FriendSettings, LookupResult, MyProfile, MyStatus, MyStatusKind, PublicProfile, ReportReason, RequestSent } from '@/types/friends'
+import type { FriendEvent, FriendList, FriendSettings, LookupResult, MyProfile, MyStatus, MyStatusKind, PublicProfile, ReportReason, RequestSent } from '@/types/friends'
 import type { LocalCrashReport, LocalCrashSummary, RemoteCrashSummary } from '@/types/crash'
 import type { ApiBoard, ApiFriendCompetitive, ApiHistoryPage, ApiSummary, ModeKey } from '@/lib/competitive'
 import type { BackupDetail, BackupOverview, BackupSettings, BackupSummary, InstanceBackupSettings } from '@/types/backup'
@@ -803,11 +803,22 @@ export const api = {
       invoke<MyStatus>('friends_set_status', { status, customText, customMinutes }),
     setSettings: (settings: FriendSettings) => invoke<FriendSettings>('friends_set_settings', { settings }),
     setServerShare: (id: string, shared: boolean) => invoke<void>('friends_set_server_share', { id, shared }),
+    /** Demander à un ami de me montrer son serveur (mon « Rejoindre » est grisé). */
+    requestServer: (id: string) => invoke<void>('friends_request_server', { id }),
     myProfile: () => invoke<MyProfile>('friends_my_profile'),
     setProfile: (profile: MyProfile) => invoke<MyProfile>('friends_set_profile', { profile }),
     profile: (id: string) => invoke<PublicProfile>('friends_profile', { id }),
     competitive: (id: string) => invoke<ApiFriendCompetitive>('friends_competitive', { id }),
     report: (id: string, reason: ReportReason, details: string) => invoke<void>('friends_report', { id, reason, details }),
+  },
+
+  /** Notifications Windows (envoyées par le Rust) et pastille de la barre des tâches. */
+  notifications: {
+    configure: (os: boolean, friendOnline: boolean) => invoke<void>('notifications_configure', { os, friendOnline }),
+    setBadge: (count: number) => invoke<void>('set_unread_badge', { count }),
+    /** Atelier de développement : rejoue un événement d'ami comme s'il venait
+     *  du flux (notification Windows + notice), après `delaySecs`. */
+    demo: (event: FriendEvent, name: string, delaySecs: number) => invoke<void>('friends_demo_event', { event, name, delaySecs }),
   },
 
   sync: {

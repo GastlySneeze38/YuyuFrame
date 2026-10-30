@@ -158,6 +158,10 @@ interface Store {
   /** Prévenir quand un ami se connecte (voir `stores/useFriends.ts`). */
   friendOnlineNotify: boolean
   setFriendOnlineNotify: (v: boolean) => void
+  /** Notifications Windows quand le launcher n'est pas devant soi (amis,
+   *  support) — envoyées par le Rust (`Backend/src/friends/notify.rs`). */
+  osNotifications: boolean
+  setOsNotifications: (v: boolean) => void
 
   language: Lang
   setLanguage: (l: Lang) => void
@@ -430,6 +434,8 @@ export const useStore = create<Store>()(
 
       friendOnlineNotify: true,
       setFriendOnlineNotify: (friendOnlineNotify) => set({ friendOnlineNotify }),
+      osNotifications: true,
+      setOsNotifications: (osNotifications) => set({ osNotifications }),
 
       language: 'fr',
       setLanguage: (language) => set({ language, languagePicked: true }),
@@ -581,6 +587,7 @@ export const useStore = create<Store>()(
         showHomeServers: s.showHomeServers,
         confirmServerLaunch: s.confirmServerLaunch,
         friendOnlineNotify: s.friendOnlineNotify,
+        osNotifications: s.osNotifications,
         language: s.language,
         languagePicked: s.languagePicked,
         sgaUnlocked: s.sgaUnlocked,

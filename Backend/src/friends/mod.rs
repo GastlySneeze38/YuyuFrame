@@ -4,13 +4,16 @@
 //! - `presence` : le signal « je suis là, et voici ce que je fais », envoyé
 //!   toutes les 30 s et à chaque changement (partie, serveur, duel) ;
 //! - `stream` : le flux temps réel du serveur, relayé à l'interface en
-//!   événements `friends_event`.
+//!   événements `friends_event` (amis, mon statut, et le ping du support) ;
+//! - `notify` : les notifications Windows tirées de ce flux, et la pastille
+//!   de la barre des tâches.
 //!
 //! Les commandes ci-dessous ne font que relayer : les règles (qui voit quoi,
 //! limites, ce qui ne se dit pas) sont sur le serveur. Pas d'écran Amis pour
 //! l'instant : l'interface ne s'en sert que pour tenir sa liste et prévenir
 //! (demande reçue, nouvel ami, ami connecté).
 
+pub mod notify;
 pub mod presence;
 pub mod stream;
 
@@ -28,7 +31,15 @@ fn done(result: api::error::ApiResult<Value>) -> CmdResult {
 /// Amis (avec leur présence), demandes reçues et envoyées, bloqués, mon statut, mes réglages.
 #[tauri::command]
 pub async fn friends_list(state: tauri::State<'_, SharedState>) -> CmdResult {
-    done(api::get(&state, "/friends", &[]).await)
+    let list = done(api::get(&state, "/friends", &[]).await)?;
+    notify::remember_list(&list);
+    Ok(list)
+}
+
+/// Demander à un ami de me montrer son serveur (mon « Rejoindre » est grisé).
+#[tauri::command]
+pub async fn friends_request_server(state: tauri::State<'_, SharedState>, id: String) -> CmdResult {
+    done(api::post(&state, &format!("/friends/{}/server-request", public_id(&id)?), json!({})).await)
 }
 
 /// Un identifiant public (UUID) qui part dans une adresse : rien d'autre que
@@ -136,7 +147,10 @@ pub async fn friends_set_status(
     custom_text: Option<String>,
     custom_minutes: Option<i64>,
 ) -> CmdResult {
-    done(api::put(&state, "/friends/status", json!({ "status": status, "custom_text": custom_text, "custom_minutes": custom_minutes })).await)
+    let answer = done(api::put(&state, "/friends/status", json!({ "status": status, "custom_text": custom_text, "custom_minutes": custom_minutes })).await)?;
+    // « Ne pas déranger » coupe les notifications Windows tout de suite.
+    notify::remember_my_status(&status);
+    Ok(answer)
 }
 
 /// `{ accept_requests, stats_visibility, activity_visibility, server_visibility }`.

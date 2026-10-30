@@ -6,6 +6,8 @@ import { useStore } from '@/stores/useStore'
 import { t } from '@/i18n'
 import { demoFriends } from '@/lib/friendsDemo'
 import { isDemo, useDevFlags } from '@/stores/useDevFlags'
+import { useSupportWatch } from '@/stores/useSupportWatch'
+import { useCrashWatch } from '@/stores/useCrashWatch'
 import type { FriendEvent, FriendList, FriendPresence } from '@/types/friends'
 
 /**
@@ -39,6 +41,22 @@ export function cameOnline(before: FriendPresence | undefined, after: FriendPres
   return before?.state === 'offline' && after.state !== 'offline'
 }
 
+/** Revenu en ligne moins de 10 minutes après l'avoir quitté (coupure réseau) :
+ *  on ne reprévient pas. Même règle que les notifications Windows
+ *  (`Backend/src/friends/notify.rs`, `FLAP_WINDOW`). */
+export const FLAP_WINDOW_MS = 10 * 60 * 1000
+
+export function justLeft(before: FriendPresence | undefined, now = Date.now()): boolean {
+  const seen = before?.last_seen ? Date.parse(before.last_seen) : NaN
+  return Number.isFinite(seen) && now - seen < FLAP_WINDOW_MS
+}
+
+/** Une notice d'ami, sauf en « Ne pas déranger » (la pastille, elle, reste). */
+function tell(message: string) {
+  if (useFriends.getState().list?.me.status === 'dnd') return
+  showNotice(message)
+}
+
 export const useFriends = create<FriendsStore>((set, get) => ({
   list: null,
   unseenRequests: 0,
@@ -67,7 +85,7 @@ export const useFriends = create<FriendsStore>((set, get) => ({
         return
       case 'friend_added':
         // C'est moi qui viens d'accepter : je le sais déjà.
-        if (!event.by_you) showNotice(t('friends.notify.added', { name: event.username }))
+        if (!event.by_you) tell(t('friends.notify.added', { name: event.username }))
         void get().refresh()
         return
       case 'request_received': {
@@ -76,9 +94,23 @@ export const useFriends = create<FriendsStore>((set, get) => ({
           set({ list: { ...list, incoming: [event.request, ...list.incoming] } })
         }
         set((s) => ({ unseenRequests: s.unseenRequests + 1 }))
-        showNotice(t('friends.notify.request', { name: event.request.username }))
+        tell(t('friends.notify.request', { name: event.request.username }))
         return
       }
+      case 'my_status': {
+        const list = get().list
+        if (list) set({ list: { ...list, me: { ...list.me, status: event.status, shown: event.shown, custom: event.custom } } })
+        return
+      }
+      case 'server_requested':
+        tell(t('friends.notify.serverRequested', { name: event.username }))
+        return
+      case 'support_changed':
+        // Réponse de l'équipe ou rapport de plantage qui bouge : la pastille
+        // se met à jour tout de suite (les modales suivent Ne pas déranger).
+        void useSupportWatch.getState().refresh()
+        void useCrashWatch.getState().refresh()
+        return
       case 'presence': {
         const list = get().list
         if (!list) return
@@ -88,8 +120,8 @@ export const useFriends = create<FriendsStore>((set, get) => ({
           void get().refresh()
           return
         }
-        if (cameOnline(friend.presence, event.presence) && useStore.getState().friendOnlineNotify) {
-          showNotice(t('friends.notify.online', { name: friend.username }))
+        if (cameOnline(friend.presence, event.presence) && !justLeft(friend.presence) && useStore.getState().friendOnlineNotify) {
+          tell(t('friends.notify.online', { name: friend.username }))
         }
         set({
           list: {

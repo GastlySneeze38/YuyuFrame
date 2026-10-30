@@ -71,6 +71,9 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_dialog::init())
+        // Notifications Windows des amis et du support (`friends/notify.rs`),
+        // envoyées par le Rust seulement : l'interface n'a pas de permission dessus.
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             // Premier lancement (app pas encore ouverte) : l'OS a passé l'URL
             // en argument de commande — voir app::deep_link pour pourquoi
