@@ -15,7 +15,7 @@ function formatWhen(at: number, language: string): string {
   return new Date(at).toLocaleString(locale, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
-function formatLength(secs: number): string {
+export function formatLength(secs: number): string {
   return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`
 }
 

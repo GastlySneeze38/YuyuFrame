@@ -51,6 +51,26 @@ function initial(server: string): string {
   return server.replace(/^(play|pvp|mc|eu|na)\./, '')[0] ?? '?'
 }
 
+/** L'icône seule d'un serveur, à la taille du conteneur (lettre sur un dégradé à défaut). */
+export function ServerAvatar({ server }: { server: string }) {
+  const icon = useServerIcon(server)
+  const h = hue(server)
+  return (
+    <div className="relative h-full w-full overflow-hidden rounded-[16%]">
+      {icon ? (
+        <img src={icon} alt="" draggable={false} className="absolute inset-0 h-full w-full [image-rendering:auto]" />
+      ) : (
+        <span
+          className="absolute inset-0 flex items-center justify-center text-[24px] font-black uppercase text-white/30"
+          style={{ background: `linear-gradient(135deg, hsl(${h} 55% 40%), hsl(${(h + 40) % 360} 55% 24%))` }}
+        >
+          {initial(server)}
+        </span>
+      )}
+    </div>
+  )
+}
+
 /**
  * Les trois meilleurs serveurs du joueur (meilleure note moyenne d'abord) :
  * rien que leur icône, en grand, avec la note moyenne dessus dans sa couleur.

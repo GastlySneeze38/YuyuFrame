@@ -182,7 +182,7 @@ export default function Competitive() {
                 className="min-h-0 flex-1"
               >
                 {view === 'stats' ? (
-                  <StatsView standing={standing} stats={data.stats?.[shown] ?? null} duels={modeDuels} />
+                  <StatsView duels={modeDuels} />
                 ) : view === 'season' ? (
                   <SeasonRankView wins={data.seasonWins ? data.seasonWins[shown] ?? [] : null} season={data.seasons?.[0] ?? null} />
                 ) : view === 'leaderboard' ? (
