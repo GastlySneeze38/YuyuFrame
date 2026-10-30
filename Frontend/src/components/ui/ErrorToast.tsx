@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useErrorToast } from '@/stores/useErrorToast'
 import { CloseButton } from './CloseButton'
 
@@ -8,6 +9,8 @@ export function ErrorToast() {
   const message = useErrorToast((s) => s.message)
   const variant = useErrorToast((s) => s.variant)
   const hide = useErrorToast((s) => s.hide)
+  const action = useErrorToast((s) => s.action)
+  const [running, setRunning] = useState(false)
 
   if (!message) return null
 
@@ -33,6 +36,22 @@ export function ErrorToast() {
       <p className="text-[12.5px] text-[rgba(255,255,255,0.92)] font-medium leading-[1.45] flex-1 [word-break:break-word]">
         {message}
       </p>
+      {action && (
+        <button
+          disabled={running}
+          onClick={async () => {
+            setRunning(true)
+            try {
+              await action.run()
+            } finally {
+              setRunning(false)
+            }
+          }}
+          className="-my-0.5 shrink-0 self-center rounded-lg bg-accent px-3 py-1 text-[12px] font-bold text-white transition-colors hover:bg-accent-hover disabled:opacity-60"
+        >
+          {action.label}
+        </button>
+      )}
       <CloseButton
         onClick={hide}
         size={22}

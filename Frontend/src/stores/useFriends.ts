@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { listen } from '@tauri-apps/api/event'
 import { api } from '@/api/client'
-import { showNotice } from '@/stores/useErrorToast'
+import { showError, showNotice, type ToastAction } from '@/stores/useErrorToast'
 import { useStore } from '@/stores/useStore'
 import { t } from '@/i18n'
 import { demoFriends } from '@/lib/friendsDemo'
@@ -52,9 +52,38 @@ export function justLeft(before: FriendPresence | undefined, now = Date.now()): 
 }
 
 /** Une notice d'ami, sauf en « Ne pas déranger » (la pastille, elle, reste). */
-function tell(message: string) {
+function tell(message: string, action?: ToastAction) {
   if (useFriends.getState().list?.me.status === 'dnd') return
-  showNotice(message)
+  showNotice(message, action)
+}
+
+/**
+ * « Lui montrer » : mon serveur devient visible pour cet ami, sans toucher à
+ * ce que voient les autres. Mon réglage était « personne » : il passe à
+ * « certains amis », avec lui seul dedans ; « tous mes amis » : il le voit déjà.
+ */
+async function showServerTo(id: string, name: string) {
+  const list = useFriends.getState().list
+  if (!list) return
+  try {
+    const visibility = list.settings.server_visibility
+    if (isDemo()) {
+      useFriends.setState({
+        list: {
+          ...list,
+          settings: visibility === 'nobody' ? { ...list.settings, server_visibility: 'some' } : list.settings,
+          friends: list.friends.map((f) => (f.id === id ? { ...f, server_shared: true } : f)),
+        },
+      })
+    } else {
+      if (visibility === 'nobody') await api.friends.setSettings({ ...list.settings, server_visibility: 'some' })
+      if (visibility !== 'friends') await api.friends.setServerShare(id, true)
+      await useFriends.getState().refresh()
+    }
+    showNotice(t('friends.notify.serverShown', { name }))
+  } catch (e) {
+    showError(e)
+  }
 }
 
 export const useFriends = create<FriendsStore>((set, get) => ({
@@ -103,7 +132,10 @@ export const useFriends = create<FriendsStore>((set, get) => ({
         return
       }
       case 'server_requested':
-        tell(t('friends.notify.serverRequested', { name: event.username }))
+        tell(t('friends.notify.serverRequested', { name: event.username }), {
+          label: t('friends.notify.showServer'),
+          run: () => showServerTo(event.id, event.username),
+        })
         return
       case 'support_changed':
         // Réponse de l'équipe ou rapport de plantage qui bouge : la pastille

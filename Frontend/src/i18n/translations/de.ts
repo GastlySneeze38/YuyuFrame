@@ -1745,7 +1745,9 @@ export const de: TranslationSchema = {
     },
     notify: {
       request: '{{name}} möchte dich als Freund hinzufügen',
-      serverRequested: '{{name}} möchte deinen Server sehen – du kannst ihn in seinem Profil zeigen',
+      serverRequested: '{{name}} möchte deinen Server sehen',
+      showServer: 'Zeigen',
+      serverShown: '{{name}} sieht jetzt deinen Server',
       added: 'Du und {{name}} seid jetzt Freunde',
       online: '{{name}} ist online',
     },

@@ -1745,7 +1745,9 @@ export const pl: TranslationSchema = {
     },
     notify: {
       request: '{{name}} chce dodać cię do znajomych',
-      serverRequested: '{{name}} chce zobaczyć twój serwer — możesz go pokazać z jego profilu',
+      serverRequested: '{{name}} chce zobaczyć twój serwer',
+      showServer: 'Pokaż',
+      serverShown: '{{name}} widzi teraz twój serwer',
       added: 'Ty i {{name}} jesteście teraz znajomymi',
       online: '{{name}} jest online',
     },

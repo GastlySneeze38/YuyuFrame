@@ -1750,7 +1750,9 @@ export const fr = {
     },
     notify: {
       request: '{{name}} veut t’ajouter en ami',
-      serverRequested: '{{name}} aimerait voir ton serveur — tu peux le lui montrer depuis sa fiche',
+      serverRequested: '{{name}} aimerait voir ton serveur',
+      showServer: 'Lui montrer',
+      serverShown: '{{name}} voit maintenant ton serveur',
       added: '{{name}} et toi êtes maintenant amis',
       online: '{{name}} est en ligne',
     },

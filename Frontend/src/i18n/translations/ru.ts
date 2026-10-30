@@ -1745,7 +1745,9 @@ export const ru: TranslationSchema = {
     },
     notify: {
       request: '{{name}} хочет добавить тебя в друзья',
-      serverRequested: '{{name}} хочет увидеть твой сервер — показать его можно в его профиле',
+      serverRequested: '{{name}} хочет увидеть твой сервер',
+      showServer: 'Показать',
+      serverShown: '{{name}} теперь видит твой сервер',
       added: 'Ты и {{name}} теперь друзья',
       online: '{{name}} в сети',
     },

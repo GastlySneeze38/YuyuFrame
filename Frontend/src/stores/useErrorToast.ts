@@ -5,10 +5,17 @@ import { t } from '@/i18n'
 
 type ToastVariant = 'error' | 'notice'
 
+/** Un bouton à côté du message (« Lui montrer »…) : le geste se fait d'ici. */
+export interface ToastAction {
+  label: string
+  run: () => Promise<void> | void
+}
+
 interface ErrorToastStore {
   message: string | null
   variant: ToastVariant
-  show: (message: string, variant?: ToastVariant) => void
+  action: ToastAction | null
+  show: (message: string, variant?: ToastVariant, action?: ToastAction) => void
   hide: () => void
 }
 
@@ -21,10 +28,12 @@ let hideTimer: ReturnType<typeof setTimeout> | null = null
 export const useErrorToast = create<ErrorToastStore>((set) => ({
   message: null,
   variant: 'error',
-  show: (message, variant = 'error') => {
+  action: null,
+  show: (message, variant = 'error', action) => {
     if (hideTimer) clearTimeout(hideTimer)
-    set({ message, variant })
-    hideTimer = setTimeout(() => set({ message: null }), 4500)
+    set({ message, variant, action: action ?? null })
+    // Avec un bouton, le temps de lire ET de cliquer.
+    hideTimer = setTimeout(() => set({ message: null, action: null }), action ? 12000 : 4500)
   },
   hide: () => {
     if (hideTimer) clearTimeout(hideTimer)
@@ -42,8 +51,8 @@ export function showError(e: unknown): void {
 }
 
 /** Affiche une notice neutre (pas une erreur) dans le même popup global, en gris. */
-export function showNotice(message: string): void {
-  useErrorToast.getState().show(message, 'notice')
+export function showNotice(message: string, action?: ToastAction): void {
+  useErrorToast.getState().show(message, 'notice', action)
 }
 
 /**
