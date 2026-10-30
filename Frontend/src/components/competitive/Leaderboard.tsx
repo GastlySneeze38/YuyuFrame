@@ -6,8 +6,9 @@ import { RankTile, useRankName } from './RankCard'
 
 /** Couleur des trois premières places. */
 const PODIUM = ['255 206 72', '210 214 222', '214 150 96']
-/** Lignes montrées au plus dans la liste (au-delà, seule la nôtre est épinglée). */
-const TOP = 20
+/** Les 15 premiers seulement : la liste tient sans défilement (au-delà, seule
+ *  la ligne du joueur est épinglée en bas). */
+const TOP = 15
 
 const skinOf = (name: string) => `https://mc-heads.net/skin/${encodeURIComponent(name)}`
 
@@ -30,7 +31,8 @@ export function Leaderboard({ rows, placed }: { rows: LeaderboardRow[] | null; p
   }
 
   const podium = rows.filter((r) => r.position <= 3).sort((a, b) => a.position - b.position)
-  const rest = rows.filter((r) => r.position > 3 && r.position <= TOP)
+  // La liste reprend aussi le podium : elle se lit d'un bout à l'autre.
+  const rest = rows.filter((r) => r.position <= TOP)
   const me = rows.find((r) => r.me)
   const pinned = me && me.position > TOP ? me : null
 
@@ -43,9 +45,10 @@ export function Leaderboard({ rows, placed }: { rows: LeaderboardRow[] | null; p
           <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-txt-muted">{t('competitive.leaderboard.title')}</span>
           <span className="text-[10.5px] text-txt-muted">{t('competitive.leaderboard.winRate')}</span>
         </div>
-        <div className="-mx-1 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-1">
+        <div className="-mx-1 flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden px-1">
+          {/* Les lignes se partagent toute la hauteur de la carte. */}
           {rest.map((r, i) => (
-            <Line key={`${r.position}-${r.name}`} row={r} index={i} />
+            <Line key={`${r.position}-${r.name}`} row={r} index={i} fill />
           ))}
         </div>
         {pinned && (
@@ -109,7 +112,7 @@ function Podium({ rows }: { rows: LeaderboardRow[] }) {
   )
 }
 
-function Line({ row: r, index }: { row: LeaderboardRow; index: number }) {
+function Line({ row: r, index, fill = false }: { row: LeaderboardRow; index: number; fill?: boolean }) {
   const t = useT()
   const rankName = useRankName()
   const color = TIER_COLORS[tierOf(r.division)]
@@ -118,9 +121,14 @@ function Line({ row: r, index }: { row: LeaderboardRow; index: number }) {
       initial={{ opacity: 0, x: -6 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ delay: Math.min(index, 12) * 0.025 }}
-      className={`flex shrink-0 items-center gap-3 rounded-xl px-2.5 py-2 ${r.me ? 'bg-accent/[0.14] ring-1 ring-accent/40' : 'hover:bg-white/[0.03]'}`}
+      className={`flex items-center gap-3 rounded-xl px-2.5 py-1 ${fill ? 'min-h-0 flex-1' : 'shrink-0'} ${r.me ? 'bg-accent/[0.14] ring-1 ring-accent/40' : 'hover:bg-white/[0.03]'}`}
     >
-      <span className="w-12 text-right text-[12.5px] font-black tabular-nums text-white/35">{r.position}</span>
+      <span
+        className="w-12 text-right text-[12.5px] font-black tabular-nums"
+        style={{ color: r.position <= 3 ? `rgb(${PODIUM[r.position - 1]})` : 'rgb(255 255 255 / 0.35)' }}
+      >
+        {r.position}
+      </span>
       <SkinFace dataUri={skinOf(r.name)} size={24} className="rounded-[4px]" />
       <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">
         {r.name}

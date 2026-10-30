@@ -11,7 +11,6 @@ import { DuelHistory } from '@/components/competitive/DuelHistory'
 import { ChallengesView } from '@/components/competitive/Challenges'
 import { ServerStats } from '@/components/competitive/ServerStats'
 import { StatsView } from '@/components/competitive/StatsView'
-import { RewardsView } from '@/components/competitive/RewardsView'
 import { api } from '@/api/client'
 import { errorCode, errorMessage } from '@/lib/apiError'
 import { useStore } from '@/stores/useStore'
@@ -45,7 +44,9 @@ import {
  * essayer la vraie route.
  */
 
-const VIEWS = ['history', 'stats', 'challenges', 'leaderboard', 'rewards'] as const
+// Récompenses (`RewardsView`, saisons et cosmétiques) : retiré de la
+// navigation le 2026-10-30, pour une mise à jour suivante. L'écran reste écrit.
+const VIEWS = ['history', 'stats', 'challenges', 'leaderboard'] as const
 type View = (typeof VIEWS)[number]
 
 type Status =
@@ -184,8 +185,6 @@ export default function Competitive() {
                   <ChallengesView challenges={data.challenges} pass={data.battlePass} season={data.seasons?.[0] ?? null} />
                 ) : view === 'leaderboard' ? (
                   <Leaderboard rows={data.leaderboard ? data.leaderboard[shown] ?? [] : null} placed={standing.placed} />
-                ) : view === 'rewards' ? (
-                  <RewardsView standing={standing} seasons={data.seasons} />
                 ) : (
                   // Le rang à gauche, l'historique au milieu, les serveurs à
                   // droite : trois colonnes de toute la hauteur.
