@@ -49,17 +49,19 @@ export function activityText(activity: Activity, t: ReturnType<typeof useT>): st
 }
 
 /**
- * La deuxième ligne d'un ami : ce qu'il fait (en vert, comme une activité),
- * sinon son statut personnalisé, sinon « vu il y a… » hors ligne.
+ * La deuxième ligne d'un ami :
+ * - en jeu : ce qu'il fait, en vert (le statut personnalisé est dans son profil) ;
+ * - en ligne : son statut personnalisé, sinon « Dans le launcher » ;
+ * - hors ligne : son statut personnalisé et « vu il y a… », sur la même ligne.
  */
 export function PresenceLine({ presence, showServer = false }: { presence: FriendPresence; showServer?: boolean }) {
   const t = useT()
   const language = useStore((s) => s.language)
   const custom = liveCustom(presence)
   if (presence.state === 'offline') {
-    return presence.last_seen ? (
-      <span className="truncate text-[11.5px] text-txt-muted">{t('friends.lastSeen', { when: relativeTime(presence.last_seen, language) })}</span>
-    ) : null
+    const seen = presence.last_seen ? t('friends.lastSeen', { when: relativeTime(presence.last_seen, language) }) : null
+    const line = [custom, seen].filter(Boolean).join(' · ')
+    return line ? <span className="truncate text-[11.5px] text-txt-muted">{line}</span> : null
   }
   const activity = presence.activity
   if (activity?.kind === 'game') {

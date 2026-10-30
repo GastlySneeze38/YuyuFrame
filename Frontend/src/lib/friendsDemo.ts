@@ -42,7 +42,7 @@ export function demoFriends(): FriendList {
         last_seen: null,
       }),
       friend(4, 'Mumbo', 'c7da90d56a054217b94a7d427cbbcad8', { state: 'away', custom: null, activity: { kind: 'launcher' }, last_seen: null }),
-      friend(5, 'Philza', '0d3a1b54d6f14e2cb64d4d5e8f6b0f00', { state: 'offline', custom: null, activity: null, last_seen: ago(95) }),
+      friend(5, 'Philza', '0d3a1b54d6f14e2cb64d4d5e8f6b0f00', { state: 'offline', custom: { text: 'En vacances 🏖️', expires_at: null }, activity: null, last_seen: ago(95) }),
       friend(6, 'Sapnap', null, { state: 'offline', custom: null, activity: null, last_seen: ago(60 * 26) }),
       friend(7, 'Tubbo', null, { state: 'offline', custom: null, activity: null, last_seen: ago(60 * 24 * 9) }),
     ],
