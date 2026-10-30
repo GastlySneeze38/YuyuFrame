@@ -15,11 +15,14 @@
 //!   intervalle régulier et rangés dans `presence::token` — eux ne sortent
 //!   jamais vers Java ;
 //! - la liste des comptes Minecraft et le changement de compte, pour la liste
-//!   déroulante du client intégré.
+//!   déroulante du client intégré ;
+//! - ce que fait le joueur, pour ses amis : serveur et duel en cours
+//!   (`activity.rs`).
 //!
 //! Sans tube — jeu lancé à la main, autre launcher, launcher fermé depuis —
 //! tout répond « indisponible » et rien d'autre ne casse.
 
+pub mod activity;
 mod bridge;
 mod channel;
 

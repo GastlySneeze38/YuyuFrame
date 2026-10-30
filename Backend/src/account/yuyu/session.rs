@@ -90,6 +90,8 @@ pub async fn yuyu_login(
 
 #[tauri::command]
 pub async fn yuyu_logout(state: tauri::State<'_, SharedState>) -> Result<(), String> {
+    // Hors ligne pour les amis tout de suite, tant qu'on a encore un jeton.
+    crate::friends::presence::leave(&state).await;
     // Ferme la session côté serveur pour qu'elle disparaisse de la liste des
     // appareils ; si le réseau manque, on oublie quand même la session ici.
     if let Err(e) = api::post(&state, "/auth/logout", json!({})).await {

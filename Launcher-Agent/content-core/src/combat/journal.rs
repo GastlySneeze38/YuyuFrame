@@ -136,6 +136,8 @@ pub struct Journal {
     /// Le choix du joueur, compétitif ou casual : figé dans l'en-tête de
     /// chaque duel à son ouverture. Compétitif tant que Java n'a rien dit.
     competitive: bool,
+    /// Le type du duel ouvert, figé à son ouverture (voir `competitive`).
+    open_competitive: bool,
     /// Combien de fois notre armure est arrivée hors duel : le serveur nous
     /// équipe pour un nouveau duel, avant le premier coup. L'interface y
     /// efface le panneau du duel précédent.
@@ -165,6 +167,7 @@ impl Journal {
             foe_near: 0,
             quiet_until: 0,
             competitive: true,
+            open_competitive: true,
             kits: 0,
             last_result: None,
         }
@@ -284,6 +287,11 @@ impl Journal {
         self.recording
     }
 
+    /// Un duel est ouvert : compte-t-il pour le classement ? `None` hors duel.
+    pub fn open_duel_competitive(&self) -> Option<bool> {
+        self.recording.then_some(self.open_competitive)
+    }
+
     /// Combien de fois le serveur nous a équipés pour un nouveau duel (voir `kits`).
     pub fn kits(&self) -> u32 {
         self.kits
@@ -380,6 +388,7 @@ impl Journal {
         // Hors d'un monde, il n'y a nulle part où écrire ni rien à écrire.
         let Some(dir) = self.dir.clone() else { return };
         self.recording = true;
+        self.open_competitive = self.competitive;
         out.push(Out::Open(dir.join("yuyuframe").join("matches").join(format!("{now_ms}.events.ndjson.zst"))));
         let header = json!({ "k": "h", "v": TELEMETRY_VERSION, "server": self.server, "mc": self.mc, "time": now_ms, "me": self.me, "t": self.tick, "open": by, "ranked": self.competitive });
         out.push(Out::Line(header.to_string()));

@@ -1579,6 +1579,13 @@ export const fr = {
     done: 'C’est noté',
   },
 
+  friends: {
+    notify: {
+      request: '{{name}} veut t’ajouter en ami',
+      added: '{{name}} et toi êtes maintenant amis',
+      online: '{{name}} est en ligne',
+    },
+  },
   support: {
     update: {
       title: 'Ta demande a bougé',

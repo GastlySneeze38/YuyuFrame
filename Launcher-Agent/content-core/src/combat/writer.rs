@@ -236,6 +236,8 @@ fn run(records: std::sync::mpsc::Receiver<Record>) {
         RECORDING.store(journal.recording(), std::sync::atomic::Ordering::Relaxed);
         LIVE_MODE.store(journal.live_mode(), std::sync::atomic::Ordering::Relaxed);
         KITS.store(journal.kits(), std::sync::atomic::Ordering::Relaxed);
+        // Pour les amis : « en duel classé ». Ne part vers le launcher qu'au changement.
+        crate::link::activity::set_duel(journal.open_duel_competitive().map(|ranked| (ranked, journal.live_mode())));
         // Un bloc par seconde, à l'horloge : les ticks arrivent vingt fois par
         // seconde, le fil ne connaît donc jamais de silence, et attendre la
         // taille seule laissait la fin d'un duel en mémoire — perdue si le jeu

@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import type { SupportCategory, TicketDetail, TicketSummary } from '@/types/support'
+import type { FriendList, FriendSettings, MyStatus, MyStatusKind, RequestSent } from '@/types/friends'
 import type { LocalCrashReport, LocalCrashSummary, RemoteCrashSummary } from '@/types/crash'
 import type { BackupDetail, BackupOverview, BackupSettings, BackupSummary, InstanceBackupSettings } from '@/types/backup'
 import type { AuthStatus, CompatResult, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, HealthCheck, JavaReport, JavaStatus, JvmProfile, LoaderVersion, McOption, OptionsSummary, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PackInfo, PackKind, PollResponse, SaveInfo, OptionsLinkInfo, ScanResult, SharedOptionsStatus, ShareExport, ShareLinkStatus, ShareImport, SharePreview, ShareScan, ShareSource, StatsData, StatsQuery, ReferencedMod, SyncDiff, SyncInstance, SyncManifest, SystemMemoryInfo, Version } from '@/types'
@@ -774,6 +775,24 @@ export const api = {
    *  jeu qui envoie les duels. Réponse brute, lue par `lib/competitive.ts`. */
   ranked: {
     state: (uuid: string) => invoke<unknown>('ranked_state', { uuid }),
+  },
+
+  /** Amis (`/v1/friends`). Les changements arrivent aussi en direct par
+   *  l'événement `friends_event` (voir `stores/useFriends.ts`). */
+  friends: {
+    list: () => invoke<FriendList>('friends_list'),
+    request: (name: string) => invoke<RequestSent>('friends_request', { name }),
+    accept: (id: number) => invoke<void>('friends_accept', { id }),
+    decline: (id: number) => invoke<void>('friends_decline', { id }),
+    cancel: (id: number) => invoke<void>('friends_cancel', { id }),
+    remove: (userId: number) => invoke<void>('friends_remove', { userId }),
+    block: (userId: number) => invoke<void>('friends_block', { userId }),
+    unblock: (userId: number) => invoke<void>('friends_unblock', { userId }),
+    /** `customMinutes` absent : sans fin. */
+    setStatus: (status: MyStatusKind, customText: string | null, customMinutes: number | null) =>
+      invoke<MyStatus>('friends_set_status', { status, customText, customMinutes }),
+    setSettings: (settings: FriendSettings) => invoke<FriendSettings>('friends_set_settings', { settings }),
+    setServerShare: (userId: number, shared: boolean) => invoke<void>('friends_set_server_share', { userId, shared }),
   },
 
   sync: {

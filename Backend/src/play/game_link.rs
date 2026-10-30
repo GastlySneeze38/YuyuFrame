@@ -21,6 +21,7 @@
 //! | `switch⇥<uuid>`   | `account⇥<uuid>⇥<pseudo>⇥<hors ligne 0/1>⇥<jeton Minecraft>` |
 //! | `skin`            | `skin⇥<modèle ou ->⇥<adresse chez Mojang ou ->⇥<chemin du PNG ou ->` |
 //! | `skin⇥<uuid>`     | la même chose pour un autre compte de la liste (sa tête, dans le jeu) |
+//! | `activity⇥<serveur ou ->⇥<- / casual / ranked>⇥<mode ou ->` | `ok` — ce que fait le joueur, pour ses amis (`friends::presence`) |
 //! | (tout)            | `error⇥<message>`                                          |
 //!
 //! Qui peut s'y brancher : le tube porte un nom tiré au hasard, n'accepte
@@ -61,6 +62,8 @@ fn accounts() -> std::sync::MutexGuard<'static, Option<HashMap<String, watch::Se
 pub fn track(instance_id: &str, session: MinecraftSession) -> watch::Receiver<MinecraftSession> {
     let (tx, rx) = watch::channel(session);
     accounts().get_or_insert_with(HashMap::new).insert(instance_id.to_string(), tx);
+    // Les amis voient « en jeu » sans attendre le prochain signal.
+    crate::friends::presence::poke();
     rx
 }
 
@@ -68,6 +71,7 @@ pub fn untrack(instance_id: &str) {
     if let Some(map) = accounts().as_mut() {
         map.remove(instance_id);
     }
+    crate::friends::presence::clear_game(instance_id);
 }
 
 fn current_uuid(instance_id: &str) -> Option<String> {
@@ -151,6 +155,17 @@ async fn answer(ctx: &Context, question: &str) -> String {
                     skin.path.map(|p| field(&p.to_string_lossy())).unwrap_or_else(|| "-".into()),
                 ),
                 None => "skin\t-\t-\t-".to_string(),
+            }
+        }
+        // Le jeu annonce son serveur et son duel ; le signal des amis part aussitôt.
+        "activity" => {
+            let fields: Vec<&str> = parts.collect();
+            match crate::friends::presence::parse_game_line(&fields) {
+                Some(activity) => {
+                    crate::friends::presence::set_game(&ctx.instance_id, activity);
+                    "ok".to_string()
+                }
+                None => error("Activité illisible"),
             }
         }
         "switch" => match parts.next() {

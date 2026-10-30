@@ -1574,6 +1574,13 @@ export const ru: TranslationSchema = {
     done: 'Понятно',
   },
 
+  friends: {
+    notify: {
+      request: '{{name}} хочет добавить тебя в друзья',
+      added: 'Ты и {{name}} теперь друзья',
+      online: '{{name}} в сети',
+    },
+  },
   support: {
     update: {
       title: 'Ваше обращение изменилось',

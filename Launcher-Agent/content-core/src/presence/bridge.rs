@@ -127,6 +127,9 @@ pub unsafe extern "C" fn yf_presence_context(
             }
         }
     }
+    // Pour les amis : l'adresse tapée de préférence (c'est elle qu'on rejoint),
+    // sinon l'adresse jointe.
+    crate::link::activity::set_server(server.first().and_then(|form| String::from_utf8(form.clone()).ok()));
     let uuid = ((uuid_hi as u64 as u128) << 64) | (uuid_lo as u64 as u128);
     let own = PlayerKey::new(uuid, bytes(name, name_len));
     shared.directory().set_context(server, own, Instant::now());

@@ -1,12 +1,12 @@
 # Privacy Policy
 
-**Last updated: October 2026**
+**Last updated: 30 October 2026**
 
 ## 1. Who we are
 
 YuyuFrame is a Minecraft launcher developed by Ghasty. The source code of the launcher is public: https://github.com/GastlySneeze38/YuyuFrame. This policy describes what the launcher and the YuyuFrame servers do with your data. You are asked to accept it when you create a YuyuFrame account.
 
-A YuyuFrame account is optional: the launcher installs and starts Minecraft without one. An account is needed for a subscription, cloud sync, support tickets, crash reports, reviews, and making the skin of an offline Minecraft account visible to other players.
+A YuyuFrame account is optional: the launcher installs and starts Minecraft without one. An account is needed for a subscription, cloud sync, support tickets, crash reports, reviews, friends, and making the skin of an offline Minecraft account visible to other players.
 
 ## 2. Data we collect
 
@@ -25,6 +25,8 @@ A YuyuFrame account is optional: the launcher installs and starts Minecraft with
 **Minecraft and Microsoft accounts.** When you sign in with Microsoft to play, the access and refresh tokens are exchanged directly between your computer and Microsoft, and stay **on your computer only**. They are never sent to YuyuFrame servers. If you are signed in to YuyuFrame, the launcher sends us the Minecraft username and UUID of the accounts you added, so that support can find your account from your Minecraft name.
 
 **Skins of offline Minecraft accounts.** An offline Minecraft account has no skin at Mojang, so other players cannot see the one you chose. If you are signed in to YuyuFrame when you apply a skin to such an account, the launcher sends the skin image to our server, which passes it to MineSkin. MineSkin puts it on one of its own Minecraft accounts so that Mojang hosts it, and returns its address. The image is sent as unlisted, so it is not shown in MineSkin's public gallery; anyone who has its address at Mojang can still fetch it. Our server keeps neither the image nor the address. In game, the built-in client can then send the command `/skin url` with that address to a server you join, so that the server shows your skin to other players; you can turn this off in the "Player" module. Nothing is sent for a Microsoft account, or when you are not signed in to YuyuFrame.
+
+**Friends and online status.** If you add friends, we store your friend list, the friend requests you send and receive, the players you block, and your friend settings. A friend request is sent by YuyuFrame username or by the name of a verified Microsoft Minecraft account. While you are signed in, the launcher tells our server every 30 seconds that it is open and what you are doing: in the launcher or in game, and in game the Minecraft version, the mod loader, whether you are in a duel (ranked or not, and its mode) and the address of the server you are playing on. Private and local addresses are never sent. This activity is kept **in memory only** and forgotten when you go offline. Your friends see your status (online, away, do not disturb, or offline if you choose to be invisible), the custom status text you write, and your activity unless you hide it. The server address is shown to **nobody by default**: you can show it to all your friends or to friends you pick. We also store the last time you were seen online, which your friends see while you are offline; it is not updated while you are invisible. Declining a request or blocking a player is never told to the other person.
 
 **Subscription and payment.** Paid plans are billed through Stripe or Lemon Squeezy. You enter your payment details on their hosted page; YuyuFrame servers never receive your card number. We receive a signed notification saying which plan was bought, for which account, and the amount, and we keep it in a billing journal.
 
@@ -71,6 +73,7 @@ To exercise these rights, open a support ticket from the launcher (Support scree
 - **Cloud sync data**: until you delete the synced instance or your account.
 - **Sessions and devices**: until you sign the device out; a device unused for 60 days no longer appears in your list.
 - **Crash reports and support tickets**: until you delete them or your account. When an account is deleted, its crash reports are detached from it: the technical cause is kept, without any link to you.
+- **Friends**: friend list, blocks, settings and last time seen, until you change them or delete your account. A declined friend request is deleted after 30 days, an unanswered one after 90 days. What you are doing in the launcher or in game is not stored.
 - **Billing journal**: kept after account deletion, because accounting rules require it.
 - **Ban block list**: for as long as the ban lasts.
 - **Backups**: a deleted account can remain in encrypted backups until they expire, 35 days at most.

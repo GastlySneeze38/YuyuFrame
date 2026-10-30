@@ -155,6 +155,10 @@ interface Store {
   confirmServerLaunch: boolean
   setConfirmServerLaunch: (v: boolean) => void
 
+  /** Prévenir quand un ami se connecte (voir `stores/useFriends.ts`). */
+  friendOnlineNotify: boolean
+  setFriendOnlineNotify: (v: boolean) => void
+
   language: Lang
   setLanguage: (l: Lang) => void
   /** Vrai dès que l'utilisateur a choisi sa langue lui-même. Tant qu'il ne
@@ -424,6 +428,9 @@ export const useStore = create<Store>()(
       confirmServerLaunch: true,
       setConfirmServerLaunch: (confirmServerLaunch) => set({ confirmServerLaunch }),
 
+      friendOnlineNotify: true,
+      setFriendOnlineNotify: (friendOnlineNotify) => set({ friendOnlineNotify }),
+
       language: 'fr',
       setLanguage: (language) => set({ language, languagePicked: true }),
       languagePicked: false,
@@ -573,6 +580,7 @@ export const useStore = create<Store>()(
         showConsole: s.showConsole,
         showHomeServers: s.showHomeServers,
         confirmServerLaunch: s.confirmServerLaunch,
+        friendOnlineNotify: s.friendOnlineNotify,
         language: s.language,
         languagePicked: s.languagePicked,
         sgaUnlocked: s.sgaUnlocked,

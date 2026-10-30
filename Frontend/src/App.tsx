@@ -22,6 +22,7 @@ import { ipLanguage, systemLanguage } from '@/i18n/detect'
 import { useModalQueue } from '@/stores/useModalQueue'
 import { useSupportWatch, POLL_MS as SUPPORT_POLL_MS } from '@/stores/useSupportWatch'
 import { useCrashWatch } from '@/stores/useCrashWatch'
+import { listenFriendEvents, useFriends } from '@/stores/useFriends'
 import { api } from '@/api/client'
 import { showError } from '@/stores/useErrorToast'
 import { AUTH_SYSTEM_VERSION, YUYU_AUTH_VERSION } from '@/config/authVersion'
@@ -527,6 +528,31 @@ export default function App() {
     const timer = setInterval(refresh, SUPPORT_POLL_MS)
     return () => clearInterval(timer)
   }, [yuyuSignedIn])
+
+  // Amis : le launcher relaie le flux temps réel du serveur (`friends_event`) ;
+  // le magasin tient la liste et prévient (demande reçue, nouvel ami, ami en
+  // ligne). Sans compte, la liste est oubliée. Le premier événement du flux
+  // (`ready`) charge la liste : pas d'appel en plus ici.
+  const clearFriends = useFriends((s) => s.clear)
+  useEffect(() => {
+    if (isConsoleWindow) return
+    if (!yuyuSignedIn || emailVerificationRequired) {
+      clearFriends()
+      return
+    }
+    let stop: (() => void) | null = null
+    let cancelled = false
+    listenFriendEvents().then((unlisten) => {
+      if (cancelled) unlisten()
+      else stop = unlisten
+    })
+    // Le flux a pu s'ouvrir avant que l'interface n'écoute : on charge quand même une fois.
+    void useFriends.getState().refresh()
+    return () => {
+      cancelled = true
+      stop?.()
+    }
+  }, [yuyuSignedIn, emailVerificationRequired])
 
   // Comptes Minecraft connus du serveur. L'envoi fait à la connexion ne
   // suffit pas : une session ouverte avant que la liste n'existe ne repasse

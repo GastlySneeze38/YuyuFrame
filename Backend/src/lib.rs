@@ -3,6 +3,7 @@ mod app;
 mod backup;
 mod commands;
 mod db;
+mod friends;
 mod instances;
 mod integrations;
 mod minecraft;
@@ -191,6 +192,12 @@ pub fn run() {
             // échéance de 20 h suffit à ne jamais sauter un jour.
             backup::commands::spawn_daily(app_state.clone());
 
+            // Amis : le signal « je suis là » (toutes les 30 s et à chaque
+            // partie) et le flux temps réel relayé à l'interface. Les deux
+            // attendent sans rien faire tant qu'on n'est pas connecté.
+            friends::presence::spawn(app_state.clone());
+            friends::stream::spawn(app_state.clone(), app.handle().clone());
+
             // Pilotage par le back-office (version minimale, interrupteurs,
             // bannières) : première lecture tout de suite, puis toutes les
             // 15 minutes. Jamais bloquant — sans réponse, rien n'est coupé.
@@ -259,8 +266,8 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|_app, event| {
-            if let tauri::RunEvent::ExitRequested { api, .. } = event {
+        .run(|app, event| match event {
+            tauri::RunEvent::ExitRequested { api, .. } => {
                 // Deux raisons de rester : surveiller une partie quand
                 // l'arrière-plan est autorisé, ou attendre que le jeu démarre
                 // avant de s'effacer quand il ne l'est pas. Sans la seconde,
@@ -271,5 +278,16 @@ pub fn run() {
                     api.prevent_exit();
                 }
             }
+            // Le launcher s'arrête pour de bon : les amis le voient hors ligne
+            // tout de suite (une seconde au plus, sinon le serveur s'en
+            // apercevra seul au bout de 75 s).
+            tauri::RunEvent::Exit => {
+                use tauri::Manager;
+                if let Some(shared) = app.try_state::<state::SharedState>() {
+                    let shared = shared.inner().clone();
+                    tauri::async_runtime::block_on(friends::presence::leave(&shared));
+                }
+            }
+            _ => {}
         });
 }

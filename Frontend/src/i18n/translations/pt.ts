@@ -1575,6 +1575,13 @@ export const pt: TranslationSchema = {
     done: 'Entendi',
   },
 
+  friends: {
+    notify: {
+      request: '{{name}} quer te adicionar como amigo',
+      added: 'Você e {{name}} agora são amigos',
+      online: '{{name}} está online',
+    },
+  },
   support: {
     update: {
       title: 'Sua solicitação mudou',

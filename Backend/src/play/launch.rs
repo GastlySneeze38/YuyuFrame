@@ -375,6 +375,8 @@ pub async fn launch_game(
             s.running_instances.remove(&instance_id);
             s.launch_cancel.remove(&instance_id);
             crate::state::RUNNING_GAMES.store(s.running_instances.len(), std::sync::atomic::Ordering::Relaxed);
+            // Les amis voient la fin de la partie au prochain signal, qui part maintenant.
+            crate::friends::presence::poke();
             // Discord Rich Presence — retour "dans le launcher" SEULEMENT si
             // plus AUCUNE instance ne tourne (any_running(), voir state.rs) :
             // plusieurs instances peuvent tourner en parallèle
