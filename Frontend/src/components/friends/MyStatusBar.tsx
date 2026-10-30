@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { api } from '@/api/client'
-import { MY_STATUSES, STATUS_COLORS, liveCustom, minutesUntilMidnight } from '@/lib/friends'
+import { MY_STATUSES, STATUS_COLORS, liveCustom } from '@/lib/friends'
 import { showError } from '@/stores/useErrorToast'
 import { useFriends } from '@/stores/useFriends'
 import { useStore } from '@/stores/useStore'
@@ -9,18 +9,9 @@ import { useT } from '@/i18n'
 import type { MyStatusKind } from '@/types/friends'
 import { FriendAvatar } from './FriendBits'
 
-type Duration = 'm30' | 'h4' | 'today' | 'never'
-
-function minutesOf(d: Duration): number | null {
-  if (d === 'm30') return 30
-  if (d === 'h4') return 240
-  if (d === 'today') return minutesUntilMidnight()
-  return null
-}
-
 /**
  * Moi, en bas du panneau : ma tête, mon pseudo, mon statut. Un clic ouvre le
- * menu au-dessus — les quatre statuts, et le statut personnalisé avec sa durée.
+ * menu au-dessus — les quatre statuts, et le statut personnalisé.
  */
 export function MyStatusBar() {
   const t = useT()
@@ -30,7 +21,6 @@ export function MyStatusBar() {
   const uuid = useStore((s) => s.uuid)
   const [open, setOpen] = useState(false)
   const [text, setText] = useState('')
-  const [duration, setDuration] = useState<Duration>('today')
   const [saving, setSaving] = useState(false)
 
   const custom = me ? liveCustom(me) : null
@@ -54,6 +44,11 @@ export function MyStatusBar() {
   }
 
   const skin = `https://mc-heads.net/skin/${uuid ?? 'MHF_Steve'}`
+  const changed = text.trim() !== (custom ?? '')
+  const save = () => {
+    void apply(me.status, text.trim() || null, null)
+    setOpen(false)
+  }
 
   return (
     <div className="relative shrink-0 border-t border-line-soft bg-black/30 p-2">
@@ -87,49 +82,23 @@ export function MyStatusBar() {
               </button>
             ))}
 
+            {/* Le statut personnalisé : un champ, un bouton. Il reste jusqu'à
+                ce qu'on le change ; vidé puis enregistré, il disparaît. */}
             <div className="mt-1 flex flex-col gap-2 border-t border-line-soft px-1 pt-2.5">
               <span className="text-[10.5px] font-bold uppercase tracking-[0.06em] text-txt-muted">{t('friends.custom.title')}</span>
-              <input
-                value={text}
-                maxLength={60}
-                onChange={(e) => setText(e.target.value)}
-                placeholder={t('friends.custom.placeholder')}
-                className="rounded-lg border border-line bg-black/30 px-2.5 py-2 text-[12.5px] outline-none placeholder:text-txt-muted focus:border-accent/60"
-              />
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] text-txt-muted">{t('friends.custom.clearAfter')}</span>
-                <select
-                  value={duration}
-                  onChange={(e) => setDuration(e.target.value as Duration)}
-                  className="flex-1 rounded-lg border border-line bg-black/30 px-2 py-1.5 text-[11.5px] outline-none"
-                >
-                  {(['m30', 'h4', 'today', 'never'] as Duration[]).map((d) => (
-                    <option key={d} value={d} className="bg-[#18181f]">
-                      {t(`friends.custom.durations.${d}`)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex justify-end gap-2">
-                {custom && (
-                  <button
-                    disabled={saving}
-                    onClick={() => {
-                      void apply(me.status, null, null)
-                      setOpen(false)
-                    }}
-                    className="rounded-lg px-2.5 py-1.5 text-[11.5px] font-semibold text-txt-muted hover:text-white"
-                  >
-                    {t('friends.custom.clear')}
-                  </button>
-                )}
+              <div className="flex gap-2">
+                <input
+                  value={text}
+                  maxLength={60}
+                  onChange={(e) => setText(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && changed && save()}
+                  placeholder={t('friends.custom.placeholder')}
+                  className="min-w-0 flex-1 rounded-lg border border-line bg-black/30 px-2.5 py-2 text-[12.5px] outline-none placeholder:text-txt-muted focus:border-accent/60"
+                />
                 <button
-                  disabled={saving || !text.trim()}
-                  onClick={() => {
-                    void apply(me.status, text.trim(), minutesOf(duration))
-                    setOpen(false)
-                  }}
-                  className="rounded-lg bg-accent px-3 py-1.5 text-[11.5px] font-bold text-white disabled:opacity-40"
+                  disabled={saving || !changed}
+                  onClick={save}
+                  className="shrink-0 rounded-lg bg-accent px-3 text-[11.5px] font-bold text-white disabled:opacity-40"
                 >
                   {t('friends.custom.save')}
                 </button>

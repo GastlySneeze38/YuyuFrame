@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
@@ -64,9 +64,24 @@ function PanelBody({ onClose }: { onClose: () => void }) {
   const refresh = useFriends((s) => s.refresh)
   const markRequestsSeen = useFriends((s) => s.markRequestsSeen)
   const [view, setView] = useState<View>({ kind: 'list' })
-  const [tool, setTool] = useState<'search' | 'add' | null>(null)
+  /** Les amis d'un côté, les demandes de l'autre : on ne mélange pas les
+   *  gens qu'on connaît et ceux qui frappent à la porte. */
+  const [tab, setTab] = useState<'friends' | 'requests'>('friends')
+  const [searching, setSearching] = useState(false)
+  /** Incrémenté pour mettre le curseur dans la barre d'ajout, en bas des demandes. */
+  const [addFocus, setAddFocus] = useState(0)
+  const openTab = (next: 'friends' | 'requests') => {
+    if (next !== tab) setSearch('')
+    setTab(next)
+  }
+  /** Ajouter un ami se fait depuis l'onglet des demandes, par sa barre du bas. */
+  const goAdd = () => {
+    setView({ kind: 'list' })
+    openTab('requests')
+    setAddFocus((n) => n + 1)
+  }
   const [search, setSearch] = useState('')
-  const [collapsed, setCollapsed] = useState<Set<Section>>(new Set(['outgoing']))
+  const [collapsed, setCollapsed] = useState<Set<Section>>(new Set())
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -90,6 +105,11 @@ function PanelBody({ onClose }: { onClose: () => void }) {
   }, [view, onClose])
 
   const groups = useMemo(() => groupFriends(list?.friends ?? [], search), [list, search])
+  // La recherche vaut pour l'onglet ouvert : dans les demandes, elle les filtre.
+  const needle = search.trim().toLowerCase()
+  const matches = (r: FriendRequest) => !needle || r.username.toLowerCase().includes(needle)
+  const incoming = (list?.incoming ?? []).filter(matches)
+  const outgoing = (list?.outgoing ?? []).filter(matches)
   const profile = view.kind === 'profile' ? list?.friends.find((f) => f.user_id === view.userId) : undefined
   const toggle = (s: Section) =>
     setCollapsed((prev) => {
@@ -113,13 +133,50 @@ function PanelBody({ onClose }: { onClose: () => void }) {
         <span className="flex-1 text-[15px] font-black">{title}</span>
         {view.kind === 'list' && signedIn && list && (
           <>
-            <IconButton active={tool === 'search'} label={t('friends.search')} onClick={() => setTool(tool === 'search' ? null : 'search')} path="M11 18a7 7 0 100-14 7 7 0 000 14zM20 20l-4-4" />
-            <IconButton active={tool === 'add'} label={t('friends.add')} onClick={() => setTool(tool === 'add' ? null : 'add')} path="M15 19v-1a4 4 0 00-4-4H6a4 4 0 00-4 4v1M8.5 10a3.5 3.5 0 100-7 3.5 3.5 0 000 7zM20 8v6M23 11h-6" />
+            <IconButton
+              active={searching}
+              label={t(tab === 'requests' ? 'friends.searchRequests' : 'friends.search')}
+              onClick={() => {
+                if (searching) setSearch('')
+                setSearching(!searching)
+              }}
+              path="M11 18a7 7 0 100-14 7 7 0 000 14zM20 20l-4-4"
+            />
+            <IconButton label={t('friends.add')} onClick={goAdd} path="M15 19v-1a4 4 0 00-4-4H6a4 4 0 00-4 4v1M8.5 10a3.5 3.5 0 100-7 3.5 3.5 0 000 7zM20 8v6M23 11h-6" />
             <IconButton label={t('friends.settings.title')} onClick={() => setView({ kind: 'settings' })} path="M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 01-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 010-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 014 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 010 4h-.1a1.7 1.7 0 00-1.5 1z" />
           </>
         )}
         <IconButton label={t('common.close')} onClick={onClose} path="M6 6l12 12M18 6L6 18" />
       </div>
+
+      {view.kind === 'list' && signedIn && list && (
+        <div className="flex shrink-0 gap-1 border-b border-line-soft px-3 py-2">
+          {(['friends', 'requests'] as const).map((key) => {
+            const count = key === 'friends' ? list.friends.length : list.incoming.length
+            return (
+              <button
+                key={key}
+                onClick={() => openTab(key)}
+                className={`relative flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-[12.5px] font-semibold transition-colors ${
+                  tab === key ? 'text-white' : 'text-txt-muted hover:text-txt-secondary'
+                }`}
+              >
+                {tab === key && <motion.span layoutId="friends-tab" className="absolute inset-0 rounded-lg bg-white/[0.07]" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />}
+                <span className="relative">{t(`friends.tabs.${key}`)}</span>
+                {count > 0 && (
+                  <span
+                    className={`relative flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10.5px] font-black ${
+                      key === 'requests' ? 'bg-danger text-white' : 'bg-white/10 text-txt-secondary'
+                    }`}
+                  >
+                    {count}
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {/* Corps */}
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -134,31 +191,41 @@ function PanelBody({ onClose }: { onClose: () => void }) {
         ) : (
           <div className="flex flex-col pb-3">
             <AnimatePresence initial={false}>
-              {tool === 'search' && (
+              {searching && (
                 <ToolRow key="search">
                   <input
                     autoFocus
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    placeholder={t('friends.searchPlaceholder')}
+                    placeholder={t(tab === 'requests' ? 'friends.searchRequestsPlaceholder' : 'friends.searchPlaceholder')}
                     className="w-full rounded-lg border border-line bg-black/30 px-3 py-2 text-[12.5px] outline-none placeholder:text-txt-muted focus:border-accent/60"
                   />
                 </ToolRow>
               )}
-              {tool === 'add' && (
-                <ToolRow key="add">
-                  <AddFriend />
-                </ToolRow>
-              )}
             </AnimatePresence>
 
-            {list.incoming.length > 0 && (
-              <Group label={t('friends.sections.requests')} count={list.incoming.length} collapsed={collapsed.has('requests')} onToggle={() => toggle('requests')} accent>
-                {list.incoming.map((r) => (
-                  <RequestRow key={r.id} request={r} incoming />
-                ))}
-              </Group>
-            )}
+            {tab === 'requests' ? (
+              <>
+                {incoming.length > 0 && (
+                  <Group label={t('friends.sections.requests')} count={incoming.length} collapsed={collapsed.has('requests')} onToggle={() => toggle('requests')} accent>
+                    {incoming.map((r) => (
+                      <RequestRow key={r.id} request={r} incoming />
+                    ))}
+                  </Group>
+                )}
+                {outgoing.length > 0 && (
+                  <Group label={t('friends.sections.outgoing')} count={outgoing.length} collapsed={collapsed.has('outgoing')} onToggle={() => toggle('outgoing')}>
+                    {outgoing.map((r) => (
+                      <RequestRow key={r.id} request={r} />
+                    ))}
+                  </Group>
+                )}
+                {incoming.length === 0 && outgoing.length === 0 && (
+                  <Empty text={t(search.trim() ? 'friends.noMatch' : 'friends.noRequests')} />
+                )}
+              </>
+            ) : (
+              <>
             {groups.inGame.length > 0 && (
               <Group label={t('friends.sections.inGame')} count={groups.inGame.length} collapsed={collapsed.has('inGame')} onToggle={() => toggle('inGame')}>
                 {groups.inGame.map((f) => (
@@ -180,20 +247,17 @@ function PanelBody({ onClose }: { onClose: () => void }) {
                 ))}
               </Group>
             )}
-            {list.outgoing.length > 0 && (
-              <Group label={t('friends.sections.outgoing')} count={list.outgoing.length} collapsed={collapsed.has('outgoing')} onToggle={() => toggle('outgoing')}>
-                {list.outgoing.map((r) => (
-                  <RequestRow key={r.id} request={r} />
-                ))}
-              </Group>
+            {list.friends.length === 0 && <Empty text={t('friends.empty')} action={t('friends.add')} onAction={goAdd} />}
+            {list.friends.length > 0 && search.trim() && groups.inGame.length + groups.online.length + groups.offline.length === 0 && (
+              <Empty text={t('friends.noMatch')} />
             )}
-            {list.friends.length === 0 && list.incoming.length === 0 && tool !== 'add' && (
-              <Empty text={t('friends.empty')} action={t('friends.add')} onAction={() => setTool('add')} />
+              </>
             )}
           </div>
         )}
       </div>
 
+      {view.kind === 'list' && signedIn && list && tab === 'requests' && <AddFriendBar focusSignal={addFocus} />}
       {signedIn && list && <MyStatusBar />}
     </>
   )
@@ -255,15 +319,27 @@ function RequestRow({ request, incoming = false }: { request: FriendRequest; inc
   )
 }
 
-function AddFriend() {
+/**
+ * Ajouter un ami, en bas de l'onglet des demandes : un « # » puis le pseudo.
+ * Pour l'instant le « # » n'est qu'un repère : la demande part par le pseudo
+ * (YuyuFrame ou Minecraft), comme avant. Un identifiant après le « # » (façon
+ * pseudo#1234) viendra avec son backend.
+ */
+function AddFriendBar({ focusSignal }: { focusSignal: number }) {
   const t = useT()
   const refresh = useFriends((s) => s.refresh)
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null)
+  const input = useRef<HTMLInputElement>(null)
+
+  // Le bouton « ajouter » de l'en-tête amène ici : le curseur suit.
+  useEffect(() => {
+    if (focusSignal > 0) input.current?.focus()
+  }, [focusSignal])
 
   async function send() {
-    const value = name.trim()
+    const value = name.trim().replace(/^#/, '')
     if (!value) return
     setBusy(true)
     setResult(null)
@@ -280,22 +356,26 @@ function AddFriend() {
   }
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="shrink-0 border-t border-line-soft px-3 pb-3 pt-2.5">
+      <p className="mb-2 text-[10.5px] font-bold uppercase tracking-[0.06em] text-txt-muted">{t('friends.add')}</p>
       <div className="flex gap-2">
-        <input
-          autoFocus
-          value={name}
-          maxLength={32}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && void send()}
-          placeholder={t('friends.addPlaceholder')}
-          className="min-w-0 flex-1 rounded-lg border border-line bg-black/30 px-3 py-2 text-[12.5px] outline-none placeholder:text-txt-muted focus:border-accent/60"
-        />
-        <button disabled={busy || !name.trim()} onClick={() => void send()} className="rounded-lg bg-accent px-3 text-[12px] font-bold text-white disabled:opacity-40">
+        <label className="flex min-w-0 flex-1 items-center rounded-lg border border-line bg-black/30 transition-colors focus-within:border-accent/60">
+          <span className="select-none pl-3 pr-1 text-[14px] font-black text-accent-hover">#</span>
+          <input
+            ref={input}
+            value={name}
+            maxLength={32}
+            onChange={(e) => setName(e.target.value.replace(/^#/, ''))}
+            onKeyDown={(e) => e.key === 'Enter' && void send()}
+            placeholder={t('friends.addPlaceholder')}
+            className="min-w-0 flex-1 bg-transparent py-2 pr-3 text-[12.5px] outline-none placeholder:text-txt-muted"
+          />
+        </label>
+        <button disabled={busy || !name.trim()} onClick={() => void send()} className="shrink-0 rounded-lg bg-accent px-3 text-[12px] font-bold text-white disabled:opacity-40">
           {t('friends.send')}
         </button>
       </div>
-      {result && <p className={`text-[11.5px] ${result.ok ? 'text-[#5fd38d]' : 'text-danger'}`}>{result.text}</p>}
+      {result && <p className={`mt-1.5 text-[11.5px] ${result.ok ? 'text-[#5fd38d]' : 'text-danger'}`}>{result.text}</p>}
     </div>
   )
 }

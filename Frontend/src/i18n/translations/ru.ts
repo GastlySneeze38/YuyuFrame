@@ -1579,6 +1579,9 @@ export const ru: TranslationSchema = {
     back: 'Назад',
     search: 'Поиск',
     searchPlaceholder: 'Найти друга',
+    searchRequests: 'Найти заявку',
+    searchRequestsPlaceholder: 'Найти заявку в друзья',
+    noMatch: 'Ничего не найдено.',
     add: 'Добавить друга',
     addPlaceholder: 'Ник в YuyuFrame или Minecraft',
     send: 'Отправить',
@@ -1595,6 +1598,11 @@ export const ru: TranslationSchema = {
     requestIncoming: 'Входящая заявка',
     requestOutgoing: 'Исходящая заявка',
     lastSeen: 'Был(а) {{when}}',
+    tabs: {
+      friends: 'Друзья',
+      requests: 'Заявки',
+    },
+    noRequests: 'Нет ожидающих заявок.',
     sections: {
       requests: 'Заявки',
       inGame: 'В игре',
@@ -1627,14 +1635,6 @@ export const ru: TranslationSchema = {
     custom: {
       title: 'Свой статус',
       placeholder: 'Чем занят?',
-      clearAfter: 'Убрать через',
-      durations: {
-        m30: '30 минут',
-        h4: '4 часа',
-        today: 'Сегодня',
-        never: 'Никогда',
-      },
-      clear: 'Убрать',
       save: 'Сохранить',
     },
     profile: {

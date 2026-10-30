@@ -1579,6 +1579,9 @@ export const pl: TranslationSchema = {
     back: 'Wstecz',
     search: 'Szukaj',
     searchPlaceholder: 'Szukaj znajomego',
+    searchRequests: 'Szukaj zaproszenia',
+    searchRequestsPlaceholder: 'Szukaj zaproszenia do znajomych',
+    noMatch: 'Brak wyników.',
     add: 'Dodaj znajomego',
     addPlaceholder: 'Nazwa w YuyuFrame lub Minecraft',
     send: 'Wyślij',
@@ -1595,6 +1598,11 @@ export const pl: TranslationSchema = {
     requestIncoming: 'Otrzymane zaproszenie',
     requestOutgoing: 'Wysłane zaproszenie',
     lastSeen: 'Widziany {{when}}',
+    tabs: {
+      friends: 'Znajomi',
+      requests: 'Zaproszenia',
+    },
+    noRequests: 'Brak oczekujących zaproszeń.',
     sections: {
       requests: 'Zaproszenia',
       inGame: 'W grze',
@@ -1627,14 +1635,6 @@ export const pl: TranslationSchema = {
     custom: {
       title: 'Własny status',
       placeholder: 'Co porabiasz?',
-      clearAfter: 'Usuń po',
-      durations: {
-        m30: '30 minutach',
-        h4: '4 godzinach',
-        today: 'Dzisiaj',
-        never: 'Nigdy',
-      },
-      clear: 'Usuń',
       save: 'Zapisz',
     },
     profile: {

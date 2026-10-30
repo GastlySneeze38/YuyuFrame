@@ -1584,6 +1584,9 @@ export const fr = {
     back: 'Retour',
     search: 'Rechercher',
     searchPlaceholder: 'Rechercher un ami',
+    searchRequests: 'Rechercher une demande',
+    searchRequestsPlaceholder: 'Rechercher une demande d’ami',
+    noMatch: 'Aucun résultat.',
     add: 'Ajouter un ami',
     addPlaceholder: 'Pseudo YuyuFrame ou Minecraft',
     send: 'Envoyer',
@@ -1600,6 +1603,11 @@ export const fr = {
     requestIncoming: 'Demande reçue',
     requestOutgoing: 'Demande envoyée',
     lastSeen: 'Vu {{when}}',
+    tabs: {
+      friends: 'Amis',
+      requests: 'Demandes',
+    },
+    noRequests: 'Aucune demande en attente.',
     sections: {
       requests: 'Demandes',
       inGame: 'En jeu',
@@ -1632,14 +1640,6 @@ export const fr = {
     custom: {
       title: 'Statut personnalisé',
       placeholder: 'Que fais-tu ?',
-      clearAfter: 'Effacer après',
-      durations: {
-        m30: '30 minutes',
-        h4: '4 heures',
-        today: 'Aujourd’hui',
-        never: 'Jamais',
-      },
-      clear: 'Effacer',
       save: 'Enregistrer',
     },
     profile: {

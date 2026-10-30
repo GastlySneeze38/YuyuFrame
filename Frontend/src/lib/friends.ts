@@ -82,9 +82,3 @@ export function liveCustom(p: { custom: { text: string; expires_at: string | nul
   if (p.custom.expires_at && Date.parse(p.custom.expires_at) <= now) return null
   return p.custom.text
 }
-
-/** Minutes jusqu'à minuit : la durée « aujourd'hui » d'un statut personnalisé. */
-export function minutesUntilMidnight(now = new Date()): number {
-  const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
-  return Math.max(1, Math.ceil((midnight.getTime() - now.getTime()) / 60000))
-}

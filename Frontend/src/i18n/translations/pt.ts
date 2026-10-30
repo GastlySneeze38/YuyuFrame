@@ -1580,6 +1580,9 @@ export const pt: TranslationSchema = {
     back: 'Voltar',
     search: 'Buscar',
     searchPlaceholder: 'Buscar um amigo',
+    searchRequests: 'Buscar um pedido',
+    searchRequestsPlaceholder: 'Buscar um pedido de amizade',
+    noMatch: 'Nenhum resultado.',
     add: 'Adicionar um amigo',
     addPlaceholder: 'Nome no YuyuFrame ou no Minecraft',
     send: 'Enviar',
@@ -1596,6 +1599,11 @@ export const pt: TranslationSchema = {
     requestIncoming: 'Pedido recebido',
     requestOutgoing: 'Pedido enviado',
     lastSeen: 'Visto {{when}}',
+    tabs: {
+      friends: 'Amigos',
+      requests: 'Pedidos',
+    },
+    noRequests: 'Nenhum pedido pendente.',
     sections: {
       requests: 'Pedidos',
       inGame: 'Jogando',
@@ -1628,14 +1636,6 @@ export const pt: TranslationSchema = {
     custom: {
       title: 'Status personalizado',
       placeholder: 'O que você está fazendo?',
-      clearAfter: 'Apagar depois de',
-      durations: {
-        m30: '30 minutos',
-        h4: '4 horas',
-        today: 'Hoje',
-        never: 'Nunca',
-      },
-      clear: 'Apagar',
       save: 'Salvar',
     },
     profile: {

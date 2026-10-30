@@ -672,7 +672,7 @@ export default function Home() {
               bannière, il ne coûte rien : cette place était vide. */}
           {/* La carte des annonces (Halloween…) passe sous le titre : le coin
               en haut à droite est au bouton Amis. */}
-          <div className="absolute left-[clamp(12px,2vw,22px)] top-[clamp(10px,1.8vh,18px)] z-10 flex flex-col items-start gap-[clamp(6px,1.2vh,12px)]">
+          <div className="absolute left-[clamp(12px,2vw,22px)] top-[clamp(12px,2vw,22px)] z-10 flex flex-col items-start gap-[clamp(12px,2.4vh,22px)]">
           <div className="flex items-center gap-2">
             {/* Le titre respire : sa lueur enfle et retombe lentement. */}
             <motion.h1
@@ -713,8 +713,10 @@ export default function Home() {
             <HomeBanner banner={banner} visible={bannerReady} />
           </div>
 
-          {/* Amis : en ligne, demandes, et le panneau façon Discord. */}
-          <div className="absolute right-[clamp(12px,2vw,22px)] top-[clamp(10px,1.8vh,18px)] z-10">
+          {/* Amis : en ligne, demandes, et le panneau façon Discord. Même
+              écart avec le haut et avec la droite : le bouton est calé dans
+              le coin, pas posé n'importe où. */}
+          <div className="absolute right-[clamp(12px,2vw,22px)] top-[clamp(12px,2vw,22px)] z-10">
             <FriendsButton />
           </div>
 
