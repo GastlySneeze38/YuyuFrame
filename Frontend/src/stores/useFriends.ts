@@ -4,6 +4,7 @@ import { api } from '@/api/client'
 import { showNotice } from '@/stores/useErrorToast'
 import { useStore } from '@/stores/useStore'
 import { t } from '@/i18n'
+import { demoFriends } from '@/lib/friendsDemo'
 import type { FriendEvent, FriendList, FriendPresence } from '@/types/friends'
 
 /**
@@ -47,6 +48,8 @@ export const useFriends = create<FriendsStore>((set, get) => ({
       set({ list })
     } catch {
       // API sans la route, réseau coupé : on garde ce qu'on a, le flux réessaiera.
+      // En développement, des amis de démonstration pour voir le panneau.
+      if (import.meta.env.DEV && !get().list) set({ list: demoFriends() })
     }
   },
 

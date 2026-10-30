@@ -58,10 +58,10 @@ export function HomeBanner({ banner, visible }: { banner: FleetAnnouncement | nu
       {banner && visible && (
         <motion.div
           key={banner.id}
-          initial={{ opacity: 0, y: -150, scale: 0.6 }}
+          initial={{ opacity: 0, x: -60, scale: 0.85 }}
           animate={{
             opacity: 1,
-            y: 0,
+            x: 0,
             scale: 1,
             transition: {
               // Un ressort mou : la bannière dépasse sa place puis revient,
@@ -74,13 +74,13 @@ export function HomeBanner({ banner, visible }: { banner: FleetAnnouncement | nu
               opacity: { duration: 0.35, delay: 0.35 },
             },
           }}
-          exit={{ opacity: 0, y: -120, scale: 0.82, transition: { duration: 0.42, ease: [0.4, 0, 1, 1] } }}
-          // `z-10` comme le titre : sans lui, elle passerait derrière le rendu
-          // 3D, qui couvre tout le panneau.
-          // La largeur est bornée pour qu'elle ne vienne jamais toucher le
-          // titre, à gauche, même sur une fenêtre étroite.
-          className="pointer-events-none absolute right-[clamp(12px,2vw,22px)] top-[clamp(10px,1.8vh,18px)] z-10 flex max-w-[min(58%,420px)] items-center gap-3 rounded-xl border px-5 py-3 backdrop-blur-[8px]"
-          style={look.card}
+          exit={{ opacity: 0, x: -50, scale: 0.88, transition: { duration: 0.42, ease: [0.4, 0, 1, 1] } }}
+          // Posée sous le titre, dans son bloc (`Home.tsx`) : le coin en haut
+          // à droite est au bouton Amis. La largeur est bornée pour qu'elle
+          // ne vienne pas chercher le personnage, au centre, sur une fenêtre
+          // étroite.
+          style={{ ...look.card, transformOrigin: 'left center' }}
+          className="pointer-events-none flex w-fit max-w-[min(34vw,420px)] items-center gap-3 rounded-xl border px-4 py-2.5 backdrop-blur-[8px]"
         >
           {banner.kicker && (
             <span
