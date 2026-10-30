@@ -1118,6 +1118,7 @@ export const de: TranslationSchema = {
       levelOf: 'Stufe {{level}} / {{max}}',
       progress: '{{wins}} / {{next}} Siege bis zur nächsten Stufe',
       maxed: 'Vollständiger Rahmen',
+      cellWins: '{{count}} Siege auf diesem Rang',
     },
     nav: { history: 'Verlauf', stats: 'Statistiken', season: 'Saison', challenges: 'Missionen', leaderboard: 'Rangliste', rewards: 'Belohnungen' },
     rewards: {

@@ -1118,6 +1118,7 @@ export const ru: TranslationSchema = {
       levelOf: 'Уровень {{level}} / {{max}}',
       progress: '{{wins}} / {{next}} побед до следующего уровня',
       maxed: 'Полная рамка',
+      cellWins: 'Побед в этом ранге: {{count}}',
     },
     nav: { history: 'История', stats: 'Статистика', season: 'Сезон', challenges: 'Задания', leaderboard: 'Таблица', rewards: 'Награды' },
     rewards: {

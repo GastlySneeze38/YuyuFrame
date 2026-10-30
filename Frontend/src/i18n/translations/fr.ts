@@ -1116,6 +1116,7 @@ export const fr = {
       levelOf: 'Niveau {{level}} / {{max}}',
       progress: '{{wins}} / {{next}} victoires pour le niveau suivant',
       maxed: 'Bordure complète',
+      cellWins: '{{count}} victoires à ce rang',
     },
     nav: { history: 'Historique', stats: 'Statistiques', season: 'Saison', challenges: 'Missions', leaderboard: 'Classement', rewards: 'Récompenses' },
     rewards: {

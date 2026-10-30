@@ -80,7 +80,7 @@ export function SeasonRankView({ wins, season }: { wins: number[] | null; season
             </p>
           )}
           <div className="mt-3 flex items-center gap-3">
-            <p className="text-[44px] font-black uppercase leading-none tracking-[-0.01em]" style={{ color: `rgb(${color})`, textShadow: `0 0 26px rgb(${color} / 0.35)` }}>
+            <p className="text-[60px] font-black uppercase leading-none tracking-[-0.01em]" style={{ color: `rgb(${color})`, textShadow: `0 0 30px rgb(${color} / 0.35)` }}>
               {top !== null ? rankName(top, true) : t('competitive.rank.unranked')}
             </p>
             <button
@@ -91,7 +91,6 @@ export function SeasonRankView({ wins, season }: { wins: number[] | null; season
               i
             </button>
           </div>
-          <p className="mt-2 text-[12px] text-txt-muted">{t('competitive.season.rankLabel')}</p>
         </div>
 
         {/* 2. La bordure : tout ce qui la concerne dans un seul bloc. */}
@@ -136,7 +135,7 @@ export function SeasonRankView({ wins, season }: { wins: number[] | null; season
         </div>
 
         {/* 3. L'affichage au profil, en dernier. */}
-        <label className="flex cursor-pointer items-center justify-between gap-3 px-1">
+        <label className="flex cursor-pointer items-center justify-between gap-3 rounded-2xl border border-white/[0.07] bg-black/30 px-5 py-3.5 backdrop-blur-sm">
           <span className="text-[12px] text-txt-secondary">{t('competitive.season.showOnProfile')}</span>
           <Toggle checked={showOnProfile} onChange={() => setShowOnProfile((v) => !v)} size="sm" />
         </label>
@@ -149,28 +148,106 @@ export function SeasonRankView({ wins, season }: { wins: number[] | null; season
 
 // ── La grille ────────────────────────────────────────────────────────────
 
-/** Les cases : les victoires (déjà triées) d'abord, puis le vide. */
+/**
+ * Les cases : les victoires (déjà triées) d'abord, puis le vide.
+ *
+ * Au survol d'une case, elle grossit et luit dans la couleur de son rang ; les
+ * victoires des autres rangs s'estompent, et une bulle dit le rang et combien
+ * de victoires la grille en compte.
+ */
 function SeasonGrid({ wins, instant = false }: { wins: number[]; instant?: boolean }) {
+  const t = useT()
   const rankName = useRankName()
+  const [hover, setHover] = useState<number | null>(null)
+  // Dès le premier survol, plus de délai d'apparition : une case qui
+  // reprend sa taille doit le faire tout de suite.
+  const [touched, setTouched] = useState(false)
+  const hovered = hover !== null ? wins[hover] : undefined
+  const sameRank = hovered !== undefined ? wins.filter((w) => w === hovered).length : 0
+
+  // La bulle a une place fixe, centrée sous la bordure : elle ne cache aucune
+  // case et ne saute pas d'un bord à l'autre en suivant la souris. La grille
+  // occupe la bordure de INNER % à (100 − INNER) % ; le bas de la bordure est
+  // donc à (100 − INNER) / (100 − 2 × INNER) de la hauteur de la grille.
+  const frameBottom = ((100 - INNER) / (100 - 2 * INNER)) * 100
+
   return (
-    <div className="grid h-full w-full gap-[3px] bg-[rgb(10_10_16)] p-[4px]" style={{ gridTemplateColumns: `repeat(${SEASON_GRID}, 1fr)` }}>
-      {Array.from({ length: CELLS }, (_, i) => {
-        const win = wins[i]
-        if (win === undefined) return <div key={i} className="rounded-[2px] border border-white/[0.05] bg-white/[0.02]" />
-        return (
+    <div className="relative h-full w-full" onMouseLeave={() => setHover(null)}>
+      <div className="grid h-full w-full gap-[3px] bg-[rgb(10_10_16)] p-[4px]" style={{ gridTemplateColumns: `repeat(${SEASON_GRID}, 1fr)` }}>
+        {Array.from({ length: CELLS }, (_, i) => {
+          const win = wins[i]
+          if (win === undefined) return <div key={i} className="rounded-[2px] border border-white/[0.05] bg-white/[0.02]" />
+          const c = TIER_COLORS[tierOf(win)]
+          const isHover = hover === i
+          const dimmed = hovered !== undefined && win !== hovered
+          return (
+            <motion.div
+              key={i}
+              onMouseEnter={() => {
+                setHover(i)
+                setTouched(true)
+              }}
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: isHover ? 1.28 : 1, opacity: 1 }}
+              // L'apparition a son délai ; le survol, non : il doit répondre tout de suite.
+              transition={
+                touched
+                  ? { type: 'spring', stiffness: 500, damping: 26 }
+                  : { delay: instant ? i * 0.006 : 0.15 + i * 0.012, type: 'spring', stiffness: 400, damping: 22 }
+              }
+              className="relative cursor-pointer overflow-hidden rounded-[2px] transition-[filter,box-shadow] duration-150"
+              style={{
+                zIndex: isHover ? 10 : 0,
+                filter: dimmed ? 'brightness(0.35) saturate(0.5)' : 'none',
+                boxShadow: isHover
+                  ? `0 0 0 1.5px rgb(255 255 255 / 0.9), 0 0 18px 2px rgb(${c} / 0.8)`
+                  : 'inset 1px 1px 0 rgb(255 255 255 / 0.3), inset -1px -1px 0 rgb(0 0 0 / 0.4)',
+              }}
+            >
+              <img src={TIER_TEXTURES[tierOf(win)]} alt="" draggable={false} className="absolute inset-0 h-full w-full [image-rendering:pixelated]" />
+            </motion.div>
+          )
+        })}
+      </div>
+
+      {/* La place de la bulle en CSS ; son apparition par Motion, à l'intérieur
+          (Motion écraserait un `transform` posé sur l'élément qu'il anime). */}
+      {hovered !== undefined && (
+        <div
+          className="pointer-events-none absolute z-20 whitespace-nowrap"
+          style={{
+            left: '50%',
+            top: `${frameBottom}%`,
+            transform: 'translate(-50%, 12px)',
+          }}
+        >
           <motion.div
-            key={i}
-            title={rankName(win, true)}
-            initial={{ scale: 0, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ delay: instant ? i * 0.006 : 0.15 + i * 0.012, type: 'spring', stiffness: 400, damping: 22 }}
-            className="relative overflow-hidden rounded-[2px]"
-            style={{ boxShadow: 'inset 1px 1px 0 rgb(255 255 255 / 0.3), inset -1px -1px 0 rgb(0 0 0 / 0.4)' }}
+            // Une nouvelle apparition seulement quand le rang survolé change.
+            key={hovered}
+            initial={{ opacity: 0, y: -4, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.12 }}
           >
-            <img src={TIER_TEXTURES[tierOf(win)]} alt="" draggable={false} className="absolute inset-0 h-full w-full [image-rendering:pixelated]" />
+            <div
+              className="flex items-center gap-2.5 rounded-xl border bg-[rgb(14_13_20/0.96)] px-3 py-2 shadow-[0_10px_30px_rgba(0,0,0,0.6)] backdrop-blur-md"
+              style={{ borderColor: `rgb(${TIER_COLORS[tierOf(hovered)]} / 0.5)` }}
+            >
+              <img
+                src={TIER_TEXTURES[tierOf(hovered)]}
+                alt=""
+                className="h-7 w-7 rounded-[5px] [image-rendering:pixelated]"
+                style={{ boxShadow: 'inset 1px 1px 0 rgb(255 255 255 / 0.35), inset -1px -1px 0 rgb(0 0 0 / 0.45)' }}
+              />
+              <div>
+                <p className="text-[13px] font-black leading-tight" style={{ color: `rgb(${TIER_COLORS[tierOf(hovered)]})` }}>
+                  {rankName(hovered, true)}
+                </p>
+                <p className="text-[10.5px] leading-tight text-txt-muted">{t('competitive.season.cellWins', { count: sameRank })}</p>
+              </div>
+            </div>
           </motion.div>
-        )
-      })}
+        </div>
+      )}
     </div>
   )
 }
