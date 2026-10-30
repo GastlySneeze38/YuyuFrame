@@ -53,7 +53,7 @@ const PAGE_IMPORTS = [
   () => import('@/pages/Plans'),
   () => import('@/pages/Stats'),
   () => import('@/pages/Backup'),
-  () => import('@/pages/Server'),
+  () => import('@/pages/Competitive'),
   () => import('@/pages/JvmProfiles'),
   () => import('@/pages/JvmProfileEditor'),
   () => import('@/pages/Skins'),
@@ -89,7 +89,7 @@ const Plans = lazy(() => import('@/pages/Plans'))
 const Stats = lazy(() => import('@/pages/Stats'))
 const Backup = lazy(() => import('@/pages/Backup'))
 const SyncInstance = lazy(() => import('@/pages/SyncInstance'))
-const Server = lazy(() => import('@/pages/Server'))
+const Competitive = lazy(() => import('@/pages/Competitive'))
 const JvmProfiles = lazy(() => import('@/pages/JvmProfiles'))
 const JvmProfileEditor = lazy(() => import('@/pages/JvmProfileEditor'))
 const Skins = lazy(() => import('@/pages/Skins'))
@@ -646,7 +646,9 @@ export default function App() {
                 pour tout le monde. */}
             <Route path="/backup" element={<PlanGate feature="backup"><Backup /></PlanGate>} />
             <Route path="/sync/:syncId" element={<SyncInstance />} />
-            <Route path="/server" element={<Server />} />
+            {/* L'onglet Compétitif a pris la place de « Serveur » (tableau de
+                bord du P2P, abandonné) dans la barre de l'accueil. */}
+            <Route path="/competitive" element={<Competitive />} />
             <Route path="/jvm" element={<JvmProfiles />} />
             <Route path="/jvm/:profileId" element={<JvmProfileEditor />} />
             {/* Atelier des modales, uniquement en développement (Ctrl+Maj+M). */}

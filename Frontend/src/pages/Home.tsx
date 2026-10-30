@@ -1102,8 +1102,9 @@ export default function Home() {
             <NavLink label={t('home.nav.account')} onClick={() => navigate('/login')} distance={2}>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z" /></svg>
             </NavLink>
-            <NavLink label={t('home.nav.server')} onClick={() => navigate('/server')} distance={3}>
-              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z" /></svg>
+            <NavLink label={t('home.nav.competitive')} onClick={() => navigate('/competitive')} distance={3}>
+              {/* Un trophée. */}
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 4h-2V3a1 1 0 00-1-1H8a1 1 0 00-1 1v1H5a2 2 0 00-2 2v1a5 5 0 004.6 4.98A5.01 5.01 0 0011 15.9V18H8a1 1 0 00-1 1v2h10v-2a1 1 0 00-1-1h-3v-2.1a5.01 5.01 0 003.4-3.92A5 5 0 0021 7V6a2 2 0 00-2-2zM5 7V6h2v3.82A3 3 0 015 7zm14 0a3 3 0 01-2 2.82V6h2v1z" /></svg>
             </NavLink>
           </div>
 

@@ -41,6 +41,7 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         crate::server::reviews::review_mine,
         crate::server::reviews::review_submit,
         crate::server::reviews::review_delete,
+        crate::server::ranked::ranked_state,
         crate::server::support::support_categories,
         crate::server::support::support_list,
         crate::server::support::support_get,

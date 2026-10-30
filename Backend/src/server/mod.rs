@@ -15,6 +15,7 @@ pub mod crash_reports;
 pub mod curseforge;
 pub mod fleet;
 pub mod patch_notes;
+pub mod ranked;
 pub mod reviews;
 pub mod support;
 

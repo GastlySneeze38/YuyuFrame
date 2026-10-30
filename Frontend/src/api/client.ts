@@ -770,6 +770,12 @@ export const api = {
     remove: () => invoke<void>('review_delete'),
   },
 
+  /** Classement compétitif vérifié (`/v1/ranked`). Lecture seule : c'est le
+   *  jeu qui envoie les duels. Réponse brute, lue par `lib/competitive.ts`. */
+  ranked: {
+    state: (uuid: string) => invoke<unknown>('ranked_state', { uuid }),
+  },
+
   sync: {
     list: () => invoke<SyncInstance[]>('sync_list_instances'),
     listSaves: (instanceId: string) =>
