@@ -288,6 +288,21 @@ export interface CompetitiveData {
   seasons: Season[] | null
   /** `null` : pas encore de route. */
   battlePass: BattlePass | null
+  /** Les victoires classées de la saison en cours, par mode : pour chacune,
+   *  la division qu'on avait en la gagnant. `null` : pas encore de route. */
+  seasonWins: Partial<Record<ModeKey, number[]>> | null
+}
+
+/** Cases de la grille de saison (8 × 8) : les meilleures victoires seulement. */
+export const SEASON_GRID = 8
+/** Victoires par niveau de bordure de la grille. */
+export const WINS_PER_BORDER = 25
+/** Niveaux de bordure ; au-delà, la bordure ne change plus. */
+export const BORDER_LEVELS = 5
+
+/** Le niveau de bordure atteint avec `wins` victoires (1 dès la première). */
+export function borderLevel(wins: number): number {
+  return Math.min(BORDER_LEVELS, Math.floor(wins / WINS_PER_BORDER) + 1)
 }
 
 // ── Démonstration (développement seulement) ──────────────────────────────
@@ -456,6 +471,17 @@ export function demoData(myName: string): CompetitiveData {
     challenges: demoChallenges(),
     seasons: demoSeasons(standings[0]),
     battlePass: demoBattlePass(),
+    // 58 victoires à la masse, de Fer 1 à Or 2 ; aucune à l'épée (placement en cours).
+    seasonWins: {
+      mace: [
+        ...Array<number>(9).fill(6),
+        ...Array<number>(10).fill(7),
+        ...Array<number>(13).fill(8),
+        ...Array<number>(14).fill(9),
+        ...Array<number>(12).fill(10),
+      ],
+      sword: [],
+    },
   }
 }
 

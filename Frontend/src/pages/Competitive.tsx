@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/Button'
 import { RankCard, RankTile, useRankName } from '@/components/competitive/RankCard'
 import { Leaderboard } from '@/components/competitive/Leaderboard'
 import { DuelHistory } from '@/components/competitive/DuelHistory'
-import { ChallengesView } from '@/components/competitive/Challenges'
+import { SeasonRankView } from '@/components/competitive/SeasonRankView'
 import { ServerStats } from '@/components/competitive/ServerStats'
 import { StatsView } from '@/components/competitive/StatsView'
 import { api } from '@/api/client'
@@ -46,7 +46,9 @@ import {
 
 // Récompenses (`RewardsView`, saisons et cosmétiques) : retiré de la
 // navigation le 2026-10-30, pour une mise à jour suivante. L'écran reste écrit.
-const VIEWS = ['history', 'stats', 'challenges', 'leaderboard'] as const
+// Missions : déplacées dans Outils (`pages/Missions.tsx`) le 2026-10-30, elles
+// ne sont pas propres au PvP. À leur place, la grille de la saison.
+const VIEWS = ['history', 'stats', 'season', 'leaderboard'] as const
 type View = (typeof VIEWS)[number]
 
 type Status =
@@ -87,7 +89,7 @@ export default function Competitive() {
       const answer = await api.ranked.state(uuid)
       setStatus({
         kind: 'ready',
-        data: { standings: readStandings(answer), leaderboard: null, duels: null, stats: null, challenges: null, seasons: null, battlePass: null },
+        data: { standings: readStandings(answer), leaderboard: null, duels: null, stats: null, challenges: null, seasons: null, battlePass: null, seasonWins: null },
       })
     } catch (e) {
       const code = errorCode(e)
@@ -181,8 +183,8 @@ export default function Competitive() {
               >
                 {view === 'stats' ? (
                   <StatsView standing={standing} stats={data.stats?.[shown] ?? null} duels={modeDuels} />
-                ) : view === 'challenges' ? (
-                  <ChallengesView challenges={data.challenges} pass={data.battlePass} season={data.seasons?.[0] ?? null} />
+                ) : view === 'season' ? (
+                  <SeasonRankView wins={data.seasonWins ? data.seasonWins[shown] ?? [] : null} season={data.seasons?.[0] ?? null} />
                 ) : view === 'leaderboard' ? (
                   <Leaderboard rows={data.leaderboard ? data.leaderboard[shown] ?? [] : null} placed={standing.placed} />
                 ) : (

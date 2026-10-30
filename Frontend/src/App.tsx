@@ -54,6 +54,7 @@ const PAGE_IMPORTS = [
   () => import('@/pages/Stats'),
   () => import('@/pages/Backup'),
   () => import('@/pages/Competitive'),
+  () => import('@/pages/Missions'),
   () => import('@/pages/JvmProfiles'),
   () => import('@/pages/JvmProfileEditor'),
   () => import('@/pages/Skins'),
@@ -90,6 +91,7 @@ const Stats = lazy(() => import('@/pages/Stats'))
 const Backup = lazy(() => import('@/pages/Backup'))
 const SyncInstance = lazy(() => import('@/pages/SyncInstance'))
 const Competitive = lazy(() => import('@/pages/Competitive'))
+const Missions = lazy(() => import('@/pages/Missions'))
 const JvmProfiles = lazy(() => import('@/pages/JvmProfiles'))
 const JvmProfileEditor = lazy(() => import('@/pages/JvmProfileEditor'))
 const Skins = lazy(() => import('@/pages/Skins'))
@@ -649,6 +651,8 @@ export default function App() {
             {/* L'onglet Compétitif a pris la place de « Serveur » (tableau de
                 bord du P2P, abandonné) dans la barre de l'accueil. */}
             <Route path="/competitive" element={<Competitive />} />
+            {/* Missions et passe de saison, ouverts depuis Outils. */}
+            <Route path="/missions" element={<Missions />} />
             <Route path="/jvm" element={<JvmProfiles />} />
             <Route path="/jvm/:profileId" element={<JvmProfileEditor />} />
             {/* Atelier des modales, uniquement en développement (Ctrl+Maj+M). */}

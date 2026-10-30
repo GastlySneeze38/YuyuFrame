@@ -39,6 +39,8 @@ const FEATURES: Feature[] = [
   { key: 'stats', path: '/stats', status: 'ready', icon: 'M4 20V10M10 20V4M16 20v-7M22 20H2' },
   { key: 'jvm', path: '/jvm', status: 'ready', icon: 'M4 6h16M4 12h16M4 18h10' },
   { key: 'skins', path: '/skins', status: 'ready', icon: 'M8 3l4 2 4-2 4 3-2.5 4H16v11H8V10H5.5L3 6z' },
+  // Missions et passe de saison : en démonstration seulement (dev), « bientôt » ailleurs.
+  { key: 'missions', path: '/missions', status: 'ready', icon: 'M4 21V4M4 4h12l-2 4 2 4H4' },
 ]
 
 export default function Features() {
