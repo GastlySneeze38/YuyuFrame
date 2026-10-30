@@ -201,7 +201,6 @@ export default function Competitive() {
                   </div>
                 )}
               </motion.div>
-              <p className="shrink-0 text-center text-[11px] text-txt-muted">{t('competitive.how')}</p>
             </>
           )}
         </div>

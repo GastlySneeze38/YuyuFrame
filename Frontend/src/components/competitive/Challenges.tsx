@@ -69,43 +69,52 @@ function Missions({ challenges, pass }: { challenges: Challenge[] | null; pass: 
   const daily = challenges.filter((c) => c.period === 'daily')
   const weekly = challenges.filter((c) => c.period === 'weekly')
 
+  // Une ligne par mission, sans cadre ni barre : la colonne tient sans
+  // défilement, et les deux sections se partagent la hauteur.
   return (
-    <div className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-line bg-surface-1">
-      {/* Missions du jour */}
-      <SectionHead title={t('competitive.challenges.daily')} refill={daily[0] ? countdown(daily[0].endsAt - now) : null} />
-      <div className="flex flex-col gap-4 px-5 pb-5 pt-3">
+    <div className="flex min-h-0 flex-col justify-between gap-5 rounded-2xl border border-line bg-surface-1 px-5 py-5">
+      <section className="flex flex-col gap-3">
+        <SectionHead title={t('competitive.challenges.daily')} refill={daily[0] ? countdown(daily[0].endsAt - now) : null} />
         {pass && (
-          <>
-            <p className="text-[11px] text-txt-muted">{t('competitive.missions.perCheckpoint', { xp: pass.checkpointXp.toLocaleString() })}</p>
+          <div title={t('competitive.missions.perCheckpoint', { xp: pass.checkpointXp.toLocaleString() })}>
             <Checkpoints done={pass.checkpointsDone} total={pass.checkpoints} />
-          </>
+          </div>
         )}
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col">
           {daily.map((c, i) => (
             <MissionRow key={c.id} mission={c} index={i} />
           ))}
         </div>
-      </div>
+      </section>
 
-      {/* Missions de la semaine */}
-      <SectionHead title={t('competitive.challenges.weekly')} refill={weekly[0] ? countdown(weekly[0].endsAt - now) : null} />
-      <div className="-mx-0 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-5 pb-5 pt-3">
+      <section className="flex flex-col gap-3">
+        <SectionHead title={t('competitive.challenges.weekly')} refill={weekly[0] ? countdown(weekly[0].endsAt - now) : null} />
         {weekly.every((c) => c.progress >= c.goal) ? (
-          <p className="py-6 text-center text-[11.5px] font-bold uppercase tracking-[0.06em] text-txt-muted">{t('competitive.missions.allDone')}</p>
+          <p className="py-4 text-center text-[11px] font-bold uppercase tracking-[0.06em] text-txt-muted">{t('competitive.missions.allDone')}</p>
         ) : (
-          weekly.map((c, i) => <MissionRow key={c.id} mission={c} index={i} />)
+          <div className="flex flex-col">
+            {weekly.map((c, i) => (
+              <MissionRow key={c.id} mission={c} index={i} />
+            ))}
+          </div>
         )}
-      </div>
+      </section>
     </div>
   )
 }
 
+/** Titre d'une section et son compte à rebours (horloge), sur une ligne. */
 function SectionHead({ title, refill }: { title: string; refill: string | null }) {
   const t = useT()
   return (
-    <div className="flex shrink-0 items-baseline justify-between gap-3 border-y border-white/[0.05] bg-white/[0.03] px-5 py-3 first:border-t-0">
-      <span className="text-[12.5px] font-black uppercase tracking-[0.04em]">{title}</span>
-      {refill && <span className="text-[11px] tabular-nums text-txt-muted">{t('competitive.missions.refills', { time: refill })}</span>}
+    <div className="flex items-center justify-between gap-3">
+      <span className="truncate text-[12.5px] font-black uppercase tracking-[0.04em]">{title}</span>
+      {refill && (
+        <span title={t('competitive.missions.refills', { time: refill })} className="flex shrink-0 items-center gap-1 text-[11px] tabular-nums text-txt-muted">
+          <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm1 11h-5v-2h3V6h2z" /></svg>
+          {refill}
+        </span>
+      )}
     </div>
   )
 }
@@ -122,14 +131,14 @@ function Checkpoints({ done, total }: { done: number; total: number }) {
               initial={{ scale: 0.6, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ delay: i * 0.06, type: 'spring', stiffness: 300, damping: 18 }}
-              className="relative flex h-11 w-11 shrink-0 items-center justify-center"
+              className="relative flex h-9 w-9 shrink-0 items-center justify-center"
             >
               <span
-                className={`absolute inset-[6px] rotate-45 rounded-[4px] border-2 ${
-                  filled ? 'border-accent bg-accent/30 shadow-[0_0_16px_rgb(var(--accent)/0.5)]' : 'border-white/15 bg-white/[0.02]'
+                className={`absolute inset-[5px] rotate-45 rounded-[4px] border-2 ${
+                  filled ? 'border-accent bg-accent/30 shadow-[0_0_14px_rgb(var(--accent)/0.5)]' : 'border-white/15 bg-white/[0.02]'
                 }`}
               />
-              <span className={`relative text-[15px] font-black ${filled ? 'text-white' : 'text-white/35'}`}>{i + 1}</span>
+              <span className={`relative text-[13px] font-black ${filled ? 'text-white' : 'text-white/35'}`}>{i + 1}</span>
             </motion.div>
             {i < total - 1 && <span className={`mx-1 h-0.5 flex-1 rounded-full ${i < done - 1 ? 'bg-accent/70' : 'bg-white/[0.08]'}`} />}
           </div>
@@ -139,36 +148,55 @@ function Checkpoints({ done, total }: { done: number; total: number }) {
   )
 }
 
+/** Une mission sur une ligne : un anneau de progression (une coche quand
+ *  c'est fait), la phrase, le mode en petit, où l'on en est, l'XP. */
 function MissionRow({ mission: c, index }: { mission: Challenge; index: number }) {
   const t = useT()
   const done = c.progress >= c.goal
+  const ratio = Math.min(1, c.progress / c.goal)
+  const R = 8
+  const C = 2 * Math.PI * R
   return (
     <motion.div
       initial={{ opacity: 0, x: -6 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ delay: index * 0.04 }}
-      className={`flex shrink-0 flex-col gap-2 rounded-xl border px-3.5 py-2.5 ${done ? 'border-success/30 bg-success/[0.07]' : 'border-white/[0.06] bg-white/[0.02]'}`}
+      className="flex items-center gap-3 border-b border-white/[0.05] py-2.5 last:border-b-0"
     >
-      <div className="flex items-center gap-2">
-        <span className={`min-w-0 flex-1 truncate text-[12.5px] font-bold ${done ? 'text-success' : ''}`}>
-          {t(`competitive.challenges.kinds.${c.kind}`, { count: c.target, score: c.target })}
+      {done ? (
+        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-success/20 text-success">
+          <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor"><path d="M9 16.2l-3.5-3.5L4 14.2 9 19.2 20 8.2l-1.5-1.5z" /></svg>
         </span>
-        {c.mode && <span className="shrink-0 rounded bg-white/[0.06] px-1.5 py-0.5 text-[9.5px] font-bold text-txt-secondary">{t(`competitive.modes.${c.mode}`)}</span>}
-        <span className="shrink-0 text-[10.5px] font-bold text-accent-hover">{t('competitive.missions.xp', { xp: c.xp.toLocaleString() })}</span>
-      </div>
-      <div className="flex items-center gap-2.5">
-        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
-          <motion.div
-            className={`h-full rounded-full ${done ? 'bg-success' : 'bg-accent'}`}
-            initial={{ width: 0 }}
-            animate={{ width: `${Math.min(1, c.progress / c.goal) * 100}%` }}
+      ) : (
+        <svg viewBox="0 0 20 20" className="h-5 w-5 shrink-0 -rotate-90">
+          <circle cx="10" cy="10" r={R} fill="none" stroke="rgb(255 255 255 / 0.1)" strokeWidth="2.5" />
+          <motion.circle
+            cx="10"
+            cy="10"
+            r={R}
+            fill="none"
+            stroke="rgb(var(--accent))"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeDasharray={C}
+            initial={{ strokeDashoffset: C }}
+            animate={{ strokeDashoffset: C * (1 - ratio) }}
             transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: 0.1 + index * 0.04 }}
           />
-        </div>
-        <span className="w-9 shrink-0 text-right text-[10.5px] font-bold tabular-nums text-txt-muted">
-          {c.progress}/{c.goal}
-        </span>
+        </svg>
+      )}
+      <div className="min-w-0 flex-1">
+        <p className={`truncate text-[12.5px] font-semibold ${done ? 'text-txt-muted line-through decoration-white/20' : ''}`}>
+          {t(`competitive.challenges.kinds.${c.kind}`, { count: c.target, score: c.target })}
+        </p>
+        <p className="text-[10.5px] tabular-nums text-txt-muted">
+          {c.progress} / {c.goal}
+          {c.mode && <> · {t(`competitive.modes.${c.mode}`)}</>}
+        </p>
       </div>
+      <span className={`shrink-0 text-[11px] font-bold tabular-nums ${done ? 'text-success' : 'text-accent-hover'}`}>
+        {t('competitive.missions.xp', { xp: c.xp.toLocaleString() })}
+      </span>
     </motion.div>
   )
 }
