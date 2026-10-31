@@ -260,6 +260,7 @@ pub fn extract(duel: &Duel, my_views: &[View], opportunities: &[Opportunity], lu
 
 #[cfg(test)]
 mod tests {
+    use super::super::SLOT_CHEST;
     use super::*;
 
     fn gear(t: u64, chest: &str, hand: &str) -> Gear {

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { isOnline } from '@/lib/friends'
 import { SNAP } from '@/lib/motion'
@@ -17,6 +17,11 @@ import { FriendsPanel } from './FriendsPanel'
 export function FriendsButton({ className }: { className?: string }) {
   const t = useT()
   const [open, setOpen] = useState(false)
+  // Un lien d'ami cliqué (`yuyuframe://friend/…`) ouvre le panneau sur l'ajout.
+  const addSeq = useFriends((s) => s.addRequest?.seq ?? 0)
+  useEffect(() => {
+    if (addSeq > 0 && useFriends.getState().addRequest?.code) setOpen(true)
+  }, [addSeq])
   const online = useFriends((s) => s.list?.friends.filter((f) => isOnline(f.presence)).length ?? 0)
   // Les demandes et invitations reçues en attente de réponse : la pastille
   // reste tant qu'on n'y a pas répondu (une invitation expire en 10 min).

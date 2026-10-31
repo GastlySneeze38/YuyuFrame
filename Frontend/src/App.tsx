@@ -28,7 +28,7 @@ import { api } from '@/api/client'
 import { showError } from '@/stores/useErrorToast'
 import { AUTH_SYSTEM_VERSION, YUYU_AUTH_VERSION } from '@/config/authVersion'
 import { useTauriEvent } from '@/hooks/useTauriEvent'
-import { parseJoinUrl } from '@/lib/joinLink'
+import { parseFriendUrl, parseInviteUrl, parseJoinUrl } from '@/lib/joinLink'
 
 // Chargées à la demande — évite de tout regrouper dans un seul chunk JS au
 // premier chargement (pages secondaires comme Legal/Information/Stats
@@ -160,7 +160,24 @@ export default function App() {
       pushPendingSkinLink(url)
       if (!window.location.href.includes('/skins/editor')) navigate('/skins/editor')
     } else if (kind) setShareLink((prev) => (prev?.kind === kind ? { kind, link: `${prev.link}\n${url}` } : { kind, link: url }))
-    else setJoinRequest(parseJoinUrl(url))
+    else if (parseInviteUrl(url)) void openInvite(parseInviteUrl(url)!)
+    else if (parseFriendUrl(url)) {
+      // L'ajout d'ami vit dans le panneau des amis, ouvert depuis l'accueil.
+      useFriends.getState().askAdd(parseFriendUrl(url)!)
+      if (!window.location.href.includes('/home')) navigate('/home')
+    } else setJoinRequest(parseJoinUrl(url))
+  }
+  /** Une invitation ouverte depuis son message privé Discord : relue sur le
+   *  serveur (elle doit m'être adressée et vivre encore), puis la fenêtre
+   *  « Rejoindre » sur la bonne adresse et la bonne instance. */
+  const openInvite = async (invite: string) => {
+    try {
+      const found = await api.friends.getInvite(invite)
+      useFriends.getState().dropInvite(invite)
+      setJoinRequest({ ip: found.server, mcVersion: found.mc_version, loader: found.loader, inviter: found.username })
+    } catch (e) {
+      showError(e)
+    }
   }
   // Calculé une seule fois au montage (avant tout re-render) — comparé puis
   // consommé dans les callbacks de démarrage ci-dessous, jamais relu après.

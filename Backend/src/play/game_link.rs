@@ -22,6 +22,8 @@
 //! | `skin`            | `skin⇥<modèle ou ->⇥<adresse chez Mojang ou ->⇥<chemin du PNG ou ->` |
 //! | `skin⇥<uuid>`     | la même chose pour un autre compte de la liste (sa tête, dans le jeu) |
 //! | `activity⇥<serveur ou ->⇥<- / casual / ranked>⇥<mode ou ->` | `ok` — ce que fait le joueur, pour ses amis (`friends::presence`) |
+//! | `friends`         | `friends⇥(<id>⇥<pseudo>⇥<online/away/dnd/offline>⇥<en jeu 0/1>)…` — les amis, les présents d'abord |
+//! | `invite⇥<id>`     | `ok` — invitation envoyée à cet ami sur le serveur où l'on joue |
 //! | (tout)            | `error⇥<message>`                                          |
 //!
 //! Qui peut s'y brancher : le tube porte un nom tiré au hasard, n'accepte
@@ -106,6 +108,37 @@ fn error(message: &str) -> String {
     format!("error\t{}", field(message))
 }
 
+/// Un identifiant public d'ami (UUID) : il part dans une adresse.
+fn is_public_id(id: &str) -> bool {
+    id.len() == 36 && id.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
+}
+
+/// La réponse à `friends`, depuis la liste du serveur (`GET /friends`) : les
+/// amis en jeu d'abord, puis en ligne, puis les autres, chacun par pseudo.
+fn friends_line(list: &serde_json::Value) -> String {
+    let friends = list.get("friends").and_then(|f| f.as_array()).map(Vec::as_slice).unwrap_or_default();
+    let mut rows: Vec<(u8, String, &str, &str, &str, bool)> = friends
+        .iter()
+        .filter_map(|f| {
+            let id = f.get("id")?.as_str().filter(|id| is_public_id(id))?;
+            let name = f.get("username")?.as_str()?;
+            let state = match f.pointer("/presence/state").and_then(|s| s.as_str()) {
+                Some(s @ ("online" | "away" | "dnd")) => s,
+                _ => "offline",
+            };
+            let in_game = f.pointer("/presence/activity/kind").and_then(|k| k.as_str()) == Some("game");
+            let order = if in_game { 0 } else if state != "offline" { 1 } else { 2 };
+            Some((order, name.to_lowercase(), id, name, state, in_game))
+        })
+        .collect();
+    rows.sort();
+    let mut line = String::from("friends");
+    for (_, _, id, name, state, in_game) in rows {
+        line.push_str(&format!("\t{id}\t{}\t{state}\t{}", field(name), in_game as u8));
+    }
+    line
+}
+
 async fn answer(ctx: &Context, question: &str) -> String {
     let mut parts = question.split('\t');
     match parts.next().unwrap_or("") {
@@ -171,6 +204,20 @@ async fn answer(ctx: &Context, question: &str) -> String {
         "switch" => match parts.next() {
             Some(uuid) if !uuid.is_empty() => switch_account(ctx, uuid).await,
             _ => error("Compte non précisé"),
+        },
+        "friends" => match crate::server::get(&ctx.state, "/friends", &[]).await {
+            Ok(list) => friends_line(&list),
+            Err(e) => error(&e.message),
+        },
+        // Le bouton « Inviter » du jeu : même invitation que celle du
+        // launcher (le serveur la lit dans notre présence, et l'écrit aussi
+        // en message privé Discord à l'ami qui l'a demandé).
+        "invite" => match parts.next().filter(|id| is_public_id(id)) {
+            Some(id) => match crate::server::post(&ctx.state, &format!("/friends/{id}/invite"), serde_json::json!({})).await {
+                Ok(_) => "ok".to_string(),
+                Err(e) => error(&e.message),
+            },
+            None => error("Ami non précisé"),
         },
         _ => error("Question inconnue"),
     }
@@ -394,6 +441,21 @@ mod tests {
     fn un_champ_ne_peut_pas_decaler_les_suivants() {
         assert_eq!(field("Ste\tve\r\n"), "Steve");
         assert_eq!(error("pas\tça"), "error\tpasça");
+    }
+
+    #[test]
+    fn la_liste_d_amis_met_les_joueurs_en_jeu_devant() {
+        let a = "0f8fad5b-d9cb-469f-a165-70867728950e";
+        let b = "1f8fad5b-d9cb-469f-a165-70867728950e";
+        let c = "2f8fad5b-d9cb-469f-a165-70867728950e";
+        let list = serde_json::json!({ "friends": [
+            { "id": a, "username": "Zed", "presence": { "state": "offline" } },
+            { "id": b, "username": "Alex", "presence": { "state": "online" } },
+            { "id": c, "username": "Mo\tla", "presence": { "state": "dnd", "activity": { "kind": "game" } } },
+            { "id": "../x", "username": "Pirate", "presence": { "state": "online" } },
+        ] });
+        assert_eq!(friends_line(&list), format!("friends\t{c}\tMola\tdnd\t1\t{b}\tAlex\tonline\t0\t{a}\tZed\toffline\t0"));
+        assert_eq!(friends_line(&serde_json::json!({})), "friends");
     }
 
     #[test]

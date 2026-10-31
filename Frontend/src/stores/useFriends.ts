@@ -8,7 +8,7 @@ import { demoFriends } from '@/lib/friendsDemo'
 import { isDemo, useDevFlags } from '@/stores/useDevFlags'
 import { useSupportWatch } from '@/stores/useSupportWatch'
 import { useCrashWatch } from '@/stores/useCrashWatch'
-import type { FriendEvent, FriendList, FriendPresence, ReceivedInvite } from '@/types/friends'
+import type { DiscordLink, FriendEvent, FriendList, FriendPresence, ReceivedInvite } from '@/types/friends'
 
 /** Durée de vie d'une invitation côté serveur (`INVITE_LIFETIME`). */
 export const INVITE_LIFETIME_MS = 10 * 60 * 1000
@@ -38,6 +38,15 @@ interface FriendsStore {
   invites: ReceivedInvite[]
   /** Retire une invitation (acceptée, refusée, ignorée ou expirée). */
   dropInvite: (invite: string) => void
+  /** Mon compte Discord lié ; `null` : pas encore lu. */
+  discord: DiscordLink | null
+  refreshDiscord: () => Promise<void>
+  /** Un lien `yuyuframe://friend/…` cliqué : le panneau s'ouvre sur l'ajout
+   *  de ce code. `seq` change à chaque demande, même pour le même code. */
+  addRequest: { code: string; seq: number } | null
+  askAdd: (code: string) => void
+  /** Le panneau a pris la demande en charge. */
+  takeAddRequest: () => string | null
   /** À la déconnexion : la liste ne parle plus de personne. */
   clear: () => void
 }
@@ -162,6 +171,9 @@ export const useFriends = create<FriendsStore>((set, get) => ({
       case 'invite_declined':
         tell(t('friends.invites.declinedBy', { name: event.username }))
         return
+      case 'discord_changed':
+        void get().refreshDiscord()
+        return
       case 'support_changed':
         // Réponse de l'équipe ou rapport de plantage qui bouge : la pastille
         // se met à jour tout de suite (les modales suivent Ne pas déranger).
@@ -193,7 +205,32 @@ export const useFriends = create<FriendsStore>((set, get) => ({
 
   markRequestsSeen: () => set({ unseenRequests: 0 }),
   dropInvite: (invite) => set((s) => ({ invites: s.invites.filter((i) => i.invite !== invite) })),
-  clear: () => set({ list: null, unseenRequests: 0, invites: [] }),
+
+  discord: null,
+  refreshDiscord: async () => {
+    // Démo, ou API sans la route : la carte reste visible et dit que la
+    // liaison n'est pas encore ouverte, plutôt que de disparaître.
+    const closed: DiscordLink = { available: false, dm_available: false, linked: null }
+    if (isDemo()) {
+      set({ discord: closed })
+      return
+    }
+    try {
+      set({ discord: await api.discord.get() })
+    } catch {
+      set({ discord: closed })
+    }
+  },
+
+  addRequest: null,
+  askAdd: (code) => set((s) => ({ addRequest: { code, seq: (s.addRequest?.seq ?? 0) + 1 } })),
+  takeAddRequest: () => {
+    const code = get().addRequest?.code ?? null
+    if (code) set((s) => ({ addRequest: s.addRequest && { ...s.addRequest, code: '' } }))
+    return code || null
+  },
+
+  clear: () => set({ list: null, unseenRequests: 0, invites: [], discord: null }),
 }))
 
 // L'interrupteur de démo de l'atelier a bougé : on repart de zéro, pour ne pas
@@ -205,6 +242,16 @@ if (import.meta.env.DEV) {
     void useFriends.getState().refresh()
   })
 }
+
+// Le statut Discord ne montre le serveur que si mon réglage le permet
+// (`server_visibility` différent de « personne ») : le Rust le suit.
+let showServerInDiscord: boolean | null = null
+useFriends.subscribe((s) => {
+  const show = !!s.list && s.list.settings.server_visibility !== 'nobody'
+  if (show === showServerInDiscord) return
+  showServerInDiscord = show
+  void api.discord.configurePresence(show).catch(() => {})
+})
 
 /** Écoute le flux relayé par le launcher. Rend de quoi arrêter. */
 export function listenFriendEvents(): Promise<() => void> {

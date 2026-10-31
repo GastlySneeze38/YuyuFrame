@@ -18,6 +18,7 @@ import type { Friend, PublicProfile, ReportReason } from '@/types/friends'
 import { FriendAvatar, GameTile, activityText } from './FriendBits'
 import { ProfileLayout } from './ProfileLayout'
 import { ProfileShowcase } from './ProfileShowcase'
+import { DiscordMark } from './FriendSettingsView'
 
 /**
  * Le profil d'un ami, dans le panneau.
@@ -66,6 +67,13 @@ export function FriendProfile({ friend, onDone }: { friend: Friend; onDone: () =
         avatar={<FriendAvatar skin={skinOf(friend)} state={p.state} size={72} />}
         bubble={custom ? <ThoughtBubble accent={profile?.accent ?? null}>{custom}</ThoughtBubble> : null}
         name={friend.username}
+        nameExtra={
+          profile?.discord ? (
+            <span title={t('friends.discord.badge')} className="flex items-center text-[#7983f5]">
+              <DiscordMark className="h-4 w-4" />
+            </span>
+          ) : null
+        }
       >
       {profile?.bio && <p className="whitespace-pre-line px-4 pt-1.5 text-[12.5px] leading-relaxed text-txt-secondary [overflow-wrap:anywhere]">{profile.bio}</p>}
 
@@ -94,6 +102,18 @@ export function FriendProfile({ friend, onDone }: { friend: Friend; onDone: () =
       {/* Ce qu'il fait, sa vitrine, ses comptes, depuis quand vous êtes amis. */}
       <div className="flex flex-col gap-2 px-4 pb-4 pt-3">
         {profile && <ProfileShowcase items={profile.showcase} />}
+        {/* Son compte Discord lié ; le pseudo seulement s'il le montre. */}
+        {profile?.discord && (
+          <div className="flex items-center gap-3 rounded-xl border border-line bg-surface-1 px-3 py-2.5">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#5865F2]/15 text-[#7983f5]">
+              <DiscordMark className="h-5 w-5" />
+            </span>
+            <div className="flex min-w-0 flex-col">
+              <span className="truncate text-[12.5px] font-bold">{profile.discord.username ?? t('friends.discord.badge')}</span>
+              {profile.discord.username && <span className="text-[11px] text-txt-muted">{t('friends.discord.badge')}</span>}
+            </div>
+          </div>
+        )}
         <div className="flex items-center gap-3 rounded-xl border border-line bg-surface-1 px-3 py-2.5">
           {game ? (
             <>

@@ -236,6 +236,7 @@ pub fn run() {
             // fait de l'IPC bloquante, pas async) pour ne jamais retarder le
             // reste du démarrage si Discord met du temps à répondre ou n'est
             // pas lancé du tout sur la machine.
+            integrations::discord::bind(app.state::<state::SharedState>().inner().clone());
             std::thread::spawn(integrations::discord::connect_and_announce);
 
             Ok(())

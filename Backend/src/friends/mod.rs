@@ -13,6 +13,7 @@
 //! l'instant : l'interface ne s'en sert que pour tenir sa liste et prévenir
 //! (demande reçue, nouvel ami, ami connecté).
 
+pub mod discord;
 pub mod notify;
 pub mod presence;
 pub mod stream;
@@ -52,6 +53,27 @@ pub async fn friends_invite(state: tauri::State<'_, SharedState>, id: String) ->
 #[tauri::command]
 pub async fn friends_decline_invite(state: tauri::State<'_, SharedState>, invite: String) -> CmdResult {
     done(api::post(&state, &format!("/friends/invites/{}/decline", public_id(&invite)?), json!({})).await)
+}
+
+/// Relire une invitation reçue — ouverte depuis son message privé Discord
+/// (`yuyuframe://invite/<invitation>`). Erreur `not_found` : expirée ou refusée.
+#[tauri::command]
+pub async fn friends_get_invite(state: tauri::State<'_, SharedState>, invite: String) -> CmdResult {
+    done(api::get(&state, &format!("/friends/invites/{}", public_id(&invite)?), &[]).await)
+}
+
+/// Qui m'a fait rejoindre par le bouton « Rejoindre » de son statut Discord
+/// (le ticket glissé dans ce lien). Même réponse que `friends_lookup`.
+#[tauri::command]
+pub async fn friends_ticket_lookup(state: tauri::State<'_, SharedState>, ticket: String) -> CmdResult {
+    done(api::post(&state, "/friends/join-ticket/lookup", json!({ "ticket": ticket })).await)
+}
+
+/// Un ticket à mon nom pour le lien « Rejoindre » de mon statut Discord.
+/// `None` sans compte, ou si le serveur ne répond pas : le lien part sans.
+pub async fn join_ticket(state: &SharedState) -> Option<String> {
+    let answer = api::post(state, "/friends/join-ticket", json!({})).await.ok()?;
+    answer.get("ticket").and_then(Value::as_str).map(str::to_string)
 }
 
 /// Un identifiant public (UUID) qui part dans une adresse : rien d'autre que

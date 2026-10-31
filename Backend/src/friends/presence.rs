@@ -81,9 +81,11 @@ pub fn parse_game_line(fields: &[&str]) -> Option<GameActivity> {
 
 /// Le jeu de cette partie a annoncé ce qu'il fait.
 pub fn set_game(instance_id: &str, activity: GameActivity) {
-    let changed = games().get_or_insert_with(HashMap::new).insert(instance_id.to_string(), activity.clone()) != Some(activity);
+    let changed = games().get_or_insert_with(HashMap::new).insert(instance_id.to_string(), activity.clone()) != Some(activity.clone());
     if changed {
         poke();
+        // Le statut Discord suit : duel, rang, serveur réel.
+        crate::integrations::discord::set_game_activity(activity);
     }
 }
 

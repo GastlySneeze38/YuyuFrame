@@ -142,6 +142,38 @@ export interface PublicProfile {
   accent: string | null
   bio: string | null
   showcase: ShowcaseView[]
+  /** Il a lié un compte Discord (vu de ses amis seulement) ; `username` s'il
+   *  le montre. Absent d'une API plus ancienne. */
+  discord?: { username: string | null } | null
+}
+
+/** Une invitation relue sur le serveur (`GET /friends/invites/{invite}`). */
+export interface ApiReceivedInvite {
+  invite: string
+  id: string
+  username: string
+  server: string
+  mc_version: string
+  loader: string
+  /** Secondes avant son échéance. */
+  expires_in: number
+}
+
+/** Mon compte Discord lié (`GET /discord/link`). */
+export interface DiscordLink {
+  /** La liaison est ouverte sur le serveur. */
+  available: boolean
+  /** Les messages privés d'invitation peuvent partir. */
+  dm_available: boolean
+  linked: {
+    username: string
+    global_name: string | null
+    /** Mes amis voient mon pseudo Discord. */
+    show_to_friends: boolean
+    /** Les invitations de mes amis m'arrivent aussi en message privé. */
+    dm_invites: boolean
+    linked_at: string
+  } | null
 }
 
 export interface MyProfile {
@@ -205,3 +237,5 @@ export type FriendEvent =
   | { type: 'invite_declined'; invite: string; id: string; username: string }
   /** Mes tickets ou mes rapports de plantage ont bougé : relire. */
   | { type: 'support_changed' }
+  /** Mon compte Discord a été lié, délié ou réglé : relire. */
+  | { type: 'discord_changed' }

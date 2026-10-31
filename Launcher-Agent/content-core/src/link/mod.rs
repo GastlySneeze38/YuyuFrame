@@ -17,7 +17,9 @@
 //! - la liste des comptes Minecraft et le changement de compte, pour la liste
 //!   déroulante du client intégré ;
 //! - ce que fait le joueur, pour ses amis : serveur et duel en cours
-//!   (`activity.rs`).
+//!   (`activity.rs`) ;
+//! - la liste des amis et l'invitation d'un ami sur notre serveur
+//!   (`friends.rs`).
 //!
 //! Sans tube — jeu lancé à la main, autre launcher, launcher fermé depuis —
 //! tout répond « indisponible » et rien d'autre ne casse.
@@ -25,5 +27,6 @@
 pub mod activity;
 mod bridge;
 mod channel;
+pub mod friends;
 
 pub use channel::available;

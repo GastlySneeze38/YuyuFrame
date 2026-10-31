@@ -19,9 +19,9 @@ import { FriendAvatar } from './FriendBits'
 /**
  * Les invitations d'un ami à le rejoindre sur son serveur (`invited` du flux).
  *
- * Accepter ouvre la fenêtre « Rejoindre un ami » (`JoinServerModal`) : elle ne
- * propose que les instances de la même version et du même loader, et lance le
- * jeu directement sur le serveur. Refuser prévient l'ami. Fermer la carte
+ * Accepter ouvre la fenêtre « Rejoindre un ami » (`JoinServerModal`) : elle
+ * propose les instances de la même version et du même loader (ou en crée une),
+ * et lance le jeu directement sur le serveur. Refuser prévient l'ami. Fermer la carte
  * flottante ne répond rien : l'invitation reste dans le panneau des amis
  * jusqu'à son expiration (10 minutes). La carte flottante se retire d'elle-même
  * au bout de 15 s (sa barre verte fait compte à rebours, le survol l'arrête),
@@ -42,7 +42,10 @@ export function useInviteJoin() {
   const modal =
     joining &&
     createPortal(
-      <JoinServerModal request={{ ip: joining.server, mcVersion: joining.mc_version, loader: joining.loader }} onClose={() => setJoining(null)} />,
+      <JoinServerModal
+        request={{ ip: joining.server, mcVersion: joining.mc_version, loader: joining.loader, inviter: joining.username }}
+        onClose={() => setJoining(null)}
+      />,
       document.body,
     )
   return { start, modal }

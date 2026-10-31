@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import type { SupportCategory, TicketDetail, TicketSummary } from '@/types/support'
-import type { FriendEvent, FriendList, FriendSettings, LookupResult, MyProfile, MyStatus, MyStatusKind, PublicProfile, ReportReason, RequestSent } from '@/types/friends'
+import type { ApiReceivedInvite, DiscordLink, FriendEvent, FriendList, FriendSettings, LookupResult, MyProfile, MyStatus, MyStatusKind, PublicProfile, ReportReason, RequestSent } from '@/types/friends'
 import type { LocalCrashReport, LocalCrashSummary, RemoteCrashSummary } from '@/types/crash'
 import type { ApiBoard, ApiFriendCompetitive, ApiHistoryPage, ApiPass, ApiSummary, ModeKey } from '@/lib/competitive'
 import type { BackupDetail, BackupOverview, BackupSettings, BackupSummary, InstanceBackupSettings } from '@/types/backup'
@@ -808,11 +808,27 @@ export const api = {
     requestServer: (id: string) => invoke<void>('friends_request_server', { id }),
     invite: (id: string) => invoke<void>('friends_invite', { id }),
     declineInvite: (invite: string) => invoke<void>('friends_decline_invite', { invite }),
+    /** Relire une invitation (ouverte depuis son message privé Discord). */
+    getInvite: (invite: string) => invoke<ApiReceivedInvite>('friends_get_invite', { invite }),
+    /** Qui m'a fait rejoindre par le bouton « Rejoindre » de son statut Discord. */
+    ticketLookup: (ticket: string) => invoke<LookupResult>('friends_ticket_lookup', { ticket }),
     myProfile: () => invoke<MyProfile>('friends_my_profile'),
     setProfile: (profile: MyProfile) => invoke<MyProfile>('friends_set_profile', { profile }),
     profile: (id: string) => invoke<PublicProfile>('friends_profile', { id }),
     competitive: (id: string) => invoke<ApiFriendCompetitive>('friends_competitive', { id }),
     report: (id: string, reason: ReportReason, details: string) => invoke<void>('friends_report', { id, reason, details }),
+  },
+
+  /** Compte Discord lié (`/v1/discord/link`). */
+  discord: {
+    get: () => invoke<DiscordLink>('discord_link_get'),
+    /** L'adresse de la connexion Discord, à ouvrir dans le navigateur ; la
+     *  suite arrive par le flux (`discord_changed`). */
+    start: () => invoke<{ url: string }>('discord_link_start'),
+    update: (settings: { show_to_friends?: boolean; dm_invites?: boolean }) => invoke<void>('discord_link_update', { settings }),
+    unlink: () => invoke<void>('discord_unlink'),
+    /** Le statut Discord peut-il montrer mon serveur (et son bouton « Rejoindre ») ? */
+    configurePresence: (showServer: boolean) => invoke<void>('discord_presence_configure', { showServer }),
   },
 
   /** Missions et passe de saison (`/v1/pass`), images du back-office. */

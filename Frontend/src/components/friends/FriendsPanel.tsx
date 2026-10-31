@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '@/api/client'
 import { errorMessage } from '@/lib/apiError'
 import { groupFriends, skinOf } from '@/lib/friends'
+import { friendLinkOf } from '@/lib/joinLink'
 import { showError } from '@/stores/useErrorToast'
 import { useFriends } from '@/stores/useFriends'
 import { useStore } from '@/stores/useStore'
@@ -87,6 +88,17 @@ function PanelBody({ onClose }: { onClose: () => void }) {
   const [search, setSearch] = useState('')
   const [collapsed, setCollapsed] = useState<Set<Section>>(new Set())
   const [loading, setLoading] = useState(false)
+  /** Un code venu d'un lien d'ami : la barre d'ajout le cherche aussitôt. */
+  const [prefill, setPrefill] = useState<{ code: string; n: number } | null>(null)
+  const addSeq = useFriends((s) => s.addRequest?.seq ?? 0)
+  useEffect(() => {
+    const code = useFriends.getState().takeAddRequest()
+    if (!code) return
+    setView({ kind: 'list' })
+    setSearch('')
+    setTab('requests')
+    setPrefill({ code, n: addSeq })
+  }, [addSeq])
 
   useEffect(() => {
     markRequestsSeen()
@@ -275,7 +287,7 @@ function PanelBody({ onClose }: { onClose: () => void }) {
         )}
       </div>
 
-      {view.kind === 'list' && signedIn && list && tab === 'requests' && <AddFriendBar focusSignal={addFocus} />}
+      {view.kind === 'list' && signedIn && list && tab === 'requests' && <AddFriendBar focusSignal={addFocus} prefill={prefill} />}
       {signedIn && list && <MyStatusBar onOpenProfile={() => setView({ kind: 'me' })} />}
     </>
   )
@@ -347,7 +359,7 @@ const CODE_PATTERN = /^[A-Za-z0-9_.-]{3,32}#\d{1,4}$/
  * tout le monde de son profil), puis on envoie. Au-dessus, mon propre code, à
  * copier pour le donner.
  */
-function AddFriendBar({ focusSignal }: { focusSignal: number }) {
+function AddFriendBar({ focusSignal, prefill }: { focusSignal: number; prefill: { code: string; n: number } | null }) {
   const t = useT()
   const refresh = useFriends((s) => s.refresh)
   const myCode = useFriends((s) => s.list?.me.code ?? null)
@@ -355,7 +367,7 @@ function AddFriendBar({ focusSignal }: { focusSignal: number }) {
   const [busy, setBusy] = useState(false)
   const [found, setFound] = useState<LookupResult | null>(null)
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null)
-  const [copied, setCopied] = useState(false)
+  const [copied, setCopied] = useState<'code' | 'link' | null>(null)
   const input = useRef<HTMLInputElement>(null)
 
   // Le bouton « ajouter » de l'en-tête amène ici : le curseur suit.
@@ -363,15 +375,24 @@ function AddFriendBar({ focusSignal }: { focusSignal: number }) {
     if (focusSignal > 0) input.current?.focus()
   }, [focusSignal])
 
+  // Un lien d'ami cliqué : son code est cherché tout de suite.
+  useEffect(() => {
+    if (!prefill) return
+    setCode(prefill.code)
+    void search(prefill.code)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefill])
+
   const valid = CODE_PATTERN.test(code.trim().replace(/^#/, ''))
 
-  async function search() {
-    if (!valid) return
+  async function search(value = code) {
+    const cleaned = value.trim().replace(/^#/, '')
+    if (!CODE_PATTERN.test(cleaned)) return
     setBusy(true)
     setResult(null)
     setFound(null)
     try {
-      setFound(await api.friends.lookup(code.trim().replace(/^#/, '')))
+      setFound(await api.friends.lookup(cleaned))
     } catch (e) {
       setResult({ ok: false, text: errorMessage(e) })
     } finally {
@@ -394,12 +415,12 @@ function AddFriendBar({ focusSignal }: { focusSignal: number }) {
     }
   }
 
-  async function copyMine() {
+  async function copyMine(what: 'code' | 'link') {
     if (!myCode) return
     try {
-      await navigator.clipboard.writeText(myCode)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
+      await navigator.clipboard.writeText(what === 'code' ? myCode : friendLinkOf(myCode))
+      setCopied(what)
+      setTimeout(() => setCopied(null), 1500)
     } catch {
       // Presse-papiers refusé : le code reste lisible à l'écran.
     }
@@ -410,10 +431,30 @@ function AddFriendBar({ focusSignal }: { focusSignal: number }) {
       <div className="mb-2 flex items-center justify-between gap-2">
         <p className="text-[10.5px] font-bold uppercase tracking-[0.06em] text-txt-muted">{t('friends.add')}</p>
         {myCode && (
-          <button onClick={() => void copyMine()} title={t('friends.copyMyCode')} className="flex min-w-0 items-center gap-1.5 text-[11px] text-txt-muted hover:text-white">
-            <span className="shrink-0">{t('friends.myCode')}</span>
-            <span className="truncate font-mono font-bold text-accent-hover">{copied ? t('friends.profile.copied') : myCode}</span>
-          </button>
+          <div className="flex min-w-0 items-center gap-1">
+            <button onClick={() => void copyMine('code')} title={t('friends.copyMyCode')} className="flex min-w-0 items-center gap-1.5 text-[11px] text-txt-muted hover:text-white">
+              <span className="shrink-0">{t('friends.myCode')}</span>
+              <span className="truncate font-mono font-bold text-accent-hover">{copied === 'code' ? t('friends.profile.copied') : myCode}</span>
+            </button>
+            {/* Le lien à coller sur Discord : un clic ouvre YuyuFrame sur l'ajout. */}
+            <button
+              onClick={() => void copyMine('link')}
+              title={`${t('friends.discord.copyLink')} — ${t('friends.discord.linkHint')}`}
+              aria-label={t('friends.discord.copyLink')}
+              className={`shrink-0 rounded-md p-1 transition-colors hover:bg-white/[0.06] ${copied === 'link' ? 'text-[#5fd38d]' : 'text-txt-muted hover:text-white'}`}
+            >
+              {copied === 'link' ? (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
+                  <path d="M5 12l5 5 9-10" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
+                  <path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1" />
+                  <path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1" />
+                </svg>
+              )}
+            </button>
+          </div>
         )}
       </div>
 
