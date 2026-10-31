@@ -12,12 +12,13 @@ import { useT } from '@/i18n'
 import type { Friend, FriendRequest, LookupResult } from '@/types/friends'
 import { FriendAvatar, FriendsIcon, GameTile, PresenceLine } from './FriendBits'
 import { FriendProfile } from './FriendProfile'
+import { InviteList } from './InviteCards'
 import { FriendSettingsView } from './FriendSettingsView'
 import { MyStatusBar } from './MyStatusBar'
 import { MyProfileView } from './MyProfileView'
 
 type View = { kind: 'list' } | { kind: 'settings' } | { kind: 'me' } | { kind: 'profile'; userId: string }
-type Section = 'requests' | 'outgoing' | 'inGame' | 'online' | 'offline'
+type Section = 'invites' | 'requests' | 'outgoing' | 'inGame' | 'online' | 'offline'
 
 /**
  * Le panneau des amis, posé par-dessus la page (comme la liste d'amis de
@@ -67,7 +68,9 @@ function PanelBody({ onClose }: { onClose: () => void }) {
   const [view, setView] = useState<View>({ kind: 'list' })
   /** Les amis d'un côté, les demandes de l'autre : on ne mélange pas les
    *  gens qu'on connaît et ceux qui frappent à la porte. */
-  const [tab, setTab] = useState<'friends' | 'requests'>('friends')
+  const invites = useFriends((s) => s.invites)
+  // Une invitation en attente : le panneau s'ouvre là où on y répond.
+  const [tab, setTab] = useState<'friends' | 'requests'>(() => (useFriends.getState().invites.length > 0 ? 'requests' : 'friends'))
   const [searching, setSearching] = useState(false)
   /** Incrémenté pour mettre le curseur dans la barre d'ajout, en bas des demandes. */
   const [addFocus, setAddFocus] = useState(0)
@@ -160,7 +163,7 @@ function PanelBody({ onClose }: { onClose: () => void }) {
       {view.kind === 'list' && signedIn && list && (
         <div className="flex shrink-0 gap-1 border-b border-line-soft px-3 py-2">
           {(['friends', 'requests'] as const).map((key) => {
-            const count = key === 'friends' ? list.friends.length : list.incoming.length
+            const count = key === 'friends' ? list.friends.length : list.incoming.length + invites.length
             return (
               <button
                 key={key}
@@ -216,6 +219,11 @@ function PanelBody({ onClose }: { onClose: () => void }) {
 
             {tab === 'requests' ? (
               <>
+                {invites.length > 0 && (
+                  <Group label={t('friends.invites.title')} count={invites.length} collapsed={collapsed.has('invites')} onToggle={() => toggle('invites')} accent>
+                    <InviteList />
+                  </Group>
+                )}
                 {incoming.length > 0 && (
                   <Group label={t('friends.sections.requests')} count={incoming.length} collapsed={collapsed.has('requests')} onToggle={() => toggle('requests')} accent>
                     {incoming.map((r) => (
@@ -230,7 +238,7 @@ function PanelBody({ onClose }: { onClose: () => void }) {
                     ))}
                   </Group>
                 )}
-                {incoming.length === 0 && outgoing.length === 0 && (
+                {invites.length === 0 && incoming.length === 0 && outgoing.length === 0 && (
                   <Empty text={t(search.trim() ? 'friends.noMatch' : 'friends.noRequests')} />
                 )}
               </>

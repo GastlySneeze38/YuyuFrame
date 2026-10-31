@@ -35,6 +35,7 @@ import { ProfileShowcase } from './ProfileShowcase'
 export function FriendProfile({ friend, onDone }: { friend: Friend; onDone: () => void }) {
   const t = useT()
   const language = useStore((s) => s.language)
+  const gameRunning = useStore((s) => s.gameRunning)
   const [joining, setJoining] = useState(false)
   const navigate = useNavigate()
   const [profile, setProfile] = useState<PublicProfile | null>(null)
@@ -86,6 +87,9 @@ export function FriendProfile({ friend, onDone }: { friend: Friend; onDone: () =
       {/* En jeu sans me montrer son serveur : on dit pourquoi « Rejoindre » est
           grisé, et on peut le lui demander (il reçoit une notification). */}
       {game && !game.server && <AskServer friendId={friend.id} />}
+
+      {/* Je joue et il est là : l'inviter sur mon serveur. */}
+      {gameRunning && p.state !== 'offline' && <InviteFriend friendId={friend.id} />}
 
       {/* Ce qu'il fait, sa vitrine, ses comptes, depuis quand vous êtes amis. */}
       <div className="flex flex-col gap-2 px-4 pb-4 pt-3">
@@ -195,6 +199,44 @@ function AskServer({ friendId }: { friendId: string }) {
         className="shrink-0 rounded-lg border border-line px-2.5 py-1 text-[11.5px] font-semibold text-txt-secondary transition-colors hover:text-white disabled:cursor-default disabled:opacity-60 disabled:hover:text-txt-secondary"
       >
         {state === 'sent' ? t('friends.profile.serverAsked') : t('friends.profile.askServer')}
+      </button>
+    </div>
+  )
+}
+
+/**
+ * Inviter cet ami sur le serveur où je joue. Le serveur à rejoindre est lu
+ * côté serveur dans ma présence : en solo ou sur un serveur privé, il refuse
+ * et l'erreur le dit. Le bouton redevient utilisable au bout d'une minute,
+ * le délai du serveur entre deux invitations au même ami.
+ */
+function InviteFriend({ friendId }: { friendId: string }) {
+  const t = useT()
+  const [state, setState] = useState<'idle' | 'sending' | 'sent'>('idle')
+  useEffect(() => {
+    if (state !== 'sent') return
+    const timer = window.setTimeout(() => setState('idle'), 60_000)
+    return () => window.clearTimeout(timer)
+  }, [state])
+  async function invite() {
+    setState('sending')
+    try {
+      if (!isDemo()) await api.friends.invite(friendId)
+      setState('sent')
+    } catch (e) {
+      showError(e)
+      setState('idle')
+    }
+  }
+  return (
+    <div className="mx-4 mt-2 flex items-center gap-3 rounded-xl border border-line bg-surface-1 px-3 py-2">
+      <p className="min-w-0 flex-1 text-[11.5px] leading-snug text-txt-muted">{t('friends.invites.sendWhy')}</p>
+      <button
+        onClick={() => void invite()}
+        disabled={state !== 'idle'}
+        className="shrink-0 rounded-lg bg-[#3ba55d] px-2.5 py-1 text-[11.5px] font-bold text-white transition-colors hover:bg-[#349852] disabled:cursor-default disabled:bg-white/[0.06] disabled:text-txt-muted"
+      >
+        {state === 'sent' ? t('friends.invites.sent') : t('friends.invites.send')}
       </button>
     </div>
   )

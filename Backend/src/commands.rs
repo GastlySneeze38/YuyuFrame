@@ -68,6 +68,8 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         crate::friends::friends_set_settings,
         crate::friends::friends_set_server_share,
         crate::friends::friends_request_server,
+        crate::friends::friends_invite,
+        crate::friends::friends_decline_invite,
         crate::friends::notify::notifications_configure,
         crate::friends::notify::set_unread_badge,
         crate::friends::notify::friends_demo_event,

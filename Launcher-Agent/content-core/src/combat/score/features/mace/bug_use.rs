@@ -6,7 +6,7 @@
 //! il s'ajoute à la note, plafonné à +10. Une tentative ratée est ignorée.
 //! Chez l'adversaire, ses techniques sont affichées, jamais comptées.
 
-use super::{gear_at, Duel, Gear, SLOT_CHEST, SLOT_HAND};
+use super::{gear_at, Duel, Gear, SLOT_HAND};
 use super::control::{upward_teleport, Lunge};
 use super::{sample_at, smash_bonus, view_at, Opportunity, View, Y};
 

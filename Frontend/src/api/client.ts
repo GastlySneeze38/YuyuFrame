@@ -806,6 +806,8 @@ export const api = {
     setServerShare: (id: string, shared: boolean) => invoke<void>('friends_set_server_share', { id, shared }),
     /** Demander à un ami de me montrer son serveur (mon « Rejoindre » est grisé). */
     requestServer: (id: string) => invoke<void>('friends_request_server', { id }),
+    invite: (id: string) => invoke<void>('friends_invite', { id }),
+    declineInvite: (invite: string) => invoke<void>('friends_decline_invite', { invite }),
     myProfile: () => invoke<MyProfile>('friends_my_profile'),
     setProfile: (profile: MyProfile) => invoke<MyProfile>('friends_set_profile', { profile }),
     profile: (id: string) => invoke<PublicProfile>('friends_profile', { id }),

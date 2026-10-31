@@ -1782,6 +1782,18 @@ export const de: TranslationSchema = {
       noBlocked: 'Niemand ist blockiert.',
       unblock: 'Entblocken',
     },
+    invites: {
+      title: 'Einladungen',
+      from: '{{name}} lädt dich ein',
+      expires: 'noch {{minutes}} Min.',
+      later: 'Später (bleibt bei den Anfragen)',
+      accept: 'Beitreten',
+      decline: 'Ablehnen',
+      declinedBy: '{{name}} hat deine Einladung abgelehnt',
+      send: 'Einladen',
+      sent: 'Eingeladen',
+      sendWhy: 'Lade ihn auf den Server ein, auf dem du spielst.',
+    },
     notify: {
       request: '{{name}} möchte dich als Freund hinzufügen',
       serverRequested: '{{name}} möchte deinen Server sehen',

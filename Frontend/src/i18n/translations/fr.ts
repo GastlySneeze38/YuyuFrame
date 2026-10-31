@@ -1787,6 +1787,18 @@ export const fr = {
       noBlocked: 'Personne n’est bloqué.',
       unblock: 'Débloquer',
     },
+    invites: {
+      title: 'Invitations',
+      from: '{{name}} t’invite',
+      expires: 'encore {{minutes}} min',
+      later: 'Plus tard (reste dans les demandes)',
+      accept: 'Rejoindre',
+      decline: 'Refuser',
+      declinedBy: '{{name}} a refusé ton invitation',
+      send: 'Inviter',
+      sent: 'Invité',
+      sendWhy: 'L’inviter sur le serveur où tu joues.',
+    },
     notify: {
       request: '{{name}} veut t’ajouter en ami',
       serverRequested: '{{name}} aimerait voir ton serveur',

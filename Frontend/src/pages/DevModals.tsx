@@ -208,6 +208,21 @@ function FriendNotificationsDemo({ demo }: { demo: boolean }) {
       return { type: 'presence', id: f.id, presence: { state: 'online', custom: f.presence.custom, activity: { kind: 'launcher' }, last_seen: null } }
     })
   const askedServer = (delay: number) => run('Demande de serveur', delay, (f) => ({ type: 'server_requested', id: f.id, username: f.username }))
+  // Sur la version et le loader de ma première instance : « Rejoindre » a
+  // ainsi une instance à proposer (et la lance pour de vrai).
+  const invited = (delay: number) =>
+    run('Invitation', delay, (f) => {
+      const inst = useStore.getState().instances[0]
+      return {
+        type: 'invited',
+        invite: crypto.randomUUID(),
+        id: f.id,
+        username: f.username,
+        server: 'demo.yuyuframe.eu:25565',
+        mc_version: inst?.mc_version ?? '1.21.11',
+        loader: inst?.loader ?? 'vanilla',
+      }
+    })
 
   return (
     <div className="flex flex-col gap-2 border-t border-border pt-4">
@@ -228,6 +243,12 @@ function FriendNotificationsDemo({ demo }: { demo: boolean }) {
           « X aimerait voir ton serveur »
         </Button>
         <Button disabled={!demo || !!waiting} onClick={() => void askedServer(5)}>
+          … dans 5 s
+        </Button>
+        <Button disabled={!demo || !!waiting} onClick={() => void invited(0)}>
+          « X t’invite »
+        </Button>
+        <Button disabled={!demo || !!waiting} onClick={() => void invited(5)}>
           … dans 5 s
         </Button>
       </div>

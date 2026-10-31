@@ -120,6 +120,7 @@ fn decide(event: &Value, now: Instant) -> Option<(Kind, String)> {
             Some((Kind::FriendAdded, name))
         }
         "server_requested" => Some((Kind::ServerRequested, event.get("username")?.as_str()?.to_string())),
+        "invited" => Some((Kind::Invited, event.get("username")?.as_str()?.to_string())),
         "support_changed" => Some((Kind::Support, String::new())),
         _ => None,
     })
@@ -131,6 +132,7 @@ enum Kind {
     Request,
     FriendAdded,
     ServerRequested,
+    Invited,
     Support,
 }
 
@@ -154,6 +156,7 @@ pub async fn friends_demo_event(app: tauri::AppHandle, event: Value, name: Strin
     let kind = match event.get("type").and_then(Value::as_str) {
         Some("presence") => Some(Kind::FriendOnline),
         Some("server_requested") => Some(Kind::ServerRequested),
+        Some("invited") => Some(Kind::Invited),
         Some("request_received") => Some(Kind::Request),
         _ => None,
     };
@@ -245,6 +248,19 @@ fn text(kind: Kind, name: &str, lang: &str) -> (String, String) {
                 "gostaria de ver em qual servidor você joga",
                 "chce zobaczyć, na jakim serwerze grasz",
                 "хочет увидеть, на каком сервере ты играешь",
+            ),
+        ),
+        Kind::Invited => (
+            pick("Invitation", "Invite", "Invitación", "Einladung", "Invito", "Convite", "Zaproszenie", "Приглашение"),
+            pick(
+                "{name} t'invite à le rejoindre en jeu",
+                "{name} invites you to join them in game",
+                "{name} te invita a unirte en el juego",
+                "{name} lädt dich ins Spiel ein",
+                "{name} ti invita a raggiungerlo in gioco",
+                "{name} te convidou para jogar junto",
+                "{name} zaprasza cię do gry",
+                "{name} приглашает тебя в игру",
             ),
         ),
         Kind::Support => (

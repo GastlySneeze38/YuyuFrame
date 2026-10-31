@@ -8,7 +8,10 @@ import { demoFriends } from '@/lib/friendsDemo'
 import { isDemo, useDevFlags } from '@/stores/useDevFlags'
 import { useSupportWatch } from '@/stores/useSupportWatch'
 import { useCrashWatch } from '@/stores/useCrashWatch'
-import type { FriendEvent, FriendList, FriendPresence } from '@/types/friends'
+import type { FriendEvent, FriendList, FriendPresence, ReceivedInvite } from '@/types/friends'
+
+/** Durée de vie d'une invitation côté serveur (`INVITE_LIFETIME`). */
+export const INVITE_LIFETIME_MS = 10 * 60 * 1000
 
 /**
  * Les amis, tenus à jour en direct.
@@ -31,6 +34,10 @@ interface FriendsStore {
   refresh: () => Promise<void>
   apply: (event: FriendEvent) => void
   markRequestsSeen: () => void
+  /** Invitations reçues encore valables, la plus récente d'abord. */
+  invites: ReceivedInvite[]
+  /** Retire une invitation (acceptée, refusée, ignorée ou expirée). */
+  dropInvite: (invite: string) => void
   /** À la déconnexion : la liste ne parle plus de personne. */
   clear: () => void
 }
@@ -89,6 +96,7 @@ async function showServerTo(id: string, name: string) {
 export const useFriends = create<FriendsStore>((set, get) => ({
   list: null,
   unseenRequests: 0,
+  invites: [],
 
   refresh: async () => {
     // Données de démonstration demandées dans l'atelier de développement :
@@ -137,6 +145,23 @@ export const useFriends = create<FriendsStore>((set, get) => ({
           run: () => showServerTo(event.id, event.username),
         })
         return
+      case 'invited': {
+        // Le même ami qui réinvite remplace son invitation précédente.
+        const invite: ReceivedInvite = {
+          invite: event.invite,
+          id: event.id,
+          username: event.username,
+          server: event.server,
+          mc_version: event.mc_version,
+          loader: event.loader,
+          expiresAt: Date.now() + INVITE_LIFETIME_MS,
+        }
+        set((s) => ({ invites: [invite, ...s.invites.filter((i) => i.id !== event.id && i.expiresAt > Date.now())] }))
+        return
+      }
+      case 'invite_declined':
+        tell(t('friends.invites.declinedBy', { name: event.username }))
+        return
       case 'support_changed':
         // Réponse de l'équipe ou rapport de plantage qui bouge : la pastille
         // se met à jour tout de suite (les modales suivent Ne pas déranger).
@@ -167,7 +192,8 @@ export const useFriends = create<FriendsStore>((set, get) => ({
   },
 
   markRequestsSeen: () => set({ unseenRequests: 0 }),
-  clear: () => set({ list: null, unseenRequests: 0 }),
+  dropInvite: (invite) => set((s) => ({ invites: s.invites.filter((i) => i.invite !== invite) })),
+  clear: () => set({ list: null, unseenRequests: 0, invites: [] }),
 }))
 
 // L'interrupteur de démo de l'atelier a bougé : on repart de zéro, pour ne pas

@@ -1782,6 +1782,18 @@ export const ru: TranslationSchema = {
       noBlocked: 'Никто не заблокирован.',
       unblock: 'Разблокировать',
     },
+    invites: {
+      title: 'Приглашения',
+      from: '{{name}} приглашает тебя',
+      expires: 'осталось {{minutes}} мин',
+      later: 'Позже (останется в заявках)',
+      accept: 'Присоединиться',
+      decline: 'Отклонить',
+      declinedBy: '{{name}} отклонил(а) твоё приглашение',
+      send: 'Пригласить',
+      sent: 'Приглашён',
+      sendWhy: 'Пригласи на сервер, где ты играешь.',
+    },
     notify: {
       request: '{{name}} хочет добавить тебя в друзья',
       serverRequested: '{{name}} хочет увидеть твой сервер',

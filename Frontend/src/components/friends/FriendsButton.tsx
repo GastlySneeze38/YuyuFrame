@@ -18,8 +18,9 @@ export function FriendsButton({ className }: { className?: string }) {
   const t = useT()
   const [open, setOpen] = useState(false)
   const online = useFriends((s) => s.list?.friends.filter((f) => isOnline(f.presence)).length ?? 0)
-  // Les demandes reçues en attente de réponse : la pastille reste tant qu'on n'y a pas répondu.
-  const waiting = useFriends((s) => s.list?.incoming.length ?? 0)
+  // Les demandes et invitations reçues en attente de réponse : la pastille
+  // reste tant qu'on n'y a pas répondu (une invitation expire en 10 min).
+  const waiting = useFriends((s) => (s.list?.incoming.length ?? 0) + s.invites.length)
 
   return (
     <>

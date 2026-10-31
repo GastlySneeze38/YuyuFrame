@@ -5,6 +5,7 @@ import { TitleBar } from '@/components/TitleBar'
 import { UpdateChecker } from '@/components/UpdateChecker'
 import { ErrorToast } from '@/components/ui/ErrorToast'
 import { FleetNotices } from '@/components/FleetNotices'
+import { InviteStack } from '@/components/friends/InviteCards'
 import { PasswordChangeModal } from '@/components/account/PasswordChangeModal'
 import { EmailVerifyModal } from '@/components/account/EmailVerifyModal'
 import { PageTransition } from '@/components/PageTransition'
@@ -539,8 +540,9 @@ export default function App() {
   }, [osNotifications, friendOnlineNotify])
 
   // La pastille de l'icône dans la barre des tâches, comme Discord : demandes
-  // d'ami en attente, réponses du support, rapports de plantage mis à jour.
-  const pendingRequests = useFriends((s) => s.list?.incoming.length ?? 0)
+  // d'ami et invitations en attente, réponses du support, rapports de
+  // plantage mis à jour — la même somme que les pastilles de l'interface.
+  const pendingRequests = useFriends((s) => (s.list?.incoming.length ?? 0) + s.invites.length)
   const supportUnread = useSupportWatch((s) => s.unread)
   const crashUpdates = useCrashWatch((s) => s.updates)
   useEffect(() => {
@@ -642,6 +644,7 @@ export default function App() {
         />
       )}
       <FleetNotices />
+      <InviteStack />
       {passwordResetRequired && <PasswordChangeModal forced onClose={() => {}} />}
       {/* Après le mot de passe provisoire, jamais en même temps : le serveur
           les réclame dans cet ordre. */}

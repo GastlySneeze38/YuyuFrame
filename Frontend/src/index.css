@@ -167,6 +167,13 @@ body {
   mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 40%, transparent 100%);
 }
 
+/* La barre de la carte d'invitation flottante (friends/InviteCards.tsx) :
+   pleine à l'arrivée, vide quand la carte se retire. */
+@keyframes inviteCardTimer {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
 @keyframes errorToastIn {
   from { opacity: 0; transform: translate(-50%, -14px); }
   to { opacity: 1; transform: translate(-50%, 0); }

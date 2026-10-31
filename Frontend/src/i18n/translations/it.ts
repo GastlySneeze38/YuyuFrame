@@ -1782,6 +1782,18 @@ export const it: TranslationSchema = {
       noBlocked: 'Nessuno è bloccato.',
       unblock: 'Sblocca',
     },
+    invites: {
+      title: 'Inviti',
+      from: '{{name}} ti invita',
+      expires: 'ancora {{minutes}} min',
+      later: 'Più tardi (resta nelle richieste)',
+      accept: 'Unisciti',
+      decline: 'Rifiuta',
+      declinedBy: '{{name}} ha rifiutato il tuo invito',
+      send: 'Invita',
+      sent: 'Invitato',
+      sendWhy: 'Invitalo sul server in cui stai giocando.',
+    },
     notify: {
       request: '{{name}} vuole aggiungerti agli amici',
       serverRequested: '{{name}} vorrebbe vedere il tuo server',

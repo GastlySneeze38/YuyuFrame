@@ -171,6 +171,21 @@ export interface LookupResult {
 
 export type ReportReason = 'username' | 'bio' | 'status' | 'other'
 
+/** Une invitation reçue, gardée jusqu'à sa réponse ou son expiration. */
+export interface ReceivedInvite {
+  /** Son identifiant, pour la refuser. */
+  invite: string
+  /** L'ami qui invite (identifiant public). */
+  id: string
+  username: string
+  /** « hôte:port ». */
+  server: string
+  mc_version: string
+  loader: string
+  /** Horodatage (ms) au-delà duquel le serveur l'a oubliée. */
+  expiresAt: number
+}
+
 /** Événement `friends_event` relayé par le launcher (flux temps réel). */
 export type FriendEvent =
   | { type: 'ready' }
@@ -184,5 +199,9 @@ export type FriendEvent =
   | { type: 'my_status'; status: MyStatusKind; shown: PresenceState | 'invisible'; custom: CustomStatus | null }
   /** Un ami aimerait voir mon serveur. */
   | { type: 'server_requested'; id: string; username: string }
+  /** Un ami m'invite sur son serveur (valable 10 min). */
+  | { type: 'invited'; invite: string; id: string; username: string; server: string; mc_version: string; loader: string }
+  /** L'ami que j'ai invité a refusé. */
+  | { type: 'invite_declined'; invite: string; id: string; username: string }
   /** Mes tickets ou mes rapports de plantage ont bougé : relire. */
   | { type: 'support_changed' }

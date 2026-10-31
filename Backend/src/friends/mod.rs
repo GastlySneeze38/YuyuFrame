@@ -42,6 +42,18 @@ pub async fn friends_request_server(state: tauri::State<'_, SharedState>, id: St
     done(api::post(&state, &format!("/friends/{}/server-request", public_id(&id)?), json!({})).await)
 }
 
+/// Inviter un ami sur le serveur où je joue (le serveur le lit dans ma présence).
+#[tauri::command]
+pub async fn friends_invite(state: tauri::State<'_, SharedState>, id: String) -> CmdResult {
+    done(api::post(&state, &format!("/friends/{}/invite", public_id(&id)?), json!({})).await)
+}
+
+/// Refuser une invitation reçue : l'ami qui l'a envoyée en est prévenu.
+#[tauri::command]
+pub async fn friends_decline_invite(state: tauri::State<'_, SharedState>, invite: String) -> CmdResult {
+    done(api::post(&state, &format!("/friends/invites/{}/decline", public_id(&invite)?), json!({})).await)
+}
+
 /// Un identifiant public (UUID) qui part dans une adresse : rien d'autre que
 /// des chiffres hexadécimaux et des tirets.
 fn public_id(id: &str) -> Result<String, String> {

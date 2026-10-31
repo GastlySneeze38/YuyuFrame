@@ -1782,6 +1782,18 @@ export const pl: TranslationSchema = {
       noBlocked: 'Nikt nie jest zablokowany.',
       unblock: 'Odblokuj',
     },
+    invites: {
+      title: 'Zaproszenia',
+      from: '{{name}} zaprasza cię',
+      expires: 'jeszcze {{minutes}} min',
+      later: 'Później (zostaje w zaproszeniach)',
+      accept: 'Dołącz',
+      decline: 'Odrzuć',
+      declinedBy: '{{name}} odrzucił(a) twoje zaproszenie',
+      send: 'Zaproś',
+      sent: 'Zaproszono',
+      sendWhy: 'Zaproś na serwer, na którym grasz.',
+    },
     notify: {
       request: '{{name}} chce dodać cię do znajomych',
       serverRequested: '{{name}} chce zobaczyć twój serwer',
