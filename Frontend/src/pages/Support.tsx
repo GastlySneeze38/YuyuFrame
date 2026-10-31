@@ -12,6 +12,7 @@ import { errorMessage } from '@/lib/apiError'
 import { showError } from '@/stores/useErrorToast'
 import { useStore } from '@/stores/useStore'
 import { useSupportWatch } from '@/stores/useSupportWatch'
+import { useCrashWatch } from '@/stores/useCrashWatch'
 import { useDraftState, clearDraft } from '@/stores/useDrafts'
 import { SUPPORT_DRAFT_KEY } from '@/lib/supportDraft'
 import { CrashPanel } from '@/components/support/CrashPanel'
@@ -93,24 +94,41 @@ export default function Support() {
 
   useEffect(() => {
     if (!signedIn) return
-    api.support.list().then(setTickets).catch((e) => {
-      setTickets([])
-      showError(errorMessage(e))
-    })
     // Mêmes catégories que le panneau Discord : chargées tout de suite pour
     // que le formulaire s'ouvre sans attente.
     api.support.categories().then(setCategories).catch(() => setCategories([]))
   }, [signedIn])
 
+  // La liste se recharge à chaque relecture de la veille (`known` change
+  // alors) : une réponse arrivée pendant qu'on est sur cet écran y allume son
+  // point, comme elle allume la pastille de l'accueil.
+  const watchKnown = useSupportWatch((s) => s.known)
+  useEffect(() => {
+    if (!signedIn) return
+    api.support.list().then(setTickets).catch((e) => {
+      setTickets((list) => list ?? [])
+      showError(errorMessage(e))
+    })
+  }, [signedIn, watchKnown])
+
   // `?ticket=…` : la modale « ta demande a bougé » ouvre le fil concerné
   // plutôt que de déposer sur la liste, où il faudrait le retrouver
-  // soi-même. Une seule fois, au montage — rouvrir en boucle empêcherait de
-  // revenir à la liste.
+  // soi-même. Une fois par ticket demandé — rouvrir en boucle empêcherait de
+  // revenir à la liste — mais aussi quand on est déjà sur cet écran.
   const requestedTicket = params.get('ticket')
   useEffect(() => {
-    if (requestedTicket) void open(requestedTicket)
+    if (!requestedTicket) return
+    setTab('requests')
+    void open(requestedTicket)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [requestedTicket])
+
+  // `?tab=…` arrivé pendant qu'on est déjà sur cet écran (la modale de
+  // plantage y renvoie) : l'onglet suit.
+  const requestedTab = params.get('tab')
+  useEffect(() => {
+    if (requestedTab === 'crashes' || requestedTab === 'patchNotes' || requestedTab === 'videos') setTab(requestedTab)
+  }, [requestedTab])
 
   const labelOf = useMemo(
     () => (code: string) => categories.find((c) => c.code === code)?.label ?? code,
@@ -231,6 +249,12 @@ export default function Support() {
  */
 function TabBar({ tab, onPick }: { tab: Tab; onPick: (tab: Tab) => void }) {
   const t = useT()
+  // Le point rouge de l'onglet où se trouve la nouvelle : la pastille de
+  // l'accueil additionne les deux, ici on dit lequel.
+  const unread: Partial<Record<Tab, number>> = {
+    requests: useSupportWatch((s) => s.unread),
+    crashes: useCrashWatch((s) => s.updates),
+  }
   return (
     <div className="flex shrink-0 gap-1 border-b border-line-soft px-6">
       {(['requests', 'crashes', 'patchNotes', 'videos'] as Tab[]).map((key) => (
@@ -242,6 +266,11 @@ function TabBar({ tab, onPick }: { tab: Tab; onPick: (tab: Tab) => void }) {
           }`}
         >
           {t(`support.tab.${key}`)}
+          {(unread[key] ?? 0) > 0 && (
+            <span className="ml-1.5 inline-flex h-[16px] min-w-[16px] items-center justify-center rounded-full bg-danger px-1 align-[1px] text-[9.5px] font-black tabular-nums text-white">
+              {unread[key]}
+            </span>
+          )}
           {tab === key && (
             <motion.span layoutId="support-tab" transition={SNAP} className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-accent-hover" />
           )}
@@ -351,7 +380,7 @@ function TicketList({
                 {ticket.has_unread && (
                   // Pastille : l'équipe a répondu depuis la dernière ouverture.
                   <motion.span
-                    className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent-hover"
+                    className="h-2 w-2 shrink-0 rounded-full bg-danger"
                     animate={{ opacity: [1, 0.35, 1] }}
                     transition={{ duration: 1.8, repeat: Infinity }}
                   />

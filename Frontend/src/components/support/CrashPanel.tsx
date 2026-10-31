@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { useCrashWatch } from '@/stores/useCrashWatch'
+import { crashUnseen, useCrashWatch } from '@/stores/useCrashWatch'
 import { Button } from '@/components/ui/Button'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { api } from '@/api/client'
@@ -78,12 +78,26 @@ export function CrashPanel({ signedIn }: { signedIn: boolean }) {
   // `?crash=<id>` — la modale « ton rapport a bougé » renvoie ici avec le
   // rapport en question. Sans ça elle déposerait sur une liste où il faudrait
   // le retrouver soi-même, ce qui est précisément ce qu'on voulait éviter.
+  // Une fois par demande : la liste se recharge à chaque relecture de la
+  // veille, et rouvrir ce rapport à chaque fois écraserait le choix de
+  // l'utilisateur (et l'acquitterait sans qu'il l'ait regardé).
   const wanted = new URLSearchParams(useLocation().search).get('crash')
+  const handled = useRef<string | null>(null)
   useEffect(() => {
-    if (!wanted || !entries) return
+    if (!wanted || !entries || handled.current === wanted) return
     const entry = entries.find((e) => e.remote?.id === wanted)
-    if (entry) openEntry(entry)
+    if (entry) {
+      handled.current = wanted
+      openEntry(entry)
+    }
   }, [wanted, entries, openEntry])
+
+  // Ce que l'utilisateur a déjà ouvert : le point rouge des lignes. Et
+  // `known`, qui change à chaque relecture de la veille : un statut arrivé
+  // pendant qu'on est sur cet écran recharge la liste — sinon ouvrir le
+  // rapport acquitterait l'ancien statut, et la pastille resterait allumée.
+  const acknowledged = useCrashWatch((s) => s.acknowledged)
+  const known = useCrashWatch((s) => s.known)
 
   const reload = useCallback(async () => {
     const local = await api.crashes.list().catch(() => [] as LocalCrashSummary[])
@@ -96,7 +110,7 @@ export function CrashPanel({ signedIn }: { signedIn: boolean }) {
 
   useEffect(() => {
     reload()
-  }, [reload])
+  }, [reload, known])
 
   const open = useMemo(() => entries?.find((e) => e.key === openKey) ?? null, [entries, openKey])
 
@@ -143,7 +157,12 @@ export function CrashPanel({ signedIn }: { signedIn: boolean }) {
                   e.key === openKey ? 'border-accent/40 bg-accent/10' : 'border-transparent hover:border-line hover:bg-surface-1'
                 }`}
               >
-                <span className="truncate text-[12px] font-semibold leading-snug">{title}</span>
+                <span className="flex items-center gap-2">
+                  <span className="truncate text-[12px] font-semibold leading-snug">{title}</span>
+                  {/* Statut changé depuis la dernière ouverture : c'est ce
+                      point que la pastille de l'accueil désigne. */}
+                  {e.remote && crashUnseen(acknowledged, e.remote) && <span className="h-2 w-2 shrink-0 rounded-full bg-danger" />}
+                </span>
                 <span className="flex items-center gap-2">
                   {status ? (
                     <span className={`rounded-md px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide ${STATUS_STYLES[status]}`}>

@@ -42,6 +42,15 @@ const SILENT = 'new'
 const signatureOf = (c: { status: string; status_updated_at: string | null }) =>
   `${c.status}|${c.status_updated_at ?? ''}`
 
+/** Ce rapport a-t-il un statut que l'utilisateur n'a pas encore ouvert ? Le
+ *  point rouge de sa ligne dans l'onglet Plantages, même règle que le compteur. */
+export function crashUnseen(
+  acknowledged: Record<string, string>,
+  report: { id: string; status: string; status_updated_at: string | null },
+): boolean {
+  return report.status !== SILENT && acknowledged[report.id] !== signatureOf(report)
+}
+
 interface CrashWatchStore {
   /** Rapports dont le statut courant n'a pas encore été ouvert. 0 = pas de
    *  pastille. */
