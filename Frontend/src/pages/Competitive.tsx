@@ -103,12 +103,16 @@ export default function Competitive() {
   const demo = useDemo()
   const [status, setStatus] = useState<Status>({ kind: 'loading' })
   const [mode, setMode] = useState<ModeKey | null>(null)
+  // L'onglet ouvert sur un ami (bouton « Compétitif » de sa fiche), ou sur
+  // un écran précis (`?view=season` : raccourci Saison de l'accueil).
+  const [params] = useSearchParams()
   // L'historique d'abord ; la carte du rang y mène aux statistiques.
-  const [view, setView] = useState<View>('history')
+  const [view, setView] = useState<View>(() => {
+    const asked = params.get('view')
+    return VIEWS.includes(asked as View) ? (asked as View) : 'history'
+  })
   const [server, setServer] = useState<string | null>(null)
 
-  // L'onglet ouvert sur un ami (bouton « Compétitif » de sa fiche).
-  const [params] = useSearchParams()
   const friendId = params.get('friend')
   const friendName = useFriends((s) => s.list?.friends.find((f) => f.id === friendId)?.username ?? null)
 

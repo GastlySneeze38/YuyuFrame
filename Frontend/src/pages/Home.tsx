@@ -16,7 +16,7 @@ import { InstanceSwitchModal } from '@/components/instances/InstanceSwitchModal'
 import { WelcomeSequence } from '@/components/home/WelcomeSequence'
 import { homeGreeting } from '@/lib/greeting'
 import { HomeBanner, Confetti, useHomeBanner } from '@/components/home/HomeBanner'
-import { FriendsButton } from '@/components/friends/FriendsButton'
+import { HomeShortcuts } from '@/components/home/ChallengeShortcuts'
 import { HalloweenButtonFx, HalloweenGround, HalloweenLaunchBurst, HalloweenSky, playHalloweenLaunchSound } from '@/components/home/Halloween'
 import { ProCard } from '@/components/home/ProCard'
 import { LaunchSweep } from '@/components/home/LaunchSweep'
@@ -676,8 +676,7 @@ export default function Home() {
               bannière, il ne coûte rien : cette place était vide. */}
           {/* La carte des annonces (Halloween…) passe sous le titre : le coin
               en haut à droite est au bouton Amis. */}
-          <div className="absolute left-[clamp(12px,2vw,22px)] top-[clamp(12px,2vw,22px)] z-10 flex flex-col items-start gap-[clamp(12px,2.4vh,22px)]">
-          <div className="flex items-center gap-2">
+          <div className="absolute left-[clamp(12px,2vw,22px)] top-[clamp(12px,2vw,22px)] z-10 flex items-center gap-2">
             {/* Le titre respire : sa lueur enfle et retombe lentement. */}
             <motion.h1
               animate={{
@@ -712,16 +711,27 @@ export default function Home() {
               <svg viewBox="0 0 24 24" fill="currentColor" className="h-[70%] w-[70%]"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" /></svg>
             </motion.button>
           </div>
-            {/* La bannière attend que le badge soit posé : deux choses qui
-                entrent en même temps, on ne regarde ni l'une ni l'autre. */}
+
+          {/* La carte d'annonce (Halloween…), centrée en hauteur sur la
+              bannière — mais jamais plus haut que juste sous le titre, quand
+              la bannière est basse. Le plancher reprend les tailles du titre
+              (son écart au haut + sa taille de police, `leading-none`), plus
+              un écart et la demi-hauteur de la carte (≈ 30 px), puisqu'elle
+              est centrée sur ce point. La bannière attend que le badge soit
+              posé : deux choses qui entrent en même temps, on ne regarde ni
+              l'une ni l'autre. */}
+          <div
+            className="absolute left-[clamp(12px,2vw,22px)] z-10 -translate-y-1/2"
+            style={{ top: 'max(50%, calc(clamp(12px, 2vw, 22px) + clamp(26px, 6vh, 58px) + 14px + 30px))' }}
+          >
             <HomeBanner banner={banner} visible={bannerReady} />
           </div>
 
-          {/* Amis : en ligne, demandes, et le panneau façon Discord. Même
-              écart avec le haut et avec la droite : le bouton est calé dans
-              le coin, pas posé n'importe où. */}
+          {/* Les raccourcis en carré : missions, amis, passe, saison. Même
+              écart avec le haut et avec la droite : le carré est calé dans le
+              coin. */}
           <div className="absolute right-[clamp(12px,2vw,22px)] top-[clamp(12px,2vw,22px)] z-10">
-            <FriendsButton />
+            <HomeShortcuts />
           </div>
 
           <WelcomeSequence

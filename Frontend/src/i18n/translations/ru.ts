@@ -765,6 +765,15 @@ export const ru: TranslationSchema = {
   },
 
   home: {
+    shortcuts: {
+      missions: 'Миссии',
+      missionsHint: 'Ежедневные и еженедельные миссии',
+      missionsOpen: 'Открыть страницу миссий',
+      pass: 'Пропуск',
+      passHint: 'Сезонный пропуск: уровень {{tier}} из {{total}}',
+      season: 'Сезон',
+      seasonHint: 'Твой рейтинговый сезон',
+    },
     startingMinecraft: 'Запуск Minecraft...',
     minecraftReady: 'Minecraft готов!',
     launchCancelled: 'Запуск отменён',

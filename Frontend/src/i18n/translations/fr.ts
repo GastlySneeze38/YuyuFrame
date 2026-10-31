@@ -763,6 +763,15 @@ export const fr = {
   },
 
   home: {
+    shortcuts: {
+      missions: 'Missions',
+      missionsHint: 'Missions du jour et de la semaine',
+      missionsOpen: 'Ouvrir la page Missions',
+      pass: 'Passe',
+      passHint: 'Passe de saison : palier {{tier}} sur {{total}}',
+      season: 'Saison',
+      seasonHint: 'Ta saison classée',
+    },
     startingMinecraft: 'Démarrage de Minecraft...',
     minecraftReady: 'Minecraft prêt !',
     launchCancelled: 'Lancement annulé',

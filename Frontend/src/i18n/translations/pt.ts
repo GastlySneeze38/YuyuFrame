@@ -766,6 +766,15 @@ export const pt: TranslationSchema = {
   },
 
   home: {
+    shortcuts: {
+      missions: 'Missões',
+      missionsHint: 'Missões diárias e semanais',
+      missionsOpen: 'Abrir a página de Missões',
+      pass: 'Passe',
+      passHint: 'Passe de temporada: nível {{tier}} de {{total}}',
+      season: 'Temporada',
+      seasonHint: 'Sua temporada ranqueada',
+    },
     startingMinecraft: 'Iniciando o Minecraft...',
     minecraftReady: 'Minecraft pronto!',
     launchCancelled: 'Início cancelado',
