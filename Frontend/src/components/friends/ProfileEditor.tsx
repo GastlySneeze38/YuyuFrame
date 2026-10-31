@@ -301,12 +301,23 @@ function LockNote({ item }: { item: LibraryItem }) {
   )
 }
 
-/** « 5 / 10 possédées » et le filtre « tout / possédés ». */
+/** « 5 / 10 possédées » et le filtre « tout / possédés ». Ce qui reste à
+ *  débloquer passe toujours en bas de la liste, après tout ce qu'on possède. */
 function useOwnedFilter(items: LibraryItem[]) {
   const [onlyOwned, setOnlyOwned] = useState(false)
-  const owned = items.filter((i) => i.owned).length
-  const shown = onlyOwned ? items.filter((i) => i.owned) : items
-  return { onlyOwned, setOnlyOwned, owned, shown }
+  const owned = items.filter((i) => i.owned)
+  const shown = onlyOwned ? owned : [...owned, ...items.filter((i) => !i.owned)]
+  return { onlyOwned, setOnlyOwned, owned: owned.length, shown }
+}
+
+/** Une bibliothèque : l'en-tête reste en place, la liste défile en dessous. */
+function LibraryLayout({ header, children }: { header: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="shrink-0">{header}</div>
+      <div className="-mr-2 min-h-0 flex-1 overflow-y-auto pr-2">{children}</div>
+    </div>
+  )
 }
 
 function OwnedFilter({ owned, total, onlyOwned, onChange }: { owned: number; total: number; onlyOwned: boolean; onChange: (v: boolean) => void }) {
@@ -340,9 +351,14 @@ function BannerLibrary({ library, value, color, visibility, onPick, onVisibility
   const t = useT()
   const filter = useOwnedFilter(library.banners)
   return (
-    <>
-      <PartHeader title={t('friends.me.parts.banner')} visibility={visibility} onVisibility={onVisibility} />
-      <OwnedFilter owned={filter.owned} total={library.banners.length} onlyOwned={filter.onlyOwned} onChange={filter.setOnlyOwned} />
+    <LibraryLayout
+      header={
+        <>
+          <PartHeader title={t('friends.me.parts.banner')} visibility={visibility} onVisibility={onVisibility} />
+          <OwnedFilter owned={filter.owned} total={library.banners.length} onlyOwned={filter.onlyOwned} onChange={filter.setOnlyOwned} />
+        </>
+      }
+    >
       <div className="grid grid-cols-3 gap-2.5">
         <LibraryTile selected={!value} onClick={() => onPick(null)} label={t('friends.me.noBanner')} background={`linear-gradient(135deg, ${color}66, ${color}14)`} />
         {filter.shown.map((item) => (
@@ -356,7 +372,7 @@ function BannerLibrary({ library, value, color, visibility, onPick, onVisibility
           />
         ))}
       </div>
-    </>
+    </LibraryLayout>
   )
 }
 
@@ -388,10 +404,15 @@ function AccentLibrary({ library, value, onPick }: { library: ProfileLibrary; va
   const t = useT()
   const filter = useOwnedFilter(library.accents)
   return (
-    <>
-      {/* La couleur suit la visibilité de la bannière (même bandeau). */}
-      <PartHeader title={t('friends.me.parts.accent')} note={t('friends.me.accentNote')} />
-      <OwnedFilter owned={filter.owned} total={library.accents.length} onlyOwned={filter.onlyOwned} onChange={filter.setOnlyOwned} />
+    <LibraryLayout
+      header={
+        <>
+          {/* La couleur suit la visibilité de la bannière (même bandeau). */}
+          <PartHeader title={t('friends.me.parts.accent')} note={t('friends.me.accentNote')} />
+          <OwnedFilter owned={filter.owned} total={library.accents.length} onlyOwned={filter.onlyOwned} onChange={filter.setOnlyOwned} />
+        </>
+      }
+    >
       <div className="grid grid-cols-4 gap-3">
         <button
           onClick={() => onPick(null)}
@@ -416,11 +437,18 @@ function AccentLibrary({ library, value, onPick }: { library: ProfileLibrary; va
           </button>
         ))}
       </div>
-    </>
+    </LibraryLayout>
   )
 }
 
-/** La vitrine : 2 objets précis, pris dans tout ce que je possède. */
+type ShowcaseGroup = 'ranks' | 'seasons' | 'titles'
+
+/**
+ * La vitrine : 2 objets précis, pris dans tout ce que je possède. Un onglet
+ * par sorte d'objet, la liste défile (on peut avoir beaucoup de titres) ; en
+ * haut, les deux places de la vitrine, visibles quel que soit l'onglet, et
+ * qu'on vide d'un clic.
+ */
 function ShowcaseLibrary({ library, value, visibility, onChange, onVisibility }: {
   library: ProfileLibrary
   value: ShowcaseItem[]
@@ -429,13 +457,14 @@ function ShowcaseLibrary({ library, value, visibility, onChange, onVisibility }:
   onVisibility: (v: Visibility3) => void
 }) {
   const t = useT()
+  const [tab, setTab] = useState<ShowcaseGroup>('ranks')
   const full = value.length >= SHOWCASE_MAX
   const toggle = (item: ShowcaseItem) => {
     const has = value.some((s) => sameShowcase(s, item))
     if (has) onChange(value.filter((s) => !sameShowcase(s, item)))
     else if (!full) onChange([...value, item])
   }
-  const groups: { key: string; items: { item: ShowcaseItem; label: string; icon: React.ReactNode }[] }[] = [
+  const groups: { key: ShowcaseGroup; items: { item: ShowcaseItem; label: string; icon: React.ReactNode }[] }[] = [
     {
       key: 'ranks',
       items: (['mace', 'sword'] as const).map((mode) => ({ item: { kind: 'rank', mode }, label: t(`friends.me.showcaseItems.rank${mode === 'mace' ? 'Mace' : 'Sword'}`), icon: <GroupIcon d="M12 3l2.5 5 5.5.8-4 3.9.9 5.5L12 15.6 7.1 18.2 8 12.7 4 8.8l5.5-.8z" /> })),
@@ -449,42 +478,95 @@ function ShowcaseLibrary({ library, value, visibility, onChange, onVisibility }:
       items: library.titles.map((title) => ({ item: { kind: 'title', code: title.code }, label: title.label, icon: <TitleIcon asset={title.asset} /> })),
     },
   ]
+  const all = groups.flatMap((g) => g.items)
+  const current = groups.find((g) => g.key === tab) ?? groups[0]
+  // Les deux places : ce qui y est, dans l'ordre d'affichage ; un objet que je
+  // ne possède plus (titre expiré) n'a pas de libellé et garde un tiret.
+  const slots = Array.from({ length: SHOWCASE_MAX }, (_, i) => {
+    const item = value[i]
+    if (!item) return null
+    return { item, entry: all.find((e) => sameShowcase(e.item, item)) ?? null }
+  })
+
   return (
-    <>
-      <PartHeader title={t('friends.me.parts.showcase')} visibility={visibility} onVisibility={onVisibility} note={t('friends.me.showcasePick', { max: SHOWCASE_MAX })} />
-      <div className="flex flex-col gap-4">
-        {groups.map((group) => (
-          <div key={group.key} className="flex flex-col gap-2">
-            <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-txt-muted">{t(`friends.me.showcaseGroups.${group.key}`)}</span>
-            {group.items.length === 0 ? (
-              <p className="text-[12px] text-txt-muted">{t('friends.me.noTitles')}</p>
-            ) : (
-              <div className="grid grid-cols-2 gap-2">
-                {group.items.map(({ item, label, icon }) => {
-                  const on = value.some((s) => sameShowcase(s, item))
-                  const order = value.findIndex((s) => sameShowcase(s, item))
-                  return (
-                    <button
-                      key={label}
-                      onClick={() => toggle(item)}
-                      disabled={!on && full}
-                      className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
-                        on ? 'border-accent/60 bg-accent/15 text-white' : 'border-line text-txt-secondary hover:border-line-strong hover:text-white'
-                      }`}
-                    >
-                      {icon}
-                      <span className="flex-1 truncate text-[13px] font-semibold">{label}</span>
-                      {on && <span className="flex h-5 w-5 items-center justify-center rounded-full bg-accent text-[11px] font-black text-white">{order + 1}</span>}
-                    </button>
-                  )
-                })}
-              </div>
+    <LibraryLayout
+      header={
+        <>
+          <PartHeader title={t('friends.me.parts.showcase')} visibility={visibility} onVisibility={onVisibility} note={t('friends.me.showcasePick', { max: SHOWCASE_MAX })} />
+
+          {/* Les places de la vitrine. */}
+          <div className="mb-3 grid grid-cols-2 gap-2">
+            {slots.map((slot, i) =>
+              slot ? (
+                <button
+                  key={i}
+                  onClick={() => toggle(slot.item)}
+                  className="group flex items-center gap-2.5 rounded-xl border border-accent/60 bg-accent/15 px-2.5 py-2 text-left"
+                >
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent text-[11px] font-black text-white">{i + 1}</span>
+                  {slot.entry?.icon}
+                  <span className="flex-1 truncate text-[12.5px] font-semibold text-white">{slot.entry?.label ?? '—'}</span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" className="h-3.5 w-3.5 shrink-0 text-white/50 group-hover:text-white">
+                    <path d="M6 6l12 12M18 6L6 18" />
+                  </svg>
+                </button>
+              ) : (
+                <div key={i} className="flex items-center gap-2.5 rounded-xl border border-dashed border-line-strong px-2.5 py-2">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-line-strong text-[11px] font-black text-txt-muted">{i + 1}</span>
+                  <span className="h-8" />
+                </div>
+              ),
             )}
           </div>
-        ))}
-        <p className="text-[12px] text-txt-muted">{t('friends.me.showcaseHint')}</p>
-      </div>
-    </>
+
+          {/* Un onglet par sorte d'objet ; le chiffre dit combien en sont choisis. */}
+          <div className="mb-3 flex gap-1 border-b border-line-soft">
+            {groups.map((group) => {
+              const picked = group.items.filter((e) => value.some((s) => sameShowcase(s, e.item))).length
+              return (
+                <button
+                  key={group.key}
+                  onClick={() => setTab(group.key)}
+                  className={`-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2 text-[12.5px] font-semibold transition-colors ${
+                    tab === group.key ? 'border-accent text-white' : 'border-transparent text-txt-muted hover:text-txt-secondary'
+                  }`}
+                >
+                  {t(`friends.me.showcaseGroups.${group.key}`)}
+                  <span className="text-[11px] tabular-nums text-txt-muted">{group.items.length}</span>
+                  {picked > 0 && <span className="h-1.5 w-1.5 rounded-full bg-accent" />}
+                </button>
+              )
+            })}
+          </div>
+        </>
+      }
+    >
+      {current.items.length === 0 ? (
+        <p className="text-[12px] text-txt-muted">{t('friends.me.noTitles')}</p>
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          {current.items.map(({ item, label, icon }) => {
+            const on = value.some((s) => sameShowcase(s, item))
+            const order = value.findIndex((s) => sameShowcase(s, item))
+            return (
+              <button
+                key={label}
+                onClick={() => toggle(item)}
+                disabled={!on && full}
+                className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                  on ? 'border-accent/60 bg-accent/15 text-white' : 'border-line text-txt-secondary hover:border-line-strong hover:text-white'
+                }`}
+              >
+                {icon}
+                <span className="flex-1 truncate text-[13px] font-semibold">{label}</span>
+                {on && <span className="flex h-5 w-5 items-center justify-center rounded-full bg-accent text-[11px] font-black text-white">{order + 1}</span>}
+              </button>
+            )
+          })}
+        </div>
+      )}
+      {tab === 'ranks' && <p className="mt-3 text-[12px] text-txt-muted">{t('friends.me.showcaseHint')}</p>}
+    </LibraryLayout>
   )
 }
 

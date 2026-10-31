@@ -1,5 +1,6 @@
 import { RankTile, useRankName } from '@/components/competitive/RankCard'
-import { SEASON_GRID, TIER_COLORS, readStandings, tierOf } from '@/lib/competitive'
+import { SeasonFrame } from '@/components/competitive/SeasonRankView'
+import { BORDER_LEVELS, TIER_COLORS, TIER_TEXTURES, borderLevel, readStandings, tierOf } from '@/lib/competitive'
 import { useContentAsset } from '@/lib/contentAsset'
 import { useT } from '@/i18n'
 import type { ShowcaseView } from '@/types/friends'
@@ -40,24 +41,45 @@ function RankItem({ mode, state }: { mode: 'mace' | 'sword'; state: unknown }) {
   )
 }
 
-/** La grille de la saison en petit : une case par victoire, à la couleur du
- *  rang qu'on avait en la gagnant ; les cases vides en creux. */
+/** Cases de la grille en petit : les 4 dernières victoires. */
+const SHOWCASE_CELLS = 4
+
+/**
+ * La saison en petit : les 4 dernières victoires (la plus récente en haut à
+ * gauche), chacune avec la texture du rang qu'on avait en la gagnant, dans la
+ * bordure de la saison au niveau atteint — la même que sur l'écran Saison.
+ * Un serveur plus ancien envoie les 64 meilleures : on en garde 4.
+ */
 function SeasonItem({ mode, wins, count }: { mode: 'mace' | 'sword'; wins: number[]; count: number }) {
   const t = useT()
-  const cells = Array.from({ length: SEASON_GRID * SEASON_GRID }, (_, i) => wins[i] ?? null)
+  const total = Math.max(count, wins.length)
+  const level = borderLevel(total)
+  const best = wins.length > 0 ? Math.max(...wins) : null
+  const accent = best !== null ? TIER_COLORS[tierOf(best)] : '160 150 190'
+  const cells = Array.from({ length: SHOWCASE_CELLS }, (_, i) => wins[i] ?? null)
   return (
-    <div className="flex flex-col items-center gap-1.5 rounded-xl border border-line bg-surface-1 px-2 py-2.5 text-center">
-      <div className="grid grid-cols-8 gap-[1.5px]" style={{ width: 40, height: 40 }}>
-        {cells.map((division, i) => (
-          <span
-            key={i}
-            className="rounded-[1px]"
-            style={{ background: division === null ? 'rgba(255,255,255,0.06)' : `rgb(${TIER_COLORS[tierOf(division)]})` }}
-          />
-        ))}
-      </div>
-      <span className="w-full truncate text-[12px] font-bold">{t('friends.profile.seasonWins', { count })}</span>
-      <span className="text-[10.5px] text-txt-muted">{t(`friends.activity.modes.${mode}`)}</span>
+    <div className="flex flex-col items-center gap-1 rounded-xl border border-line bg-surface-1 px-2 pb-2.5 pt-1.5 text-center">
+      <SeasonFrame level={level} accent={accent} size="64px" still>
+        <div className="grid h-full w-full grid-cols-2 gap-[2px] bg-[rgb(10_10_16)] p-[2px]">
+          {cells.map((division, i) =>
+            division === null ? (
+              <span key={i} className="rounded-[1px] border border-white/[0.05] bg-white/[0.02]" />
+            ) : (
+              <span
+                key={i}
+                className="relative overflow-hidden rounded-[1px]"
+                style={{ boxShadow: 'inset 1px 1px 0 rgb(255 255 255 / 0.3), inset -1px -1px 0 rgb(0 0 0 / 0.4)' }}
+              >
+                <img src={TIER_TEXTURES[tierOf(division)]} alt="" draggable={false} className="absolute inset-0 h-full w-full [image-rendering:pixelated]" />
+              </span>
+            ),
+          )}
+        </div>
+      </SeasonFrame>
+      <span className="w-full truncate text-[12px] font-bold">{t('friends.profile.seasonWins', { count: total })}</span>
+      <span className="text-[10.5px] text-txt-muted">
+        {t(`friends.activity.modes.${mode}`)} · {t('competitive.season.levelOf', { level, max: BORDER_LEVELS })}
+      </span>
     </div>
   )
 }

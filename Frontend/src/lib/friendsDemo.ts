@@ -74,7 +74,7 @@ export function demoMyShowcase(items: ShowcaseItem[]): ShowcaseView[] {
     item.kind === 'rank'
       ? { kind: 'rank', mode: item.mode, state }
       : item.kind === 'season'
-        ? { kind: 'season', mode: item.mode, wins: [9, 9, 8, 8, 8, 7, 7, 7, 7, 6, 6, 6], count: 12 }
+        ? { kind: 'season', mode: item.mode, wins: [10, 9, 9, 7], count: 57 }
         : { kind: 'title', ...(DEMO_TITLES.find((t) => t.code === item.code) ?? DEMO_TITLES[0]) },
   )
 }
