@@ -22,6 +22,15 @@ export interface JoinRequest {
   /** Ticket du joueur qu'on rejoint par son statut Discord : de quoi l'ajouter
    *  en ami une fois la partie lancée (`/friends/join-ticket/lookup`). */
   host?: string
+  /** Toutes les versions que le serveur accepte (catalogue). `mcVersion`
+   *  reste celle d'une instance créée. */
+  versions?: string[]
+  /** Serveur vanilla : n'importe quel loader fait l'affaire (un Fabric avec
+   *  Sodium rejoint très bien), et une instance créée est vanilla. */
+  anyLoader?: boolean
+  /** Nom sous lequel ranger le serveur dans la liste de l'instance avant de
+   *  la lancer (catalogue) : il reste ensuite dans « Mes serveurs ». */
+  remember?: string
 }
 
 /**
@@ -47,7 +56,10 @@ export function JoinServerModal({ request, onClose }: { request: JoinRequest; on
   const [step, setStep] = useState<'pick' | 'host'>('pick')
   const [busy, setBusy] = useState(false)
 
-  const compatible = instances.filter((i) => i.mc_version === request.mcVersion && i.loader === request.loader)
+  const versions = request.versions?.length ? request.versions : [request.mcVersion]
+  const compatible = instances.filter(
+    (i) => versions.includes(i.mc_version) && (request.anyLoader || i.loader === request.loader),
+  )
 
   // Le joueur derrière le lien, s'il n'est pas déjà un ami : lu tout de suite,
   // montré une fois la partie lancée.
@@ -62,6 +74,8 @@ export function JoinServerModal({ request, onClose }: { request: JoinRequest; on
   }, [request.host, signedIn])
 
   const launch = async (instanceId: string) => {
+    // Rangé avant le lancement : le jeu relit sa liste en démarrant.
+    if (request.remember) await api.servers.add(instanceId, request.remember, request.ip).catch(() => false)
     // Le choix « avec / sans le client intégré » suit l'instance, quel que
     // soit l'endroit d'où on la lance (voir AgentModal).
     await api.launch.start(instanceId, avoidBetaDependencies, showConsole, request.ip, isAgentEnabled(instanceId))
@@ -85,8 +99,10 @@ export function JoinServerModal({ request, onClose }: { request: JoinRequest; on
   const handleCreate = async () => {
     setCreating(true)
     try {
-      const loaderName = request.loader === 'vanilla' ? 'Vanilla' : request.loader.charAt(0).toUpperCase() + request.loader.slice(1)
-      const instance = await api.instances.create(t('friends.join.newName', { loader: loaderName, version: request.mcVersion }), request.mcVersion, request.loader, defaultRam)
+      const loader = request.anyLoader ? 'vanilla' : request.loader
+      const loaderName = loader === 'vanilla' ? 'Vanilla' : loader.charAt(0).toUpperCase() + loader.slice(1)
+      const name = request.remember ?? t('friends.join.newName', { loader: loaderName, version: request.mcVersion })
+      const instance = await api.instances.create(name, request.mcVersion, loader, defaultRam)
       addInstance(instance)
       setCreating(false)
       setLaunchingId(instance.id)
@@ -136,7 +152,7 @@ export function JoinServerModal({ request, onClose }: { request: JoinRequest; on
     )
   }
 
-  const loaderLabel = request.loader
+  const loaderLabel = request.anyLoader ? 'vanilla' : request.loader
   return (
     <ModalShell title={request.inviter ? t('friends.join.titleFrom', { name: request.inviter }) : t('friends.join.title')} onClose={onClose} maxWidth="max-w-lg">
       <p className="-mt-2 text-[12px] text-[rgba(255,255,255,0.4)]">

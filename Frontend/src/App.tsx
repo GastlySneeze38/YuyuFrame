@@ -57,6 +57,7 @@ const PAGE_IMPORTS = [
   () => import('@/pages/Backup'),
   () => import('@/pages/Competitive'),
   () => import('@/pages/Missions'),
+  () => import('@/pages/Servers'),
   () => import('@/pages/SeasonPass'),
   () => import('@/pages/JvmProfiles'),
   () => import('@/pages/JvmProfileEditor'),
@@ -95,6 +96,7 @@ const Backup = lazy(() => import('@/pages/Backup'))
 const SyncInstance = lazy(() => import('@/pages/SyncInstance'))
 const Competitive = lazy(() => import('@/pages/Competitive'))
 const Missions = lazy(() => import('@/pages/Missions'))
+const Servers = lazy(() => import('@/pages/Servers'))
 const SeasonPass = lazy(() => import('@/pages/SeasonPass'))
 const JvmProfiles = lazy(() => import('@/pages/JvmProfiles'))
 const JvmProfileEditor = lazy(() => import('@/pages/JvmProfileEditor'))
@@ -732,6 +734,7 @@ export default function App() {
             <Route path="/competitive" element={<Competitive />} />
             {/* Missions et passe de saison, ouverts depuis Outils. */}
             <Route path="/missions" element={<Missions />} />
+            <Route path="/servers" element={<Servers />} />
             <Route path="/missions/pass" element={<SeasonPass />} />
             <Route path="/jvm" element={<JvmProfiles />} />
             <Route path="/jvm/:profileId" element={<JvmProfileEditor />} />

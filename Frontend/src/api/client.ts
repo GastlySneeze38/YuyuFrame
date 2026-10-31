@@ -110,9 +110,94 @@ export interface YuyuDevice {
   current: boolean
 }
 
+/** Le réglage « Packs de ressources » de l'écran du jeu. */
+export type ResourcePacks = 'prompt' | 'enabled' | 'disabled'
+
 export interface SavedServer {
   name: string
   ip: string
+  /** Absent dans les réponses d'avant ce champ : à lire comme `prompt`. */
+  resource_packs?: ResourcePacks
+}
+
+/** Un morceau du MOTD d'un même style (`color` en `#rrggbb`, `null` = gris
+ *  par défaut du jeu). */
+export interface MotdSpan {
+  text: string
+  color: string | null
+  bold: boolean
+  italic: boolean
+  underlined: boolean
+  strikethrough: boolean
+}
+
+/** Une fiche du catalogue de serveurs (Modrinth), normalisée par le Rust
+ *  (`servers/catalog.rs`). */
+export interface CatalogServer {
+  id: string
+  slug: string
+  name: string
+  summary: string
+  author: string | null
+  icon_url: string | null
+  banner_url: string | null
+  color: string | null
+  categories: string[]
+  address: string
+  region: string | null
+  languages: string[]
+  game_versions: string[]
+  recommended_version: string | null
+  content:
+    | { kind: 'vanilla' }
+    | { kind: 'modpack'; project_id: string; version_id: string; name: string | null; icon_url: string | null }
+  ping: { players_online: number; players_max: number; version_name: string | null; at: string | null } | null
+  plays_2w: number | null
+  follows: number
+}
+
+export interface CatalogServerDetail extends CatalogServer {
+  description: string
+  gallery: string[]
+  links: { platform: string; url: string }[]
+}
+
+export interface CatalogQuery {
+  query: string
+  categories: string[]
+  region: string | null
+  language: string | null
+  gameVersion: string | null
+  kind: 'vanilla' | 'modpack' | null
+  sort: 'relevance' | 'follows' | 'newest' | 'updated'
+  page: number
+  /** Serveurs par page : ce qui tient à l'écran (1 à 50). */
+  pageSize: number
+}
+
+export interface ServerModpack {
+  project_id: string
+  version_id: string
+  version_number: string
+  file_url: string
+  name: string
+  summary: string
+  icon_url: string | null
+  downloads: number
+  date_modified: string | null
+  categories: string[]
+  game_versions: string[]
+  loaders: string[]
+}
+
+/** Les serveurs d'une instance (`servers.dat`). `error` : liste illisible. */
+export interface InstanceServers {
+  instance_id: string
+  instance_name: string
+  mc_version: string
+  loader: string
+  servers: SavedServer[]
+  error: string | null
 }
 
 export interface ServerPingInfo {
@@ -122,6 +207,7 @@ export interface ServerPingInfo {
   version_name: string
   favicon: string | null
   latency_ms: number
+  motd_spans: MotdSpan[]
 }
 
 /** Ce qui empêche le client intégré de se charger — `null` quand rien ne
@@ -758,6 +844,22 @@ export const api = {
       invoke<SavedServer[]>('list_saved_servers', { instanceId }),
     pingServer: (address: string) =>
       invoke<ServerPingInfo>('ping_server', { address }),
+  },
+
+  /** Écran Serveurs : le catalogue de Modrinth et les listes des instances. */
+  servers: {
+    search: (query: CatalogQuery) =>
+      invoke<{ servers: CatalogServer[]; total: number; page: number; page_size: number }>('server_catalog_search', { query }),
+    get: (id: string) => invoke<CatalogServerDetail>('server_catalog_get', { id }),
+    categories: () => invoke<{ name: string; header: string }[]>('server_catalog_categories'),
+    modpack: (versionId: string) => invoke<ServerModpack>('server_catalog_modpack', { versionId }),
+    all: () => invoke<InstanceServers[]>('servers_all'),
+    /** Faux si le serveur était déjà dans la liste. */
+    add: (instanceId: string, name: string, address: string, resourcePacks: ResourcePacks = 'prompt') =>
+      invoke<boolean>('server_add', { instanceId, name, address, resourcePacks }),
+    remove: (instanceId: string, address: string) => invoke<boolean>('server_remove', { instanceId, address }),
+    edit: (instanceId: string, address: string, newName: string, newAddress: string, resourcePacks: ResourcePacks = 'prompt') =>
+      invoke<boolean>('server_edit', { instanceId, address, newName, newAddress, resourcePacks }),
   },
 
   /** Avis déposés depuis le launcher, sous le compte YuyuFrame. Un seul par

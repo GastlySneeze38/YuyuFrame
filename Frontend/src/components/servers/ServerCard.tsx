@@ -31,9 +31,9 @@ function SignalBars({ ping, failed }: { ping: ServerPingInfo | null; failed: boo
 }
 
 /** Carte serveur — même gabarit visuel que les cartes promo remplacées sur
- * Home.tsx (rounded-xl px-3 py-2.5, même hiérarchie icône/titre/sous-texte),
- * réutilisée telle quelle dans ServerManageModal pour garder un style
- * identique entre l'accueil et la modal de gestion. Se ping elle-même au
+ * Home.tsx (rounded-xl px-3 py-2.5, même hiérarchie icône/titre/sous-texte).
+ * La gestion des serveurs vit dans l'écran Serveurs (`pages/Servers.tsx`),
+ * qui a ses propres cartes. Se ping elle-même au
  * montage (Server List Ping, voir ping_server côté Rust) pour afficher MOTD,
  * joueurs en ligne et favicon — indépendamment des autres cartes affichées
  * en même temps (chacune son propre aller-retour réseau, en parallèle). */
@@ -147,8 +147,7 @@ export function ServerCard({
       {/* Bouton d'épinglage — espace fixe (pb-[24px] sur la carte) réservé en
           permanence pour qu'il ne fasse jamais varier la hauteur de la carte
           (seule l'opacité change au survol) : dans une grille, une carte qui
-          grandit au survol pousse les cartes des rangées suivantes — voir la
-          modal ServerManageModal. Overlay posé par-dessus le contenu écarté
+          grandit au survol pousse les cartes des rangées suivantes. Overlay posé par-dessus le contenu écarté
           plus haut pour la même raison (chevauchait favicon/signal/ip). */}
       {onToggleFavorite && (
         <button

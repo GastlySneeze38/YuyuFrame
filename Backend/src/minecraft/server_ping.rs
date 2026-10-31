@@ -25,6 +25,176 @@ pub struct ServerPingInfo {
     /// serveur — directement utilisable comme `src` d'un `<img>` côté frontend.
     pub favicon: Option<String>,
     pub latency_ms: u64,
+    /// Le MOTD avec ses couleurs et ses styles, morceau par morceau, comme le
+    /// jeu l'affiche dans sa liste de serveurs (`motd` reste le texte brut).
+    pub motd_spans: Vec<MotdSpan>,
+}
+
+/// Un morceau du MOTD d'un même style. `color` est en `#rrggbb`, `None` =
+/// la couleur par défaut du jeu (gris clair).
+#[derive(Serialize, Clone, Debug, PartialEq, Default)]
+pub struct MotdSpan {
+    pub text: String,
+    pub color: Option<String>,
+    pub bold: bool,
+    pub italic: bool,
+    pub underlined: bool,
+    pub strikethrough: bool,
+}
+
+/// Les 16 couleurs du jeu, dans l'ordre des codes `§0`…`§f`, avec leur nom
+/// dans les composants JSON.
+const COLORS: [(&str, &str); 16] = [
+    ("black", "#000000"),
+    ("dark_blue", "#0000AA"),
+    ("dark_green", "#00AA00"),
+    ("dark_aqua", "#00AAAA"),
+    ("dark_red", "#AA0000"),
+    ("dark_purple", "#AA00AA"),
+    ("gold", "#FFAA00"),
+    ("gray", "#AAAAAA"),
+    ("dark_gray", "#555555"),
+    ("blue", "#5555FF"),
+    ("green", "#55FF55"),
+    ("aqua", "#55FFFF"),
+    ("red", "#FF5555"),
+    ("light_purple", "#FF55FF"),
+    ("yellow", "#FFFF55"),
+    ("white", "#FFFFFF"),
+];
+
+/// Au-delà, le reste du MOTD n'est plus affiché : une liste de serveurs n'en
+/// montre que deux lignes.
+const MOTD_MAX_CHARS: usize = 400;
+
+fn named_color(name: &str) -> Option<String> {
+    if let Some(hex) = name.strip_prefix('#') {
+        return (hex.len() == 6 && hex.chars().all(|c| c.is_ascii_hexdigit())).then(|| format!("#{}", hex.to_ascii_uppercase()));
+    }
+    COLORS.iter().find(|(n, _)| *n == name).map(|(_, hex)| hex.to_string())
+}
+
+fn push_span(out: &mut Vec<MotdSpan>, text: &mut String, style: &MotdSpan, budget: &mut usize) {
+    if text.is_empty() || *budget == 0 {
+        text.clear();
+        return;
+    }
+    let kept: String = text.chars().take(*budget).collect();
+    *budget -= kept.chars().count();
+    text.clear();
+    // Un morceau du même style que le précédent le prolonge.
+    if let Some(last) = out.last_mut() {
+        if last.color == style.color
+            && last.bold == style.bold
+            && last.italic == style.italic
+            && last.underlined == style.underlined
+            && last.strikethrough == style.strikethrough
+        {
+            last.text.push_str(&kept);
+            return;
+        }
+    }
+    out.push(MotdSpan { text: kept, ..style.clone() });
+}
+
+/// Un texte qui peut contenir des codes `§` : une couleur remet les styles
+/// à zéro, `§r` revient au style du composant parent.
+fn legacy_spans(text: &str, base: &MotdSpan, out: &mut Vec<MotdSpan>, budget: &mut usize) {
+    let mut style = base.clone();
+    let mut buf = String::new();
+    let mut chars = text.chars();
+    while let Some(c) = chars.next() {
+        if c != '§' {
+            buf.push(c);
+            continue;
+        }
+        let Some(code) = chars.next() else { break };
+        push_span(out, &mut buf, &style, budget);
+        let code = code.to_ascii_lowercase();
+        if let Some(i) = code.to_digit(16) {
+            style = MotdSpan { color: Some(COLORS[i as usize].1.to_string()), ..Default::default() };
+        } else {
+            match code {
+                'l' => style.bold = true,
+                'o' => style.italic = true,
+                'n' => style.underlined = true,
+                'm' => style.strikethrough = true,
+                'r' => style = base.clone(),
+                _ => {}
+            }
+        }
+    }
+    push_span(out, &mut buf, &style, budget);
+}
+
+fn walk_motd(value: &Value, parent: &MotdSpan, out: &mut Vec<MotdSpan>, budget: &mut usize) {
+    match value {
+        Value::String(s) => legacy_spans(s, parent, out, budget),
+        Value::Array(items) => {
+            for item in items {
+                walk_motd(item, parent, out, budget);
+            }
+        }
+        Value::Object(_) => {
+            let mut style = parent.clone();
+            style.text.clear();
+            if let Some(c) = value.get("color").and_then(Value::as_str).and_then(named_color) {
+                style.color = Some(c);
+            }
+            let flag = |key: &str, current: bool| value.get(key).and_then(Value::as_bool).unwrap_or(current);
+            style.bold = flag("bold", style.bold);
+            style.italic = flag("italic", style.italic);
+            style.underlined = flag("underlined", style.underlined);
+            style.strikethrough = flag("strikethrough", style.strikethrough);
+            if let Some(t) = value.get("text").and_then(Value::as_str) {
+                legacy_spans(t, &style, out, budget);
+            }
+            if let Some(extra) = value.get("extra") {
+                walk_motd(extra, &style, out, budget);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn motd_spans(value: &Value) -> Vec<MotdSpan> {
+    let mut out = Vec::new();
+    let mut budget = MOTD_MAX_CHARS;
+    walk_motd(value, &MotdSpan::default(), &mut out, &mut budget);
+    out
+}
+
+#[cfg(test)]
+mod motd_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn les_codes_de_couleur_se_lisent() {
+        let spans = motd_spans(&json!("§6§lMinemen §rClub §7| EU"));
+        assert_eq!(spans.len(), 3);
+        assert_eq!((spans[0].text.as_str(), spans[0].color.as_deref(), spans[0].bold), ("Minemen ", Some("#FFAA00"), true));
+        assert_eq!((spans[1].text.as_str(), spans[1].color.as_deref(), spans[1].bold), ("Club ", None, false));
+        assert_eq!((spans[2].text.as_str(), spans[2].color.as_deref()), ("| EU", Some("#AAAAAA")));
+    }
+
+    #[test]
+    fn les_composants_heritent_du_style_parent() {
+        let spans = motd_spans(&json!({
+            "text": "", "color": "aqua",
+            "extra": [ { "text": "Hypixel", "bold": true }, " ", { "text": "Network", "color": "#ff00AA" } ]
+        }));
+        assert_eq!(spans[0], MotdSpan { text: "Hypixel".into(), color: Some("#55FFFF".into()), bold: true, ..Default::default() });
+        assert_eq!(spans[1].color.as_deref(), Some("#55FFFF"));
+        assert_eq!(spans[2].color.as_deref(), Some("#FF00AA"));
+        assert_eq!(named_color("#12"), None);
+    }
+
+    #[test]
+    fn un_motd_demesure_est_coupe() {
+        let spans = motd_spans(&json!("x".repeat(5000)));
+        assert_eq!(spans.iter().map(|s| s.text.chars().count()).sum::<usize>(), MOTD_MAX_CHARS);
+    }
 }
 
 fn write_varint(buf: &mut Vec<u8>, value: i32) {
@@ -196,6 +366,7 @@ pub async fn ping_server(address: &str) -> Result<ServerPingInfo, String> {
 
     Ok(ServerPingInfo {
         motd: json.get("description").map(flatten_motd).unwrap_or_default(),
+        motd_spans: json.get("description").map(motd_spans).unwrap_or_default(),
         players_online: json.pointer("/players/online").and_then(|v| v.as_i64()).unwrap_or(0),
         players_max: json.pointer("/players/max").and_then(|v| v.as_i64()).unwrap_or(0),
         version_name: json.pointer("/version/name").and_then(|v| v.as_str()).unwrap_or("").to_string(),

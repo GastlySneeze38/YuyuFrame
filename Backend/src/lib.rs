@@ -11,6 +11,7 @@ mod paths;
 mod play;
 mod security;
 mod server;
+mod servers;
 mod share_link;
 mod state;
 mod sync;

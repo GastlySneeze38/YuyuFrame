@@ -221,8 +221,8 @@ interface Store {
   launchPhaseDurations: Record<string, number>
   recordLaunchPhaseDuration: (instanceId: string, ms: number) => void
 
-  // ── Serveurs épinglés sur l'accueil (persisté), par instance — voir
-  // ServerManageModal. Max 3 par instance (correspond aux 3 slots de la
+  // ── Serveurs épinglés sur l'accueil (persisté), par instance — épinglés
+  // depuis l'écran Serveurs (« Mes serveurs »). Max 3 par instance (correspond aux 3 slots de la
   // rangée sur Home.tsx) : toggleFavoriteServer renvoie `false` sans rien
   // changer si on tente d'en épingler un 4ᵉ.
   favoriteServers: Record<string, string[]>

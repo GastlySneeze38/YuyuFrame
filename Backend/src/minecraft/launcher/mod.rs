@@ -29,4 +29,4 @@ pub(crate) use jvm_args::parse_user_jvm_args;
 pub use agent_deploy::deploy_bundled_agent;
 pub use orchestrator::{download_and_launch, minecraft_dir, preview_jvm_config, LAUNCH_CANCELLED_MSG};
 pub use progress::{register_console_waiter, signal_console_ready};
-pub use servers::{merge_saved_servers, read_saved_servers, SavedServer};
+pub use servers::{edit_saved_server, merge_saved_servers, read_saved_servers, remove_saved_server, ResourcePacks, SavedServer};

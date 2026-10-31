@@ -24,7 +24,6 @@ import { AgentModal, WarningIcon } from '@/components/home/AgentModal'
 import { Skyline } from '@/components/home/Skyline'
 import { GhastFlight } from '@/components/home/GhastFlight'
 import { ServerCard } from '@/components/servers/ServerCard'
-import { ServerManageModal } from '@/components/servers/ServerManageModal'
 import { ServerConfirmModal } from '@/components/servers/ServerConfirmModal'
 import { useT } from '@/i18n'
 import type { SavedServer } from '@/api/client'
@@ -169,7 +168,7 @@ export default function Home() {
     recordLaunchPhaseDuration,
     showHomeServers,
     confirmServerLaunch,
-    favoriteServers, toggleFavoriteServer,
+    favoriteServers,
     isAgentEnabled, setAgentEnabled,
   } = useStore()
 
@@ -201,7 +200,6 @@ export default function Home() {
   const supportUnread = useSupportWatch((s) => s.unread)
   const crashUpdates = useCrashWatch((s) => s.updates)
   const [savedServers, setSavedServers] = useState<SavedServer[]>([])
-  const [showServerManage, setShowServerManage] = useState(false)
   const [pendingServer, setPendingServer] = useState<SavedServer | null>(null)
   /** Texture complète du skin d'un compte hors ligne, pour le rendu 3D. */
   const [customSkinUri, setCustomSkinUri] = useState<string | null>(null)
@@ -524,13 +522,7 @@ export default function Home() {
     else launch(server.ip)
   }
 
-  const handleToggleFavorite = (ip: string) => {
-    if (!selectedInstanceId) return
-    if (!toggleFavoriteServer(selectedInstanceId, ip)) {
-      showNotice(t('home.maxPinnedServers'))
-    }
-  }
-
+  // Les serveurs s'épinglent depuis l'écran Serveurs (bouton « ⋮ »).
   const favoriteIps = selectedInstanceId ? favoriteServers[selectedInstanceId] ?? [] : []
   const displayedServers = savedServers.length <= 3
     ? savedServers
@@ -1034,8 +1026,10 @@ export default function Home() {
                   <motion.div
                     key={`empty-${i}`}
                     variants={cardItem}
-                    onClick={savedServers.length > 3 ? () => setShowServerManage(true) : undefined}
-                    className={`flex flex-1 flex-col items-center justify-center gap-1 rounded-xl px-[clamp(8px,1.4vh,12px)] py-[clamp(6px,1.1vh,10px)] text-center border-2 border-dashed border-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.2)] text-[clamp(8px,1.15vh,10px)] transition-all duration-200 ${savedServers.length > 3 ? 'cursor-pointer hover:border-[rgba(75,63,207,0.4)] hover:text-[rgba(120,110,230,0.6)]' : ''}`}
+                    // Un emplacement vide mène à l'écran Serveurs : au
+                    // catalogue quand l'instance n'en a aucun.
+                    onClick={() => navigate(savedServers.length === 0 ? '/servers?tab=catalog' : '/servers')}
+                    className="flex flex-1 cursor-pointer flex-col items-center justify-center gap-1 rounded-xl px-[clamp(8px,1.4vh,12px)] py-[clamp(6px,1.1vh,10px)] text-center border-2 border-dashed border-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.2)] text-[clamp(8px,1.15vh,10px)] transition-all duration-200 hover:border-[rgba(75,63,207,0.4)] hover:text-[rgba(120,110,230,0.6)]"
                   >
                     {savedServers.length === 0
                       ? t('home.noServerRegistered')
@@ -1045,17 +1039,17 @@ export default function Home() {
                   </motion.div>
                 )
               )}
-              {savedServers.length > 3 && (
-                <button
-                  onClick={() => setShowServerManage(true)}
-                  title={t('home.allServers')}
-                  className="flex-shrink-0 flex items-center justify-center w-9 rounded-xl bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.05)] text-[rgba(255,255,255,0.35)] transition-all duration-150 hover:bg-[rgba(75,63,207,0.06)] hover:border-[rgba(120,100,255,0.25)] hover:text-white"
-                >
-                  <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}>
-                    <circle cx="12" cy="5" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="12" cy="19" r="1.8" />
-                  </svg>
-                </button>
-              )}
+              {/* Toujours là : c'est l'entrée de l'écran Serveurs (mes
+                  serveurs, catalogue, ajout). */}
+              <button
+                onClick={() => navigate('/servers')}
+                title={t('home.allServers')}
+                className="flex-shrink-0 flex items-center justify-center w-9 rounded-xl bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.05)] text-[rgba(255,255,255,0.35)] transition-all duration-150 hover:bg-[rgba(75,63,207,0.06)] hover:border-[rgba(120,100,255,0.25)] hover:text-white"
+              >
+                <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}>
+                  <circle cx="12" cy="5" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="12" cy="19" r="1.8" />
+                </svg>
+              </button>
             </>
           ) : (
             FEATURES.map((f, i) => (
@@ -1180,16 +1174,6 @@ export default function Home() {
           enabled={isAgentEnabled(instance.id)}
           onChange={(value) => setAgentEnabled(instance.id, value)}
           onClose={() => setShowAgentModal(false)}
-        />
-      )}
-
-      {showServerManage && (
-        <ServerManageModal
-          servers={savedServers}
-          favorites={favoriteIps}
-          onToggleFavorite={handleToggleFavorite}
-          onClose={() => setShowServerManage(false)}
-          onLaunch={(server) => handleServerClick(server)}
         />
       )}
 

@@ -188,7 +188,7 @@ pub async fn instance_share_import(
         let servers: Vec<crate::minecraft::launcher::SavedServer> = pack
             .servers
             .iter()
-            .map(|(name, ip)| crate::minecraft::launcher::SavedServer { name: name.clone(), ip: ip.clone() })
+            .map(|(name, ip)| crate::minecraft::launcher::SavedServer::new(name.clone(), ip.clone()))
             .collect();
         let dir = dir.clone();
         let merged = tokio::task::spawn_blocking(move || crate::minecraft::launcher::merge_saved_servers(&dir, &servers))
