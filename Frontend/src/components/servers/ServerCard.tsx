@@ -42,12 +42,15 @@ export function ServerCard({
   onClick,
   favorite,
   onToggleFavorite,
+  badge,
   className = '',
 }: {
   server: SavedServer
   onClick: () => void
   favorite?: boolean
   onToggleFavorite?: () => void
+  /** Petite étiquette à côté du nom (serveur proposé par le catalogue). */
+  badge?: string
   className?: string
 }) {
   const t = useT()
@@ -123,6 +126,11 @@ export function ServerCard({
           <span className="text-[clamp(8px,4cqw,10px)] font-bold text-[rgba(255,255,255,0.6)] truncate flex-1">
             {server.name || t('servers.defaultName')}
           </span>
+          {badge && (
+            <span className="flex-shrink-0 rounded-[4px] bg-[rgba(75,63,207,0.3)] px-[clamp(3px,1.5cqw,5px)] text-[clamp(6px,3cqw,8px)] font-bold uppercase tracking-[0.04em] text-[rgba(255,255,255,0.75)]">
+              {badge}
+            </span>
+          )}
           <SignalBars ping={ping} failed={failed} />
         </div>
         <button

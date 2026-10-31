@@ -814,6 +814,7 @@ export const ru: TranslationSchema = {
     noServerPinned: 'Закреплённых серверов нет',
     noOtherServer: 'Других серверов нет',
     allServers: 'Все серверы',
+    suggestedServer: 'Совет',
     nav: {
       instances: 'Сборки',
       settings: 'Настройки',

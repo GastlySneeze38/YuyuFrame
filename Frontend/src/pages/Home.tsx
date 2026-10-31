@@ -26,7 +26,9 @@ import { GhastFlight } from '@/components/home/GhastFlight'
 import { ServerCard } from '@/components/servers/ServerCard'
 import { ServerConfirmModal } from '@/components/servers/ServerConfirmModal'
 import { useT } from '@/i18n'
-import type { SavedServer } from '@/api/client'
+import type { CatalogServer, SavedServer } from '@/api/client'
+import { JoinServerModal, type JoinRequest } from '@/components/servers/JoinServerModal'
+import { acceptsVersion, homeSuggestions } from '@/lib/homeSuggestions'
 
 // ── Animations d'entrée de l'accueil ────────────────────────────────────────
 // Le bloc de lancement monte sous la bannière, puis ses éléments se posent
@@ -201,6 +203,8 @@ export default function Home() {
   const crashUpdates = useCrashWatch((s) => s.updates)
   const [savedServers, setSavedServers] = useState<SavedServer[]>([])
   const [pendingServer, setPendingServer] = useState<SavedServer | null>(null)
+  const [suggestions, setSuggestions] = useState<CatalogServer[]>([])
+  const [joinRequest, setJoinRequest] = useState<JoinRequest | null>(null)
   /** Texture complète du skin d'un compte hors ligne, pour le rendu 3D. */
   const [customSkinUri, setCustomSkinUri] = useState<string | null>(null)
   const [skinKnown, setSkinKnown] = useState(false)
@@ -395,6 +399,20 @@ export default function Home() {
     return () => { cancelled = true }
   }, [showHomeServers, selectedInstanceId])
 
+  // Serveurs du catalogue pour compléter la rangée (voir `serverSlots`).
+  const mcVersionForSuggestions = instance?.mc_version ?? null
+  useEffect(() => {
+    if (!showHomeServers) {
+      setSuggestions([])
+      return
+    }
+    let alive = true
+    void homeSuggestions(mcVersionForSuggestions).then((list) => alive && setSuggestions(list))
+    return () => {
+      alive = false
+    }
+  }, [showHomeServers, mcVersionForSuggestions])
+
   useTauriEvent<DownloadProgress>('download_progress', ({ instance_id, ...value }) => {
     setProgress(instance_id, value)
     // Palier exact émis par le backend une fois tous les téléchargements
@@ -527,7 +545,40 @@ export default function Home() {
   const displayedServers = savedServers.length <= 3
     ? savedServers
     : savedServers.filter((s) => favoriteIps.includes(s.ip))
-  const serverSlots: (SavedServer | null)[] = Array.from({ length: 3 }, (_, i) => displayedServers[i] ?? null)
+  // Ce qui manque pour faire trois cartes est complété par les premiers
+  // serveurs vanilla du catalogue (`lib/homeSuggestions.ts`), sans reprendre
+  // un serveur déjà dans la liste de l'instance.
+  const savedIps = new Set(savedServers.map((s) => s.ip.toLowerCase()))
+  const fillers = suggestions.filter((s) => !savedIps.has(s.address.toLowerCase())).slice(0, Math.max(0, 3 - displayedServers.length))
+  const serverSlots: ({ kind: 'saved'; server: SavedServer } | { kind: 'suggested'; server: CatalogServer } | null)[] = Array.from(
+    { length: 3 },
+    (_, i) =>
+      i < displayedServers.length
+        ? { kind: 'saved', server: displayedServers[i] }
+        : fillers[i - displayedServers.length]
+          ? { kind: 'suggested', server: fillers[i - displayedServers.length] }
+          : null,
+  )
+
+  // Un serveur proposé qui accepte la version de l'instance se lance comme
+  // les autres cartes ; sinon, la fenêtre « Rejoindre » propose une instance
+  // compatible ou en crée une.
+  const handleSuggestionClick = (server: CatalogServer) => {
+    api.analytics.track('server_card_clicked', { instance_id: selectedInstanceId })
+    const version = instance?.mc_version ?? null
+    if (acceptsVersion(server, version)) {
+      handleServerClick({ name: server.name, ip: server.address })
+      return
+    }
+    setJoinRequest({
+      ip: server.address,
+      mcVersion: server.recommended_version ?? server.game_versions[0],
+      loader: 'vanilla',
+      versions: server.game_versions,
+      anyLoader: true,
+      remember: server.name,
+    })
+  }
 
   const canLaunch = !!selectedInstanceId && !!username && !gameRunning
   const percent = progress && progress.total > 0
@@ -1005,24 +1056,29 @@ export default function Home() {
 
           {showHomeServers ? (
             <>
-              {serverSlots.map((server, i) =>
-                server ? (
+              {serverSlots.map((slot, i) =>
+                slot ? (
                   // Enveloppe animée : la carte garde son propre rendu, on
                   // ne fait qu'ajouter son entrée en cascade et le survol.
                   <motion.div
                     // La position en plus de l'adresse : une même adresse
                     // peut figurer deux fois dans la liste du jeu.
-                    key={`${i}:${server.ip}`}
+                    key={slot.kind === 'saved' ? `${i}:${slot.server.ip}` : `suggested:${slot.server.id}`}
                     variants={cardItem}
                     whileHover={{ y: -3 }}
                     transition={{ type: 'spring', stiffness: 420, damping: 26 }}
                     className="flex flex-1"
                   >
-                    <ServerCard
-                      server={server}
-                      className="flex-1"
-                      onClick={() => handleServerClick(server)}
-                    />
+                    {slot.kind === 'saved' ? (
+                      <ServerCard server={slot.server} className="flex-1" onClick={() => handleServerClick(slot.server)} />
+                    ) : (
+                      <ServerCard
+                        server={{ name: slot.server.name, ip: slot.server.address }}
+                        badge={t('home.suggestedServer')}
+                        className="flex-1"
+                        onClick={() => handleSuggestionClick(slot.server)}
+                      />
+                    )}
                   </motion.div>
                 ) : (
                   <motion.div
@@ -1178,6 +1234,9 @@ export default function Home() {
           onClose={() => setShowAgentModal(false)}
         />
       )}
+
+      {/* Serveur proposé qui n'accepte pas la version de l'instance choisie */}
+      {joinRequest && <JoinServerModal request={joinRequest} onClose={() => setJoinRequest(null)} />}
 
       {pendingServer && (
         <ServerConfirmModal

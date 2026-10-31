@@ -76,3 +76,10 @@ md-5 = "0.10"
 # crate retomberait sur un coffre en mémoire, vide à chaque démarrage.
 [target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
 keyring = { version = "3", features = ["windows-native", "apple-native"] }
+
+# Enregistrements SRV `_minecraft._tcp` du ping des serveurs, hors Windows
+# seulement (minecraft/server_ping.rs) : sous Windows on passe par le service
+# DNS du système, un client DNS à nous y déclenchait la fenêtre du pare-feu.
+# Même version que celle déjà tirée par libp2p.
+[target.'cfg(not(target_os = "windows"))'.dependencies]
+hickory-resolver = "0.24"

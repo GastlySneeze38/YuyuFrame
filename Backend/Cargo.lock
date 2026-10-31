@@ -8353,6 +8353,7 @@ dependencies = [
  "ed25519-dalek",
  "fastnbt",
  "futures",
+ "hickory-resolver",
  "keyring",
  "libp2p",
  "md-5",

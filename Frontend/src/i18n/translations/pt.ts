@@ -815,6 +815,7 @@ export const pt: TranslationSchema = {
     noServerPinned: 'Nenhum servidor fixado',
     noOtherServer: 'Nenhum outro servidor',
     allServers: 'Todos os servidores',
+    suggestedServer: 'Sugerido',
     nav: {
       instances: 'Instâncias',
       settings: 'Configurações',

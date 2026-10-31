@@ -170,6 +170,22 @@ mod motd_tests {
     use serde_json::json;
 
     #[test]
+    fn un_port_ecrit_coupe_la_recherche_srv() {
+        assert_eq!(parse_address("play.example.com"), ("play.example.com".into(), 25565, false));
+        assert_eq!(parse_address("play.example.com:25570"), ("play.example.com".into(), 25570, true));
+        assert_eq!(parse_address("play.example.com:"), ("play.example.com:".into(), 25565, false));
+    }
+
+    /// Réseau : `cargo test --lib ping_suit_le_srv -- --ignored --nocapture`.
+    #[tokio::test]
+    #[ignore]
+    async fn ping_suit_le_srv() {
+        assert_eq!(resolve_srv("unstablehmp.net").await.map(|(_, p)| p), Some(25659));
+        let info = ping_server("unstablehmp.net").await.expect("le serveur répond par son SRV");
+        println!("{} joueurs, {}", info.players_online, info.version_name);
+    }
+
+    #[test]
     fn les_codes_de_couleur_se_lisent() {
         let spans = motd_spans(&json!("§6§lMinemen §rClub §7| EU"));
         assert_eq!(spans.len(), 3);
@@ -303,19 +319,133 @@ fn flatten_motd(value: &Value) -> String {
     }
 }
 
-fn parse_address(address: &str) -> (String, u16) {
+/// `(hôte, port, port écrit dans l'adresse ?)`.
+fn parse_address(address: &str) -> (String, u16, bool) {
     match address.rsplit_once(':') {
-        Some((h, p)) if p.chars().all(|c| c.is_ascii_digit()) => {
-            (h.to_string(), p.parse().unwrap_or(25565))
+        Some((h, p)) if !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()) => {
+            (h.to_string(), p.parse().unwrap_or(25565), true)
         }
-        _ => (address.to_string(), 25565),
+        _ => (address.to_string(), 25565, false),
     }
 }
 
-/// `address` — `host` ou `host:port` (port par défaut 25565, comme
-/// servers.dat côté vanilla — voir `super::launcher::servers`).
+/// Délai de la requête DNS SRV : au-delà, on tente le port par défaut.
+const SRV_TIMEOUT: Duration = Duration::from_secs(3);
+
+/// L'enregistrement SRV `_minecraft._tcp.<hôte>`, que le jeu consulte avant
+/// de se connecter : beaucoup de serveurs y renvoient vers une autre machine
+/// ou un autre port (`unstablehmp.net` → port 25659). Sans lui, le ping
+/// visait le port 25565 et annonçait hors ligne un serveur bien en ligne.
+/// `None` : pas d'enregistrement, ou DNS muet — on garde l'adresse telle quelle.
+async fn resolve_srv(host: &str) -> Option<(String, u16)> {
+    let name = format!("_minecraft._tcp.{host}");
+    let found = timeout(SRV_TIMEOUT, tokio::task::spawn_blocking(move || srv_records(&name)))
+        .await
+        .ok()?
+        .ok()?;
+    // Comme le jeu : la priorité la plus basse gagne.
+    let (target, port, _) = found.into_iter().min_by_key(|(_, _, priority)| *priority)?;
+    let target = target.trim_end_matches('.').to_string();
+    (!target.is_empty() && port != 0).then_some((target, port))
+}
+
+/// Sous Windows, la requête passe par **le service DNS du système**
+/// (`DnsQuery_W`) et non par un client DNS à nous : celui-ci ouvrait un port
+/// UDP, et Windows prenait le launcher pour un programme qui attend des
+/// connexions — d'où la fenêtre « Autoriser l'accès au réseau » du pare-feu.
+/// Ici, aucun port n'est ouvert par le launcher. Rend `(cible, port, priorité)`.
+#[cfg(target_os = "windows")]
+fn srv_records(name: &str) -> Vec<(String, u16, u16)> {
+    use std::ffi::c_void;
+
+    #[repr(C)]
+    struct DnsSrvData {
+        target: *const u16,
+        priority: u16,
+        weight: u16,
+        port: u16,
+        pad: u16,
+    }
+    /// `DNS_RECORDW`, réduit à ce qu'on lit : l'en-tête puis la variante SRV
+    /// de l'union `Data` (même alignement que le reste de l'union).
+    #[repr(C)]
+    struct DnsRecordW {
+        next: *const DnsRecordW,
+        name: *const u16,
+        kind: u16,
+        data_length: u16,
+        flags: u32,
+        ttl: u32,
+        reserved: u32,
+        srv: DnsSrvData,
+    }
+
+    #[link(name = "dnsapi")]
+    extern "system" {
+        fn DnsQuery_W(name: *const u16, kind: u16, options: u32, extra: *mut c_void, results: *mut *mut DnsRecordW, reserved: *mut c_void) -> i32;
+        fn DnsFree(data: *mut c_void, free_type: i32);
+    }
+    const DNS_TYPE_SRV: u16 = 33;
+    const DNS_QUERY_STANDARD: u32 = 0;
+    const DNS_FREE_RECORD_LIST: i32 = 1;
+
+    unsafe fn wide_to_string(p: *const u16) -> String {
+        if p.is_null() {
+            return String::new();
+        }
+        let mut len = 0;
+        while *p.add(len) != 0 && len < 1024 {
+            len += 1;
+        }
+        String::from_utf16_lossy(std::slice::from_raw_parts(p, len))
+    }
+
+    let wide: Vec<u16> = name.encode_utf16().chain(std::iter::once(0)).collect();
+    let mut results: *mut DnsRecordW = std::ptr::null_mut();
+    let status = unsafe { DnsQuery_W(wide.as_ptr(), DNS_TYPE_SRV, DNS_QUERY_STANDARD, std::ptr::null_mut(), &mut results, std::ptr::null_mut()) };
+    if status != 0 || results.is_null() {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    let mut cur: *const DnsRecordW = results;
+    // SAFETY : liste rendue par DnsQuery_W, parcourue en lecture seule puis
+    // libérée une seule fois par DnsFree ; on ne lit l'union SRV que pour les
+    // enregistrements de type SRV (la réponse peut contenir des CNAME…).
+    unsafe {
+        while !cur.is_null() {
+            let r = &*cur;
+            if r.kind == DNS_TYPE_SRV {
+                out.push((wide_to_string(r.srv.target), r.srv.port, r.srv.priority));
+            }
+            cur = r.next;
+        }
+        DnsFree(results as *mut c_void, DNS_FREE_RECORD_LIST);
+    }
+    out
+}
+
+/// Hors Windows, pas de fenêtre de pare-feu à craindre : un client DNS
+/// ordinaire suffit.
+#[cfg(not(target_os = "windows"))]
+fn srv_records(name: &str) -> Vec<(String, u16, u16)> {
+    use hickory_resolver::Resolver;
+    let Ok(resolver) = Resolver::from_system_conf() else { return Vec::new() };
+    match resolver.srv_lookup(format!("{name}.")) {
+        Ok(lookup) => lookup.iter().map(|r| (r.target().to_utf8(), r.port(), r.priority())).collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
+/// `address` — `host` ou `host:port`. Sans port écrit, l'enregistrement SRV
+/// du domaine est suivi s'il existe (comme le fait le jeu), sinon 25565.
 pub async fn ping_server(address: &str) -> Result<ServerPingInfo, String> {
-    let (host, port) = parse_address(address);
+    let (mut host, mut port, explicit) = parse_address(address);
+    if !explicit && host.parse::<std::net::IpAddr>().is_err() {
+        if let Some((target, srv_port)) = resolve_srv(&host).await {
+            host = target;
+            port = srv_port;
+        }
+    }
 
     let mut stream = timeout(CONNECT_TIMEOUT, TcpStream::connect((host.as_str(), port)))
         .await

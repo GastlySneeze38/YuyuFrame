@@ -812,6 +812,7 @@ export const fr = {
     noServerPinned: 'Aucun serveur épinglé',
     noOtherServer: 'Aucun autre serveur',
     allServers: 'Tous les serveurs',
+    suggestedServer: 'Suggéré',
     nav: {
       instances: 'Instances',
       settings: 'Réglages',
