@@ -1121,6 +1121,7 @@ export const pt: TranslationSchema = {
       max: 'MÁX',
       winsToGo: 'Faltam {{count}} vitórias para o próximo nível de borda',
       showOnProfile: 'Mostrar minha grade da temporada ao lado do meu perfil',
+      showcaseFull: 'Sua vitrine está cheia (3 itens): tire um no seu perfil.',
       rankLabel: 'Rank da temporada',
       wins: '{{count}} vitórias ranqueadas nesta temporada',
       levelAt: '{{count}} V',
@@ -1215,6 +1216,8 @@ export const pt: TranslationSchema = {
       notPlaced: 'Termine a classificatória para aparecer no ranking.',
       friend: 'Amigo',
       notPlacedFriend: '{{name}} ainda não terminou a classificatória: não aparece no ranking.',
+      scope: { global: 'Top 15', friends: 'Amigos' },
+      noFriends: 'Nenhum amigo classificado neste modo por enquanto.',
       soon: 'O ranking entre jogadores chega em breve.',
     },
     history: {
@@ -1666,6 +1669,8 @@ export const pt: TranslationSchema = {
       showcaseItems: {
         rankMace: 'Rank Maça',
         rankSword: 'Rank Espada',
+        seasonMace: 'Temporada Maça',
+        seasonSword: 'Temporada Espada',
         title: 'Título',
       },
       mainAccount: 'Conta principal',
@@ -1713,6 +1718,7 @@ export const pt: TranslationSchema = {
       copied: 'Copiado!',
       nameMc: 'Ver no NameMC',
       titleLabel: 'Título',
+      seasonWins: '{{count}} vitórias',
       friendsSince: 'Amigos desde {{date}}',
       shareServer: 'Mostrar meu servidor',
       remove: 'Remover dos amigos',

@@ -63,13 +63,42 @@ pub struct LadderState {
     pub ladder: SavedLadder,
     /// Pseudonyme de l'adversaire → sa force connue.
     pub foes: BTreeMap<String, FoeLevels>,
+    /// Numéro de la saison où vit cet état (0 : d'avant les saisons). Le
+    /// serveur le fait avancer par [`season_reset`] ; le jeu ne fait que suivre.
+    #[serde(default)]
+    pub season: u32,
 }
 
 impl LadderState {
     /// Un état neuf : tout à faire, le placement compris.
     pub fn new(salt: String) -> Self {
-        Self { format: STATE_FORMAT, salt, last_time: 0, ladder: SavedLadder::default(), foes: BTreeMap::new() }
+        Self { format: STATE_FORMAT, salt, last_time: 0, ladder: SavedLadder::default(), foes: BTreeMap::new(), season: 0 }
     }
+}
+
+/// Divisions perdues à chaque nouvelle saison : un rang entier.
+pub const SEASON_DROP: usize = 3;
+
+/// L'état au début de la saison `season` : chaque mode PLACÉ redescend d'un
+/// rang ([`SEASON_DROP`] divisions, jamais sous Bois 1) et repart à 0 point,
+/// sans bouclier ; il reste placé — pas de nouveau placement. Un mode en cours
+/// de placement continue où il en était. Les adversaires connus restent (leur
+/// force ne change pas avec la saison). Sans effet si l'état est déjà à cette
+/// saison ou plus loin.
+pub fn season_reset(state: &LadderState, season: u32) -> LadderState {
+    let mut next = state.clone();
+    if season <= state.season {
+        return next;
+    }
+    for standing in &mut next.ladder.standings {
+        if standing.duels >= super::ranked::PLACEMENT_DUELS {
+            standing.division = standing.division.saturating_sub(SEASON_DROP);
+            standing.points = 0;
+            standing.shield = false;
+        }
+    }
+    next.season = season;
+    next
 }
 
 /// Ce qu'un duel a rapporté, en nombres. Les entiers sont comparés entre le
@@ -538,6 +567,26 @@ mod tests {
         assert_eq!(apply(&state, &casual).unwrap_err(), Rejection::Casual);
         let preview = preview(&state, &casual).expect("ce qu'il aurait rapporté");
         assert!(preview.agrees(&apply(&state, defeat()).unwrap().outcome));
+    }
+
+    #[test]
+    fn une_nouvelle_saison_fait_redescendre_d_un_rang() {
+        use super::super::ranked::SavedStanding;
+        let mut state = LadderState::new(SALT.into());
+        state.ladder.standings = vec![
+            SavedStanding { mode: 1, division: 10, points: 340, duels: 50, shield: true, placement: 0 },
+            SavedStanding { mode: 2, division: 1, points: 120, duels: 30, shield: false, placement: 0 },
+        ];
+        let next = season_reset(&state, 2);
+        assert_eq!((next.ladder.standings[0].division, next.ladder.standings[0].points), (7, 0));
+        assert!(!next.ladder.standings[0].shield);
+        assert_eq!(next.ladder.standings[1].division, 0, "jamais sous Bois 1");
+        assert_eq!(next.season, 2);
+        // Déjà à cette saison : rien ne bouge.
+        assert_eq!(season_reset(&next, 2), next);
+        // En placement : on continue.
+        state.ladder.standings[0].duels = 4;
+        assert_eq!(season_reset(&state, 2).ladder.standings[0].division, 10);
     }
 
     #[test]

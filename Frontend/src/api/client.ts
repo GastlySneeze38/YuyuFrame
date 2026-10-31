@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
 import type { SupportCategory, TicketDetail, TicketSummary } from '@/types/support'
 import type { FriendEvent, FriendList, FriendSettings, LookupResult, MyProfile, MyStatus, MyStatusKind, PublicProfile, ReportReason, RequestSent } from '@/types/friends'
 import type { LocalCrashReport, LocalCrashSummary, RemoteCrashSummary } from '@/types/crash'
-import type { ApiBoard, ApiFriendCompetitive, ApiHistoryPage, ApiSummary, ModeKey } from '@/lib/competitive'
+import type { ApiBoard, ApiFriendCompetitive, ApiHistoryPage, ApiPass, ApiSummary, ModeKey } from '@/lib/competitive'
 import type { BackupDetail, BackupOverview, BackupSettings, BackupSummary, InstanceBackupSettings } from '@/types/backup'
 import type { AuthStatus, CompatResult, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, HealthCheck, JavaReport, JavaStatus, JvmProfile, LoaderVersion, McOption, OptionsSummary, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PackInfo, PackKind, PollResponse, SaveInfo, OptionsLinkInfo, ScanResult, SharedOptionsStatus, ShareExport, ShareLinkStatus, ShareImport, SharePreview, ShareScan, ShareSource, StatsData, StatsQuery, ReferencedMod, SyncDiff, SyncInstance, SyncManifest, SystemMemoryInfo, Version } from '@/types'
 
@@ -780,6 +780,7 @@ export const api = {
       invoke<ApiHistoryPage>('ranked_history', { uuid, mode: mode ?? null, before: before ?? null }),
     summary: (uuid: string) => invoke<ApiSummary>('ranked_summary', { uuid }),
     leaderboard: (mode: ModeKey, uuid?: string) => invoke<ApiBoard>('ranked_leaderboard', { mode, uuid: uuid ?? null }),
+    friendsLeaderboard: (mode: ModeKey, uuid?: string) => invoke<ApiBoard>('ranked_friends_leaderboard', { mode, uuid: uuid ?? null }),
   },
 
   /** Amis (`/v1/friends`). Les changements arrivent aussi en direct par
@@ -810,6 +811,13 @@ export const api = {
     profile: (id: string) => invoke<PublicProfile>('friends_profile', { id }),
     competitive: (id: string) => invoke<ApiFriendCompetitive>('friends_competitive', { id }),
     report: (id: string, reason: ReportReason, details: string) => invoke<void>('friends_report', { id, reason, details }),
+  },
+
+  /** Missions et passe de saison (`/v1/pass`), images du back-office. */
+  pass: {
+    state: () => invoke<ApiPass>('pass_state'),
+    /** Une image en data URI ; `null` si elle manque (icône par défaut). */
+    asset: (id: string) => invoke<string | null>('content_asset', { id }),
   },
 
   /** Notifications Windows (envoyées par le Rust) et pastille de la barre des tâches. */

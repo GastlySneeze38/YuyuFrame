@@ -1,26 +1,21 @@
-import { useMemo } from 'react'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { PageGlow } from '@/components/PageGlow'
 import { ChallengesView } from '@/components/competitive/Challenges'
-import { demoData } from '@/lib/competitive'
-import { useStore } from '@/stores/useStore'
-import { useDemo } from '@/stores/useDevFlags'
+import { usePass } from '@/lib/usePass'
 import { useT } from '@/i18n'
 
 /**
  * Missions et passe de saison, ouverts depuis la page Outils.
  *
  * Elles étaient un onglet du Compétitif, mais elles ne sont pas propres au
- * PvP : une mission peut demander n'importe quoi au joueur. Rien n'a de route
- * serveur pour l'instant : en développement, l'écran est rempli de données de
- * démonstration ; ailleurs, il dit « bientôt ».
+ * PvP : une mission peut demander n'importe quoi au joueur. Missions et passe
+ * sont réglés dans le back-office et lus sur `GET /v1/pass` (`lib/usePass.ts`) ;
+ * sans saison ni mission, l'écran dit « bientôt ».
  */
 export default function Missions() {
   const t = useT()
-  const username = useStore((s) => s.username)
-  // Données de démonstration : interrupteur de l'atelier de développement.
-  const demoOn = useDemo()
-  const demo = useMemo(() => (demoOn ? demoData(username ?? 'Steve') : null), [username, demoOn])
+  // Démonstration (atelier) ou `GET /v1/pass` ; sans rien, « bientôt ».
+  const { challenges, pass, season } = usePass()
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-bg-primary text-txt-primary">
@@ -37,11 +32,7 @@ export default function Missions() {
       {/* La page ne défile pas : l'écran tient dans la fenêtre. */}
       <div className="min-h-0 flex-1 overflow-hidden">
         <div className="mx-auto h-full w-full max-w-6xl px-6 py-5">
-          <ChallengesView
-            challenges={demo?.challenges ?? null}
-            pass={demo?.battlePass ?? null}
-            season={demo?.seasons?.[0] ?? null}
-          />
+          <ChallengesView challenges={challenges} pass={pass} season={season} />
         </div>
       </div>
     </div>

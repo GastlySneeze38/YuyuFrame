@@ -1118,6 +1118,7 @@ export const fr = {
       max: 'MAX',
       winsToGo: 'Encore {{count}} victoires pour le prochain niveau de bordure',
       showOnProfile: 'Afficher ma grille de saison à côté de mon profil',
+      showcaseFull: 'Ta vitrine est pleine (3 éléments) : retires-en un dans ton profil.',
       rankLabel: 'Rang de la saison',
       wins: '{{count}} victoires classées cette saison',
       levelAt: '{{count}} V.',
@@ -1212,6 +1213,8 @@ export const fr = {
       notPlaced: 'Termine ton placement pour apparaître dans le classement.',
       friend: 'Ami',
       notPlacedFriend: "{{name}} n'a pas encore terminé son placement : il n'apparaît pas dans le classement.",
+      scope: { global: 'Top 15', friends: 'Amis' },
+      noFriends: 'Aucun ami placé dans ce mode pour l’instant.',
       soon: 'Le classement entre joueurs arrive bientôt.',
     },
     history: {
@@ -1670,6 +1673,8 @@ export const fr = {
       showcaseItems: {
         rankMace: 'Rang Masse',
         rankSword: 'Rang Épée',
+        seasonMace: 'Saison Masse',
+        seasonSword: 'Saison Épée',
         title: 'Titre',
       },
       mainAccount: 'Compte principal',
@@ -1717,6 +1722,7 @@ export const fr = {
       copied: 'Copié !',
       nameMc: 'Voir sur NameMC',
       titleLabel: 'Titre',
+      seasonWins: '{{count}} victoires',
       friendsSince: 'Amis depuis le {{date}}',
       shareServer: 'Lui montrer mon serveur',
       remove: 'Retirer de mes amis',

@@ -148,12 +148,14 @@ export default function Competitive() {
       const answer = await api.ranked.state(uuid)
       // Le reste à part : une API qui ne connaît pas encore ces routes laisse
       // leurs écrans sur « bientôt » sans empêcher d'afficher le rang.
-      const [summary, mace, sword, boardMace, boardSword] = await Promise.allSettled([
+      const [summary, mace, sword, boardMace, boardSword, friendsMace, friendsSword] = await Promise.allSettled([
         api.ranked.summary(uuid),
         api.ranked.history(uuid, 'mace'),
         api.ranked.history(uuid, 'sword'),
         api.ranked.leaderboard('mace', uuid),
         api.ranked.leaderboard('sword', uuid),
+        api.ranked.friendsLeaderboard('mace', uuid),
+        api.ranked.friendsLeaderboard('sword', uuid),
       ])
       const s = summary.status === 'fulfilled' ? summary.value : null
       const duels =
@@ -164,12 +166,14 @@ export default function Competitive() {
         boardMace.status === 'fulfilled' && boardSword.status === 'fulfilled'
           ? { mace: readBoard(boardMace.value, uuid), sword: readBoard(boardSword.value, uuid) }
           : null
-      setStatus({
-        kind: 'ready',
-        data: s
-          ? fromSummary(s, duels, leaderboard)
-          : { standings: readStandings(answer), leaderboard, duels, stats: null, challenges: null, seasons: null, battlePass: null, seasonWins: null },
-      })
+      const friendsLeaderboard =
+        friendsMace.status === 'fulfilled' && friendsSword.status === 'fulfilled'
+          ? { mace: readBoard(friendsMace.value, uuid, true), sword: readBoard(friendsSword.value, uuid, true) }
+          : null
+      const base = s
+        ? fromSummary(s, duels, leaderboard)
+        : { standings: readStandings(answer), leaderboard, duels, stats: null, challenges: null, seasons: null, battlePass: null, seasonWins: null }
+      setStatus({ kind: 'ready', data: { ...base, friendsLeaderboard } })
     } catch (e) {
       const code = errorCode(e)
       if (code === 'ranked_unavailable') setStatus({ kind: 'unavailable' })
@@ -258,10 +262,16 @@ export default function Competitive() {
                     wins={data.seasonWins ? data.seasonWins[shown] ?? [] : null}
                     count={data.seasonWinCount?.[shown]}
                     season={data.seasons?.[0] ?? null}
+                    mode={shown}
                     readOnly={!!friendId}
                   />
                 ) : view === 'leaderboard' ? (
-                  <Leaderboard rows={data.leaderboard ? data.leaderboard[shown] ?? [] : null} placed={standing.placed} subject={friendId ? friendName ?? '…' : undefined} />
+                  <Leaderboard
+                    rows={data.leaderboard ? data.leaderboard[shown] ?? [] : null}
+                    friendRows={data.friendsLeaderboard ? data.friendsLeaderboard[shown] ?? [] : null}
+                    placed={standing.placed}
+                    subject={friendId ? friendName ?? '…' : undefined}
+                  />
                 ) : (
                   // Le rang à gauche, l'historique au milieu, les serveurs à
                   // droite : trois colonnes de toute la hauteur.

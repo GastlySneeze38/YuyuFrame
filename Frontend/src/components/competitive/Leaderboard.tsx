@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { useT } from '@/i18n'
 import { SkinFace } from '@/components/ui/SkinFace'
@@ -6,23 +7,40 @@ import { RankTile, useRankName } from './RankCard'
 
 /** Couleur des trois premières places. */
 const PODIUM = ['255 206 72', '210 214 222', '214 150 96']
-/** Les 15 premiers seulement : la liste tient sans défilement (au-delà, seule
- *  la ligne du joueur est épinglée en bas). */
+/** Les 15 premiers seulement : la liste tient sans défilement (entre amis, la
+ *  ligne du joueur est épinglée en bas s'il est plus loin). */
 const TOP = 15
 
 const skinOf = (name: string) => `https://mc-heads.net/skin/${encodeURIComponent(name)}`
 
 /**
- * Écran Classement : le podium des trois premiers, puis la suite en liste. Le
- * joueur est mis en avant ; hors du haut du tableau, sa ligne est épinglée
- * sous la liste.
+ * Écran Classement, en deux portées :
+ * - **Global** : les 15 meilleurs joueurs YuyuFrame, rien d'autre — on n'y
+ *   figure qu'en en faisant partie ;
+ * - **Amis** : moi et mes amis qui montrent leurs pages compétitives, avec ma
+ *   ligne épinglée sous la liste si je suis plus bas.
+ * Le podium montre les trois premiers de la portée choisie.
  *
  * `rows === null` : le serveur n'a pas encore de route pour ça.
+ * `subject` : le pseudo de l'ami dont on regarde l'onglet ; sa ligne (`me`)
+ * est marquée « Ami » au lieu de « Toi », et la portée Amis (les miens) n'a
+ * pas de sens chez lui.
  */
-/** `subject` : le pseudo de l'ami dont on regarde l'onglet ; sa ligne (`me`)
- *  est marquée « Ami » au lieu de « Toi ». */
-export function Leaderboard({ rows, placed, subject }: { rows: LeaderboardRow[] | null; placed: boolean; subject?: string }) {
+export function Leaderboard({
+  rows: globalRows,
+  friendRows = null,
+  placed,
+  subject,
+}: {
+  rows: LeaderboardRow[] | null
+  friendRows?: LeaderboardRow[] | null
+  placed: boolean
+  subject?: string
+}) {
   const t = useT()
+  const [scope, setScope] = useState<'global' | 'friends'>('global')
+  const friends = scope === 'friends' && !subject
+  const rows = friends ? friendRows : globalRows
 
   if (rows === null) {
     return (
@@ -36,7 +54,8 @@ export function Leaderboard({ rows, placed, subject }: { rows: LeaderboardRow[] 
   // La liste reprend aussi le podium : elle se lit d'un bout à l'autre.
   const rest = rows.filter((r) => r.position <= TOP)
   const me = rows.find((r) => r.me)
-  const pinned = me && me.position > TOP ? me : null
+  // Ma ligne épinglée : entre amis seulement — le global ne montre que le haut.
+  const pinned = friends && me && me.position > TOP ? me : null
   const mark = subject ? t('competitive.leaderboard.friend') : t('competitive.leaderboard.you')
 
   return (
@@ -44,10 +63,27 @@ export function Leaderboard({ rows, placed, subject }: { rows: LeaderboardRow[] 
       <Podium rows={podium} />
 
       <div className="flex min-h-0 flex-col gap-3 rounded-2xl border border-line bg-surface-1 p-5">
-        <div className="flex items-baseline justify-between px-2.5">
-          <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-txt-muted">{t('competitive.leaderboard.title')}</span>
+        <div className="flex items-center justify-between gap-3 px-2.5">
+          {subject ? (
+            <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-txt-muted">{t('competitive.leaderboard.title')}</span>
+          ) : (
+            <div className="flex rounded-lg bg-white/[0.04] p-0.5">
+              {(['global', 'friends'] as const).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setScope(s)}
+                  className={`rounded-md px-2.5 py-1 text-[11px] font-bold transition-colors ${
+                    scope === s ? 'bg-accent/80 text-white' : 'text-txt-muted hover:text-txt-secondary'
+                  }`}
+                >
+                  {t(`competitive.leaderboard.scope.${s}`)}
+                </button>
+              ))}
+            </div>
+          )}
           <span className="text-[10.5px] text-txt-muted">{t('competitive.leaderboard.winRate')}</span>
         </div>
+        {friends && rows.length === 0 && <p className="px-2.5 text-[12px] text-txt-muted">{t('competitive.leaderboard.noFriends')}</p>}
         <div className="-mx-1 flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden px-1">
           {/* Les lignes se partagent toute la hauteur de la carte. */}
           {rest.map((r, i) => (

@@ -11,6 +11,7 @@ import { useFriends } from '@/stores/useFriends'
 import { useStore } from '@/stores/useStore'
 import { useT } from '@/i18n'
 import type { MyProfile, ShowcaseItem, ShowcaseView, Visibility3 } from '@/types/friends'
+import { sameShowcase } from '@/lib/friends'
 import { FriendAvatar } from './FriendBits'
 import { ThoughtBubble } from './FriendProfile'
 import { ProfileLayout } from './ProfileLayout'
@@ -22,9 +23,11 @@ const SHOWCASE_CHOICES: { item: ShowcaseItem; key: string }[] = [
   { item: { kind: 'rank', mode: 'mace' }, key: 'rankMace' },
   { item: { kind: 'rank', mode: 'sword' }, key: 'rankSword' },
   { item: { kind: 'title' }, key: 'title' },
+  { item: { kind: 'season', mode: 'mace' }, key: 'seasonMace' },
+  { item: { kind: 'season', mode: 'sword' }, key: 'seasonSword' },
 ]
 
-const same = (a: ShowcaseItem, b: ShowcaseItem) => a.kind === b.kind && (a.kind !== 'rank' || (b.kind === 'rank' && a.mode === b.mode))
+const same = sameShowcase
 
 /**
  * Mon profil, dans le panneau des amis, modifiable sur place : c'est la même
@@ -127,7 +130,7 @@ export function MyProfileView() {
   // élément sans valeur — pas de titre, rang caché en jeu — n'apparaît pas.
   const preview: ShowcaseView[] = isDemo()
     ? demoMyShowcase(draft.showcase)
-    : draft.showcase.flatMap((item) => served.filter((v) => (item.kind === 'title' ? v.kind === 'title' : v.kind === 'rank' && v.mode === item.mode)).slice(0, 1))
+    : draft.showcase.flatMap((item) => served.filter((v) => v.kind === item.kind && (item.kind === 'title' || ('mode' in v && 'mode' in item && v.mode === item.mode))).slice(0, 1))
 
   const toggleShowcase = (item: ShowcaseItem) => {
     const has = draft.showcase.some((s) => same(s, item))

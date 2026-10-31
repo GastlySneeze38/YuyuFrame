@@ -237,6 +237,97 @@ export interface PassReward {
   kind: CosmeticKind
   /** Nom propre de la récompense (« Impact »), pas traduit. */
   name: string
+  /** Son image, réglée dans le back-office ; absente : l'icône de la sorte. */
+  asset?: string | null
+}
+
+// ── Missions et passe (`GET /v1/pass`, LauncherAPI `launcher/pass.rs`) ───
+
+export interface ApiPass {
+  season: { number: number; name: string; ends_at: number | null } | null
+  challenges: {
+    id: number
+    kind: ChallengeKind
+    period: 'daily' | 'weekly'
+    mode: ModeKey | null
+    target: number
+    progress: number
+    goal: number
+    done: boolean
+    ends_at: number
+    xp: number
+  }[]
+  xp: number
+  xp_per_tier: number
+  tier: number
+  tiers: number
+  rewards: { tier: number; kind: CosmeticKind; name: string; asset: string | null }[]
+}
+
+/** Les cosmétiques qui méritent d'être mis en avant comme objectif. */
+const BIG_REWARDS: CosmeticKind[] = ['cape', 'aura']
+
+/**
+ * La réponse du serveur, comme les écrans la lisent. `pass` vaut `null` sans
+ * saison en cours ou sans palier réglé (« bientôt »), `challenges` sans
+ * mission active.
+ */
+export function readPass(api: ApiPass): { challenges: Challenge[] | null; pass: BattlePass | null; season: Season | null } {
+  const challenges: Challenge[] = api.challenges.map((c) => ({
+    id: String(c.id),
+    kind: c.kind,
+    period: c.period,
+    mode: c.mode,
+    target: c.target,
+    progress: c.progress,
+    goal: c.goal,
+    endsAt: c.ends_at,
+    xp: c.xp,
+  }))
+  const season: Season | null = api.season
+    ? { id: String(api.season.number), number: api.season.number, name: api.season.name, start: null, end: api.season.ends_at, rewards: ['badge', 'badge', 'badge', 'badge', 'badge', 'badge', 'title'], peak: null }
+    : null
+  if (!api.season || api.tiers === 0) return { challenges: challenges.length ? challenges : null, pass: null, season }
+
+  // Un palier sans récompense réglée (trou dans la liste) : un insigne sans nom.
+  const byTier = new Map(api.rewards.map((r) => [r.tier, r]))
+  const rewards: PassReward[] = Array.from({ length: api.tiers }, (_, i) => {
+    const r = byTier.get(i + 1)
+    return r ? { kind: r.kind, name: r.name, asset: r.asset } : { kind: 'badge', name: '—', asset: null }
+  })
+  const perTier = Math.max(1, api.xp_per_tier)
+  const maxed = api.tier >= api.tiers
+  const featuredIndex = Math.min(api.tier, api.tiers - 1)
+  const daily = challenges.filter((c) => c.period === 'daily')
+  const nextBig = rewards.findIndex((r, i) => i >= api.tier && BIG_REWARDS.includes(r.kind))
+  const objectives: PassObjective[] = [{ kind: 'tiers', done: api.tier, total: api.tiers }]
+  if (nextBig >= 0) {
+    const xpTo = (nextBig + 1) * perTier
+    objectives.unshift({
+      kind: 'unlock',
+      reward: rewards[nextBig].kind,
+      name: rewards[nextBig].name,
+      xpLeft: Math.max(0, xpTo - api.xp),
+      ratio: Math.min(1, api.xp / xpTo),
+      endsAt: api.season.ends_at ?? 0,
+    })
+  }
+  return {
+    challenges: challenges.length ? challenges : null,
+    season,
+    pass: {
+      tier: api.tier,
+      tiers: api.tiers,
+      xpInTier: maxed ? perTier : api.xp - api.tier * perTier,
+      xpPerTier: perTier,
+      featured: { kind: rewards[featuredIndex].kind, name: rewards[featuredIndex].name, tier: featuredIndex + 1 },
+      checkpointXp: daily[0]?.xp ?? 0,
+      checkpointsDone: daily.filter((c) => c.progress >= c.goal).length,
+      checkpoints: daily.length,
+      objectives,
+      rewards,
+    },
+  }
 }
 
 export type PassObjective =
@@ -292,6 +383,8 @@ export interface CompetitiveData {
   standings: Standing[]
   /** `null` : pas de route pour l'instant. */
   leaderboard: Partial<Record<ModeKey, LeaderboardRow[]>> | null
+  /** Le classement entre amis ; absent ou `null` : pas de route. */
+  friendsLeaderboard?: Partial<Record<ModeKey, LeaderboardRow[]>> | null
   duels: DuelRow[] | null
   stats: Partial<Record<ModeKey, ModeStats>> | null
   challenges: Challenge[] | null
@@ -433,9 +526,9 @@ export function readSeasons(s: ApiSummary): Season[] {
   }))
 }
 
-/** Le classement d'un mode : les premiers, et ma ligne derrière eux si je
- *  n'y suis pas (sans place quand je cache mon rang). */
-export function readBoard(board: ApiBoard, myUuid: string | null): LeaderboardRow[] {
+/** Le classement d'un mode : les premiers ; avec `pinMe` (entre amis), ma
+ *  ligne derrière eux si je n'y suis pas. Le global ne montre que le haut. */
+export function readBoard(board: ApiBoard, myUuid: string | null, pinMe = false): LeaderboardRow[] {
   const same = (a: string, b: string | null) => !!b && a.replace(/-/g, '') === b.replace(/-/g, '')
   const rows: LeaderboardRow[] = board.rows.map((r) => ({
     position: r.position ?? 0,
@@ -445,7 +538,7 @@ export function readBoard(board: ApiBoard, myUuid: string | null): LeaderboardRo
     winRate: r.win_rate ?? 0,
     me: same(r.uuid, myUuid) || undefined,
   }))
-  if (board.me && board.me.position !== null && !rows.some((r) => r.me)) {
+  if (pinMe && board.me && board.me.position !== null && !rows.some((r) => r.me)) {
     rows.push({ position: board.me.position, name: board.me.name ?? '?', division: board.me.division, points: board.me.points, winRate: board.me.win_rate ?? 0, me: true })
   }
   return rows
@@ -478,6 +571,23 @@ function seeded(seed: number) {
     s = (s * 1664525 + 1013904223) % 4294967296
     return s / 4294967296
   }
+}
+
+/** Un classement entre amis inventé : six amis autour de moi. */
+function demoFriendsBoard(myName: string, me: Standing): LeaderboardRow[] {
+  const friends: [string, number, number, number][] = [
+    ['Technoblade', 17, 210, 71],
+    ['Dream', 13, 80, 64],
+    ['Grian', 11, 420, 55],
+    ['Mumbo', 8, 300, 49],
+    ['Philza', 6, 120, 47],
+    ['Sapnap', 3, 260, 41],
+  ]
+  const rows: LeaderboardRow[] = friends.map(([name, division, points, winRate]) => ({ position: 0, name, division, points, winRate }))
+  rows.push({ position: 0, name: myName, division: me.division, points: me.points, winRate: 58, me: true })
+  return rows
+    .sort((a, b) => b.division * DIVISION_POINTS + b.points - (a.division * DIVISION_POINTS + a.points))
+    .map((r, i) => ({ ...r, position: i + 1 }))
 }
 
 function demoLeaderboard(myName: string, me: Standing, seed: number): LeaderboardRow[] {
@@ -628,11 +738,13 @@ export function demoData(myName: string): CompetitiveData {
   const duels = demoDuels()
   return {
     standings,
+    // Le global ne montre que les 15 premiers : on n'y est pas.
     leaderboard: {
-      mace: demoLeaderboard(myName, standings[0], 11),
-      // Pendant le placement on n'a pas de place : le classement s'affiche sans nous.
+      mace: demoLeaderboard(myName, standings[0], 11).filter((r) => !r.me),
       sword: demoLeaderboard(myName, standings[1], 23).filter((r) => !r.me),
     },
+    // Entre amis : quelques amis et moi, à ma place.
+    friendsLeaderboard: { mace: demoFriendsBoard(myName, standings[0]), sword: [] },
     duels,
     stats: { mace: statsOf(duels, 'mace'), sword: statsOf(duels, 'sword') },
     challenges: demoChallenges(),

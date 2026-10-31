@@ -70,7 +70,13 @@ export function demoProfile(id: string): PublicProfile {
 /** Ma vitrine de démonstration, telle que la verront mes amis : suit ce que je coche. */
 export function demoMyShowcase(items: ShowcaseItem[]): ShowcaseView[] {
   const state = demoLadder(10, 7)
-  return items.map((item) => (item.kind === 'rank' ? { kind: 'rank', mode: item.mode, state } : DEMO_TITLE))
+  return items.map((item) =>
+    item.kind === 'rank'
+      ? { kind: 'rank', mode: item.mode, state }
+      : item.kind === 'season'
+        ? { kind: 'season', mode: item.mode, wins: [9, 9, 8, 8, 8, 7, 7, 7, 7, 6, 6, 6], count: 12 }
+        : DEMO_TITLE,
+  )
 }
 
 /** Mon profil de démonstration, à modifier. */

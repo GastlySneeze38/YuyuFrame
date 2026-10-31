@@ -106,11 +106,16 @@ export interface RequestSent {
 
 export type Visibility3 = 'everyone' | 'friends' | 'me'
 
-export type ShowcaseItem = { kind: 'rank'; mode: 'mace' | 'sword' } | { kind: 'title' }
+export type ShowcaseItem = { kind: 'rank'; mode: 'mace' | 'sword' } | { kind: 'title' } | { kind: 'season'; mode: 'mace' | 'sword' }
 
 /** Un élément de vitrine tel qu'on le montre. `state` : l'état du classement,
  *  à lire avec `readStandings` (`lib/competitive.ts`). */
-export type ShowcaseView = { kind: 'rank'; mode: 'mace' | 'sword'; state: unknown } | { kind: 'title'; code: string; label: string }
+export type ShowcaseView =
+  | { kind: 'rank'; mode: 'mace' | 'sword'; state: unknown }
+  /** `asset` : l'image du titre réglée dans le back-office (absente d'une API plus ancienne). */
+  | { kind: 'title'; code: string; label: string; asset?: string | null }
+  /** La grille de la saison : les meilleures victoires (division en gagnant) et leur nombre. */
+  | { kind: 'season'; mode: 'mace' | 'sword'; wins: number[]; count: number }
 
 export interface PublicProfile {
   banner: string | null

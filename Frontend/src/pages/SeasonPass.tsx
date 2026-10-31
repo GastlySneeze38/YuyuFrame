@@ -2,12 +2,12 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
-import { CosmeticIcon } from '@/components/competitive/RewardsView'
+import { RewardImage } from '@/components/competitive/RewardImage'
 import { TopoBackdrop } from '@/components/competitive/TopoBackdrop'
 import { Missions, PASS_COLOR } from '@/components/competitive/Challenges'
-import { demoData, type BattlePass, type Challenge, type PassReward } from '@/lib/competitive'
+import { type BattlePass, type Challenge, type PassReward } from '@/lib/competitive'
+import { usePass } from '@/lib/usePass'
 import { useStore } from '@/stores/useStore'
-import { useDemo } from '@/stores/useDevFlags'
 import { useT } from '@/i18n'
 
 /** Paliers par chapitre : une rangée à l'écran. */
@@ -29,12 +29,8 @@ type TierState = 'obtained' | 'current' | 'upcoming'
  */
 export default function SeasonPass() {
   const t = useT()
-  const username = useStore((s) => s.username)
-  // Données de démonstration : interrupteur de l'atelier de développement.
-  const demoOn = useDemo()
-  const demo = useMemo(() => (demoOn ? demoData(username ?? 'Steve') : null), [username, demoOn])
-  const pass = demo?.battlePass ?? null
-  const season = demo?.seasons?.[0] ?? null
+  // Démonstration (atelier) ou `GET /v1/pass` ; sans passe réglé, « bientôt ».
+  const { challenges, pass, season } = usePass()
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-bg-primary text-txt-primary">
@@ -53,7 +49,7 @@ export default function SeasonPass() {
           <p className="text-[12.5px] text-txt-muted">{t('competitive.pass.soon')}</p>
         </div>
       ) : (
-        <PassBoard pass={pass} challenges={demo?.challenges ?? null} />
+        <PassBoard pass={pass} challenges={challenges} />
       )}
     </div>
   )
@@ -221,7 +217,7 @@ function PassBoard({ pass, challenges }: { pass: BattlePass; challenges: Challen
             style={{ filter: `drop-shadow(0 0 40px rgb(${PASS_COLOR} / 0.45))` }}
           >
             <motion.div animate={{ y: [0, -8, 0] }} transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}>
-              <CosmeticIcon kind={reward.kind} color={PASS_COLOR} tierIndex={3} size={200} />
+              <RewardImage reward={reward} color={PASS_COLOR} tierIndex={3} size={200} />
             </motion.div>
           </motion.div>
         </AnimatePresence>
@@ -304,7 +300,7 @@ function TierTile({ tier, reward, state, owned, selected, ratio, index, onPick }
       }`}
     >
       <div className={`flex h-[92px] items-center justify-center ${state === 'upcoming' && !selected ? 'opacity-55' : ''}`}>
-        <CosmeticIcon kind={reward.kind} color={PASS_COLOR} tierIndex={3} size={60} />
+        <RewardImage reward={reward} color={PASS_COLOR} tierIndex={3} size={60} />
       </div>
       {state === 'obtained' && (
         <span className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-success text-black">

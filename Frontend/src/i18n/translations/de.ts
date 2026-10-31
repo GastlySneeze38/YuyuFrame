@@ -1120,6 +1120,7 @@ export const de: TranslationSchema = {
       max: 'MAX',
       winsToGo: 'Noch {{count}} Siege bis zur nächsten Rahmenstufe',
       showOnProfile: 'Mein Saisonraster neben meinem Profil anzeigen',
+      showcaseFull: 'Deine Vitrine ist voll (3 Elemente): Entferne eines in deinem Profil.',
       rankLabel: 'Saisonrang',
       wins: '{{count}} Ranked-Siege in dieser Saison',
       levelAt: '{{count}} S',
@@ -1214,6 +1215,8 @@ export const de: TranslationSchema = {
       notPlaced: 'Schließe deine Platzierung ab, um in der Rangliste zu erscheinen.',
       friend: 'Freund',
       notPlacedFriend: '{{name}} hat die Platzierung noch nicht abgeschlossen und erscheint nicht in der Rangliste.',
+      scope: { global: 'Top 15', friends: 'Freunde' },
+      noFriends: 'Noch kein Freund in diesem Modus platziert.',
       soon: 'Die Rangliste der Spieler kommt bald.',
     },
     history: {
@@ -1665,6 +1668,8 @@ export const de: TranslationSchema = {
       showcaseItems: {
         rankMace: 'Rang Streitkolben',
         rankSword: 'Rang Schwert',
+        seasonMace: 'Saison Streitkolben',
+        seasonSword: 'Saison Schwert',
         title: 'Titel',
       },
       mainAccount: 'Hauptkonto',
@@ -1712,6 +1717,7 @@ export const de: TranslationSchema = {
       copied: 'Kopiert!',
       nameMc: 'Auf NameMC ansehen',
       titleLabel: 'Titel',
+      seasonWins: '{{count}} Siege',
       friendsSince: 'Freunde seit dem {{date}}',
       shareServer: 'Meinen Server zeigen',
       remove: 'Als Freund entfernen',

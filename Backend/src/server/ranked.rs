@@ -81,6 +81,16 @@ pub async fn ranked_summary(state: tauri::State<'_, SharedState>, uuid: String) 
     api::get(&state, &format!("/ranked/summary/{uuid}"), &[]).await.map_err(|e| String::from(explain(e)))
 }
 
+/// Le classement entre amis d'un mode (moi et mes amis qui montrent leurs pages).
+#[tauri::command]
+pub async fn ranked_friends_leaderboard(state: tauri::State<'_, SharedState>, mode: String, uuid: Option<String>) -> Result<Value, String> {
+    let mut query = vec![("mode", clean_mode(&mode)?)];
+    if let Some(uuid) = uuid {
+        query.push(("uuid", clean_uuid(&uuid)?));
+    }
+    api::get(&state, "/ranked/leaderboard/friends", &query).await.map_err(|e| String::from(explain(e)))
+}
+
 /// Le classement entre joueurs d'un mode, et la place de `uuid`.
 #[tauri::command]
 pub async fn ranked_leaderboard(state: tauri::State<'_, SharedState>, mode: String, uuid: Option<String>) -> Result<Value, String> {

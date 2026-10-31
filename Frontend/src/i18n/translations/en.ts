@@ -1120,6 +1120,7 @@ export const en: TranslationSchema = {
       max: 'MAX',
       winsToGo: '{{count}} wins to go for the next border level',
       showOnProfile: 'Show my season grid next to my profile',
+      showcaseFull: 'Your showcase is full (3 items): remove one in your profile.',
       rankLabel: 'Season rank',
       wins: '{{count}} ranked wins this season',
       levelAt: '{{count}} W',
@@ -1214,6 +1215,8 @@ export const en: TranslationSchema = {
       notPlaced: 'Finish your placement to appear on the leaderboard.',
       friend: 'Friend',
       notPlacedFriend: "{{name}} hasn't finished their placement yet, so they're not on the leaderboard.",
+      scope: { global: 'Top 15', friends: 'Friends' },
+      noFriends: 'No friend placed in this mode yet.',
       soon: 'The player leaderboard is coming soon.',
     },
     history: {
@@ -1665,6 +1668,8 @@ export const en: TranslationSchema = {
       showcaseItems: {
         rankMace: 'Mace rank',
         rankSword: 'Sword rank',
+        seasonMace: 'Mace season',
+        seasonSword: 'Sword season',
         title: 'Title',
       },
       mainAccount: 'Main account',
@@ -1712,6 +1717,7 @@ export const en: TranslationSchema = {
       copied: 'Copied!',
       nameMc: 'View on NameMC',
       titleLabel: 'Title',
+      seasonWins: '{{count}} wins',
       friendsSince: 'Friends since {{date}}',
       shareServer: 'Show them my server',
       remove: 'Remove friend',

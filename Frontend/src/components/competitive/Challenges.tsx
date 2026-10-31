@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useT } from '@/i18n'
 import { useStore } from '@/stores/useStore'
 import { DIVISIONS_PER_TIER, TIER_COLORS, TIER_KEYS, type BattlePass, type Challenge, type PassObjective, type Season } from '@/lib/competitive'
-import { CosmeticIcon } from './RewardsView'
+import { RewardImage } from './RewardImage'
 import { RankTile } from './RankCard'
 import { TopoBackdrop } from './TopoBackdrop'
 
@@ -311,7 +311,7 @@ function PassHero({ pass, season }: { pass: BattlePass; season: Season | null })
           animate={{ scale: 1, opacity: 1, rotate: 0, y: [0, -6, 0] }}
           transition={{ scale: { type: 'spring', stiffness: 220, damping: 18 }, y: { duration: 4, repeat: Infinity, ease: 'easeInOut' } }}
         >
-          <CosmeticIcon kind={pass.featured.kind} color={PASS_COLOR} tierIndex={3} size={116} />
+          <RewardImage reward={pass.rewards[pass.featured.tier - 1] ?? pass.featured} color={PASS_COLOR} tierIndex={3} size={116} />
         </motion.div>
         {owned ? (
           <span className="rounded-xl border border-success/40 bg-success/[0.1] px-5 py-2.5 text-[12px] font-black uppercase tracking-[0.05em] text-success">
@@ -367,7 +367,15 @@ function Objective({ objective: o, pass, index }: { objective: PassObjective; pa
           {o.kind === 'rank' ? (
             <RankTile division={TIER_KEYS.indexOf(o.tier) * DIVISIONS_PER_TIER} placed size={84} />
           ) : (
-            <CosmeticIcon kind={o.kind === 'unlock' ? o.reward : pass.featured.kind} color={color} tierIndex={3} size={88} />
+            <RewardImage
+              reward={
+                (o.kind === 'unlock' ? pass.rewards.find((r) => r.kind === o.reward && r.name === o.name) : pass.rewards[pass.featured.tier - 1]) ??
+                { kind: o.kind === 'unlock' ? o.reward : pass.featured.kind, name: '' }
+              }
+              color={color}
+              tierIndex={3}
+              size={88}
+            />
           )}
         </div>
         <div className="w-full">

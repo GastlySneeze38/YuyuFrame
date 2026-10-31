@@ -14,6 +14,7 @@ pub mod error;
 pub mod crash_reports;
 pub mod curseforge;
 pub mod fleet;
+pub mod pass;
 pub mod patch_notes;
 pub mod ranked;
 pub mod reviews;

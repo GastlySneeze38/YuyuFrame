@@ -1,7 +1,13 @@
 // Règles d'affichage des amis, partagées par le bouton de l'accueil et le
 // panneau (`components/friends/`). Les données viennent de `stores/useFriends`.
 
-import type { Friend, FriendPresence, MyStatusKind, PresenceState } from '@/types/friends'
+import type { Friend, FriendPresence, MyStatusKind, PresenceState, ShowcaseItem } from '@/types/friends'
+
+/** Deux éléments de vitrine désignent-ils la même chose (même sorte, même mode) ? */
+export function sameShowcase(a: ShowcaseItem, b: ShowcaseItem): boolean {
+  if (a.kind !== b.kind) return false
+  return a.kind === 'title' || ('mode' in a && 'mode' in b && a.mode === b.mode)
+}
 
 /** Pastille de statut — les couleurs que tout le monde reconnaît. */
 export const STATUS_COLORS: Record<PresenceState | 'invisible', string> = {

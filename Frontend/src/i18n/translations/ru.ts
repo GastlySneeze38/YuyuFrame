@@ -1120,6 +1120,7 @@ export const ru: TranslationSchema = {
       max: 'МАКС',
       winsToGo: 'Ещё {{count}} побед до следующего уровня рамки',
       showOnProfile: 'Показывать мою сетку сезона рядом с профилем',
+      showcaseFull: 'Витрина заполнена (3 элемента): убери один в профиле.',
       rankLabel: 'Ранг сезона',
       wins: 'Рейтинговых побед в этом сезоне: {{count}}',
       levelAt: '{{count}} П',
@@ -1214,6 +1215,8 @@ export const ru: TranslationSchema = {
       notPlaced: 'Завершите калибровку, чтобы попасть в таблицу.',
       friend: 'Друг',
       notPlacedFriend: '{{name}} ещё не завершил калибровку и не попадает в таблицу.',
+      scope: { global: 'Топ-15', friends: 'Друзья' },
+      noFriends: 'Пока ни у одного друга нет ранга в этом режиме.',
       soon: 'Таблица лидеров скоро появится.',
     },
     history: {
@@ -1665,6 +1668,8 @@ export const ru: TranslationSchema = {
       showcaseItems: {
         rankMace: 'Ранг: булава',
         rankSword: 'Ранг: меч',
+        seasonMace: 'Сезон: булава',
+        seasonSword: 'Сезон: меч',
         title: 'Титул',
       },
       mainAccount: 'Основной аккаунт',
@@ -1712,6 +1717,7 @@ export const ru: TranslationSchema = {
       copied: 'Скопировано!',
       nameMc: 'Открыть на NameMC',
       titleLabel: 'Титул',
+      seasonWins: 'Побед: {{count}}',
       friendsSince: 'Друзья с {{date}}',
       shareServer: 'Показывать ему мой сервер',
       remove: 'Удалить из друзей',

@@ -1120,6 +1120,7 @@ export const pl: TranslationSchema = {
       max: 'MAKS',
       winsToGo: 'Jeszcze {{count}} wygranych do następnego poziomu ramki',
       showOnProfile: 'Pokazuj moją siatkę sezonu obok profilu',
+      showcaseFull: 'Twoja gablota jest pełna (3 elementy): usuń jeden w profilu.',
       rankLabel: 'Ranga sezonu',
       wins: 'Wygrane rankingowe w tym sezonie: {{count}}',
       levelAt: '{{count}} W',
@@ -1214,6 +1215,8 @@ export const pl: TranslationSchema = {
       notPlaced: 'Ukończ kwalifikacje, aby pojawić się w rankingu.',
       friend: 'Znajomy',
       notPlacedFriend: '{{name}} nie ukończył jeszcze kwalifikacji, więc nie ma go w rankingu.',
+      scope: { global: 'Top 15', friends: 'Znajomi' },
+      noFriends: 'Na razie żaden znajomy nie ma rangi w tym trybie.',
       soon: 'Ranking graczy pojawi się wkrótce.',
     },
     history: {
@@ -1665,6 +1668,8 @@ export const pl: TranslationSchema = {
       showcaseItems: {
         rankMace: 'Ranga Buława',
         rankSword: 'Ranga Miecz',
+        seasonMace: 'Sezon Buława',
+        seasonSword: 'Sezon Miecz',
         title: 'Tytuł',
       },
       mainAccount: 'Konto główne',
@@ -1712,6 +1717,7 @@ export const pl: TranslationSchema = {
       copied: 'Skopiowano!',
       nameMc: 'Zobacz na NameMC',
       titleLabel: 'Tytuł',
+      seasonWins: 'Zwycięstwa: {{count}}',
       friendsSince: 'Znajomi od {{date}}',
       shareServer: 'Pokaż mu mój serwer',
       remove: 'Usuń ze znajomych',

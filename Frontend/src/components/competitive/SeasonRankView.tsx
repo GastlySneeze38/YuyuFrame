@@ -1,4 +1,8 @@
-import { useId, useState, type ReactNode } from 'react'
+import { useEffect, useId, useState, type ReactNode } from 'react'
+import { api } from '@/api/client'
+import { showError } from '@/stores/useErrorToast'
+import { isDemo } from '@/stores/useDevFlags'
+import type { ModeKey } from '@/lib/competitive'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useT } from '@/i18n'
 import { Toggle } from '@/components/ui/Toggle'
@@ -19,6 +23,59 @@ import { TopoBackdrop } from './TopoBackdrop'
 
 const CELLS = SEASON_GRID * SEASON_GRID
 
+/** Places dans la vitrine du profil (comme le serveur, `SHOWCASE_MAX`). */
+const SHOWCASE_MAX = 3
+
+/**
+ * « Afficher à côté de mon profil » : la grille de ce mode dans la vitrine de
+ * mon profil (panneau des amis). L'état vient de mon profil ; le changer
+ * l'enregistre aussitôt. `null` : on ne sait pas (pas de compte, pas de
+ * route) — l'interrupteur se grise.
+ */
+function useSeasonOnProfile(mode: ModeKey) {
+  const t = useT()
+  const [on, setOn] = useState<boolean | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    if (isDemo()) {
+      setOn(false)
+      return
+    }
+    api.friends
+      .myProfile()
+      .then((p) => alive && setOn(p.showcase.some((s) => s.kind === 'season' && s.mode === mode)))
+      .catch(() => alive && setOn(null))
+    return () => {
+      alive = false
+    }
+  }, [mode])
+
+  async function toggle() {
+    if (on === null || busy) return
+    if (isDemo()) return setOn(!on)
+    setBusy(true)
+    try {
+      const profile = await api.friends.myProfile()
+      const without = profile.showcase.filter((s) => !(s.kind === 'season' && s.mode === mode))
+      if (!on && without.length >= SHOWCASE_MAX) {
+        showError(t('competitive.season.showcaseFull'))
+        return
+      }
+      const showcase = on ? without : [...without, { kind: 'season' as const, mode }]
+      const saved = await api.friends.setProfile({ ...profile, showcase })
+      setOn(saved.showcase.some((s) => s.kind === 'season' && s.mode === mode))
+    } catch (e) {
+      showError(e)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return { on, busy, toggle }
+}
+
 /**
  * Écran Saison : chaque victoire classée de la saison remplit une case de la
  * grille, avec la texture du rang qu'on avait en la gagnant. Les meilleures
@@ -29,17 +86,30 @@ const CELLS = SEASON_GRID * SEASON_GRID
  * qu'on regarde d'abord) ; puis un seul bloc pour la bordure ; puis
  * l'interrupteur, en dernier.
  *
- * Le « i » ouvre ce qu'on peut obtenir au mieux. L'affichage de la grille à
- * côté du profil n'est pas fait : l'interrupteur n'est que l'interface.
+ * Le « i » ouvre ce qu'on peut obtenir au mieux. L'interrupteur met la grille
+ * de ce mode dans la vitrine de mon profil (panneau des amis), ou l'en retire.
  *
  * `wins === null` : pas encore de route pour ça. `count` : toutes les
  * victoires de la saison, quand le serveur n'envoie que les meilleures.
  * `readOnly` : la saison d'un ami, sans le réglage d'affichage au profil.
  */
-export function SeasonRankView({ wins, count, season, readOnly = false }: { wins: number[] | null; count?: number; season: Season | null; readOnly?: boolean }) {
+export function SeasonRankView({
+  wins,
+  count,
+  season,
+  mode,
+  readOnly = false,
+}: {
+  wins: number[] | null
+  count?: number
+  season: Season | null
+  /** Le mode montré : c'est sa grille qui va (ou non) dans la vitrine. */
+  mode: ModeKey
+  readOnly?: boolean
+}) {
   const t = useT()
   const rankName = useRankName()
-  const [showOnProfile, setShowOnProfile] = useState(true)
+  const onProfile = useSeasonOnProfile(mode)
   const [showMax, setShowMax] = useState(false)
 
   if (wins === null) {
@@ -141,7 +211,10 @@ export function SeasonRankView({ wins, count, season, readOnly = false }: { wins
         {!readOnly && (
           <label className="flex cursor-pointer items-center justify-between gap-3 rounded-2xl border border-white/[0.07] bg-black/30 px-5 py-3.5 backdrop-blur-sm">
             <span className="text-[12px] text-txt-secondary">{t('competitive.season.showOnProfile')}</span>
-            <Toggle checked={showOnProfile} onChange={() => setShowOnProfile((v) => !v)} size="sm" />
+            {/* Sans profil lisible (pas de compte, pas de route), le geste ne fait rien. */}
+            <span className={onProfile.on === null ? 'pointer-events-none opacity-40' : ''}>
+              <Toggle checked={onProfile.on === true} onChange={() => void onProfile.toggle()} size="sm" />
+            </span>
           </label>
         )}
       </div>
