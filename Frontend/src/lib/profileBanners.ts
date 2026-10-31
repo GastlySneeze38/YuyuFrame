@@ -1,8 +1,13 @@
-// Les bannières de profil que le launcher sait dessiner. La liste des
-// identifiants est la même que `BANNERS` côté serveur
-// (Server/LauncherAPI/src/launcher/friends/profile.rs) : une bannière se
-// rajoute aux deux endroits. Ce sont des dégradés et non des images envoyées
-// par les joueurs : rien à modérer.
+// Les bannières de profil que le launcher sait dessiner. Ce sont des dégradés
+// et non des images envoyées par les joueurs : rien à modérer.
+//
+// Une bannière nouvelle se dessine ICI d'abord, puis s'ajoute au back-office
+// (`LAUNCHER_BANNERS` de `Server/Admin/Backend/src/competitive/cosmetics.rs`
+// et l'aperçu `Server/Admin/Frontend/src/lib/cosmetics.ts`) ; elle se propose
+// ensuite depuis Compétitif → Bibliothèque (offerte ou à débloquer dans le
+// passe). Le serveur ne connaît que ce que la bibliothèque contient.
+// `ACCENTS` ne sert plus que de repli face à une API sans bibliothèque : les
+// couleurs s'ajoutent librement dans le back-office.
 
 export const BANNERS: Record<string, string> = {
   aurora: 'radial-gradient(120% 140% at 15% 0%, #3ee6b8aa, transparent 60%), radial-gradient(90% 120% at 90% 20%, #7b72e9cc, transparent 60%), linear-gradient(135deg, #10233a, #1b1440)',

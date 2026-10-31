@@ -574,7 +574,11 @@ export default function Home() {
           initial={{ opacity: 0, scale: 0.985 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.45, ease: EASE_OUT }}
-          className="relative h-[clamp(182px,38vh,340px)] flex-shrink-0 overflow-hidden rounded-[20px] border border-[rgba(200,200,220,0.08)] shadow-[0_8px_40px_rgba(0,0,0,0.7)]"
+          // La bannière prend la hauteur que le reste lui laisse : elle
+          // rétrécit sur un petit écran (plutôt que de faire défiler la page)
+          // et grandit sur un grand, jusqu'à un plafond — au-delà, c'est le
+          // bloc de lancement qui se centre dans ce qui reste.
+          className="relative min-h-[150px] max-h-[540px] flex-[1_1_0] overflow-hidden rounded-[20px] border border-[rgba(200,200,220,0.08)] shadow-[0_8px_40px_rgba(0,0,0,0.7)]"
         >
           <div className="absolute inset-0 bg-[linear-gradient(180deg,#020208_0%,#06041a_18%,#0e0932_40%,#1c1250_58%,#130d35_76%,#070512_100%)]" />
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_38%_55%,rgba(75,63,207,0.09)_0%,transparent_55%)]" />
@@ -747,7 +751,7 @@ export default function Home() {
           variants={panelVariants}
           initial="initial"
           animate="animate"
-          className="mx-auto flex w-full max-w-[560px] flex-shrink-0 flex-col"
+          className="mx-auto my-auto flex w-full max-w-[560px] flex-shrink-0 flex-col"
         >
 
           {/* Le titre, le bouton d'information et l'avatar ont rejoint la

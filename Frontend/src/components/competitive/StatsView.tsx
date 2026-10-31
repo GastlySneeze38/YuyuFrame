@@ -170,7 +170,7 @@ export function StatsView({ duels }: { duels: DuelRow[] | null }) {
         </Tile>
       </div>
 
-      <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_300px] gap-4">
+      <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_250px] gap-4 lg:grid-cols-[minmax(0,1fr)_300px] xl:grid-cols-[minmax(0,1fr)_340px]">
         <ScoreChart duels={duels} avg={s.avgScore} />
 
         {/* Le résumé : quelques chiffres de plus, sans en faire un tableau. */}
@@ -178,16 +178,21 @@ export function StatsView({ duels }: { duels: DuelRow[] | null }) {
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ ...SNAP, delay: 0.15 }}
-          className="flex min-h-0 flex-col rounded-2xl border border-line bg-surface-1 p-5"
+          className="flex min-h-0 flex-col rounded-2xl border border-line bg-surface-1 p-4 lg:p-5"
         >
           <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-txt-muted">{t('competitive.stats.summary')}</span>
-          {/* La meilleure note en large, quatre chiffres deux par deux, et
-              l'adversaire sur toute la largeur (un pseudo est long). */}
-          <div className="mt-3 grid min-h-0 flex-1 grid-cols-2 grid-rows-4 gap-2">
+          {/* La carte est un conteneur (largeur ET hauteur) : la mise en page
+              suit la place qu'elle a, pas la fenêtre.
+              Peu de hauteur : une liste, le libellé à gauche et le chiffre à
+              droite, une ligne chacun. De la hauteur (ch-lg) : la meilleure
+              note en large, quatre chiffres deux par deux, et l'adversaire sur
+              toute la largeur (un pseudo est long). */}
+          <div className="mt-3 min-h-0 flex-1 [container-type:size]">
+          <div className="grid h-full auto-rows-fr grid-cols-1 gap-1.5 ch-lg:grid-cols-2 ch-lg:grid-rows-4 ch-lg:gap-2">
             <Cell wide label={t('competitive.stats.bestScore')}>
-              <div className="flex items-baseline gap-1">
+              <div className="flex shrink-0 items-baseline gap-1">
                 <span
-                  className="text-[24px] font-black leading-none tabular-nums"
+                  className="text-[18px] font-black leading-none tabular-nums ch-lg:text-[24px]"
                   style={{ color: `rgb(${scoreColor(s.bestScore)})`, textShadow: `0 0 14px rgb(${scoreColor(s.bestScore)} / 0.4)` }}
                 >
                   {s.bestScore}
@@ -209,7 +214,7 @@ export function StatsView({ duels }: { duels: DuelRow[] | null }) {
             </Cell>
             <Cell wide label={t('competitive.stats.rival')}>
               <div className="flex min-w-0 items-baseline gap-2">
-                <span className="min-w-0 truncate text-[16px] font-black" title={s.rival?.name}>
+                <span className="min-w-0 truncate text-[13px] font-black ch-lg:text-[16px]" title={s.rival?.name}>
                   {s.rival ? s.rival.name : '—'}
                 </span>
                 {s.rival && (
@@ -219,6 +224,7 @@ export function StatsView({ duels }: { duels: DuelRow[] | null }) {
                 )}
               </div>
             </Cell>
+          </div>
           </div>
         </motion.div>
       </div>
@@ -303,20 +309,24 @@ function Ring({ value }: { value: number }) {
 /** Une case du résumé : le libellé en petit, le chiffre en dessous. */
 function Cell({ label, wide, children }: { label: string; wide?: boolean; children: React.ReactNode }) {
   return (
+    // Dans une carte basse : une ligne, libellé à gauche, chiffre à droite.
+    // Dans une carte haute (ch-lg) : une case, libellé au-dessus du chiffre.
     <div
-      className={`flex min-w-0 flex-col justify-center gap-1.5 rounded-xl border border-white/[0.06] bg-white/[0.025] px-3.5 ${
-        wide ? 'col-span-2' : ''
+      className={`flex min-h-0 min-w-0 items-center justify-between gap-3 overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.025] px-3 ch-lg:flex-col ch-lg:items-start ch-lg:justify-center ch-lg:gap-1.5 ch-lg:px-3.5 ${
+        wide ? 'ch-lg:col-span-2' : ''
       }`}
     >
-      {/* Sur deux lignes s'il le faut : un libellé coupé ne se lit plus. */}
-      <span className="text-[10px] font-bold uppercase leading-tight tracking-[0.06em] text-txt-muted">{label}</span>
+      {/* Une seule ligne : le libellé entier est dans la bulle. */}
+      <span title={label} className="min-w-0 truncate text-[10px] font-bold uppercase leading-tight tracking-[0.06em] text-txt-muted">
+        {label}
+      </span>
       {children}
     </div>
   )
 }
 
 function Value({ children }: { children: React.ReactNode }) {
-  return <span className="text-[20px] font-black leading-none tabular-nums">{children}</span>
+  return <span className="shrink-0 text-[15px] font-black leading-none tabular-nums ch-lg:text-[20px]">{children}</span>
 }
 
 /**

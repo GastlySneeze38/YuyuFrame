@@ -96,5 +96,19 @@ module.exports = {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    // Requêtes de conteneur : une carte s'adapte à SA place, pas à la
+    // fenêtre (la même carte est large seule et étroite entre deux colonnes).
+    // Le parent porte `[container-type:inline-size]` (largeur) ou
+    // `[container-type:size]` (largeur et hauteur, s'il a une hauteur fixée).
+    //   cw-sm / cw-md / cw-lg : largeur du conteneur ≥ 380 / 520 / 680 px
+    //   ch-md / ch-lg        : hauteur du conteneur ≥ 260 / 340 px
+    require('tailwindcss/plugin')(({ addVariant }) => {
+      addVariant('cw-sm', '@container (min-width: 380px)')
+      addVariant('cw-md', '@container (min-width: 520px)')
+      addVariant('cw-lg', '@container (min-width: 680px)')
+      addVariant('ch-md', '@container (min-height: 260px)')
+      addVariant('ch-lg', '@container (min-height: 340px)')
+    }),
+  ],
 }

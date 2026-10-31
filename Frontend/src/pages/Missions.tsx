@@ -31,7 +31,7 @@ export default function Missions() {
 
       {/* La page ne défile pas : l'écran tient dans la fenêtre. */}
       <div className="min-h-0 flex-1 overflow-hidden">
-        <div className="mx-auto h-full w-full max-w-6xl px-6 py-5">
+        <div className="mx-auto h-full w-full max-w-6xl px-4 py-[clamp(10px,2vh,20px)] lg:px-6">
           <ChallengesView challenges={challenges} pass={pass} season={season} />
         </div>
       </div>

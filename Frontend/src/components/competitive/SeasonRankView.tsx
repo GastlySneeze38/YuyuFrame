@@ -136,13 +136,15 @@ export function SeasonRankView({
       </div>
 
       {/* La grille, dans sa bordure. */}
-      <div className="flex items-center justify-center p-6">
-        <SeasonFrame level={level} accent={color} size="min(64vh, 480px)">
+      {/* La grille suit la plus petite des deux dimensions : sur une fenêtre
+          étroite, c'est la largeur de sa colonne qui la borne. */}
+      <div className="flex min-w-0 items-center justify-center p-4 lg:p-6">
+        <SeasonFrame level={level} accent={color} size="min(64vh, 480px, 44vw)">
           <SeasonGrid wins={best} />
         </SeasonFrame>
       </div>
 
-      <div className="flex min-h-0 flex-col justify-center gap-8 py-8 pl-2 pr-10">
+      <div className="flex min-h-0 min-w-0 flex-col gap-5 overflow-y-auto [justify-content:safe_center] py-6 pl-1 pr-5 lg:gap-8 lg:py-8 lg:pl-2 lg:pr-10">
         {/* 1. Le rang de la saison : ce qu'on lit en premier. */}
         <div>
           {season && (
@@ -152,7 +154,7 @@ export function SeasonRankView({
             </p>
           )}
           <div className="mt-3 flex items-center gap-3">
-            <p className="text-[60px] font-black uppercase leading-none tracking-[-0.01em]" style={{ color: `rgb(${color})`, textShadow: `0 0 30px rgb(${color} / 0.35)` }}>
+            <p className="text-[clamp(36px,5vw,60px)] font-black uppercase leading-none tracking-[-0.01em]" style={{ color: `rgb(${color})`, textShadow: `0 0 30px rgb(${color} / 0.35)` }}>
               {top !== null ? rankName(top, true) : t('competitive.rank.unranked')}
             </p>
             <button
@@ -166,7 +168,7 @@ export function SeasonRankView({
         </div>
 
         {/* 2. La bordure : tout ce qui la concerne dans un seul bloc. */}
-        <div className="flex flex-col gap-4 rounded-2xl border border-white/[0.07] bg-black/30 p-5 backdrop-blur-sm">
+        <div className="flex flex-col gap-4 rounded-2xl border border-white/[0.07] bg-black/30 p-4 backdrop-blur-sm lg:p-5">
           <div className="flex items-baseline justify-between gap-3">
             <p className="text-[13px] font-black uppercase tracking-[0.05em]">{t('competitive.season.borderTitle')}</p>
             <p className="text-[12px] font-bold tabular-nums text-txt-secondary">
@@ -188,13 +190,15 @@ export function SeasonRankView({
             </p>
           </div>
 
-          {/* Les cinq bordures : la sienne en clair, les suivantes en retrait. */}
-          <div className="flex items-end justify-between">
+          {/* Les cinq bordures : la sienne en clair, les suivantes en retrait.
+              Une case par niveau, toutes de même largeur : la bordure s'inscrit
+              dans la sienne, donc rien ne déborde sur une colonne étroite. */}
+          <div className="grid grid-cols-5 items-end gap-1">
             {Array.from({ length: BORDER_LEVELS }, (_, i) => {
               const l = i + 1
               return (
-                <div key={l} className={`flex flex-col items-center gap-1 ${l <= level ? '' : 'opacity-30'}`}>
-                  <SeasonFrame level={l} accent={color} size="58px" still>
+                <div key={l} className={`flex min-w-0 flex-col items-center gap-1 ${l <= level ? '' : 'opacity-30'}`}>
+                  <SeasonFrame level={l} accent={color} size="clamp(34px, 4.4vw, 58px)" still>
                     <div className="h-full w-full rounded-[2px] bg-[rgb(10_10_16)]" />
                   </SeasonFrame>
                   <span className={`text-[9.5px] font-bold tabular-nums ${l === level ? 'text-white' : 'text-txt-muted'}`}>

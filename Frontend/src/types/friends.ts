@@ -112,7 +112,10 @@ export type ShowcaseItem = { kind: 'rank'; mode: 'mace' | 'sword' } | { kind: 't
 
 /** Un objet de la bibliothèque (bannière, couleur) : possédé, ou où le débloquer. */
 export interface LibraryItem {
+  /** La bannière (`aurora`…) ou la couleur (`#rrggbb`). */
   code: string
+  /** Son nom, réglé dans le back-office ; absent d'une API plus ancienne. */
+  label?: string
   owned: boolean
   /** Palier du passe de la saison en cours qui le débloque ; absent : pas de moyen pour l'instant. */
   unlock: { season: number; tier: number } | null

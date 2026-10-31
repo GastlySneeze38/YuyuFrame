@@ -7,6 +7,7 @@ import { DIVISIONS_PER_TIER, TIER_COLORS, TIER_KEYS, type BattlePass, type Chall
 import { RewardImage } from './RewardImage'
 import { RankTile } from './RankCard'
 import { TopoBackdrop } from './TopoBackdrop'
+import { clamp, useElementSize } from '@/lib/useElementSize'
 
 /** Couleur du passe de saison : l'accent du launcher. */
 export const PASS_COLOR = '129 120 255'
@@ -47,7 +48,9 @@ export function ChallengesView({
   season: Season | null
 }) {
   return (
-    <div className="grid h-full grid-cols-[360px_minmax(0,1fr)] gap-4">
+    // Les missions prennent une colonne qui s'élargit avec la fenêtre ; le
+    // passe a le reste.
+    <div className="grid h-full grid-cols-[290px_minmax(0,1fr)] gap-3 lg:grid-cols-[330px_minmax(0,1fr)] lg:gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
       <Missions challenges={challenges} pass={pass} />
       <PassColumn pass={pass} season={season} />
     </div>
@@ -70,11 +73,13 @@ export function Missions({ challenges, pass }: { challenges: Challenge[] | null;
   const daily = challenges.filter((c) => c.period === 'daily')
   const weekly = challenges.filter((c) => c.period === 'weekly')
 
-  // Une ligne par mission, sans cadre ni barre : la colonne tient sans
-  // défilement, et les deux sections se partagent la hauteur.
+  // Une ligne par mission, sans cadre ni barre ; les lignes et les écarts se
+  // resserrent avec la hauteur de la fenêtre. Les deux sections se partagent
+  // la hauteur, et si elle manque malgré tout la colonne défile plutôt que de
+  // couper la semaine.
   return (
-    <div className="flex min-h-0 flex-col justify-between gap-5 rounded-2xl border border-line bg-surface-1 px-5 py-5">
-      <section className="flex flex-col gap-3">
+    <div className="flex min-h-0 flex-col justify-between gap-[clamp(10px,2.2vh,20px)] overflow-y-auto rounded-2xl border border-line bg-surface-1 px-4 py-[clamp(12px,2.2vh,20px)] lg:px-5">
+      <section className="flex flex-col gap-[clamp(6px,1.3vh,12px)]">
         <SectionHead title={t('competitive.challenges.daily')} refill={daily[0] ? countdown(daily[0].endsAt - now) : null} />
         {pass && (
           <div title={t('competitive.missions.perCheckpoint', { xp: pass.checkpointXp.toLocaleString() })}>
@@ -88,7 +93,7 @@ export function Missions({ challenges, pass }: { challenges: Challenge[] | null;
         </div>
       </section>
 
-      <section className="flex flex-col gap-3">
+      <section className="flex flex-col gap-[clamp(6px,1.3vh,12px)]">
         <SectionHead title={t('competitive.challenges.weekly')} refill={weekly[0] ? countdown(weekly[0].endsAt - now) : null} />
         {weekly.every((c) => c.progress >= c.goal) ? (
           <p className="py-4 text-center text-[11px] font-bold uppercase tracking-[0.06em] text-txt-muted">{t('competitive.missions.allDone')}</p>
@@ -132,7 +137,7 @@ function Checkpoints({ done, total }: { done: number; total: number }) {
               initial={{ scale: 0.6, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ delay: i * 0.06, type: 'spring', stiffness: 300, damping: 18 }}
-              className="relative flex h-9 w-9 shrink-0 items-center justify-center"
+              className="relative flex h-[clamp(28px,4.6vh,36px)] w-[clamp(28px,4.6vh,36px)] shrink-0 items-center justify-center"
             >
               <span
                 className={`absolute inset-[5px] rotate-45 rounded-[4px] border-2 ${
@@ -162,7 +167,7 @@ function MissionRow({ mission: c, index }: { mission: Challenge; index: number }
       initial={{ opacity: 0, x: -6 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ delay: index * 0.04 }}
-      className="flex items-center gap-3 border-b border-white/[0.05] py-2.5 last:border-b-0"
+      className="flex items-center gap-3 border-b border-white/[0.05] py-[clamp(5px,1.2vh,10px)] last:border-b-0"
     >
       {done ? (
         <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-success/20 text-success">
@@ -206,6 +211,17 @@ function MissionRow({ mission: c, index }: { mission: Challenge; index: number }
 
 function PassColumn({ pass, season }: { pass: BattlePass | null; season: Season | null }) {
   const t = useT()
+  // Les objectifs se règlent sur la case qu'ils ont : l'image prend ce que
+  // le texte laisse ; trop bas, la carte passe à l'horizontale (image à
+  // gauche, texte à droite).
+  const [gridRef, grid] = useElementSize<HTMLDivElement>()
+  const cardWidth = grid.width === 0 ? 220 : (grid.width - 2 * 12) / 3
+  const horizontal = grid.height > 0 && grid.height < 150
+  const imageSize = horizontal
+    ? Math.floor(clamp(grid.height - 40, 30, 56))
+    : grid.height === 0
+      ? 88
+      : Math.floor(clamp(Math.min(grid.height - 118, cardWidth - 48), 36, 88))
   if (pass === null) {
     return (
       <div className="flex items-center justify-center rounded-2xl border border-line bg-surface-1 p-5">
@@ -216,13 +232,13 @@ function PassColumn({ pass, season }: { pass: BattlePass | null; season: Season 
   return (
     // Le passe en haut, les objectifs en dessous : la hauteur est partagée
     // presque à égalité pour que les objectifs aient de la place.
-    <div className="grid min-h-0 grid-rows-[minmax(0,1.1fr)_minmax(0,1fr)] gap-4">
+    <div className="grid min-h-0 grid-rows-[minmax(0,1.1fr)_minmax(0,1fr)] gap-[clamp(10px,1.8vh,16px)]">
       <PassHero pass={pass} season={season} />
       <div className="flex min-h-0 flex-col gap-2">
         <span className="text-[12.5px] font-black uppercase tracking-[0.04em]">{t('competitive.pass.objectives')}</span>
-        <div className="grid min-h-0 flex-1 grid-cols-3 gap-3">
+        <div ref={gridRef} className="grid min-h-0 flex-1 grid-cols-3 gap-3">
           {pass.objectives.map((o, i) => (
-            <Objective key={i} objective={o} pass={pass} index={i} />
+            <Objective key={i} objective={o} pass={pass} index={i} imageSize={imageSize} horizontal={horizontal} />
           ))}
         </div>
       </div>
@@ -240,15 +256,22 @@ function PassHero({ pass, season }: { pass: BattlePass; season: Season | null })
   const daysLeft = season?.end ? Math.max(0, Math.ceil((season.end - Date.now()) / 86_400_000)) : null
   const xpLeft = pass.xpPerTier - pass.xpInTier
   const openPass = () => navigate('/missions/pass')
+  // La carte se règle sur sa propre taille : l'image suit sa hauteur, la
+  // colonne de droite sa largeur ; les textes passent par ses requêtes de
+  // conteneur (cw-*).
+  const [boxRef, box] = useElementSize<HTMLDivElement>()
+  const imageSize = box.height === 0 ? 116 : Math.floor(clamp(box.height * 0.42, 52, 116))
+  const sideWidth = box.width === 0 ? 260 : Math.floor(clamp(box.width * 0.34, 140, 260))
 
   return (
     <div
+      ref={boxRef}
       role="button"
       tabIndex={0}
       onClick={openPass}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPass() } }}
       title={t('competitive.pass.seeTiers')}
-      className="group relative flex min-h-0 cursor-pointer overflow-hidden rounded-2xl border border-line bg-surface-1 transition-colors duration-200 hover:border-accent/40"
+      className="group relative flex min-h-0 cursor-pointer overflow-hidden rounded-2xl border border-line bg-surface-1 transition-colors duration-200 [container-type:inline-size] hover:border-accent/40"
       style={{ isolation: 'isolate' }}
     >
       <div aria-hidden="true" className="absolute inset-0 -z-10">
@@ -257,40 +280,41 @@ function PassHero({ pass, season }: { pass: BattlePass; season: Season | null })
       </div>
 
       {/* À gauche : la saison, la récompense suivante, la progression. */}
-      <div className="flex min-w-0 flex-1 flex-col justify-between p-5">
-        <div>
-          <p className="text-[15px] font-black uppercase tracking-[0.03em]">
+      <div className="flex min-w-0 flex-1 flex-col justify-between gap-2 p-[clamp(12px,2.2vh,20px)]">
+        <div className="min-w-0">
+          <p className="truncate text-[13px] font-black uppercase tracking-[0.03em] cw-md:text-[15px]">
             {season ? t('competitive.pass.season', { number: season.number, name: season.name }) : t('competitive.pass.title')}
           </p>
           {daysLeft !== null && (
-            <p className="mt-0.5 text-[13px] font-bold uppercase">
+            <p className="mt-0.5 truncate text-[11.5px] font-bold uppercase cw-md:text-[13px]">
               {t('competitive.pass.endsIn')} <span className="text-warning">{t('competitive.pass.days', { count: daysLeft })}</span>
             </p>
           )}
         </div>
 
-        <div className="flex flex-col gap-3">
+        <div className="flex min-w-0 flex-col gap-[clamp(6px,1.3vh,12px)]">
           {locked && (
-            <span className="flex items-center gap-1.5 text-[12px] font-semibold text-txt-secondary">
-              <svg viewBox="0 0 24 24" className="h-4 w-4 text-warning" fill="currentColor"><path d="M12 2a5 5 0 00-5 5v3H6a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2v-8a2 2 0 00-2-2h-1V7a5 5 0 00-5-5zm-3 8V7a3 3 0 016 0v3z" /></svg>
-              {t('competitive.pass.requires')}
+            <span className="flex min-w-0 items-center gap-1.5 text-[12px] font-semibold text-txt-secondary">
+              <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-warning" fill="currentColor"><path d="M12 2a5 5 0 00-5 5v3H6a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2v-8a2 2 0 00-2-2h-1V7a5 5 0 00-5-5zm-3 8V7a3 3 0 016 0v3z" /></svg>
+              <span className="truncate">{t('competitive.pass.requires')}</span>
             </span>
           )}
-          <p className="text-[22px] font-black uppercase leading-none tracking-[-0.01em]">
+          <p className="truncate text-[17px] font-black uppercase leading-none tracking-[-0.01em] cw-md:text-[22px]">
             {t(`competitive.seasons.kinds.${pass.featured.kind}`, { rank: pass.featured.name })}
           </p>
           <div className="flex max-w-[440px] flex-col gap-1.5">
-            <div className="flex items-baseline justify-between text-[11.5px] font-bold">
-              <span className="flex items-center gap-2">
+            <div className="flex items-baseline justify-between gap-2 whitespace-nowrap text-[11px] font-bold cw-md:text-[11.5px]">
+              <span className="flex min-w-0 items-center gap-2">
                 {t('competitive.pass.tier', { tier: pass.tier, total: pass.tiers })}
-                <span className="flex items-center gap-0.5 text-[10.5px] font-semibold text-txt-muted transition-colors group-hover:text-accent-hover">
+                {/* « Voir les paliers » : seulement quand il y a la place — la carte entière y mène. */}
+                <span className="hidden items-center gap-0.5 text-[10.5px] font-semibold text-txt-muted transition-colors group-hover:text-accent-hover cw-lg:flex">
                   {t('competitive.pass.seeTiers')}
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3 transition-transform group-hover:translate-x-0.5">
                     <path d="M9 6l6 6-6 6" />
                   </svg>
                 </span>
               </span>
-              <span className="text-success">{t('competitive.pass.xpToGo', { xp: xpLeft.toLocaleString() })}</span>
+              <span className="shrink-0 text-success">{t('competitive.pass.xpToGo', { xp: xpLeft.toLocaleString() })}</span>
             </div>
             <div className="h-2 overflow-hidden rounded-full bg-white/[0.08]">
               <motion.div
@@ -305,16 +329,16 @@ function PassHero({ pass, season }: { pass: BattlePass; season: Season | null })
       </div>
 
       {/* À droite : la récompense en grand, et de quoi débloquer le passe. */}
-      <div className="flex w-[260px] shrink-0 flex-col items-center justify-center gap-4 p-5">
+      <div className="flex shrink-0 flex-col items-center justify-center gap-[clamp(8px,1.6vh,16px)] p-[clamp(10px,2vh,20px)]" style={{ width: sideWidth }}>
         <motion.div
           initial={{ scale: 0.8, opacity: 0, rotate: -6 }}
           animate={{ scale: 1, opacity: 1, rotate: 0, y: [0, -6, 0] }}
           transition={{ scale: { type: 'spring', stiffness: 220, damping: 18 }, y: { duration: 4, repeat: Infinity, ease: 'easeInOut' } }}
         >
-          <RewardImage reward={pass.rewards[pass.featured.tier - 1] ?? pass.featured} color={PASS_COLOR} tierIndex={3} size={116} />
+          <RewardImage reward={pass.rewards[pass.featured.tier - 1] ?? pass.featured} color={PASS_COLOR} tierIndex={3} size={imageSize} />
         </motion.div>
         {owned ? (
-          <span className="rounded-xl border border-success/40 bg-success/[0.1] px-5 py-2.5 text-[12px] font-black uppercase tracking-[0.05em] text-success">
+          <span className="whitespace-nowrap rounded-xl border border-success/40 bg-success/[0.1] px-3 py-2 text-[11px] font-black uppercase tracking-[0.05em] text-success cw-md:px-5 cw-md:py-2.5 cw-md:text-[12px]">
             {t('competitive.pass.owned')}
           </span>
         ) : (
@@ -324,7 +348,7 @@ function PassHero({ pass, season }: { pass: BattlePass; season: Season | null })
               e.stopPropagation()
               navigate('/plans')
             }}
-            className="rounded-xl bg-white px-6 py-2.5 text-[12px] font-black uppercase tracking-[0.05em] text-black transition-transform hover:scale-[1.03] active:scale-[0.98]"
+            className="whitespace-nowrap rounded-xl bg-white px-3 py-2 text-[11px] font-black uppercase tracking-[0.05em] text-black transition-transform hover:scale-[1.03] active:scale-[0.98] cw-md:px-6 cw-md:py-2.5 cw-md:text-[12px]"
           >
             {t('competitive.pass.unlock')}
           </button>
@@ -334,7 +358,15 @@ function PassHero({ pass, season }: { pass: BattlePass; season: Season | null })
   )
 }
 
-function Objective({ objective: o, pass, index }: { objective: PassObjective; pass: BattlePass; index: number }) {
+function Objective({ objective: o, pass, index, imageSize, horizontal }: {
+  objective: PassObjective
+  pass: BattlePass
+  index: number
+  /** Taille de l'image, calculée d'après la case (voir `PassColumn`). */
+  imageSize: number
+  /** Case trop basse : image à gauche, texte à droite. */
+  horizontal: boolean
+}) {
   const t = useT()
   const now = useNow()
   const color = o.kind === 'rank' ? TIER_COLORS[o.tier] : PASS_COLOR
@@ -362,10 +394,14 @@ function Objective({ objective: o, pass, index }: { objective: PassObjective; pa
       className="relative flex min-h-0 flex-col overflow-hidden rounded-2xl border border-line bg-surface-1"
       style={{ backgroundImage: `radial-gradient(16rem 12rem at 50% 32%, rgb(${color} / 0.2), transparent 70%)` }}
     >
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-5 py-5 text-center">
-        <div style={{ filter: `drop-shadow(0 0 16px rgb(${color} / 0.4))` }}>
+      <div
+        className={`flex min-h-0 flex-1 items-center ${
+          horizontal ? 'gap-2.5 px-3 py-2 text-left' : 'flex-col justify-center gap-[clamp(6px,1.4vh,16px)] px-3 py-[clamp(8px,1.8vh,20px)] text-center lg:px-5'
+        }`}
+      >
+        <div className="shrink-0" style={{ filter: `drop-shadow(0 0 16px rgb(${color} / 0.4))` }}>
           {o.kind === 'rank' ? (
-            <RankTile division={TIER_KEYS.indexOf(o.tier) * DIVISIONS_PER_TIER} placed size={84} />
+            <RankTile division={TIER_KEYS.indexOf(o.tier) * DIVISIONS_PER_TIER} placed size={imageSize} />
           ) : (
             <RewardImage
               reward={
@@ -374,24 +410,27 @@ function Objective({ objective: o, pass, index }: { objective: PassObjective; pa
               }
               color={color}
               tierIndex={3}
-              size={88}
+              size={imageSize}
             />
           )}
         </div>
-        <div className="w-full">
-          <p className="truncate text-[15px] font-black uppercase">{title}</p>
-          <p className="mt-1 truncate text-[12px] font-semibold" style={{ color: `rgb(${color})` }}>
+        <div className={horizontal ? 'flex min-w-0 flex-1 flex-col justify-center' : 'w-full min-w-0'}>
+          {/* Le titre entier dans la bulle quand il est coupé. */}
+          <p title={title} className="truncate text-[clamp(12px,1.9vh,15px)] font-black uppercase leading-tight">
+            {title}
+          </p>
+          <p className="mt-0.5 truncate text-[11px] font-semibold lg:text-[12px]" style={{ color: `rgb(${color})` }}>
             {sub}
           </p>
           {o.kind === 'tiers' ? (
             // Les paliers du passe, en segments.
-            <div className="mt-3 flex gap-1">
+            <div className="mt-[clamp(6px,1.2vh,12px)] flex gap-1">
               {Array.from({ length: 5 }, (_, i) => (
                 <span key={i} className={`h-2 flex-1 rounded-full ${i < Math.round((o.done / o.total) * 5) ? 'bg-white/80' : 'bg-white/[0.1]'}`} />
               ))}
             </div>
           ) : (
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/[0.08]">
+            <div className="mt-[clamp(6px,1.2vh,12px)] h-2 overflow-hidden rounded-full bg-white/[0.08]">
               <motion.div
                 className="h-full rounded-full"
                 style={{ background: `rgb(${color})` }}
@@ -404,9 +443,11 @@ function Objective({ objective: o, pass, index }: { objective: PassObjective; pa
         </div>
       </div>
       {o.kind === 'unlock' && (
-        <div className="flex shrink-0 items-center justify-center gap-1.5 bg-danger/[0.85] px-4 py-1.5 text-[10.5px] font-black uppercase tracking-[0.04em] text-white">
-          <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm1 11h-5v-2h3V6h2z" /></svg>
-          {t('competitive.pass.endsIn')} {t('competitive.pass.days', { count: Math.max(0, Math.ceil((o.endsAt - now) / 86_400_000)) })}
+        <div className="flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap bg-danger/[0.85] px-2 py-1 text-[9.5px] font-black uppercase tracking-[0.04em] text-white lg:px-4 lg:py-1.5 lg:text-[10.5px]">
+          <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" fill="currentColor"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm1 11h-5v-2h3V6h2z" /></svg>
+          <span className="truncate">
+            {t('competitive.pass.endsIn')} {t('competitive.pass.days', { count: Math.max(0, Math.ceil((o.endsAt - now) / 86_400_000)) })}
+          </span>
         </div>
       )}
     </motion.div>

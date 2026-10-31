@@ -210,14 +210,16 @@ export default function Competitive() {
         <h1 className="shrink-0 text-[16px] font-black leading-[1.2] tracking-[-0.01em]">
           {friendId ? t('friends.profile.competitiveTitle', { name: friendName ?? '…' }) : t('competitive.title')}
         </h1>
-        <nav className="flex min-w-0 flex-1 justify-center">
+        {/* Centré tant qu'il y a la place ; sinon calé à gauche, jamais
+            par-dessus le titre (`safe`). */}
+        <nav className="flex min-w-0 flex-1 [justify-content:safe_center]">
           {data && (
-            <div className="flex rounded-xl bg-white/[0.04] p-1">
+            <div className="flex shrink-0 rounded-xl bg-white/[0.04] p-1">
               {VIEWS.map((v) => (
                 <button
                   key={v}
                   onClick={() => setView(v)}
-                  className={`relative rounded-lg px-3.5 py-1.5 text-[12px] font-bold transition-colors ${
+                  className={`relative whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[12px] font-bold transition-colors lg:px-3.5 ${
                     view === v ? 'text-white' : 'text-txt-muted hover:text-txt-secondary'
                   }`}
                 >
@@ -229,7 +231,7 @@ export default function Competitive() {
           )}
         </nav>
         {data && (
-          <div className="w-[230px] shrink-0">
+          <div className="w-[170px] shrink-0 lg:w-[230px]">
             <ModeDropdown value={shown} onChange={setMode} standings={data.standings} />
           </div>
         )}
@@ -275,13 +277,13 @@ export default function Competitive() {
                 ) : (
                   // Le rang à gauche, l'historique au milieu, les serveurs à
                   // droite : trois colonnes de toute la hauteur.
-                  <div className="grid h-full grid-cols-[270px_minmax(0,1fr)_174px] gap-4">
+                  <div className="grid h-full grid-cols-[230px_minmax(0,1fr)_164px] gap-3 lg:grid-cols-[270px_minmax(0,1fr)_174px] lg:gap-4">
                     {/* Le rang mène aux statistiques. */}
                     <RankCard standing={standing} onOpen={() => setView('stats')} />
                     <DuelHistory duels={duels} />
                     {/* Un écart plus large que celui de la grille : les icônes
                         n'ont pas de cadre, elles se colleraient à l'historique. */}
-                    <div className="h-full min-h-0 pl-6">
+                    <div className="h-full min-h-0 pl-3 lg:pl-6">
                       <ServerStats servers={servers} selected={activeServer} onSelect={setServer} />
                     </div>
                   </div>

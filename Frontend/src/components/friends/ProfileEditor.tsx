@@ -107,14 +107,19 @@ export function ProfileEditor({
 
   return createPortal(
     <ModalShell title={t('friends.me.editTitle')} onClose={onClose} maxWidth="max-w-6xl">
-      <div className="grid h-[64vh] max-h-[620px] grid-cols-[200px_minmax(0,1fr)_340px] gap-5">
+      {/* Trois colonnes à toutes les tailles ; sur une petite fenêtre, le menu
+          et l'aperçu rétrécissent pour laisser la place à la bibliothèque.
+          La hauteur est celle de la fenêtre moins le titre, le pied et les
+          marges de la modale (≈ 205 px) : la modale tient toujours à l'écran,
+          et seule la liste de la bibliothèque défile. */}
+      <div className="grid h-[min(620px,calc(100vh-205px))] min-h-[240px] grid-cols-[156px_minmax(0,1fr)_250px] gap-3 lg:grid-cols-[190px_minmax(0,1fr)_300px] lg:gap-5 xl:grid-cols-[200px_minmax(0,1fr)_340px]">
         {/* Ce qu'on modifie : une partie à la fois. */}
-        <nav className="flex flex-col gap-1">
+        <nav className="flex min-w-0 flex-col gap-1 overflow-y-auto">
           {PARTS.map((p) => (
             <button
               key={p}
               onClick={() => setPart(p)}
-              className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left transition-colors ${
+              className={`flex items-center gap-2.5 rounded-xl px-2 py-2 text-left transition-colors lg:px-3 lg:py-2.5 ${
                 part === p ? 'bg-accent/20 text-white' : 'text-txt-secondary hover:bg-white/[0.04] hover:text-white'
               }`}
             >
@@ -138,7 +143,13 @@ export function ProfileEditor({
         </nav>
 
         {/* La bibliothèque de la partie choisie. */}
-        <div className="flex min-h-0 flex-col overflow-y-auto rounded-2xl border border-line bg-surface-1 p-4">
+        {/* Les bibliothèques font défiler leur seule liste (en-tête fixe) ;
+            la bio et le compte, courts, défilent en entier s'il le faut. */}
+        <div
+          className={`flex min-h-0 min-w-0 flex-col rounded-2xl border border-line bg-surface-1 p-3 lg:p-4 ${
+            part === 'bio' || part === 'account' ? 'overflow-y-auto' : 'overflow-hidden'
+          }`}
+        >
           {part === 'banner' && (
             <BannerLibrary library={library} value={draft.banner} color={color} visibility={draft.banner_visibility} onPick={(banner) => edit({ banner })} onVisibility={(v) => edit({ banner_visibility: v })} />
           )}
@@ -175,7 +186,7 @@ export function ProfileEditor({
               {draft.accounts.length === 0 ? (
                 <p className="text-[12.5px] text-txt-muted">{t('friends.me.noAccounts')}</p>
               ) : (
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
                   {draft.accounts.map((a) => {
                     const on = (draft.main_mc_uuid ?? draft.accounts[0]?.uuid) === a.uuid
                     return (
@@ -220,14 +231,16 @@ export function ProfileEditor({
         </div>
       </div>
 
-      <div className="mt-5 flex items-center justify-end gap-2 border-t border-line-soft pt-4">
-        <button onClick={onClose} disabled={saving} className="rounded-lg px-4 py-2 text-[13px] font-semibold text-txt-muted hover:text-white">
+      {/* Le pied reste mince : l'écart de la modale (gap-5) le sépare déjà
+          du contenu, toute la hauteur doit aller aux colonnes. */}
+      <div className="-mt-1 flex items-center justify-end gap-2 border-t border-line-soft pt-3">
+        <button onClick={onClose} disabled={saving} className="rounded-lg px-4 py-1.5 text-[13px] font-semibold text-txt-muted hover:text-white">
           {t('common.cancel')}
         </button>
         <button
           onClick={() => void save()}
           disabled={saving || !dirty}
-          className="rounded-lg bg-accent px-5 py-2 text-[13px] font-bold text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
+          className="rounded-lg bg-accent px-5 py-1.5 text-[13px] font-bold text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
         >
           {t('friends.custom.save')}
         </button>
@@ -260,20 +273,22 @@ function PartSummary({ part, draft, color }: { part: Part; draft: MyProfile; col
 function PartHeader({ title, visibility, onVisibility, note }: { title: string; visibility?: Visibility3; onVisibility?: (v: Visibility3) => void; note?: string }) {
   const t = useT()
   return (
-    <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-      <div className="flex flex-col">
+    // Le titre et « qui la voit » côte à côte quand il y a la place, l'un
+    // sous l'autre sinon : jamais un libellé coupé mot par mot.
+    <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+      <div className="flex min-w-0 flex-col">
         <h3 className="text-[15px] font-bold">{title}</h3>
         {note && <span className="text-[11.5px] text-txt-muted">{note}</span>}
       </div>
       {visibility && onVisibility && (
-        <div className="flex items-center gap-2">
-          <span className="text-[11.5px] text-txt-muted">{t('friends.me.whoSees')}</span>
-          <div className="flex items-center gap-0.5 rounded-lg bg-black/30 p-0.5">
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="whitespace-nowrap text-[11.5px] text-txt-muted">{t('friends.me.whoSees')}</span>
+          <div className="flex shrink-0 items-center gap-0.5 rounded-lg bg-black/30 p-0.5">
             {(['everyone', 'friends', 'me'] as Visibility3[]).map((v) => (
               <button
                 key={v}
                 onClick={() => onVisibility(v)}
-                className={`rounded-md px-2.5 py-1 text-[11.5px] font-semibold transition-colors ${
+                className={`whitespace-nowrap rounded-md px-2.5 py-1 text-[11.5px] font-semibold transition-colors ${
                   visibility === v ? 'bg-white/[0.12] text-white' : 'text-txt-muted hover:text-txt-secondary'
                 }`}
               >
@@ -323,14 +338,14 @@ function LibraryLayout({ header, children }: { header: React.ReactNode; children
 function OwnedFilter({ owned, total, onlyOwned, onChange }: { owned: number; total: number; onlyOwned: boolean; onChange: (v: boolean) => void }) {
   const t = useT()
   return (
-    <div className="mb-3 flex items-center justify-between gap-3">
-      <span className="text-[12px] text-txt-muted">{t('friends.me.ownedCount', { owned, total })}</span>
-      <div className="flex rounded-lg bg-black/30 p-0.5">
+    <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+      <span className="whitespace-nowrap text-[12px] text-txt-muted">{t('friends.me.ownedCount', { owned, total })}</span>
+      <div className="flex shrink-0 rounded-lg bg-black/30 p-0.5">
         {[false, true].map((v) => (
           <button
             key={String(v)}
             onClick={() => onChange(v)}
-            className={`rounded-md px-2.5 py-1 text-[11.5px] font-semibold ${onlyOwned === v ? 'bg-white/[0.12] text-white' : 'text-txt-muted hover:text-txt-secondary'}`}
+            className={`whitespace-nowrap rounded-md px-2.5 py-1 text-[11.5px] font-semibold ${onlyOwned === v ? 'bg-white/[0.12] text-white' : 'text-txt-muted hover:text-txt-secondary'}`}
           >
             {t(v ? 'friends.me.filterOwned' : 'friends.me.filterAll')}
           </button>
@@ -349,17 +364,20 @@ function BannerLibrary({ library, value, color, visibility, onPick, onVisibility
   onVisibility: (v: Visibility3) => void
 }) {
   const t = useT()
-  const filter = useOwnedFilter(library.banners)
+  // Une bannière que cette version du launcher ne sait pas dessiner (ajoutée
+  // dans une version plus récente) n'est pas proposée.
+  const drawable = library.banners.filter((b) => BANNERS[b.code])
+  const filter = useOwnedFilter(drawable)
   return (
     <LibraryLayout
       header={
         <>
           <PartHeader title={t('friends.me.parts.banner')} visibility={visibility} onVisibility={onVisibility} />
-          <OwnedFilter owned={filter.owned} total={library.banners.length} onlyOwned={filter.onlyOwned} onChange={filter.setOnlyOwned} />
+          <OwnedFilter owned={filter.owned} total={drawable.length} onlyOwned={filter.onlyOwned} onChange={filter.setOnlyOwned} />
         </>
       }
     >
-      <div className="grid grid-cols-3 gap-2.5">
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-3 lg:gap-2.5">
         <LibraryTile selected={!value} onClick={() => onPick(null)} label={t('friends.me.noBanner')} background={`linear-gradient(135deg, ${color}66, ${color}14)`} />
         {filter.shown.map((item) => (
           <LibraryTile
@@ -367,7 +385,8 @@ function BannerLibrary({ library, value, color, visibility, onPick, onVisibility
             selected={value === item.code}
             locked={!item.owned}
             onClick={() => item.owned && onPick(item.code)}
-            background={BANNERS[item.code] ?? '#222'}
+            background={BANNERS[item.code]}
+            label={item.label}
             note={<LockNote item={item} />}
           />
         ))}
@@ -413,7 +432,7 @@ function AccentLibrary({ library, value, onPick }: { library: ProfileLibrary; va
         </>
       }
     >
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-3 gap-2 lg:grid-cols-4 lg:gap-3">
         <button
           onClick={() => onPick(null)}
           className={`flex flex-col items-center gap-2 rounded-xl border p-3 transition-colors ${!value ? 'border-white bg-white/[0.06]' : 'border-line hover:border-line-strong'}`}
@@ -433,7 +452,8 @@ function AccentLibrary({ library, value, onPick }: { library: ProfileLibrary; va
             <span className="relative h-10 w-10 rounded-full" style={{ background: item.code }}>
               {!item.owned && <span className="absolute inset-0 rounded-full bg-black/50" />}
             </span>
-            {item.owned ? <span className="text-[11.5px] font-semibold text-txt-secondary">{item.code}</span> : <LockNote item={item} />}
+            <span className="max-w-full truncate text-[11.5px] font-semibold text-txt-secondary">{item.label ?? item.code}</span>
+            <LockNote item={item} />
           </button>
         ))}
       </div>
@@ -520,19 +540,21 @@ function ShowcaseLibrary({ library, value, visibility, onChange, onVisibility }:
           </div>
 
           {/* Un onglet par sorte d'objet ; le chiffre dit combien en sont choisis. */}
-          <div className="mb-3 flex gap-1 border-b border-line-soft">
+          {/* Les onglets se partagent la largeur ; serrés, ils perdent leur
+              compteur plutôt que de défiler. */}
+          <div className="mb-3 flex border-b border-line-soft">
             {groups.map((group) => {
               const picked = group.items.filter((e) => value.some((s) => sameShowcase(s, e.item))).length
               return (
                 <button
                   key={group.key}
                   onClick={() => setTab(group.key)}
-                  className={`-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2 text-[12.5px] font-semibold transition-colors ${
+                  className={`-mb-px flex min-w-0 flex-1 items-center justify-center gap-1.5 border-b-2 px-1.5 py-2 text-[12px] font-semibold transition-colors lg:flex-none lg:px-3 lg:text-[12.5px] ${
                     tab === group.key ? 'border-accent text-white' : 'border-transparent text-txt-muted hover:text-txt-secondary'
                   }`}
                 >
-                  {t(`friends.me.showcaseGroups.${group.key}`)}
-                  <span className="text-[11px] tabular-nums text-txt-muted">{group.items.length}</span>
+                  <span className="truncate">{t(`friends.me.showcaseGroups.${group.key}`)}</span>
+                  <span className="hidden text-[11px] tabular-nums text-txt-muted lg:inline">{group.items.length}</span>
                   {picked > 0 && <span className="h-1.5 w-1.5 rounded-full bg-accent" />}
                 </button>
               )
@@ -544,7 +566,7 @@ function ShowcaseLibrary({ library, value, visibility, onChange, onVisibility }:
       {current.items.length === 0 ? (
         <p className="text-[12px] text-txt-muted">{t('friends.me.noTitles')}</p>
       ) : (
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
           {current.items.map(({ item, label, icon }) => {
             const on = value.some((s) => sameShowcase(s, item))
             const order = value.findIndex((s) => sameShowcase(s, item))
