@@ -98,6 +98,12 @@ pub async fn download_and_launch(
     // testé est exactement ce qui sera joué.
     probe: Option<Arc<crate::minecraft::compat::Probe>>,
 ) -> Result<Vec<String>> {
+    // Horizon n'est pas Minecraft : rien de ce qui suit (classpath, JVM,
+    // agents) ne le concerne, et le lancer comme vanilla démarrerait le jeu
+    // Java à sa place. Son lancement passe par `horizon::launch`.
+    if loader == Some(super::horizon::LOADER) {
+        return Err(anyhow!("Une instance Horizon ne se lance pas par Java"));
+    }
     // P1-6 : "auto" couvre toute la config (vendeur ET GC), résolu une seule
     // fois ici avant toute utilisation — voir doc de `resolve_auto_vendor`.
     let (jvm_vendor, gc_policy) = if jvm_vendor == "auto" {
@@ -228,128 +234,14 @@ pub async fn download_and_launch(
 
     // ── Assets en tâche de fond — démarre immédiatement, indépendant des libs ──
     // Les assets et les libs sont totalement indépendants : on les télécharge en parallèle.
-    let assets_task = {
-        let client = client.clone();
-        let app = app.clone();
-        let assets_dir = assets_dir.clone();
-        let asset_index = details.asset_index.clone();
-        let cancel = cancel.clone();
-        let progress_floor = progress_floor.clone();
-        tokio::spawn(async move {
-            let asset_index_path = assets_dir
-                .join("indexes")
-                .join(format!("{}.json", asset_index.id));
-            tokio::fs::create_dir_all(asset_index_path.parent().unwrap()).await?;
-            if !asset_index_path.exists() {
-                download_file(&client, &asset_index.url, &asset_index_path).await?;
-            }
-            // On vient de s'assurer que le fichier est sur disque (déjà présent ou
-            // juste téléchargé) — on le relit localement au lieu de re-télécharger
-            // le même contenu par réseau à chaque lancement (l'asset index d'une
-            // version donnée ne change jamais une fois publié).
-            let index_text = tokio::fs::read_to_string(&asset_index_path).await?;
-            let index_file: AssetIndexFile = serde_json::from_str(&index_text)?;
-            let objects_dir = assets_dir.join("objects");
-            let total_assets = index_file.objects.len() as u64;
-
-            // O-3 (audit pipeline) : un seul `read_dir` par bucket de préfixe
-            // (256 au maximum — 2 caractères hexa) au lieu d'un appel par
-            // asset (~4000 sur une version moderne, un par `exists()`).
-            // Le résultat (nom de fichier → taille) est mis en mémoire une
-            // fois pour toutes puis consulté localement par chaque tâche
-            // ci-dessous, plus aucun syscall pour la détection "déjà présent"
-            // pendant la boucle de téléchargement.
-            //
-            // TOUT le scan tient dans UN SEUL `spawn_blocking`, en `std::fs`
-            // synchrone : les équivalents tokio (`read_dir().next_entry()`,
-            // `DirEntry::metadata()`) repassent par `spawn_blocking` à CHAQUE
-            // entrée, ce qui aurait rendu ~4000 allers-retours vers le pool de
-            // threads — soit exactement le coût que ce correctif est censé
-            // supprimer. La taille vient en plus gratuitement du scan de
-            // répertoire lui-même sur Windows (déjà dans WIN32_FIND_DATA).
-            let existing = {
-                let objects_dir = objects_dir.clone();
-                tokio::task::spawn_blocking(move || {
-                    let mut map: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
-                    let Ok(buckets) = std::fs::read_dir(&objects_dir) else { return map };
-                    for bucket in buckets.flatten() {
-                        if !bucket.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-                            continue;
-                        }
-                        let Ok(files) = std::fs::read_dir(bucket.path()) else { continue };
-                        for f in files.flatten() {
-                            if let (Ok(meta), Some(name)) = (f.metadata(), f.file_name().to_str().map(str::to_string)) {
-                                map.insert(name, meta.len());
-                            }
-                        }
-                    }
-                    map
-                })
-                .await
-                .unwrap_or_default()
-            };
-            let existing = Arc::new(existing);
-
-            // O-4 (audit pipeline) : `buffer_unordered` au lieu de spawner les
-            // ~4000 tâches d'un coup avec un sémaphore à 32 pour les brider
-            // après coup — celui-ci matérialisait 4000 futures en mémoire
-            // pour n'en exécuter que 32 à la fois. `buffer_unordered` ne
-            // matérialise que les futures réellement en vol, sans sémaphore
-            // séparé à gérer.
-            let mut results = futures::stream::iter(index_file.objects.into_iter())
-                .map(|(obj_id, obj)| {
-                    let client = client.clone();
-                    let objects_dir = objects_dir.clone();
-                    let existing = existing.clone();
-                    async move {
-                        // L-6 (audit pipeline) : un index d'assets corrompu
-                        // (tronqué par une coupure réseau, voir L-1) peut
-                        // contenir un hash de moins de 2 caractères —
-                        // `&obj.hash[..2]` paniquerait alors la tâche entière
-                        // au lieu de sauter juste cette entrée.
-                        let Some(prefix) = obj.hash.get(..2) else {
-                            tracing::warn!("Asset «{}» ignoré : hash invalide ({:?})", obj_id, obj.hash);
-                            return;
-                        };
-                        let up_to_date = existing.get(&obj.hash).map(|&len| len == obj.size).unwrap_or(false);
-                        if up_to_date {
-                            return;
-                        }
-                        let obj_path = objects_dir.join(prefix).join(&obj.hash);
-                        let url = format!(
-                            "https://resources.download.minecraft.net/{}/{}",
-                            prefix, obj.hash
-                        );
-                        // Erreur best-effort mais désormais LOGGÉE : avant, elle
-                        // était intégralement avalée (`.ok()`), sans warning de
-                        // lancement ni trace — un asset manquant restait
-                        // totalement invisible jusqu'au crash Java en jeu.
-                        if let Err(e) = download_verified(&client, &url, &obj_path, Some(&obj.hash)).await {
-                            tracing::warn!("Téléchargement asset «{}» échoué : {}", obj_id, e);
-                        }
-                    }
-                })
-                .buffer_unordered(32);
-
-            let mut done = 0u64;
-            while results.next().await.is_some() {
-                if cancelled(&cancel) {
-                    return Err(anyhow!(LAUNCH_CANCELLED_MSG));
-                }
-                done += 1;
-                if done.is_multiple_of(200) || done == total_assets {
-                    set_progress_monotonic(
-                        &app,
-                        &progress_floor,
-                        50 + done * 40 / total_assets.max(1),
-                        100,
-                        &format!("Assets {}/{}", done, total_assets),
-                    );
-                }
-            }
-            anyhow::Ok(())
-        })
-    };
+    let assets_task = tokio::spawn(download_assets(
+        client.clone(),
+        assets_dir.clone(),
+        details.asset_index.clone(),
+        cancel.clone(),
+        app.clone(),
+        progress_floor.clone(),
+    ));
 
     let client_jar = versions_dir.join(format!("{}.jar", version_id));
     if !file_matches(&client_jar, Some(details.downloads.client.size)).await {
@@ -1078,4 +970,129 @@ async fn effective_jvm_vendor(java: &str, requested: JvmVendor) -> JvmVendor {
         java
     );
     JvmVendor::Temurin
+}
+
+/// Index et objets d'assets d'une version, vérifiés et téléchargés s'il en
+/// manque. Partagé par le lancement Java et la préparation d'Horizon
+/// (`horizon::prepare`), qui lit les mêmes fichiers.
+pub(super) async fn download_assets(
+    client: Arc<reqwest::Client>,
+    assets_dir: PathBuf,
+    asset_index: crate::minecraft::versions::AssetIndex,
+    cancel: watch::Receiver<bool>,
+    app: tauri::AppHandle,
+    progress_floor: Arc<ProgressFloor>,
+) -> Result<()> {
+    let asset_index_path = assets_dir
+        .join("indexes")
+        .join(format!("{}.json", asset_index.id));
+    tokio::fs::create_dir_all(asset_index_path.parent().unwrap()).await?;
+    if !asset_index_path.exists() {
+        download_file(&client, &asset_index.url, &asset_index_path).await?;
+    }
+    // On vient de s'assurer que le fichier est sur disque (déjà présent ou
+    // juste téléchargé) — on le relit localement au lieu de re-télécharger
+    // le même contenu par réseau à chaque lancement (l'asset index d'une
+    // version donnée ne change jamais une fois publié).
+    let index_text = tokio::fs::read_to_string(&asset_index_path).await?;
+    let index_file: AssetIndexFile = serde_json::from_str(&index_text)?;
+    let objects_dir = assets_dir.join("objects");
+    let total_assets = index_file.objects.len() as u64;
+
+    // O-3 (audit pipeline) : un seul `read_dir` par bucket de préfixe
+    // (256 au maximum — 2 caractères hexa) au lieu d'un appel par
+    // asset (~4000 sur une version moderne, un par `exists()`).
+    // Le résultat (nom de fichier → taille) est mis en mémoire une
+    // fois pour toutes puis consulté localement par chaque tâche
+    // ci-dessous, plus aucun syscall pour la détection "déjà présent"
+    // pendant la boucle de téléchargement.
+    //
+    // TOUT le scan tient dans UN SEUL `spawn_blocking`, en `std::fs`
+    // synchrone : les équivalents tokio (`read_dir().next_entry()`,
+    // `DirEntry::metadata()`) repassent par `spawn_blocking` à CHAQUE
+    // entrée, ce qui aurait rendu ~4000 allers-retours vers le pool de
+    // threads — soit exactement le coût que ce correctif est censé
+    // supprimer. La taille vient en plus gratuitement du scan de
+    // répertoire lui-même sur Windows (déjà dans WIN32_FIND_DATA).
+    let existing = {
+        let objects_dir = objects_dir.clone();
+        tokio::task::spawn_blocking(move || {
+            let mut map: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+            let Ok(buckets) = std::fs::read_dir(&objects_dir) else { return map };
+            for bucket in buckets.flatten() {
+                if !bucket.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                    continue;
+                }
+                let Ok(files) = std::fs::read_dir(bucket.path()) else { continue };
+                for f in files.flatten() {
+                    if let (Ok(meta), Some(name)) = (f.metadata(), f.file_name().to_str().map(str::to_string)) {
+                        map.insert(name, meta.len());
+                    }
+                }
+            }
+            map
+        })
+        .await
+        .unwrap_or_default()
+    };
+    let existing = Arc::new(existing);
+
+    // O-4 (audit pipeline) : `buffer_unordered` au lieu de spawner les
+    // ~4000 tâches d'un coup avec un sémaphore à 32 pour les brider
+    // après coup — celui-ci matérialisait 4000 futures en mémoire
+    // pour n'en exécuter que 32 à la fois. `buffer_unordered` ne
+    // matérialise que les futures réellement en vol, sans sémaphore
+    // séparé à gérer.
+    let mut results = futures::stream::iter(index_file.objects.into_iter())
+        .map(|(obj_id, obj)| {
+            let client = client.clone();
+            let objects_dir = objects_dir.clone();
+            let existing = existing.clone();
+            async move {
+                // L-6 (audit pipeline) : un index d'assets corrompu
+                // (tronqué par une coupure réseau, voir L-1) peut
+                // contenir un hash de moins de 2 caractères —
+                // `&obj.hash[..2]` paniquerait alors la tâche entière
+                // au lieu de sauter juste cette entrée.
+                let Some(prefix) = obj.hash.get(..2) else {
+                    tracing::warn!("Asset «{}» ignoré : hash invalide ({:?})", obj_id, obj.hash);
+                    return;
+                };
+                let up_to_date = existing.get(&obj.hash).map(|&len| len == obj.size).unwrap_or(false);
+                if up_to_date {
+                    return;
+                }
+                let obj_path = objects_dir.join(prefix).join(&obj.hash);
+                let url = format!(
+                    "https://resources.download.minecraft.net/{}/{}",
+                    prefix, obj.hash
+                );
+                // Erreur best-effort mais désormais LOGGÉE : avant, elle
+                // était intégralement avalée (`.ok()`), sans warning de
+                // lancement ni trace — un asset manquant restait
+                // totalement invisible jusqu'au crash Java en jeu.
+                if let Err(e) = download_verified(&client, &url, &obj_path, Some(&obj.hash)).await {
+                    tracing::warn!("Téléchargement asset «{}» échoué : {}", obj_id, e);
+                }
+            }
+        })
+        .buffer_unordered(32);
+
+    let mut done = 0u64;
+    while results.next().await.is_some() {
+        if cancelled(&cancel) {
+            return Err(anyhow!(LAUNCH_CANCELLED_MSG));
+        }
+        done += 1;
+        if done.is_multiple_of(200) || done == total_assets {
+            set_progress_monotonic(
+                &app,
+                &progress_floor,
+                50 + done * 40 / total_assets.max(1),
+                100,
+                &format!("Assets {}/{}", done, total_assets),
+            );
+        }
+    }
+    Ok(())
 }

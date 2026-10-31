@@ -3,6 +3,7 @@ mod agent_deploy;
 mod agents;
 mod appcds;
 mod classpath;
+pub mod horizon;
 mod java;
 mod jvm_args;
 mod legacy_lwjgl3;

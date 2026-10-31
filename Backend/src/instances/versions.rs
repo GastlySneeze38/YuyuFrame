@@ -75,6 +75,10 @@ pub async fn loader_availability(mc_version: String) -> Result<Vec<String>, Stri
             available.push(name.to_string());
         }
     }
+    // Horizon ne recrée qu'une version du jeu, connue sans réseau.
+    if crate::minecraft::launcher::horizon::available_for(&mc_version) {
+        available.push(crate::minecraft::launcher::horizon::LOADER.to_string());
+    }
     Ok(available)
 }
 
@@ -95,6 +99,7 @@ pub async fn loader_game_versions(loader: String) -> Result<Vec<String>, String>
         "quilt" => quilt::game_versions().await,
         "forge" => forge::game_versions().await,
         "neoforge" => neoforge::game_versions().await,
+        "horizon" => Ok(vec![crate::minecraft::launcher::horizon::GAME_VERSION.to_string()]),
         _ => Ok(Vec::new()),
     }
     .map_err(|e| e.to_string())

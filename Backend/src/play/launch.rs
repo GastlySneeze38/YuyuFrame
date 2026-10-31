@@ -291,7 +291,32 @@ pub async fn launch_game(
         // Le compte de la partie est suivi : il peut changer en jeu (voir `game_link`).
         let presence = super::presence::spawn(state_clone.clone(), super::game_link::track(&instance_id, session.clone()));
 
-        let launched = launcher::download_and_launch(
+        let window_size = instance
+            .window_custom
+            .then_some((instance.window_width, instance.window_height));
+
+        // Horizon n'est pas le jeu Java : il a sa propre installation, sa
+        // propre préparation et son propre client (`launcher::horizon`). Tout
+        // le reste de cette fonction — console, statistiques, fin de partie —
+        // vaut pour lui aussi.
+        let launched = if instance.loader == launcher::horizon::LOADER {
+            launcher::horizon::launch(
+                app.clone(),
+                launcher::horizon::HorizonLaunch {
+                    mc_version: &instance.mc_version,
+                    session: &session,
+                    game_dir: &game_dir,
+                    console_label: &window_label,
+                    instance_id: &instance_id,
+                    session_id,
+                    connect_server: connect_server.as_deref(),
+                    window_size,
+                },
+                cancel_rx,
+            )
+            .await
+            .map(|()| Vec::new())
+        } else { launcher::download_and_launch(
             &instance.mc_version,
             Some(&instance.loader),
             &session,
@@ -313,13 +338,11 @@ pub async fn launch_game(
             &jvm_extra_args,
             &jvm_args_mode,
             &instance.loader_version,
-            instance
-                .window_custom
-                .then_some((instance.window_width, instance.window_height)),
+            window_size,
             // Pas de sonde : ceci est une vraie partie.
             None,
         )
-        .await;
+        .await };
         presence.abort();
         super::game_link::untrack(&instance_id);
 

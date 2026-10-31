@@ -129,6 +129,10 @@ pub struct Arguments {
 #[derive(Debug, Deserialize)]
 pub struct Downloads {
     pub client: Artifact,
+    /// Le jar serveur — seule la préparation d'Horizon s'en sert. Absent des
+    /// très vieilles versions, d'où l'option.
+    #[serde(default)]
+    pub server: Option<Artifact>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
