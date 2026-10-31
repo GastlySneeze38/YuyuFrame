@@ -12,7 +12,7 @@ import { useT } from '@/i18n'
 export function InstalledTab({
   mods, modpackMeta, showPackContent, loading, error, isPlugin, modSearch, onModSearch, logoCache, versionMap,
   cfModIdByName, cfVersionByName, pinnedProjectIds, pinnedCfModIds, updates, updatingMods, updatingAll, onReload, onToggle, onDelete, onUpdateMod,
-  onSwitchVersion, switchingModName, onBrowseExtra, onUploadExtra,
+  onSwitchVersion, onOpenMod, switchingModName, onBrowseExtra, onUploadExtra,
 }: {
   mods: Mod[]
   modpackMeta: ModpackMeta | null
@@ -37,6 +37,8 @@ export function InstalledTab({
   onDelete: (name: string) => void
   onUpdateMod: (u: ModUpdate) => void
   onSwitchVersion: (mod: Mod) => void
+  /** Clic sur la ligne : la description du mod (Modrinth seulement). */
+  onOpenMod: (mod: Mod) => void
   switchingModName: string | null
   onBrowseExtra: () => void
   onUploadExtra: () => void
@@ -100,6 +102,7 @@ export function InstalledTab({
         onDelete={onDelete}
         onUpdate={onUpdateMod}
         onSwitchVersion={onSwitchVersion}
+        onOpen={onOpenMod}
       />
     )
   }

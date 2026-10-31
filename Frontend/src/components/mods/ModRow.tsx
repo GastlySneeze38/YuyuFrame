@@ -14,7 +14,7 @@ import { useT } from '@/i18n'
  * des références stables (useCallback) au lieu d'une closure par ligne. */
 export const ModRow = memo(function ModRow({
   mod, version, modrinthName, projectId, cfModId, pinned, update, updating, switchingVersion, logoUrl,
-  onToggle, onDelete, onUpdate, onSwitchVersion,
+  onToggle, onDelete, onUpdate, onSwitchVersion, onOpen,
 }: {
   mod: Mod
   /** Ses mises à jour sont ignorées (interrupteur de la fiche du mod). */
@@ -31,6 +31,8 @@ export const ModRow = memo(function ModRow({
   onDelete: (name: string) => void
   onUpdate: (update: ModUpdate) => void
   onSwitchVersion: (mod: Mod) => void
+  /** Ouvre la description du mod — seulement s'il vient de Modrinth. */
+  onOpen: (mod: Mod) => void
 }) {
   const t = useT()
   const [confirm, setConfirm] = useState(false)
@@ -47,8 +49,14 @@ export const ModRow = memo(function ModRow({
         mod.enabled ? 'bg-[rgba(255,255,255,0.04)] opacity-100' : 'bg-[rgba(255,255,255,0.018)] opacity-60'
       }`}
     >
-      {/* Section gauche : icône + nom (flex-1) */}
-      <div className="flex items-center gap-3 min-w-0 flex-1">
+      {/* Section gauche : icône + nom (flex-1). Un clic ouvre la description
+          du mod quand il vient de Modrinth ; les boutons à droite gardent
+          leur rôle (les versions, c'est le bouton aux flèches). */}
+      <div
+        onClick={projectId ? () => onOpen(mod) : undefined}
+        title={projectId ? t('mods.openDescription') : undefined}
+        className={`flex items-center gap-3 min-w-0 flex-1 ${projectId ? 'cursor-pointer' : ''}`}
+      >
         {/* L'icône du mod avance un peu plus que la ligne : ça donne de la
             profondeur au geste sans déformer la grille. */}
         <motion.div

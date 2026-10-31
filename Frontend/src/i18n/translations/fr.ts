@@ -99,6 +99,8 @@ export const fr = {
     removeModpack: 'Retirer le modpack (désinstalle ses mods)',
     installedVersion: 'Installé : {{version}}',
     hideFullDescription: 'Masquer la description complète',
+    tabs: { versions: 'Versions', description: 'Description' },
+    openDescription: 'Voir la description',
     showFullDescription: 'Voir la description complète',
     availableVersions: 'Versions disponibles',
     allVersions: 'Toutes versions',

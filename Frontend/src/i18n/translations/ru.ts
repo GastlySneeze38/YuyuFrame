@@ -101,6 +101,8 @@ export const ru: TranslationSchema = {
     removeModpack: 'Удалить модпак (его моды будут удалены)',
     installedVersion: 'Установлена: {{version}}',
     hideFullDescription: 'Скрыть полное описание',
+    tabs: { versions: 'Версии', description: 'Описание' },
+    openDescription: 'Открыть описание',
     showFullDescription: 'Показать полное описание',
     availableVersions: 'Доступные версии',
     allVersions: 'Все версии',

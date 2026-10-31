@@ -309,6 +309,13 @@ export function ModsContent({ instance }: { instance: Instance }) {
   const [modSearch, setModSearch] = useState('')
   const [logoCache, setLogoCache] = useState<Record<string, string | null>>({})
   const [detailHit, setDetailHit] = useState<ModrinthHit | null>(null)
+  // `installed` : fiche ouverte en cliquant un mod installé — sa description
+  // seule, les versions passant par le bouton aux flèches de la ligne.
+  const [detailMode, setDetailMode] = useState<'catalog' | 'installed'>('catalog')
+  const openCatalogDetail = (hit: ModrinthHit | null) => {
+    setDetailMode('catalog')
+    setDetailHit(hit)
+  }
   const [cfDetailHit, setCfDetailHit] = useState<CurseforgeHit | null>(null)
   const [packDetailHit, setPackDetailHit] = useState<MergedModpackHit | null>(null)
   const [switchingModName, setSwitchingModName] = useState<string | null>(null)
@@ -1151,15 +1158,23 @@ export function ModsContent({ instance }: { instance: Instance }) {
   /// Installés) — avant, il fallait le rechercher à nouveau dans l'onglet
   /// Parcourir pour accéder à la liste des versions. Fonctionne aussi bien pour un
   /// mod d'origine Modrinth que CurseForge (chacun ouvre son propre écran de switch).
-  const handleSwitchVersion = async (mod: Mod) => {
+  const handleSwitchVersion = (mod: Mod) => openInstalledMod(mod, 'catalog')
+
+  /// Clic sur la ligne d'un mod installé (Modrinth) : sa description.
+  const handleOpenMod = (mod: Mod) => openInstalledMod(mod, 'installed')
+
+  const openInstalledMod = async (mod: Mod, mode: 'catalog' | 'installed') => {
     const projectId = versionMap[mod.sha1]?.projectId
     const cfModId = cfModIdByName[mod.name]
     if (!projectId && !cfModId) return
+    // La description n'existe que chez Modrinth.
+    if (mode === 'installed' && !projectId) return
     setSwitchingModName(mod.name)
     try {
       if (projectId) {
         const detail = await fetchProjectDetail(projectId)
         if (!detail) { showError('Impossible de joindre Modrinth'); return }
+        setDetailMode(mode)
         setDetailHit({
           project_id: detail.id,
           slug: detail.id,
@@ -1339,6 +1354,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
               : null
           }
           onClose={() => setDetailHit(null)}
+          mode={detailMode}
           onInstall={(file) => handleInstallVersion(detailHit, file)}
         />
       )}
@@ -1436,6 +1452,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
             onDelete={handleDelete}
             onUpdateMod={handleUpdateMod}
             onSwitchVersion={handleSwitchVersion}
+            onOpenMod={handleOpenMod}
             switchingModName={switchingModName}
             onBrowseExtra={() => setTab('modpack')}
             onUploadExtra={handlePickJars}
@@ -1456,7 +1473,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
             installProgressModrinth={installProgress}
             isInstalledModrinth={(hit) => !!installedByProject[hit.project_id]}
             onInstallModrinth={handleInstall}
-            onOpenDetailModrinth={setDetailHit}
+            onOpenDetailModrinth={openCatalogDetail}
             installingCurseforge={cfInstalling}
             installProgressCurseforge={cfInstallProgress}
             isInstalledCurseforge={(hit) => cfInstalledModIds.has(hit.id)}

@@ -101,6 +101,8 @@ export const pl: TranslationSchema = {
     removeModpack: 'Usuń modpacka (odinstalowuje jego mody)',
     installedVersion: 'Zainstalowana: {{version}}',
     hideFullDescription: 'Ukryj pełny opis',
+    tabs: { versions: 'Wersje', description: 'Opis' },
+    openDescription: 'Zobacz opis',
     showFullDescription: 'Pokaż pełny opis',
     availableVersions: 'Dostępne wersje',
     allVersions: 'Wszystkie wersje',
