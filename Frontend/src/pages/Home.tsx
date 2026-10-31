@@ -1010,7 +1010,9 @@ export default function Home() {
                   // Enveloppe animée : la carte garde son propre rendu, on
                   // ne fait qu'ajouter son entrée en cascade et le survol.
                   <motion.div
-                    key={server.ip}
+                    // La position en plus de l'adresse : une même adresse
+                    // peut figurer deux fois dans la liste du jeu.
+                    key={`${i}:${server.ip}`}
                     variants={cardItem}
                     whileHover={{ y: -3 }}
                     transition={{ type: 'spring', stiffness: 420, damping: 26 }}

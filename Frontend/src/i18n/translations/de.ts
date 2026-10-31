@@ -1069,6 +1069,10 @@ export const de: TranslationSchema = {
         pin: 'Auf der Startseite anheften',
         offline: 'Keine Verbindung zum Server möglich',
         pinging: 'Verbinde…',
+        count: '{{count}} Server',
+        onlineCount: '{{count}} online',
+        offlineBadge: 'Offline',
+        offlineHint: 'Der Server antwortet gerade nicht.',
       },
       form: {
         name: 'Servername',

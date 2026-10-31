@@ -74,6 +74,42 @@ export function useServerPing(address: string | null) {
   return { state, refresh, refreshing }
 }
 
+/** Les pings de toute une liste d'adresses, pour pouvoir la trier (en ligne
+ *  d'abord). Mêmes réponses mémorisées et fusionnées que `pingServer` ;
+ *  `refresh` relance une adresse, ou toutes. */
+export function useServerPings(addresses: string[]) {
+  const signature = addresses.map(key).join('|')
+  const [states, setStates] = useState<Record<string, PingState>>({})
+
+  useEffect(() => {
+    let alive = true
+    const list = signature ? signature.split('|') : []
+    setStates(Object.fromEntries(list.map((a) => [a, { status: 'loading' } as PingState])))
+    for (const a of list) {
+      void pingServer(a).then((info) => {
+        if (alive) setStates((s) => ({ ...s, [a]: info ? { status: 'ok', info } : { status: 'offline' } }))
+      })
+    }
+    return () => {
+      alive = false
+    }
+  }, [signature])
+
+  const refresh = useCallback(
+    (address?: string) => {
+      const list = address ? [key(address)] : signature ? signature.split('|') : []
+      setStates((s) => ({ ...s, ...Object.fromEntries(list.map((a) => [a, { status: 'loading' } as PingState])) }))
+      for (const a of list) {
+        void pingServer(a, true).then((info) => setStates((s) => ({ ...s, [a]: info ? { status: 'ok', info } : { status: 'offline' } })))
+      }
+    },
+    [signature],
+  )
+
+  const stateOf = useCallback((address: string): PingState => states[key(address)] ?? { status: 'loading' }, [states])
+  return { stateOf, refresh }
+}
+
 /** Première ligne du MOTD, sans les codes de couleur `§x` que certains
  *  serveurs laissent dans le texte. */
 export function motdLine(motd: string): string {

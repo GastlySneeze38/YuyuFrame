@@ -1067,6 +1067,10 @@ export const fr = {
         pin: "Épingler à l'accueil",
         offline: 'Impossible de se connecter au serveur',
         pinging: 'Ping en cours…',
+        count: '{{count}} serveurs',
+        onlineCount: '{{count}} en ligne',
+        offlineBadge: 'Hors ligne',
+        offlineHint: 'Le serveur ne répond pas pour le moment.',
       },
       form: {
         name: 'Nom du serveur',

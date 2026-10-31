@@ -1069,6 +1069,10 @@ export const ru: TranslationSchema = {
         pin: 'Закрепить на главной',
         offline: 'Не удаётся подключиться к серверу',
         pinging: 'Опрос…',
+        count: 'Серверов: {{count}}',
+        onlineCount: 'Онлайн: {{count}}',
+        offlineBadge: 'Не в сети',
+        offlineHint: 'Сервер сейчас не отвечает.',
       },
       form: {
         name: 'Название сервера',
