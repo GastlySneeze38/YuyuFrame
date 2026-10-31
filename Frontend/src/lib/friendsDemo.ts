@@ -2,7 +2,7 @@
 // LauncherAPI ne connaît pas encore les amis (même principe que
 // `lib/competitive.ts` `demoData`). Jamais en production.
 
-import type { Friend, FriendList, MyProfile, PublicProfile, ShowcaseItem, ShowcaseView } from '@/types/friends'
+import type { Friend, FriendList, LibraryItem, MyProfile, ProfileLibrary, PublicProfile, ShowcaseItem, ShowcaseView } from '@/types/friends'
 
 const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString()
 
@@ -75,8 +75,34 @@ export function demoMyShowcase(items: ShowcaseItem[]): ShowcaseView[] {
       ? { kind: 'rank', mode: item.mode, state }
       : item.kind === 'season'
         ? { kind: 'season', mode: item.mode, wins: [9, 9, 8, 8, 8, 7, 7, 7, 7, 6, 6, 6], count: 12 }
-        : DEMO_TITLE,
+        : { kind: 'title', ...(DEMO_TITLES.find((t) => t.code === item.code) ?? DEMO_TITLES[0]) },
   )
+}
+
+/** Mes titres de démonstration : deux, pour qu'on choisisse lequel montrer. */
+const DEMO_TITLES = [
+  { code: 'choc', label: 'Champion du Choc', asset: null },
+  { code: 'builder', label: 'Bâtisseur de la saison 1', asset: null },
+]
+
+/** Ma bibliothèque de démonstration : une partie possédée, le reste à
+ *  débloquer dans le passe (ou pas encore de moyen). */
+function demoLibrary(): ProfileLibrary {
+  const lib = (codes: string[], owned: string[], unlocks: Record<string, number>): LibraryItem[] =>
+    codes.map((code) => ({ code, owned: owned.includes(code), unlock: unlocks[code] ? { season: 1, tier: unlocks[code] } : null }))
+  return {
+    banners: lib(
+      ['aurora', 'sunset', 'ocean', 'forest', 'nether', 'end', 'night', 'candy', 'gold', 'mono'],
+      ['aurora', 'ocean', 'forest', 'mono', 'end'],
+      { sunset: 8, nether: 15, night: 22, gold: 40 },
+    ),
+    accents: lib(
+      ['#7b72e9', '#3ba55d', '#5ad1ff', '#f5b74a', '#ff6b8b', '#e8487a', '#b28dff', '#e5e7eb'],
+      ['#7b72e9', '#3ba55d', '#5ad1ff', '#e5e7eb', '#ff6b8b'],
+      { '#f5b74a': 12, '#b28dff': 30 },
+    ),
+    titles: DEMO_TITLES,
+  }
 }
 
 /** Mon profil de démonstration, à modifier. */
@@ -86,12 +112,13 @@ export function demoMyProfile(): MyProfile {
     banner: 'end',
     accent: '#7b72e9',
     bio: 'Je fais le launcher.',
-    showcase: [{ kind: 'rank', mode: 'mace' }, { kind: 'title' }],
+    showcase: [{ kind: 'rank', mode: 'mace' }, { kind: 'title', code: 'choc' }],
     banner_visibility: 'friends',
     bio_visibility: 'everyone',
     showcase_visibility: 'friends',
     bio_hidden: false,
     accounts: [{ uuid: 'b876ec32e396476ba1158438d83c67d4', name: 'Ghasty', main: true }],
+    library: demoLibrary(),
   }
 }
 

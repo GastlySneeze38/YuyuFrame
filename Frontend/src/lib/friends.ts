@@ -3,10 +3,14 @@
 
 import type { Friend, FriendPresence, MyStatusKind, PresenceState, ShowcaseItem } from '@/types/friends'
 
-/** Deux éléments de vitrine désignent-ils la même chose (même sorte, même mode) ? */
+/** Objets montrés au plus dans la vitrine (comme le serveur, `SHOWCASE_MAX`). */
+export const SHOWCASE_MAX = 2
+
+/** Deux éléments de vitrine désignent-ils le même objet (même sorte, même mode, même titre) ? */
 export function sameShowcase(a: ShowcaseItem, b: ShowcaseItem): boolean {
+  if (a.kind === 'title' && b.kind === 'title') return (a.code ?? null) === (b.code ?? null)
   if (a.kind !== b.kind) return false
-  return a.kind === 'title' || ('mode' in a && 'mode' in b && a.mode === b.mode)
+  return 'mode' in a && 'mode' in b && a.mode === b.mode
 }
 
 /** Pastille de statut — les couleurs que tout le monde reconnaît. */

@@ -239,6 +239,8 @@ export interface PassReward {
   name: string
   /** Son image, réglée dans le back-office ; absente : l'icône de la sorte. */
   asset?: string | null
+  /** La bannière ou la couleur débloquée (sortes `banner`, `accent`). */
+  code?: string | null
 }
 
 // ── Missions et passe (`GET /v1/pass`, LauncherAPI `launcher/pass.rs`) ───
@@ -261,7 +263,7 @@ export interface ApiPass {
   xp_per_tier: number
   tier: number
   tiers: number
-  rewards: { tier: number; kind: CosmeticKind; name: string; asset: string | null }[]
+  rewards: { tier: number; kind: CosmeticKind; name: string; code: string | null; asset: string | null }[]
 }
 
 /** Les cosmétiques qui méritent d'être mis en avant comme objectif. */
@@ -293,7 +295,7 @@ export function readPass(api: ApiPass): { challenges: Challenge[] | null; pass: 
   const byTier = new Map(api.rewards.map((r) => [r.tier, r]))
   const rewards: PassReward[] = Array.from({ length: api.tiers }, (_, i) => {
     const r = byTier.get(i + 1)
-    return r ? { kind: r.kind, name: r.name, asset: r.asset } : { kind: 'badge', name: '—', asset: null }
+    return r ? { kind: r.kind, name: r.name, code: r.code, asset: r.asset } : { kind: 'badge', name: '—', asset: null }
   })
   const perTier = Math.max(1, api.xp_per_tier)
   const maxed = api.tier >= api.tiers
@@ -349,7 +351,9 @@ export interface ModeStats {
 
 /** Les sortes de cosmétiques donnés en fin de saison ; chacune a son nom et
  *  son icône (`competitive.seasons.kinds.<kind>`, `CosmeticIcon`). */
-export type CosmeticKind = 'badge' | 'nametag' | 'cape' | 'aura' | 'title'
+/** `banner` et `accent` : une bannière ou une couleur de profil (débloquée
+ *  pour de vrai dans la bibliothèque du profil). */
+export type CosmeticKind = 'badge' | 'nametag' | 'cape' | 'aura' | 'title' | 'banner' | 'accent'
 
 export interface Season {
   id: string

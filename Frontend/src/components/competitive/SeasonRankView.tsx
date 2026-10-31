@@ -3,6 +3,7 @@ import { api } from '@/api/client'
 import { showError } from '@/stores/useErrorToast'
 import { isDemo } from '@/stores/useDevFlags'
 import type { ModeKey } from '@/lib/competitive'
+import { SHOWCASE_MAX } from '@/lib/friends'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useT } from '@/i18n'
 import { Toggle } from '@/components/ui/Toggle'
@@ -23,8 +24,6 @@ import { TopoBackdrop } from './TopoBackdrop'
 
 const CELLS = SEASON_GRID * SEASON_GRID
 
-/** Places dans la vitrine du profil (comme le serveur, `SHOWCASE_MAX`). */
-const SHOWCASE_MAX = 3
 
 /**
  * « Afficher à côté de mon profil » : la grille de ce mode dans la vitrine de

@@ -106,7 +106,24 @@ export interface RequestSent {
 
 export type Visibility3 = 'everyone' | 'friends' | 'me'
 
-export type ShowcaseItem = { kind: 'rank'; mode: 'mace' | 'sword' } | { kind: 'title' } | { kind: 'season'; mode: 'mace' | 'sword' }
+/** Un élément de vitrine choisi : un objet précis (tel rang, tel titre…).
+ *  Un titre sans code vient d'un profil d'avant la bibliothèque. */
+export type ShowcaseItem = { kind: 'rank'; mode: 'mace' | 'sword' } | { kind: 'title'; code?: string } | { kind: 'season'; mode: 'mace' | 'sword' }
+
+/** Un objet de la bibliothèque (bannière, couleur) : possédé, ou où le débloquer. */
+export interface LibraryItem {
+  code: string
+  owned: boolean
+  /** Palier du passe de la saison en cours qui le débloque ; absent : pas de moyen pour l'instant. */
+  unlock: { season: number; tier: number } | null
+}
+
+export interface ProfileLibrary {
+  banners: LibraryItem[]
+  accents: LibraryItem[]
+  /** Mes titres en cours. */
+  titles: { code: string; label: string; asset: string | null }[]
+}
 
 /** Un élément de vitrine tel qu'on le montre. `state` : l'état du classement,
  *  à lire avec `readStandings` (`lib/competitive.ts`). */
@@ -137,6 +154,8 @@ export interface MyProfile {
   bio_hidden: boolean
   /** Mes comptes Minecraft prouvés, parmi lesquels choisir le principal (lecture seule). */
   accounts: MinecraftAccount[]
+  /** Ma bibliothèque (lecture seule) ; absente d'une API plus ancienne. */
+  library?: ProfileLibrary
 }
 
 export interface LookupResult {

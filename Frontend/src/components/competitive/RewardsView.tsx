@@ -275,5 +275,10 @@ export function CosmeticIcon({ kind, color, tierIndex, size = 72 }: { kind: Cosm
           <rect x="5" y="20" width="14" height="1.6" rx="0.8" />
         </svg>,
       )
+    // Bannière ou couleur de profil sans valeur connue : un bandeau, une pastille.
+    case 'banner':
+      return frame(<span className="block h-6 w-11 rounded-md" style={{ background: c }} />)
+    case 'accent':
+      return frame(<span className="block h-9 w-9 rounded-full border-2 border-white/70" style={{ background: c }} />)
   }
 }
