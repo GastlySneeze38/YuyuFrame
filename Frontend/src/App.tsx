@@ -527,7 +527,19 @@ export default function App() {
     }
     refresh()
     const timer = setInterval(refresh, SUPPORT_POLL_MS)
-    return () => clearInterval(timer)
+    // Revenir sur le launcher (au retour d'une partie, d'un autre programme)
+    // relit aussi, au plus une fois toutes les 15 s.
+    let lastFocus = 0
+    const onFocus = () => {
+      if (Date.now() - lastFocus < 15_000) return
+      lastFocus = Date.now()
+      refresh()
+    }
+    window.addEventListener('focus', onFocus)
+    return () => {
+      clearInterval(timer)
+      window.removeEventListener('focus', onFocus)
+    }
   }, [yuyuSignedIn])
 
   // Notifications Windows (envoyées par le Rust, qui ne voit pas le magasin) :

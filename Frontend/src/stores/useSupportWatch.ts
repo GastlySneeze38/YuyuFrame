@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware'
 import { api } from '@/api/client'
 import { useModalQueue } from '@/stores/useModalQueue'
 import { doNotDisturb } from '@/lib/doNotDisturb'
+import type { TicketSummary } from '@/types/support'
 
 /**
  * Surveillance des tickets de support, pour la pastille de la barre de
@@ -21,9 +22,10 @@ import { doNotDisturb } from '@/lib/doNotDisturb'
  * fois, la pastille reste tant que rien n'est lu.
  */
 
-/** Relecture périodique. Assez lent pour ne rien coûter, assez rapide pour
- *  qu'une réponse arrivée pendant une partie soit visible au retour. */
-export const POLL_MS = 3 * 60 * 1000
+/** Relecture périodique, en filet : le flux en direct (`support_changed`,
+ *  voir `useFriends`) prévient d'habitude tout de suite, et le retour sur la
+ *  fenêtre relit aussi (`App.tsx`). Une minute suffit pour le reste. */
+export const POLL_MS = 60 * 1000
 
 /** Les changements qui méritent qu'on interrompe quelqu'un. Un ticket qui
  *  passe de « ouvert » à « ouvert » n'est pas une nouvelle. */
@@ -32,6 +34,13 @@ const WORTH_TELLING = ['answered', 'closed', 'waiting']
 interface SupportWatchStore {
   /** Nombre de tickets avec une réponse non lue. 0 = pas de pastille. */
   unread: number
+  /** Les tickets, tels que le serveur les a rendus à la dernière relecture.
+   *  L'écran Support affiche CETTE liste : une seule source, donc le point
+   *  d'une ligne, le compteur de l'onglet, la pastille de l'accueil et celle
+   *  de la barre des tâches ne peuvent pas se contredire. `null` : pas encore lue. */
+  tickets: TicketSummary[] | null
+  /** Modifie la liste sur place (ticket lu, créé, supprimé) ; le compte suit. */
+  setTickets: (update: (list: TicketSummary[]) => TicketSummary[]) => void
   /** Dernier état connu par ticket (`statut|date`), persisté : c'est la
    *  comparaison avec lui qui fait la nouvelle. Sans mémoire, tout serait
    *  neuf à chaque démarrage et la modale reviendrait sans fin. */
@@ -45,7 +54,13 @@ export const useSupportWatch = create<SupportWatchStore>()(
   persist(
     (set, get) => ({
       unread: 0,
+      tickets: null,
       known: {},
+
+      setTickets: (update) => {
+        const tickets = update(get().tickets ?? [])
+        set({ tickets, unread: tickets.filter((t) => t.has_unread).length })
+      },
 
       refresh: async () => {
         let tickets
@@ -53,7 +68,9 @@ export const useSupportWatch = create<SupportWatchStore>()(
           tickets = await api.support.list()
         } catch {
           // Réseau coupé, session expirée : on garde le dernier compte connu
-          // plutôt que d'effacer une pastille encore valable.
+          // plutôt que d'effacer une pastille encore valable. Jamais lue :
+          // une liste vide, pour que l'écran ne tourne pas indéfiniment.
+          if (get().tickets === null) set({ tickets: [] })
           return
         }
 
@@ -100,10 +117,10 @@ export const useSupportWatch = create<SupportWatchStore>()(
           })
         }
 
-        set({ unread: tickets.filter((t) => t.has_unread).length, known: next })
+        set({ tickets, unread: tickets.filter((t) => t.has_unread).length, known: next })
       },
 
-      clear: () => set({ unread: 0 }),
+      clear: () => set({ unread: 0, tickets: null }),
     }),
     {
       name: 'yuyu-support-watch',

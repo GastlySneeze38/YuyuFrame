@@ -1283,7 +1283,10 @@ function NavLink({ label, onClick, plans, accent, distance = 0, badge = 0, child
             les sept entrées n'ont pas la même largeur. Dimensions en `em`,
             comme le reste du bouton — elle suit la taille de la barre. */}
         {badge > 0 && (
-          <span className="absolute -right-[0.35em] -top-[0.3em] flex h-[0.85em] min-w-[0.85em] items-center justify-center rounded-full bg-[#ef4444] px-[0.18em] text-[0.62em] font-bold leading-none text-white shadow-[0_0_0_0.12em_rgba(9,9,13,0.9)]">
+          // Même pastille que le bouton Amis. Les `em` de ses dimensions
+          // sont ceux de SA police (0.62em du bouton) : 1.75em ≈ un caractère
+          // du libellé, la taille de la pastille des amis à cette échelle.
+          <span className="absolute -right-[0.9em] -top-[0.85em] flex h-[1.75em] min-w-[1.75em] items-center justify-center rounded-full bg-danger px-[0.35em] text-[0.62em] font-black leading-none tabular-nums text-white shadow-[0_0_0_0.28em_rgba(10,10,14,0.9)]">
             {badge > 9 ? '9+' : badge}
           </span>
         )}

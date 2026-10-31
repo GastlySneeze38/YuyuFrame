@@ -71,7 +71,10 @@ export default function Support() {
   const navigate = useNavigate()
   const signedIn = useStore((s) => s.yuyuSignedIn)
 
-  const [tickets, setTickets] = useState<TicketSummary[] | null>(null)
+  // La liste est celle de la veille du support : même source que les
+  // pastilles, qui ne peuvent donc pas être en retard sur ce que montre l'écran.
+  const tickets = useSupportWatch((s) => s.tickets)
+  const setTickets = useSupportWatch((s) => s.setTickets)
   const [openTicket, setOpenTicket] = useState<TicketDetail | null>(null)
   const [categories, setCategories] = useState<SupportCategory[]>([])
   // `?new=question` : un autre écran envoie ici avec une question déjà
@@ -99,17 +102,13 @@ export default function Support() {
     api.support.categories().then(setCategories).catch(() => setCategories([]))
   }, [signedIn])
 
-  // La liste se recharge à chaque relecture de la veille (`known` change
-  // alors) : une réponse arrivée pendant qu'on est sur cet écran y allume son
-  // point, comme elle allume la pastille de l'accueil.
-  const watchKnown = useSupportWatch((s) => s.known)
+  // Arriver sur l'écran relit tout de suite les tickets et les rapports de
+  // plantage : liste, compteurs des onglets et pastilles d'un même coup.
   useEffect(() => {
     if (!signedIn) return
-    api.support.list().then(setTickets).catch((e) => {
-      setTickets((list) => list ?? [])
-      showError(errorMessage(e))
-    })
-  }, [signedIn, watchKnown])
+    void useSupportWatch.getState().refresh()
+    void useCrashWatch.getState().refresh()
+  }, [signedIn])
 
   // `?ticket=…` : la modale « ta demande a bougé » ouvre le fil concerné
   // plutôt que de déposer sur la liste, où il faudrait le retrouver
@@ -140,12 +139,9 @@ export default function Support() {
     try {
       const detail = await api.support.get(id)
       setOpenTicket(detail)
-      // La lecture efface la pastille côté serveur : la liste doit suivre.
-      setTickets((list) => list?.map((x) => (x.id === id ? { ...x, has_unread: false } : x)) ?? null)
-      // Et la pastille de la barre de navigation aussi, sans attendre son
-      // prochain sondage — trois minutes d'un point rouge sur un message
-      // qu'on vient de lire.
-      useSupportWatch.getState().refresh()
+      // La lecture efface la pastille côté serveur : la liste, et avec elle
+      // toutes les pastilles, suivent sur-le-champ.
+      setTickets((list) => list.map((x) => (x.id === id ? { ...x, has_unread: false } : x)))
     } catch (e) {
       showError(errorMessage(e))
     } finally {
@@ -156,13 +152,13 @@ export default function Support() {
   function absorb(detail: TicketDetail) {
     setOpenTicket(detail)
     const { messages: _messages, ...summary } = detail
-    setTickets((list) => [summary, ...(list ?? []).filter((x) => x.id !== summary.id)])
+    setTickets((list) => [summary, ...list.filter((x) => x.id !== summary.id)])
   }
 
   async function hide(id: string) {
     try {
       await api.support.hide(id)
-      setTickets((list) => list?.filter((x) => x.id !== id) ?? null)
+      setTickets((list) => list.filter((x) => x.id !== id))
       setOpenTicket(null)
     } catch (e) {
       showError(errorMessage(e))
@@ -267,7 +263,7 @@ function TabBar({ tab, onPick }: { tab: Tab; onPick: (tab: Tab) => void }) {
         >
           {t(`support.tab.${key}`)}
           {(unread[key] ?? 0) > 0 && (
-            <span className="ml-1.5 inline-flex h-[16px] min-w-[16px] items-center justify-center rounded-full bg-danger px-1 align-[1px] text-[9.5px] font-black tabular-nums text-white">
+            <span className="ml-1.5 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-danger px-1 align-[1px] text-[10.5px] font-black leading-none tabular-nums text-white">
               {unread[key]}
             </span>
           )}
