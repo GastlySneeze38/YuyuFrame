@@ -25,11 +25,12 @@ import java.util.List;
  * duel du HUD ont en commun : les couleurs, le cadre d'une page plein écran,
  * et quelques façons de poser du texte.
  *
- * <p>Les couleurs sont plus vives que celles du thème : sur ces pages, la
- * couleur EST l'information (bon, moyen, mauvais ; gagné, perdu), elle doit se
- * lire d'un coup d'œil. Les teintes de fond ne sont plus un mélange avec le
- * gris des cartes — qui donnait du brun et du vert-de-gris — mais la couleur
- * elle-même, transparente, en dégradé.
+ * <p>Rendu du 2026-11-01, aligné sur le menu YuyuFrame : le monde reste
+ * visible sous un voile, chaque bloc est une carte de VERRE au liseré fin, et
+ * la couleur se fait discrète — elle porte toujours l'information (bon, moyen,
+ * mauvais ; gagné, perdu) mais sur le texte, un trait ou une pastille, plus
+ * jamais en grands aplats teintés. Les teintes sont adoucies pour la même
+ * raison : vives, elles prenaient le dessus sur ce qu'elles qualifient.
  */
 public final class PvpScoreUi {
 
@@ -37,21 +38,21 @@ public final class PvpScoreUi {
     }
 
     /** Bonne note, victoire. */
-    public static final UiColor GOOD = new UiColor(70, 226, 132, 255);
+    public static final UiColor GOOD = new UiColor(104, 206, 148, 255);
     /** Note moyenne : ni bonne ni mauvaise. */
-    public static final UiColor MID = new UiColor(255, 192, 62, 255);
+    public static final UiColor MID = new UiColor(226, 186, 104, 255);
     /** Mauvaise note, défaite. */
-    public static final UiColor BAD = new UiColor(255, 88, 96, 255);
+    public static final UiColor BAD = new UiColor(228, 112, 120, 255);
     /** Match nul, pas de note. */
-    public static final UiColor NEUTRAL = new UiColor(158, 166, 188, 255);
+    public static final UiColor NEUTRAL = new UiColor(150, 156, 176, 255);
     /**
      * L'adversaire. Ses barres ne sont pas colorées comme les nôtres : un
      * vert chez lui serait une mauvaise nouvelle pour nous, et le lire comme
      * une bonne prête à confusion. Une seule couleur, la sienne.
      */
-    public static final UiColor FOE = new UiColor(104, 158, 255, 255);
+    public static final UiColor FOE = new UiColor(128, 164, 236, 255);
     /** Le bonus bug use : à part des familles, qui ne fait que monter la note. */
-    public static final UiColor BUG_USE = new UiColor(196, 140, 255, 255);
+    public static final UiColor BUG_USE = new UiColor(180, 150, 240, 255);
 
     /** « 62 + 4 bug use » : la note des familles et le bonus, à part. */
     public static String bugUseText(double baseScore, double bonus) {
@@ -124,8 +125,9 @@ public final class PvpScoreUi {
      * un très grand écran.
      */
     static float[] content(int screenWidth, int screenHeight) {
-        float side = Math.max(UiTheme.scaled(40f), (screenWidth - UiTheme.scaled(1560f)) / 2f);
-        return new float[]{ side, screenWidth - side, screenHeight - topBarHeight(), UiTheme.scaled(28f) };
+        // Des marges franches et une largeur bornée : de l'air autour de chaque bloc.
+        float side = Math.max(UiTheme.scaled(64f), (screenWidth - UiTheme.scaled(1480f)) / 2f);
+        return new float[]{ side, screenWidth - side, screenHeight - topBarHeight(), UiTheme.scaled(40f) };
     }
 
     /** Le bouton de retour, en haut à gauche. */
@@ -213,13 +215,18 @@ public final class PvpScoreUi {
         }
     }
 
-    /** Le fond d'une page : tout l'écran en verre, et le titre au milieu de la barre du haut. */
+    /**
+     * Le fond d'une page : le même voile que le menu YuyuFrame — le monde du
+     * jeu reste visible, c'est lui que les cartes de verre floutent —, et le
+     * titre au milieu de la barre du haut, en capitales espacées.
+     */
     static void drawPage(UiRenderer r, String title, int screenWidth, int screenHeight) {
-        r.drawGlassPanel(0f, 0f, screenWidth, screenHeight, 0f,
-            UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_PANEL, UiTheme.PANEL_BG, screenWidth, screenHeight);
+        UiColor veil = r.isGlassAvailable() ? UiTheme.GLASS_SCRIM : UiTheme.OVERLAY_BG;
+        r.drawRoundedRect(0f, 0f, screenWidth, screenHeight, 0f, veil, screenWidth, screenHeight);
         float bar = screenHeight - topBarHeight();
-        r.drawRoundedRect(0f, bar, screenWidth, bar + Math.max(1f, UiTheme.scaled(1f)), 0f, UiTheme.GLASS_BORDER, screenWidth, screenHeight);
-        float scale = UiTheme.scaled(0.7f);
+        float[] c = content(screenWidth, screenHeight);
+        r.drawRoundedRect(c[0], bar, c[1], bar + Math.max(1f, UiTheme.scaled(1f)), 0f, UiTheme.GLASS_HAIRLINE, screenWidth, screenHeight);
+        float scale = UiTheme.scaled(0.62f);
         centered(r, UiFont.BOLD, title, screenWidth / 2f, middle(bar + topBarHeight() / 2f, scale), screenWidth * 0.4f,
             UiTheme.TEXT_PRIMARY, scale, screenWidth, screenHeight);
     }
@@ -285,25 +292,43 @@ public final class PvpScoreUi {
         r.drawText(font, text, x, y, a(color), scale, vw, vh);
     }
 
-    /** Une carte grise, comme partout dans le client. */
-    static void card(UiRenderer r, float x1, float y1, float x2, float y2, int vw, int vh) {
-        r.drawRoundedRect(x1, y1, x2, y2, UiTheme.scaled(10f), a(UiTheme.CARD_BG), vw, vh);
+    /** Rayon des cartes de ces pages. */
+    static float radius() {
+        return UiTheme.scaled(14f);
     }
 
     /**
-     * Une carte teintée par une couleur : la carte grise, puis la couleur en
-     * transparence, plus franche à gauche qu'à droite. {@code strength} est
-     * l'opacité de la couleur côté gauche.
+     * Une carte de verre, comme celles du menu YuyuFrame : le décor flouté
+     * teinté, un liseré fin tout autour. L'opacité courante ({@link #alpha})
+     * passe par la couleur de repli, qui pilote aussi celle du verre.
      */
-    static void tintedCard(UiRenderer r, float x1, float y1, float x2, float y2, UiColor tone, float strength, int vw, int vh) {
-        float radius = UiTheme.scaled(10f);
-        r.drawRoundedRect(x1, y1, x2, y2, radius, a(UiTheme.CARD_BG), vw, vh);
-        UiColor strong = a(tone.withAlpha(strength));
-        UiColor faint = a(tone.withAlpha(strength * 0.25f));
-        r.drawGradientRect2D(x1, y1, x2, y2, radius, strong, faint, strong, faint, vw, vh);
+    static void card(UiRenderer r, float x1, float y1, float x2, float y2, int vw, int vh) {
+        float radius = radius();
+        UiColor border = r.isGlassAvailable() ? a(UiTheme.GLASS_BORDER) : null;
+        r.drawGlassPanel(x1, y1, x2, y2, radius, UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_CARD, a(UiTheme.CARD_BG),
+            border, Math.max(1f, UiTheme.scaled(1f)), vw, vh);
     }
 
-    private static final UiColor TRACK = new UiColor(0, 0, 0, 90);
+    /**
+     * Une carte qui porte une couleur, discrètement : la carte de verre, et un
+     * trait de la couleur en haut, rentré des coins. {@code strength} règle
+     * l'opacité du trait (de 0 à 1 ; 0,3 donne un trait franc). La couleur
+     * n'envahit plus le fond : elle se lit sur le trait et sur le texte.
+     */
+    static void tintedCard(UiRenderer r, float x1, float y1, float x2, float y2, UiColor tone, float strength, int vw, int vh) {
+        card(r, x1, y1, x2, y2, vw, vh);
+        float inset = radius();
+        float line = Math.max(1.5f, UiTheme.scaled(2f));
+        float opacity = Math.max(0.35f, Math.min(1f, strength * 2.6f));
+        r.drawRoundedRect(x1 + inset, y2 - line, x2 - inset, y2, line / 2f, a(tone.withAlpha(opacity)), vw, vh);
+    }
+
+    /** Un intitulé de section : petites capitales grises, posées à gauche. */
+    static void label(UiRenderer r, String text, float x, float y, float maxWidth, int vw, int vh) {
+        left(r, UiFont.BOLD, text.toUpperCase(java.util.Locale.ROOT), x, y, maxWidth, UiTheme.TEXT_MUTED, UiTheme.scaled(0.38f), vw, vh);
+    }
+
+    private static final UiColor TRACK = new UiColor(255, 255, 255, 16);
 
     /** Une barre de 0 à 100 dans sa couleur, sur un rail sombre. */
     static void bar(UiRenderer r, float x1, float y, float x2, float height, double value, UiColor tone, int vw, int vh) {
@@ -312,7 +337,7 @@ public final class PvpScoreUi {
         r.drawRoundedRect(x1, y, x2, y + height, radius, a(TRACK), vw, vh);
         float filled = x1 + (x2 - x1) * (float) (Math.max(0, Math.min(100, value)) / 100.0);
         if (filled > x1 + height) {
-            r.drawGradientRect2D(x1, y, filled, y + height, radius, tone.multiplyAlpha(0.7f), tone, tone.multiplyAlpha(0.7f), tone, vw, vh);
+            r.drawRoundedRect(x1, y, filled, y + height, radius, tone.multiplyAlpha(0.85f), vw, vh);
         }
     }
 
@@ -323,7 +348,7 @@ public final class PvpScoreUi {
         r.drawRoundedRect(x1, y, x2, y + height, radius, a(TRACK), vw, vh);
         float filled = x2 - (x2 - x1) * (float) (Math.max(0, Math.min(100, value)) / 100.0);
         if (filled < x2 - height) {
-            r.drawGradientRect2D(filled, y, x2, y + height, radius, tone, tone.multiplyAlpha(0.7f), tone, tone.multiplyAlpha(0.7f), vw, vh);
+            r.drawRoundedRect(filled, y, x2, y + height, radius, tone.multiplyAlpha(0.85f), vw, vh);
         }
     }
 
@@ -411,10 +436,10 @@ public final class PvpScoreUi {
             hover.setTarget(contains(mouseX, mouseY) || expanded ? 1f : 0f);
             float t = hover.get();
             float radius = UiTheme.scaled(9f);
-            r.drawRoundedRect(x - 1f, y - 1f, x + w + 1f, y + h + 1f, radius + 1f,
-                UiColor.lerp(UiTheme.GLASS_BORDER, UiTheme.ACCENT, t), vw, vh);
-            r.drawRoundedRect(x, y, x + w, y + h, radius, UiColor.lerp(UiTheme.CARD_BG, new UiColor(40, 36, 64, 255), t), vw, vh);
-            float pad = UiTheme.scaled(14f);
+            UiColor border = UiColor.lerp(UiTheme.GLASS_BORDER, UiTheme.GLASS_BORDER_HOVER, t);
+            r.drawGlassPanel(x, y, x + w, y + h, radius, UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_FIELD - 0.08f * t,
+                UiTheme.CARD_BG, r.isGlassAvailable() ? border : null, Math.max(1f, UiTheme.scaled(1f)), vw, vh);
+            float pad = UiTheme.scaled(16f);
             float small = UiTheme.scaled(0.36f);
             float value = UiTheme.scaled(0.5f);
             float mid = y + h / 2f;
@@ -447,8 +472,8 @@ public final class PvpScoreUi {
             r.pushLayer(Math.min(1f, open * 1.6f), 0.82f + 0.18f * grow, x + w / 2f, top, 0f, (1f - open) * UiTheme.scaled(10f));
             try {
                 r.drawShadow(x, bottom, x + w, top, radius, 16f, 0f, new UiColor(0, 0, 0, 130), vw, vh);
-                r.drawRoundedRect(x - 1f, bottom - 1f, x + w + 1f, top + 1f, radius + 1f, UiTheme.ACCENT.withAlpha(0.4f), vw, vh);
-                r.drawRoundedRect(x, bottom, x + w, top, radius, UiTheme.PANEL_BG_ALT, vw, vh);
+                r.drawGlassPanel(x, bottom, x + w, top, radius, UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_MODAL, UiTheme.PANEL_BG_ALT,
+                    r.isGlassAvailable() ? UiTheme.GLASS_BORDER_HOVER : null, Math.max(1f, UiTheme.scaled(1f)), vw, vh);
 
                 float pad = UiTheme.scaled(14f);
                 float value = UiTheme.scaled(0.5f);
@@ -568,11 +593,11 @@ public final class PvpScoreUi {
             slide.setTarget(selected);
             float radius = UiTheme.scaled(9f);
             float inset = UiTheme.scaled(4f);
-            r.drawRoundedRect(x - 1f, y - 1f, x + w + 1f, y + h + 1f, radius + 1f, a(UiTheme.GLASS_BORDER), vw, vh);
-            r.drawRoundedRect(x, y, x + w, y + h, radius, a(UiTheme.CARD_BG), vw, vh);
+            r.drawGlassPanel(x, y, x + w, y + h, radius, UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_FIELD, a(UiTheme.CARD_BG),
+                r.isGlassAvailable() ? a(UiTheme.GLASS_BORDER) : null, Math.max(1f, UiTheme.scaled(1f)), vw, vh);
             float pillLeft = x + inset + slide.get() * half;
             r.drawRoundedRect(pillLeft, y + inset, pillLeft + half - inset * 2f, y + h - inset, radius - inset / 2f,
-                a(UiTheme.ACCENT.withAlpha(0.45f)), vw, vh);
+                a(UiTheme.ACCENT.withAlpha(0.32f)), vw, vh);
             float scale = UiTheme.scaled(0.46f);
             float mid = y + h / 2f;
             for (int i = 0; i < PLAY_TYPES.length; i++) {
@@ -634,8 +659,9 @@ public final class PvpScoreUi {
             float t = hover.get();
             float radius = h / 2f;
             if (playing()) {
-                r.drawRoundedRect(x - 1f, y - 1f, x + w + 1f, y + h + 1f, radius + 1f, a(tone.withAlpha(0.55f + 0.35f * t)), vw, vh);
-                r.drawRoundedRect(x, y, x + w, y + h, radius, a(UiColor.lerp(UiTheme.CARD_BG, tone.withAlpha(0.3f), 0.6f + 0.4f * t)), vw, vh);
+                r.drawGlassPanel(x, y, x + w, y + h, radius, UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_FIELD, a(UiTheme.CARD_BG),
+                    r.isGlassAvailable() ? a(UiColor.lerp(UiTheme.GLASS_BORDER, tone.withAlpha(0.7f), 0.4f + 0.6f * t)) : null,
+                    Math.max(1f, UiTheme.scaled(1f)), vw, vh);
                 float trackH = h * 0.5f;
                 float trackW = trackH * 1.8f;
                 float pad = (h - trackH) / 2f;
@@ -649,10 +675,10 @@ public final class PvpScoreUi {
                     tx - x - UiTheme.scaled(22f), UiTheme.TEXT_PRIMARY, scale, vw, vh);
             } else {
                 // Le bouton qui ramène au compétitif : il respire pour appeler le clic.
-                float breath = 0.5f + 0.5f * (float) Math.sin((System.nanoTime() - createdAt) / 1e9 * 2.4);
-                r.drawGlow(x, y, x + w, y + h, h * 0.35f, 0.25f + 0.2f * breath, a(UiTheme.ACCENT.withAlpha(0.8f)), vw, vh);
-                r.drawRoundedRect(x, y, x + w, y + h, UiTheme.scaled(10f),
-                    a(UiColor.lerp(UiTheme.ACCENT.withAlpha(0.8f), UiTheme.ACCENT, Math.max(t, 0.4f * breath))), vw, vh);
+                // Il respire à peine : il appelle le clic sans crier.
+                float breath = 0.5f + 0.5f * (float) Math.sin((System.nanoTime() - createdAt) / 1e9 * 2.0);
+                r.drawRoundedRect(x, y, x + w, y + h, UiTheme.scaled(12f),
+                    a(UiColor.lerp(UiTheme.ACCENT.withAlpha(0.72f), UiTheme.ACCENT, Math.max(t, 0.25f * breath))), vw, vh);
                 float scale = UiTheme.scaled(0.52f);
                 centered(r, UiFont.BOLD, Lang.tr("REPASSER EN COMPÉTITIF"), x + w / 2f, middle(y + h / 2f, scale), w - UiTheme.scaled(24f),
                     UiTheme.TEXT_PRIMARY, scale, vw, vh);

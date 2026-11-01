@@ -46,7 +46,7 @@ public final class UiPvpDuelScreen extends UiScreenBase {
 
     /** Les trois cases de l'analyse. */
     private static final String[] ANALYSIS = { "Points forts", "Points faibles", "À améliorer" };
-    private static final UiColor[] ANALYSIS_TONES = { PvpScoreUi.GOOD, PvpScoreUi.BAD, new UiColor(168, 152, 255, 255) };
+    private static final UiColor[] ANALYSIS_TONES = { PvpScoreUi.GOOD, PvpScoreUi.BAD, new UiColor(160, 150, 236, 255) };
 
     /** Au plus, les lignes du face-à-face : mes cinq familles ; l'adversaire n'a que les quatre premières. */
     private static final int ROWS = NativeCombat.FAMILY_COUNT - 1;
@@ -110,14 +110,18 @@ public final class UiPvpDuelScreen extends UiScreenBase {
 
     // ── Mise en page ─────────────────────────────────────────────────────────
 
-    private static float bannerHeight() { return UiTheme.scaled(108f); }
-    private static float gap() { return UiTheme.scaled(18f); }
-    private static float rowHeight() { return UiTheme.scaled(46f); }
-    private static float faceHeader() { return UiTheme.scaled(62f); }
-    private static float figuresHeight() { return UiTheme.scaled(96f); }
+    // Des blocs bien séparés et des cartes qui respirent : la page se lit
+    // de haut en bas sans que rien ne se touche.
+    private static float bannerHeight() { return UiTheme.scaled(112f); }
+    private static float gap() { return UiTheme.scaled(24f); }
+    private static float rowHeight() { return UiTheme.scaled(50f); }
+    private static float faceHeader() { return UiTheme.scaled(72f); }
+    private static float figuresHeight() { return UiTheme.scaled(88f); }
+    /** L'écart entre deux cases de chiffres. */
+    private static float figureGap() { return UiTheme.scaled(16f); }
     /** Les chiffres tiennent sur deux rangées. */
     private static final int FIGURE_ROWS = 2;
-    private static float figuresBlock() { return FIGURE_ROWS * figuresHeight() + (FIGURE_ROWS - 1) * UiTheme.scaled(12f); }
+    private static float figuresBlock() { return FIGURE_ROWS * figuresHeight() + (FIGURE_ROWS - 1) * figureGap(); }
 
     private void buildLayout() {
         widgets.clear();
@@ -128,11 +132,11 @@ public final class UiPvpDuelScreen extends UiScreenBase {
         left = c[0];
         right = c[1];
         contentBottom = c[3];
-        bannerTop = c[2] - UiTheme.scaled(24f);
+        bannerTop = c[2] - UiTheme.scaled(32f);
         bannerBottom = bannerTop - bannerHeight();
         float mainTop = bannerBottom - gap();
-        mainBottom = mainTop - faceHeader() - rows * rowHeight() - UiTheme.scaled(16f);
-        scoreRight = left + UiTheme.scaled(330f);
+        mainBottom = mainTop - faceHeader() - rows * rowHeight() - UiTheme.scaled(20f);
+        scoreRight = left + UiTheme.scaled(340f);
         figuresBottom = mainBottom - gap() - figuresBlock();
 
         // Une zone cliquable par ligne du face-à-face, et une sur l'en-tête de l'adversaire.
@@ -226,30 +230,33 @@ public final class UiPvpDuelScreen extends UiScreenBase {
         float dy = -enter(0f);
         float top = bannerTop + dy, bottom = bannerBottom + dy;
         UiColor tone = PvpScoreUi.resultColor(duel.result());
-        PvpScoreUi.tintedCard(r, left, bottom, right, top, tone, 0.3f, vw, vh);
-        // La barre d'accent se dessine de bas en haut.
+        PvpScoreUi.card(r, left, bottom, right, top, vw, vh);
+        // Un trait fin du résultat à gauche, qui se dessine de bas en haut.
         float accent = progress(0.15f, 0.5f);
-        PvpScoreUi.rect(r, left, bottom, left + UiTheme.scaled(6f), bottom + (top - bottom) * accent, UiTheme.scaled(3f), tone, vw, vh);
+        float inset = UiTheme.scaled(18f);
+        float stripe = Math.max(2f, UiTheme.scaled(3f));
+        PvpScoreUi.rect(r, left + UiTheme.scaled(12f), bottom + inset, left + UiTheme.scaled(12f) + stripe,
+            bottom + inset + (top - bottom - inset * 2f) * accent, stripe / 2f, tone.withAlpha(0.8f), vw, vh);
 
-        float inner = UiTheme.scaled(30f);
+        float inner = UiTheme.scaled(36f);
         float half = (right - left) / 2f;
-        PvpScoreUi.text(r, UiFont.BOLD, Lang.tr("CONTRE"), left + inner, top - UiTheme.scaled(34f), UiTheme.TEXT_SECONDARY,
-            UiTheme.scaled(0.42f), vw, vh);
+        PvpScoreUi.text(r, UiFont.BOLD, Lang.tr("CONTRE"), left + inner, top - UiTheme.scaled(38f), UiTheme.TEXT_MUTED,
+            UiTheme.scaled(0.38f), vw, vh);
         String opponent = duel.opponent.isEmpty() ? Lang.tr("Adversaire inconnu") : duel.opponent;
-        float nameScale = PvpScoreUi.fit(r, UiFont.BOLD, opponent, UiTheme.scaled(1.05f), half * 0.55f);
-        PvpScoreUi.left(r, UiFont.BOLD, opponent, left + inner, bottom + UiTheme.scaled(24f), half - inner,
+        float nameScale = PvpScoreUi.fit(r, UiFont.BOLD, opponent, UiTheme.scaled(0.95f), half * 0.55f);
+        PvpScoreUi.left(r, UiFont.BOLD, opponent, left + inner, bottom + UiTheme.scaled(28f), half - inner,
             UiTheme.TEXT_PRIMARY, nameScale, vw, vh);
 
         // Ce qu'on savait de lui avant ce duel : affiché, gardé pour le classement, hors de la note.
         int met = (int) duel.report[NativeCombat.REPORT_FOE_KNOWN_DUELS];
-        float known = UiTheme.scaled(0.42f);
-        float knownX = left + inner + r.textWidth(UiFont.BOLD, opponent, nameScale) + UiTheme.scaled(22f);
-        float knownY = bottom + UiTheme.scaled(30f);
+        float known = UiTheme.scaled(0.4f);
+        float knownX = left + inner + r.textWidth(UiFont.BOLD, opponent, nameScale) + UiTheme.scaled(24f);
+        float knownY = bottom + UiTheme.scaled(33f);
         if (met > 0) {
             String before = Lang.tr("Force connue avant ce duel :") + " ";
             String value = String.valueOf(Math.round(duel.report[NativeCombat.REPORT_FOE_KNOWN]));
             String basis = " (" + met + " " + Lang.tr(met > 1 ? "duels passés" : "duel passé") + ")";
-            PvpScoreUi.text(r, UiFont.REGULAR, before, knownX, knownY, UiTheme.TEXT_SECONDARY, known, vw, vh);
+            PvpScoreUi.text(r, UiFont.REGULAR, before, knownX, knownY, UiTheme.TEXT_MUTED, known, vw, vh);
             float x = knownX + r.textWidth(UiFont.REGULAR, before, known);
             PvpScoreUi.text(r, UiFont.BOLD, value, x, knownY, PvpScoreUi.FOE, known, vw, vh);
             PvpScoreUi.text(r, UiFont.REGULAR, basis, x + r.textWidth(UiFont.BOLD, value, known), knownY, UiTheme.TEXT_MUTED, known, vw, vh);
@@ -262,10 +269,10 @@ public final class UiPvpDuelScreen extends UiScreenBase {
         PvpScoreUi.alpha = arrive;
         String result = PvpScoreUi.resultText(duel.result()).toUpperCase(java.util.Locale.ROOT);
         float slide = (1f - arrive) * UiTheme.scaled(40f);
-        PvpScoreUi.right(r, UiFont.BOLD, result, right - inner + slide, top - UiTheme.scaled(62f), half - inner,
-            tone, UiTheme.scaled(1.3f), vw, vh);
-        PvpScoreUi.right(r, UiFont.REGULAR, PvpScoreUi.date(duel.time), right - inner + slide, bottom + UiTheme.scaled(18f), half - inner,
-            UiTheme.TEXT_SECONDARY, UiTheme.scaled(0.46f), vw, vh);
+        PvpScoreUi.right(r, UiFont.BOLD, result, right - inner + slide, top - UiTheme.scaled(60f), half - inner,
+            tone, UiTheme.scaled(0.95f), vw, vh);
+        PvpScoreUi.right(r, UiFont.REGULAR, PvpScoreUi.date(duel.time), right - inner + slide, bottom + UiTheme.scaled(26f), half - inner,
+            UiTheme.TEXT_MUTED, UiTheme.scaled(0.42f), vw, vh);
         PvpScoreUi.alpha = 1f;
     }
 
@@ -280,17 +287,17 @@ public final class UiPvpDuelScreen extends UiScreenBase {
         PvpScoreUi.tintedCard(r, left, bottom, scoreRight, top, tone, 0.24f, vw, vh);
         float center = (left + scoreRight) / 2f;
         float width = scoreRight - left - UiTheme.scaled(32f);
-        PvpScoreUi.centered(r, UiFont.BOLD, Lang.tr("NOTE"), center, top - UiTheme.scaled(40f), width,
-            UiTheme.TEXT_SECONDARY, UiTheme.scaled(0.46f), vw, vh);
+        PvpScoreUi.centered(r, UiFont.BOLD, Lang.tr("NOTE"), center, top - UiTheme.scaled(44f), width,
+            UiTheme.TEXT_MUTED, UiTheme.scaled(0.38f), vw, vh);
         float body = UiTheme.scaled(0.48f);
         if (score >= 0) {
             String shown = String.valueOf(PvpScoreUi.count(score, progress(0.2f, 1.2f)));
             // Elle grossit d'un cran à son arrivée, puis se pose.
             float pop = PvpScoreUi.pop(openedAt, 0.2f, 0.6f);
-            float big = UiTheme.scaled(3.6f) * (0.85f + 0.15f * pop);
+            float big = UiTheme.scaled(3.2f) * (0.85f + 0.15f * pop);
             PvpScoreUi.centered(r, UiFont.BOLD, shown, center, top - UiTheme.scaled(160f), width, tone, big, vw, vh);
             PvpScoreUi.centered(r, UiFont.REGULAR, Lang.tr("sur 500"), center, top - UiTheme.scaled(200f), width,
-                UiTheme.TEXT_SECONDARY, body, vw, vh);
+                UiTheme.TEXT_MUTED, body, vw, vh);
             // Le bonus bug use, à part : il ne fait que monter la note.
             double bonus = duel.report[NativeCombat.REPORT_BUG_USE];
             if (bonus >= 0.5) {
@@ -303,10 +310,10 @@ public final class UiPvpDuelScreen extends UiScreenBase {
             float barLeft = left + UiTheme.scaled(36f);
             float barRight = scoreRight - UiTheme.scaled(36f);
             String label = Lang.tr("Confiance") + " " + PvpScoreUi.count(confidence * 100, grow) + " %";
-            PvpScoreUi.centered(r, UiFont.REGULAR, label, center, bottom + UiTheme.scaled(46f), width,
-                UiTheme.TEXT_PRIMARY, body, vw, vh);
-            PvpScoreUi.bar(r, barLeft, bottom + UiTheme.scaled(24f), barRight, UiTheme.scaled(8f), confidence * 100 * grow,
-                new UiColor(168, 152, 255, 255), vw, vh);
+            PvpScoreUi.centered(r, UiFont.REGULAR, label, center, bottom + UiTheme.scaled(52f), width,
+                UiTheme.TEXT_SECONDARY, body, vw, vh);
+            PvpScoreUi.bar(r, barLeft, bottom + UiTheme.scaled(30f), barRight, UiTheme.scaled(6f), confidence * 100 * grow,
+                UiTheme.ACCENT, vw, vh);
         } else {
             PvpScoreUi.centered(r, UiFont.BOLD, PvpScoreUi.NO_SCORE, center, top - UiTheme.scaled(150f), width, tone, UiTheme.scaled(3f), vw, vh);
             String[] reason = PvpScoreUi.reasonLines(duel.report);
@@ -334,7 +341,7 @@ public final class UiPvpDuelScreen extends UiScreenBase {
         float dy = enter(0.18f);
         float cardLeft = scoreRight + gap();
         PvpScoreUi.card(r, cardLeft, mainBottom + dy, right, top + dy, vw, vh);
-        float inner = UiTheme.scaled(26f);
+        float inner = UiTheme.scaled(32f);
         float center = (cardLeft + right) / 2f;
         float labelHalf = UiTheme.scaled(120f);
         float valueW = UiTheme.scaled(56f);
@@ -348,23 +355,23 @@ public final class UiPvpDuelScreen extends UiScreenBase {
         float counting = progress(0.3f, 1f);
         double own = duel.report[NativeCombat.REPORT_OWN];
         double level = duel.report[NativeCombat.REPORT_FAMILIES + NativeCombat.FAMILY_COUNT - 1];
-        float label = UiTheme.scaled(0.42f);
-        float big = UiTheme.scaled(1.05f);
+        float label = UiTheme.scaled(0.38f);
+        float big = UiTheme.scaled(0.95f);
         opponentHover.setTarget(opponentHit != null && opponentHit.contains(mouseX, mouseY) ? 1f : 0f);
         float oh = opponentHover.get();
         if (oh > 0.01f) {
             PvpScoreUi.rect(r, center, top + dy - faceHeader(), right, top + dy, UiTheme.scaled(10f),
-                PvpScoreUi.FOE.withAlpha(0.12f * oh), vw, vh);
+                new UiColor(255, 255, 255, (int) (12 * oh)), vw, vh);
         }
         String ownText = String.valueOf(PvpScoreUi.count(own, counting));
         PvpScoreUi.text(r, UiFont.BOLD, ownText, cardLeft + inner, PvpScoreUi.middle(headerMid, big), PvpScoreUi.scoreColor(own), big, vw, vh);
         PvpScoreUi.text(r, UiFont.BOLD, Lang.tr("VOTRE JEU"), cardLeft + inner + r.textWidth(UiFont.BOLD, ownText, big) + UiTheme.scaled(14f),
-            PvpScoreUi.middle(headerMid, label), UiTheme.TEXT_SECONDARY, label, vw, vh);
+            PvpScoreUi.middle(headerMid, label), UiTheme.TEXT_MUTED, label, vw, vh);
         String levelText = String.valueOf(PvpScoreUi.count(level, counting));
         float levelW = r.textWidth(UiFont.BOLD, levelText, big);
         PvpScoreUi.text(r, UiFont.BOLD, levelText, right - inner - levelW, PvpScoreUi.middle(headerMid, big), PvpScoreUi.FOE, big, vw, vh);
         PvpScoreUi.right(r, UiFont.BOLD, Lang.tr("NIVEAU ADVERSE"), right - inner - levelW - UiTheme.scaled(14f),
-            PvpScoreUi.middle(headerMid, label), right - center, UiColor.lerp(UiTheme.TEXT_SECONDARY, UiTheme.TEXT_PRIMARY, oh), label, vw, vh);
+            PvpScoreUi.middle(headerMid, label), right - center, UiColor.lerp(UiTheme.TEXT_MUTED, UiTheme.TEXT_PRIMARY, oh), label, vw, vh);
         PvpScoreUi.centered(r, UiFont.BOLD, Lang.tr("FACE À FACE"), center, PvpScoreUi.middle(headerMid, label * 0.9f),
             labelHalf * 2f - UiTheme.scaled(20f), UiTheme.TEXT_MUTED, label * 0.9f, vw, vh);
         // Le trait sous l'en-tête se trace depuis le milieu.
@@ -373,9 +380,9 @@ public final class UiPvpDuelScreen extends UiScreenBase {
         PvpScoreUi.rect(r, center - lineHalf, top + dy - faceHeader(), center + lineHalf,
             top + dy - faceHeader() + Math.max(1f, UiTheme.scaled(1f)), 0f, UiTheme.GLASS_BORDER, vw, vh);
 
-        float name = UiTheme.scaled(0.5f);
-        float value = UiTheme.scaled(0.6f);
-        float barH = UiTheme.scaled(10f);
+        float name = UiTheme.scaled(0.46f);
+        float value = UiTheme.scaled(0.54f);
+        float barH = UiTheme.scaled(6f);
         float cardAlpha = PvpScoreUi.alpha;
         for (int i = 0; i < rows; i++) {
             UiWidget hit = familyHits[i];
@@ -386,7 +393,7 @@ public final class UiPvpDuelScreen extends UiScreenBase {
             float hv = familyHover[i].get();
             if (hv > 0.01f) {
                 PvpScoreUi.rect(r, hit.x + UiTheme.scaled(8f), mid - hit.h / 2f + UiTheme.scaled(3f), hit.x + hit.w - UiTheme.scaled(8f),
-                    mid + hit.h / 2f - UiTheme.scaled(3f), UiTheme.scaled(8f), new UiColor(255, 255, 255, (int) (18 * hv)), vw, vh);
+                    mid + hit.h / 2f - UiTheme.scaled(3f), UiTheme.scaled(8f), new UiColor(255, 255, 255, (int) (12 * hv)), vw, vh);
             }
             float grow = progress(0.4f + 0.07f * i, 0.8f);
             // Une famille mesurée sur aucun événement (aucun smash porté, par
@@ -454,7 +461,7 @@ public final class UiPvpDuelScreen extends UiScreenBase {
             // Le ping est affiché, jamais corrigé.
             { "PING", report[NativeCombat.REPORT_PING] >= 0 ? PvpScoreUi.count(report[NativeCombat.REPORT_PING], n) + " ms" : PvpScoreUi.NO_SCORE },
         };
-        float gap = UiTheme.scaled(12f);
+        float gap = figureGap();
         int perRow = (figures.length + FIGURE_ROWS - 1) / FIGURE_ROWS;
         float cell = (right - left - gap * (perRow - 1)) / perRow;
         for (int i = 0; i < figures.length; i++) {
@@ -466,9 +473,9 @@ public final class UiPvpDuelScreen extends UiScreenBase {
             float center = x + cell / 2f;
             float width = cell - UiTheme.scaled(16f);
             PvpScoreUi.centered(r, UiFont.BOLD, figures[i][1], center, cellBottom + UiTheme.scaled(44f), width,
-                UiTheme.TEXT_PRIMARY, UiTheme.scaled(0.86f), vw, vh);
-            PvpScoreUi.centered(r, UiFont.REGULAR, Lang.tr(figures[i][0]), center, cellBottom + UiTheme.scaled(16f), width,
-                UiTheme.TEXT_SECONDARY, UiTheme.scaled(0.36f), vw, vh);
+                UiTheme.TEXT_PRIMARY, UiTheme.scaled(0.76f), vw, vh);
+            PvpScoreUi.centered(r, UiFont.BOLD, Lang.tr(figures[i][0]), center, cellBottom + UiTheme.scaled(20f), width,
+                UiTheme.TEXT_MUTED, UiTheme.scaled(0.32f), vw, vh);
         }
         PvpScoreUi.alpha = 1f;
     }
@@ -498,30 +505,34 @@ public final class UiPvpDuelScreen extends UiScreenBase {
      */
     private void drawAnalysis(UiRenderer r, float top, float bottom) {
         int vw = screenWidth, vh = screenHeight;
-        float cardsTop = top - UiTheme.scaled(34f);
+        float cardsTop = top - UiTheme.scaled(40f);
         // Sur une fenêtre trop basse, la bande n'a pas la place d'exister.
         if (cardsTop - bottom < UiTheme.scaled(100f)) {
             return;
         }
         enter(0.6f);
-        PvpScoreUi.text(r, UiFont.BOLD, Lang.tr("ANALYSE"), left, top - UiTheme.scaled(18f), UiTheme.TEXT_SECONDARY, UiTheme.scaled(0.48f), vw, vh);
-        float gap = UiTheme.scaled(14f);
+        PvpScoreUi.label(r, Lang.tr("ANALYSE"), left + UiTheme.scaled(4f), top - UiTheme.scaled(22f), right - left, vw, vh);
+        float gap = figureGap();
         float cell = (right - left - gap * (ANALYSIS.length - 1)) / ANALYSIS.length;
         float breathe = 0.65f + 0.35f * (0.5f + 0.5f * (float) Math.sin(System.nanoTime() / 1e9 * 2.0));
         for (int i = 0; i < ANALYSIS.length; i++) {
             float dy = enter(0.65f + 0.08f * i);
             float x = left + i * (cell + gap);
             float cTop = cardsTop + dy, cBottom = bottom + dy;
-            PvpScoreUi.tintedCard(r, x, cBottom, x + cell, cTop, ANALYSIS_TONES[i], 0.1f, vw, vh);
+            PvpScoreUi.card(r, x, cBottom, x + cell, cTop, vw, vh);
+            // Le trait de la case, fin et rentré des coins, se trace de gauche à droite.
             float trace = progress(0.75f + 0.08f * i, 0.6f);
-            PvpScoreUi.rect(r, x, cTop - UiTheme.scaled(4f), x + cell * trace, cTop, UiTheme.scaled(2f), ANALYSIS_TONES[i], vw, vh);
-            float inner = UiTheme.scaled(20f);
-            PvpScoreUi.text(r, UiFont.BOLD, Lang.tr(ANALYSIS[i]), x + inner, cTop - UiTheme.scaled(38f), ANALYSIS_TONES[i],
-                UiTheme.scaled(0.62f), vw, vh);
+            float edge = PvpScoreUi.radius();
+            float line = Math.max(1.5f, UiTheme.scaled(2f));
+            PvpScoreUi.rect(r, x + edge, cTop - line, x + edge + (cell - edge * 2f) * trace, cTop, line / 2f,
+                ANALYSIS_TONES[i].withAlpha(0.8f), vw, vh);
+            float inner = UiTheme.scaled(28f);
+            PvpScoreUi.text(r, UiFont.BOLD, Lang.tr(ANALYSIS[i]), x + inner, cTop - UiTheme.scaled(44f), ANALYSIS_TONES[i],
+                UiTheme.scaled(0.52f), vw, vh);
             float cardAlpha = PvpScoreUi.alpha;
             PvpScoreUi.alpha = cardAlpha * breathe;
             PvpScoreUi.centered(r, UiFont.REGULAR, Lang.tr("Bientôt disponible"), x + cell / 2f, cBottom + (cTop - cBottom) / 2f - UiTheme.scaled(14f),
-                cell - inner * 2f, UiTheme.TEXT_MUTED, UiTheme.scaled(0.48f), vw, vh);
+                cell - inner * 2f, UiTheme.TEXT_MUTED, UiTheme.scaled(0.44f), vw, vh);
             PvpScoreUi.alpha = cardAlpha;
         }
         PvpScoreUi.alpha = 1f;
