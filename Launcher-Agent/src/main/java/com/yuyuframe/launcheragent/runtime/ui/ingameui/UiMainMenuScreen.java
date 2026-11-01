@@ -1,6 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.ui.ingameui;
 
 import com.yuyuframe.launcheragent.runtime.friends.GameFriends;
+import com.yuyuframe.launcheragent.runtime.friends.GameMissions;
 import com.yuyuframe.launcheragent.runtime.i18n.Lang;
 import com.yuyuframe.launcheragent.runtime.ui.GlobalUiSettings;
 import com.yuyuframe.launcheragent.runtime.ui.HudConfigStore;
@@ -139,6 +140,8 @@ public class UiMainMenuScreen extends UiScreenBase {
     private static boolean friendSearchOpen;
     private static final Set<String> collapsedFriendGroups = new HashSet<>();
     private static int friendScroll;
+    /** Onglet affiché à droite de la sidebar : faux = Accueil (les mods), vrai = Missions. */
+    private static boolean missionsTab;
     /** Grille de cartes mods — SÉPARÉE de {@code widgets} (voir UiScrollContainer/ConfigScreenBuilder pour le même motif) : permet de scroller quand le nombre de mods dépasse la hauteur visible, ce que {@code widgets} seul ne permet pas (pas de clipping/offset). */
     private UiScrollContainer modScroll;
     private int lastLayoutWidth = -1, lastLayoutHeight = -1;
@@ -252,7 +255,7 @@ public class UiMainMenuScreen extends UiScreenBase {
             // ciel blanc et dans une grotte : l'ombre règle les deux d'un coup.
             renderer.drawTextShadowed(UiFont.BOLD, "YuyuFrame", titleX, titleBaseline,
                 UiTheme.TEXT_PRIMARY, UiTheme.TEXT_SHADOW, 1f, -1f, titleScale, screenWidth, screenHeight);
-            renderer.drawTextShadowed(Lang.tr("Mods installes"), SIDEBAR_W + MARGIN, screenHeight - UiTheme.scaled(40f),
+            renderer.drawTextShadowed(Lang.tr(missionsTab ? "Missions" : "Mods installes"), SIDEBAR_W + MARGIN, screenHeight - UiTheme.scaled(40f),
                 UiTheme.TEXT_SECONDARY, UiTheme.TEXT_SHADOW, UiTheme.scaled(0.42f), screenWidth, screenHeight);
 
             // (Halo d'ambiance décoratif dans le coin haut-droit RETIRÉ — se
@@ -362,6 +365,7 @@ public class UiMainMenuScreen extends UiScreenBase {
         friendsStyle.margin = new String[]{
             TaffyStyle.px(UiTheme.scaled(14f)), TaffyStyle.px(0f), TaffyStyle.px(UiTheme.scaled(8f)), TaffyStyle.px(0f) };
         sidebar.child(new TaffyNode("friends", friendsStyle));
+        sidebar.child(navNode("nav.missions", navH));
         sidebar.child(navNode("nav.hud", navH));
         screen.child(sidebar);
 
@@ -410,7 +414,12 @@ public class UiMainMenuScreen extends UiScreenBase {
         }
 
         SidebarBackground sidebarBg = new SidebarBackground();
-        SidebarItem navHome = new SidebarItem("Accueil", LauncherModule.icons8("home"), true, null);
+        // Accueil et Missions sont des onglets de cet écran (la partie droite
+        // change, la sidebar reste) ; Paramètres et le HUD ouvrent un autre écran.
+        SidebarItem navHome = new SidebarItem("Accueil", LauncherModule.icons8("home"), !missionsTab,
+            () -> switchTab(false));
+        SidebarItem navMissions = new SidebarItem("Missions", LauncherModule.icons8("goal"), missionsTab,
+            () -> switchTab(true));
         SidebarItem navSettings = new SidebarItem("Parametres", LauncherModule.icons8("settings"), false,
             () -> closeTo(new UiModConfigScreen(UiMainMenuScreen.this, GlobalUiSettings.INSTANCE)));
         SidebarItem navHud = new SidebarItem("Modifier le HUD", LauncherModule.icons8("dashboard"), false,
@@ -444,6 +453,7 @@ public class UiMainMenuScreen extends UiScreenBase {
             layout.apply("nav.home", navHome);
             layout.apply("nav.settings", navSettings);
             layout.apply("nav.hud", navHud);
+            layout.apply("nav.missions", navMissions);
             layout.apply("friends", friendsPanel);
             layout.apply("close", closeButton);
             layout.apply("search", searchField);
@@ -474,11 +484,27 @@ public class UiMainMenuScreen extends UiScreenBase {
         widgets.add(navHome);
         widgets.add(navSettings);
         widgets.add(navHud);
+        // Sans layout (repli), l'onglet Missions n'a pas de place : taille nulle, invisible.
+        widgets.add(navMissions);
         // Sans layout (repli), le panneau garde une taille nulle et ne dessine rien.
         widgets.add(friendsPanel);
         // Après le panneau : il pose les bornes du champ pendant son propre dessin.
         widgets.add(friendSearch);
         widgets.add(closeButton);
+
+        if (missionsTab) {
+            // Onglet Missions : toute la zone de droite, sous le titre ; ni
+            // recherche de mods ni grille.
+            MissionsPanel missions = new MissionsPanel();
+            missions.x = contentX;
+            missions.y = viewportBottom;
+            missions.w = contentW;
+            missions.h = Math.max(1f, screenHeight - UiTheme.scaled(64f) - viewportBottom);
+            widgets.add(missions);
+            modScroll = null;
+            return;
+        }
+
         widgets.add(searchField);
         widgets.add(layoutButton);
 
@@ -683,6 +709,13 @@ public class UiMainMenuScreen extends UiScreenBase {
         // Posée sur des pixels entiers, à sa taille exacte : un demi-pixel de
         // décalage suffirait à la rendre floue.
         renderer.drawIcon(url + "@" + n, img, Math.round(ix), Math.round(iy), n, n, alpha, vpWidth, vpHeight);
+    }
+
+    /** Passe sur l'onglet Accueil ({@code false}) ou Missions ({@code true}). */
+    private void switchTab(boolean missions) {
+        if (missionsTab == missions) return;
+        missionsTab = missions;
+        lastLayoutWidth = -1; // force rebuildAll() à la prochaine image
     }
 
     /** Nœud d'un item de navigation — largeur laissée libre : la colonne sidebar l'étire d'elle-même à sa largeur de contenu. */
@@ -1360,6 +1393,283 @@ public class UiMainMenuScreen extends UiScreenBase {
         public void onClick() {
             if (action != null) action.run();
         }
+    }
+
+    /**
+     * L'onglet Missions (2026-11-01) : les missions du jour et de la semaine,
+     * sur le modèle de l'écran Missions du launcher
+     * ({@code components/competitive/Challenges.tsx}) — un titre en capitales
+     * et son compte à rebours, les paliers du jour en losanges, puis une ligne
+     * par mission : anneau de progression (coche verte une fois faite), la
+     * phrase, où l'on en est et le mode, l'XP à droite.
+     *
+     * <p>Ici la place ne manque pas : jour et semaine sont deux cartes côte à
+     * côte plutôt qu'une colonne. Données : {@link GameMissions}, par le
+     * canal du jeu (mêmes missions que le launcher, {@code GET /v1/pass}).
+     *
+     * <p>Les anneaux et les losanges sont dessinés une fois en image (Java2D)
+     * à leur taille exacte puis gardés : le moteur n'a pas de primitive pour
+     * un arc ou un carré tourné.
+     */
+    private final class MissionsPanel extends UiWidget {
+        private static final String ICON_CLOCK = "https://img.icons8.com/ios-filled/100/ffffff/clock.png";
+        private static final String ICON_CHECK = "https://img.icons8.com/ios-filled/100/ffffff/checkmark.png";
+
+        MissionsPanel() {
+            super(0f, 0f, 0f, 0f);
+        }
+
+        private float px(float v) { return UiTheme.scaled(v); }
+
+        @Override
+        public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
+            if (w <= 0f || h <= 0f) return;
+            GameMissions.keepFresh();
+
+            String message = null;
+            if (!GameMissions.available()) {
+                message = Lang.tr("Lance le jeu depuis le launcher YuyuFrame pour voir tes missions");
+            } else if (!GameMissions.loaded()) {
+                message = GameMissions.error() != null ? GameMissions.error() : Lang.tr("Chargement...");
+            } else if (GameMissions.missions().isEmpty()) {
+                message = Lang.tr("Les missions arrivent bientôt.");
+            }
+            if (message != null) {
+                float cw = Math.min(w, px(560f));
+                float ch = px(120f);
+                float cx = x, cy = y + h - ch;
+                card(renderer, cx, cy, cw, ch, vpWidth, vpHeight);
+                float mw = renderer.textWidth(message, px(0.48f));
+                renderer.drawText(message, cx + Math.max(px(22f), (cw - mw) / 2f), cy + ch / 2f - px(5f),
+                    UiTheme.TEXT_MUTED, px(0.48f), vpWidth, vpHeight);
+                return;
+            }
+
+            List<GameMissions.Mission> daily = new ArrayList<>();
+            List<GameMissions.Mission> weekly = new ArrayList<>();
+            for (GameMissions.Mission m : GameMissions.missions()) {
+                if ("daily".equals(m.period)) daily.add(m); else weekly.add(m);
+            }
+            float gap = px(20f);
+            float cardW = Math.min(px(620f), (w - gap) / 2f);
+            float top = y + h;
+            drawSection(renderer, Lang.tr("Missions du jour"), daily, true, x, top, cardW, mouseX, mouseY, vpWidth, vpHeight);
+            drawSection(renderer, Lang.tr("Missions de la semaine"), weekly, false, x + cardW + gap, top, cardW, mouseX, mouseY, vpWidth, vpHeight);
+        }
+
+        /** Fond d'une carte : verre sombre arrondi, comme les cartes du launcher. */
+        private void card(UiRenderer renderer, float cx, float cy, float cw, float ch, int vpWidth, int vpHeight) {
+            renderer.drawShadow(cx, cy, cx + cw, cy + ch, px(16f), px(20f), 0f, new UiColor(0, 0, 0, 110), vpWidth, vpHeight);
+            renderer.drawRoundedRect(cx, cy, cx + cw, cy + ch, px(16f), UiTheme.PANEL_BG.multiplyAlpha(0.94f), vpWidth, vpHeight);
+            renderer.drawRoundedRect(cx + px(16f), cy + ch - px(1f), cx + cw - px(16f), cy + ch, 0f,
+                UiTheme.GLASS_BORDER, vpWidth, vpHeight);
+        }
+
+        private void drawSection(UiRenderer renderer, String title, List<GameMissions.Mission> list, boolean daily,
+                                 float cx, float top, float cw, double mouseX, double mouseY, int vpWidth, int vpHeight) {
+            float pad = px(24f);
+            float headerH = px(36f);
+            float checkpointsH = daily && !list.isEmpty() ? px(62f) : 0f;
+            float rowH = px(68f);
+            boolean allDone = !list.isEmpty();
+            for (GameMissions.Mission m : list) if (!m.done()) allDone = false;
+            boolean showRows = !list.isEmpty() && !(allDone && !daily);
+            float bodyH = showRows ? list.size() * rowH : px(70f);
+            float ch = pad + headerH + checkpointsH + bodyH + pad * 0.6f;
+            float cy = top - ch;
+            card(renderer, cx, cy, cw, ch, vpWidth, vpHeight);
+
+            // ── Titre en capitales et compte à rebours ──────────────────────
+            float headMid = top - pad - headerH / 2f + px(4f);
+            renderer.drawText(UiFont.BOLD, title.toUpperCase(Locale.ROOT), cx + pad, headMid - px(5f),
+                UiTheme.TEXT_PRIMARY, px(0.58f), vpWidth, vpHeight);
+            if (!list.isEmpty()) {
+                String left = countdown(list.get(0).endsAt - System.currentTimeMillis());
+                float tw = renderer.textWidth(left, px(0.46f));
+                float clock = px(15f);
+                float rx = cx + cw - pad - tw;
+                renderer.drawText(left, rx, headMid - px(4.5f), UiTheme.TEXT_MUTED, px(0.46f), vpWidth, vpHeight);
+                drawCrispIcon(renderer, ICON_CLOCK, rx - clock - px(7f), headMid - clock / 2f, clock, 0.6f, vpWidth, vpHeight);
+            }
+
+            float cursor = top - pad - headerH;
+
+            // ── Paliers du jour : un losange par mission faite ─────────────
+            if (checkpointsH > 0f) {
+                int total = list.size(), done = 0;
+                for (GameMissions.Mission m : list) if (m.done()) done++;
+                float d = px(38f);
+                float mid = cursor - checkpointsH / 2f;
+                float left = cx + pad, right = cx + cw - pad - d;
+                float step = total > 1 ? (right - left) / (total - 1) : 0f;
+                for (int i = 0; i < total; i++) {
+                    float dx = left + i * step;
+                    if (i < total - 1) {
+                        boolean lit = i < done - 1;
+                        renderer.drawRoundedRect(dx + d + px(4f), mid - px(1.5f), dx + step - px(4f), mid + px(1.5f), px(1.5f),
+                            lit ? UiTheme.ACCENT.multiplyAlpha(0.75f) : new UiColor(255, 255, 255, 22), vpWidth, vpHeight);
+                    }
+                    boolean filled = i < done;
+                    if (filled) {
+                        renderer.drawShadow(dx + px(6f), mid - d / 2f + px(6f), dx + d - px(6f), mid + d / 2f - px(6f), px(6f), px(14f), 0f,
+                            UiTheme.ACCENT.multiplyAlpha(0.45f), vpWidth, vpHeight);
+                    }
+                    int n = Math.max(1, Math.round(d));
+                    renderer.drawIcon("yf-diamond-" + filled + "-" + n, diamondImage(n, filled), Math.round(dx), Math.round(mid - d / 2f), n, n,
+                        1f, vpWidth, vpHeight);
+                    String num = String.valueOf(i + 1);
+                    float nw = renderer.textWidth(UiFont.BOLD, num, px(0.5f));
+                    renderer.drawText(UiFont.BOLD, num, dx + (d - nw) / 2f, mid - px(5f),
+                        filled ? UiTheme.TEXT_PRIMARY : new UiColor(255, 255, 255, 90), px(0.5f), vpWidth, vpHeight);
+                }
+                cursor -= checkpointsH;
+            }
+
+            if (!showRows) {
+                String text = list.isEmpty() ? Lang.tr("Les missions arrivent bientôt.")
+                    : Lang.tr("Toutes les missions de la semaine sont faites.");
+                float tw = renderer.textWidth(UiFont.BOLD, text, px(0.44f));
+                renderer.drawText(UiFont.BOLD, text, cx + (cw - tw) / 2f, cursor - bodyH / 2f - px(4f),
+                    UiTheme.TEXT_MUTED, px(0.44f), vpWidth, vpHeight);
+                return;
+            }
+
+            // ── Une ligne par mission ───────────────────────────────────────
+            for (int i = 0; i < list.size(); i++) {
+                GameMissions.Mission m = list.get(i);
+                float rowTop = cursor - i * rowH, rowBottom = rowTop - rowH, mid = rowBottom + rowH / 2f;
+                if (i > 0) {
+                    renderer.drawRoundedRect(cx + pad, rowTop - px(0.5f), cx + cw - pad, rowTop + px(0.5f), 0f,
+                        new UiColor(255, 255, 255, 13), vpWidth, vpHeight);
+                }
+                float ring = px(28f);
+                float rx = cx + pad, ry = mid - ring / 2f;
+                if (m.done()) {
+                    renderer.drawRoundedRect(rx, ry, rx + ring, ry + ring, ring / 2f, UiTheme.SUCCESS.multiplyAlpha(0.2f), vpWidth, vpHeight);
+                    drawCrispIcon(renderer, ICON_CHECK, rx + ring * 0.22f, ry + ring * 0.22f, ring * 0.56f, 1f, vpWidth, vpHeight);
+                } else {
+                    int n = Math.max(1, Math.round(ring));
+                    int pct = Math.round(Math.min(1f, m.progress / (float) m.goal) * 50f) * 2;
+                    renderer.drawIcon("yf-ring-" + pct + "-" + n, ringImage(n, pct / 100f), Math.round(rx), Math.round(ry), n, n,
+                        1f, vpWidth, vpHeight);
+                }
+
+                // L'XP à droite, la phrase prend le reste.
+                String xp = "+" + String.format(Locale.ROOT, "%,d", m.xp).replace(',', ' ') + " XP";
+                float xpW = renderer.textWidth(UiFont.BOLD, xp, px(0.5f));
+                renderer.drawText(UiFont.BOLD, xp, cx + cw - pad - xpW, mid - px(5f),
+                    m.done() ? UiTheme.SUCCESS : UiTheme.accentLight(), px(0.5f), vpWidth, vpHeight);
+
+                float tx = rx + ring + px(16f);
+                float maxW = cx + cw - pad - xpW - px(16f) - tx;
+                String phrase = fitText(renderer, UiFont.BOLD, missionText(m), maxW, px(0.52f));
+                UiColor titleColor = m.done() ? UiTheme.TEXT_MUTED : UiTheme.TEXT_PRIMARY;
+                float titleBase = mid + px(3f);
+                renderer.drawText(UiFont.BOLD, phrase, tx, titleBase, titleColor, px(0.52f), vpWidth, vpHeight);
+                if (m.done()) {
+                    // Barrée une fois faite, comme dans le launcher.
+                    float pw = renderer.textWidth(UiFont.BOLD, phrase, px(0.52f));
+                    renderer.drawRoundedRect(tx, titleBase + px(5f), tx + pw, titleBase + px(6.5f), 0f,
+                        new UiColor(255, 255, 255, 55), vpWidth, vpHeight);
+                }
+                String sub = m.progress + " / " + m.goal;
+                String mode = "mace".equals(m.mode) ? Lang.tr("Masse") : "sword".equals(m.mode) ? Lang.tr("Épée") : "";
+                if (!mode.isEmpty()) sub += " · " + mode;
+                renderer.drawText(sub, tx, mid - px(16f), UiTheme.TEXT_MUTED, px(0.42f), vpWidth, vpHeight);
+            }
+        }
+
+        /** La phrase d'une mission, mêmes textes que le launcher ({@code competitive.challenges.kinds}). */
+        private String missionText(GameMissions.Mission m) {
+            String key;
+            switch (m.kind) {
+                case "winDuels": key = "Gagne {n} duels"; break;
+                case "scoreAbove": key = "Fais une note de {n} ou plus"; break;
+                case "streak": key = "Enchaîne {n} victoires"; break;
+                case "servers": key = "Gagne sur {n} serveurs différents"; break;
+                case "beatHigher": key = "Bats {n} joueurs mieux classés que toi"; break;
+                case "playDuels": key = "Joue {n} duels classés"; break;
+                default: return m.kind;
+            }
+            return Lang.tr(key).replace("{n}", String.valueOf(m.target));
+        }
+
+        /** « 08:24:55 » sous un jour, « 3:16:49:05 » (jours en tête) au-delà — comme le launcher. */
+        private String countdown(long ms) {
+            long total = Math.max(0L, ms / 1000L);
+            long d = total / 86400L;
+            String hms = String.format(Locale.ROOT, "%02d:%02d:%02d", (total % 86400L) / 3600L, (total % 3600L) / 60L, total % 60L);
+            return d > 0 ? d + ":" + hms : hms;
+        }
+
+        private String fitText(UiRenderer renderer, UiFont font, String text, float maxW, float scale) {
+            if (renderer.textWidth(font, text, scale) <= maxW) return text;
+            String s = text;
+            while (s.length() > 1 && renderer.textWidth(font, s + "...", scale) > maxW) s = s.substring(0, s.length() - 1);
+            return s + "...";
+        }
+    }
+
+    /** Images d'anneaux et de losanges déjà dessinées, par taille et état (voir MissionsPanel). */
+    private static final Map<String, BufferedImage> MISSION_SHAPES = new HashMap<>();
+
+    /** Anneau de progression de {@code n} pixels, rempli à {@code ratio} (0..1), accent sur piste claire. */
+    private static BufferedImage ringImage(int n, float ratio) {
+        String key = "ring:" + n + ":" + Math.round(ratio * 100f);
+        BufferedImage cached = MISSION_SHAPES.get(key);
+        if (cached != null) return cached;
+        BufferedImage img = new BufferedImage(n, n, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = img.createGraphics();
+        try {
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
+            float stroke = Math.max(2f, n * 0.13f);
+            float inset = stroke / 2f + 0.5f;
+            g.setStroke(new java.awt.BasicStroke(stroke, java.awt.BasicStroke.CAP_ROUND, java.awt.BasicStroke.JOIN_ROUND));
+            g.setColor(new java.awt.Color(255, 255, 255, 28));
+            g.draw(new Ellipse2D.Float(inset, inset, n - inset * 2f, n - inset * 2f));
+            if (ratio > 0f) {
+                UiColor a = UiTheme.ACCENT;
+                g.setColor(new java.awt.Color(a.r, a.g, a.b, 1f));
+                // Depuis le haut, dans le sens des aiguilles d'une montre (comme le launcher).
+                g.draw(new java.awt.geom.Arc2D.Float(inset, inset, n - inset * 2f, n - inset * 2f, 90f, -360f * ratio,
+                    java.awt.geom.Arc2D.OPEN));
+            }
+        } finally {
+            g.dispose();
+        }
+        MISSION_SHAPES.put(key, img);
+        return img;
+    }
+
+    /** Losange d'un palier du jour : rempli d'accent une fois atteint, simple contour sinon. */
+    private static BufferedImage diamondImage(int n, boolean filled) {
+        String key = "diamond:" + n + ":" + filled;
+        BufferedImage cached = MISSION_SHAPES.get(key);
+        if (cached != null) return cached;
+        BufferedImage img = new BufferedImage(n, n, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = img.createGraphics();
+        try {
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            float stroke = Math.max(2f, n * 0.06f);
+            float c = n / 2f, r = n / 2f - stroke - n * 0.06f;
+            java.awt.geom.Path2D.Float path = new java.awt.geom.Path2D.Float();
+            path.moveTo(c, c - r);
+            path.lineTo(c + r, c);
+            path.lineTo(c, c + r);
+            path.lineTo(c - r, c);
+            path.closePath();
+            UiColor a = UiTheme.ACCENT;
+            g.setColor(filled ? new java.awt.Color(a.r, a.g, a.b, 0.32f) : new java.awt.Color(255, 255, 255, 6));
+            g.fill(path);
+            g.setStroke(new java.awt.BasicStroke(stroke, java.awt.BasicStroke.CAP_ROUND, java.awt.BasicStroke.JOIN_ROUND));
+            g.setColor(filled ? new java.awt.Color(a.r, a.g, a.b, 1f) : new java.awt.Color(255, 255, 255, 40));
+            g.draw(path);
+        } finally {
+            g.dispose();
+        }
+        MISSION_SHAPES.put(key, img);
+        return img;
     }
 
     /**

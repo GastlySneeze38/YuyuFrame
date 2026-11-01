@@ -26,6 +26,7 @@ import { useCrashWatch } from '@/stores/useCrashWatch'
 import { listenFriendEvents, useFriends } from '@/stores/useFriends'
 import { useDemo } from '@/stores/useDevFlags'
 import { demoFriends } from '@/lib/friendsDemo'
+import { demoData as competitiveDemo } from '@/lib/competitive'
 import { api } from '@/api/client'
 import { showError } from '@/stores/useErrorToast'
 import { AUTH_SYSTEM_VERSION, YUYU_AUTH_VERSION } from '@/config/authVersion'
@@ -616,6 +617,8 @@ export default function App() {
   useEffect(() => {
     if (isConsoleWindow) return
     void api.friends.gameDemo(demoData ? demoFriends() : null).catch(() => {})
+    // L'onglet Missions du menu en jeu, sur le même interrupteur.
+    void api.pass.gameDemo(demoData ? competitiveDemo('Steve').challenges : null).catch(() => {})
   }, [demoData])
 
   // Comptes Minecraft connus du serveur. L'envoi fait à la connexion ne

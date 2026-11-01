@@ -271,6 +271,55 @@ fn friends_line_v2(list: &serde_json::Value) -> String {
     line
 }
 
+/// Missions de démonstration posées par l'interface de dev (même interrupteur
+/// que les amis, `lib/competitive.ts` `demoData`), au format de l'interface
+/// (`endsAt` en millisecondes). `None` = la vraie route `/pass`.
+static DEMO_MISSIONS: Mutex<Option<serde_json::Value>> = Mutex::new(None);
+
+/// Pose ou retire les missions de démonstration. Sans effet en build release.
+#[tauri::command]
+pub fn game_missions_demo(list: Option<serde_json::Value>) {
+    if !cfg!(debug_assertions) {
+        return;
+    }
+    if let Ok(mut demo) = DEMO_MISSIONS.lock() {
+        *demo = list;
+    }
+}
+
+/// La réponse à `missions`, l'onglet Missions du menu YuyuFrame en jeu :
+/// `missions⇥(<période>⇥<sorte>⇥<mode>⇥<cible>⇥<progression>⇥<but>⇥<fin, ms>⇥<xp>)…`,
+/// huit champs par mission (mode vide = tous). `challenges` est la liste de
+/// `GET /pass` (`ends_at`) ou celle de démonstration (`endsAt`).
+fn missions_line(challenges: &[serde_json::Value]) -> String {
+    let num = |c: &serde_json::Value, keys: &[&str]| {
+        keys.iter().find_map(|k| c.get(*k).and_then(|v| v.as_i64())).unwrap_or(0)
+    };
+    let mut line = String::from("missions");
+    for c in challenges {
+        let period = text(c, "/period");
+        let kind = text(c, "/kind");
+        if !matches!(period, "daily" | "weekly") || kind.is_empty() {
+            continue;
+        }
+        let fields = [
+            period.to_string(),
+            field(kind),
+            field(text(c, "/mode")),
+            num(c, &["target"]).to_string(),
+            num(c, &["progress"]).to_string(),
+            num(c, &["goal"]).to_string(),
+            num(c, &["ends_at", "endsAt"]).to_string(),
+            num(c, &["xp"]).to_string(),
+        ];
+        for value in fields {
+            line.push('\t');
+            line.push_str(&value);
+        }
+    }
+    line
+}
+
 async fn answer(ctx: &Context, question: &str) -> String {
     let mut parts = question.split('\t');
     match parts.next().unwrap_or("") {
@@ -352,6 +401,18 @@ async fn answer(ctx: &Context, question: &str) -> String {
             },
         },
         "invite" if demo_friends().is_some() => "ok".to_string(),
+        // L'onglet Missions du menu en jeu : les mêmes missions que l'écran
+        // Missions du launcher (`GET /pass`), ou celles de démonstration.
+        "missions" => {
+            let demo = DEMO_MISSIONS.lock().ok().and_then(|d| d.clone());
+            match demo {
+                Some(list) => missions_line(list.as_array().map(Vec::as_slice).unwrap_or_default()),
+                None => match crate::server::get(&ctx.state, "/pass", &[]).await {
+                    Ok(pass) => missions_line(pass.get("challenges").and_then(|c| c.as_array()).map(Vec::as_slice).unwrap_or_default()),
+                    Err(e) => error(&e.message),
+                },
+            }
+        }
         // Le bouton « Inviter » du jeu : même invitation que celle du
         // launcher (le serveur la lit dans notre présence, et l'écrit aussi
         // en message privé Discord à l'ami qui l'a demandé).
@@ -604,6 +665,19 @@ mod tests {
         assert_eq!(&parts[13..25], &[
             "00000000-0000-4000-8000-000000000005", "Philza", "offline", "0", "", "Envacances", "", "", "", "", "", "1793527200",
         ]);
+    }
+
+    #[test]
+    fn les_missions_lisent_le_serveur_comme_la_demo() {
+        // `GET /pass` écrit `ends_at`, la démonstration de l'interface `endsAt`.
+        let api = serde_json::json!([{ "id": 7, "kind": "winDuels", "period": "daily", "mode": "mace", "target": 5,
+            "progress": 3, "goal": 5, "done": false, "ends_at": 1793577600000_i64, "xp": 1000 }]);
+        let demo = serde_json::json!([{ "id": "w1", "kind": "streak", "period": "weekly", "mode": null, "target": 5,
+            "progress": 3, "goal": 5, "endsAt": 1793577600000_i64, "xp": 4500 },
+            { "kind": "inconnue", "period": "mensuelle" }]);
+        assert_eq!(missions_line(api.as_array().unwrap()), "missions\tdaily\twinDuels\tmace\t5\t3\t5\t1793577600000\t1000");
+        // Une période inconnue est écartée plutôt que de décaler les champs.
+        assert_eq!(missions_line(demo.as_array().unwrap()), "missions\tweekly\tstreak\t\t5\t3\t5\t1793577600000\t4500");
     }
 
     #[test]
