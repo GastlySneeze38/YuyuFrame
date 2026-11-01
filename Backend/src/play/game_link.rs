@@ -16,7 +16,7 @@
 //! | question          | réponse                                                    |
 //! |-------------------|------------------------------------------------------------|
 //! | `ready`           | `ok`                                                       |
-//! | `token`           | `token⇥<visible 0/1>⇥<jeton ou ->`                         |
+//! | `token`           | `token⇥<visible 0/1>⇥<jeton ou ->⇥<uuid du compte Minecraft en jeu ou ->` |
 //! | `accounts`        | `accounts⇥<uuid en jeu>⇥(<uuid>⇥<pseudo>⇥<hors ligne 0/1>)…` |
 //! | `switch⇥<uuid>`   | `account⇥<uuid>⇥<pseudo>⇥<hors ligne 0/1>⇥<jeton Minecraft>` |
 //! | `skin`            | `skin⇥<modèle ou ->⇥<adresse chez Mojang ou ->⇥<chemin du PNG ou ->` |
@@ -339,7 +339,9 @@ async fn answer(ctx: &Context, question: &str) -> String {
                 true => crate::server::valid_access_token(&ctx.state).await.ok(),
                 false => None,
             };
-            format!("token\t{}\t{}", visible as u8, token.as_deref().unwrap_or("-"))
+            // Le compte Minecraft de la partie : le jeu lit son classement sous ce compte.
+            let account = current_uuid(&ctx.instance_id).filter(|u| !u.is_empty() && !u.contains('\t'));
+            format!("token\t{}\t{}\t{}", visible as u8, token.as_deref().unwrap_or("-"), account.as_deref().unwrap_or("-"))
         }
         "accounts" => match crate::account::minecraft::list_accounts(&ctx.state).await {
             Ok(list) => {

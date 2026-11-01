@@ -21,7 +21,7 @@ mod history;
 mod journal;
 mod live;
 mod ranked;
-mod ranked_sync;
+pub(crate) mod ranked_sync;
 mod record;
 mod score;
 mod share;

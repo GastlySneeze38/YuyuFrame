@@ -206,14 +206,21 @@ impl Link {
     }
 }
 
-/// La réponse à `token` : `token⇥<visible 0/1>⇥<jeton ou ->`.
+/// La réponse à `token` : `token⇥<visible 0/1>⇥<jeton ou ->⇥<compte Minecraft ou ->`.
+/// Le compte manque chez un launcher plus ancien : il reste alors inconnu.
 fn apply_token(tokens: &TokenStore, reply: &str) {
     let mut parts = reply.split('\t');
     if parts.next() != Some("token") {
         return;
     }
     let (Some(visible), Some(token)) = (parts.next(), parts.next()) else { return };
+    let had_token = tokens.get().is_some();
     tokens.update((token != "-").then_some(token), visible == "1");
+    let account_changed = tokens.set_account(parts.next().filter(|a| *a != "-"));
+    // Le classement se resynchronise dès qu'on sait pour qui, ou que le compte change.
+    if account_changed || had_token != tokens.get().is_some() {
+        crate::combat::ranked_sync::poke();
+    }
 }
 
 /// `None` une fois pour toutes si le jeu n'a pas été lancé par le launcher :

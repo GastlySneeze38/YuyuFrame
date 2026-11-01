@@ -33,7 +33,15 @@ import java.util.UUID;
 public final class NativeCombat {
 
     /** Même valeur que {@code ABI_VERSION} dans combat/bridge.rs. */
-    private static final int ABI_VERSION = 20;
+    private static final int ABI_VERSION = 21;
+
+    // Le compétitif est-il possible (combat/ranked_sync.rs, `Readiness`).
+    public static final int RANKED_READY_CHECKING = 0;
+    public static final int RANKED_READY_YES = 1;
+    public static final int RANKED_READY_NO_ACCOUNT = 2;
+    public static final int RANKED_READY_NOT_MICROSOFT = 3;
+    public static final int RANKED_READY_UNREACHABLE = 4;
+    public static final int RANKED_READY_UNSUPPORTED = 5;
 
     /** Place réservée au texte de l'historique : deux cents duels en tiennent bien moins. */
     private static final int HISTORY_BYTES = 256 * 1024;
@@ -264,6 +272,7 @@ public final class NativeCombat {
     private static MethodHandle kits;
     private static MethodHandle callouts;
     private static MethodHandle rankedStatus;
+    private static MethodHandle rankedReady;
     private static MethodHandle ownBadge;
     private static MethodHandle showRank;
 
@@ -335,6 +344,7 @@ public final class NativeCombat {
                 FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT), heap);
             rankedStatus = linker.downcallHandle(lib.find("yf_combat_ranked_status").orElseThrow(),
                 FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT));
+            rankedReady = linker.downcallHandle(lib.find("yf_combat_ranked_ready").orElseThrow(), FunctionDescriptor.of(ValueLayout.JAVA_INT));
             ownBadge = linker.downcallHandle(lib.find("yf_combat_own_badge").orElseThrow(), FunctionDescriptor.of(ValueLayout.JAVA_INT));
             showRank = linker.downcallHandle(lib.find("yf_combat_show_rank").orElseThrow(),
                 FunctionDescriptor.ofVoid(ValueLayout.JAVA_INT));
@@ -577,6 +587,19 @@ public final class NativeCombat {
      * {@code RANKED_STATUS_*}, ou {@link #RANKED_STATUS_NONE} s'il n'est pas
      * (encore) connu pour ce résumé.
      */
+    /** Le compétitif est-il possible en ce moment : une des constantes {@code RANKED_READY_*}. */
+    public static int rankedReady() {
+        if (!READY) {
+            return RANKED_READY_NO_ACCOUNT;
+        }
+        try {
+            return (int) rankedReady.invokeExact();
+        } catch (Throwable error) {
+            failed(error);
+            return RANKED_READY_NO_ACCOUNT;
+        }
+    }
+
     public static int rankedStatus(int number) {
         if (!READY) {
             return RANKED_STATUS_NONE;

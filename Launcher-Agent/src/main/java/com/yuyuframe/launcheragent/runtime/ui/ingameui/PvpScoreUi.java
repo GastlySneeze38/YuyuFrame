@@ -645,7 +645,13 @@ public final class PvpScoreUi {
         static boolean playing() {
             com.yuyuframe.launcheragent.runtime.module.gameplay.PvpScoreModule module =
                 com.yuyuframe.launcheragent.runtime.module.gameplay.PvpScoreModule.instance();
-            return module == null || module.competitive();
+            return available() && (module == null || module.competitive());
+        }
+
+        /** Le serveur de classement est joint : sans lui, on ne joue qu'en casual. */
+        static boolean available() {
+            return com.yuyuframe.launcheragent.runtime.combat.NativeCombat.rankedReady()
+                == com.yuyuframe.launcheragent.runtime.combat.NativeCombat.RANKED_READY_YES;
         }
 
         @Override
@@ -689,7 +695,7 @@ public final class PvpScoreUi {
         public void onClick() {
             com.yuyuframe.launcheragent.runtime.module.gameplay.PvpScoreModule module =
                 com.yuyuframe.launcheragent.runtime.module.gameplay.PvpScoreModule.instance();
-            if (module == null) return;
+            if (module == null || !available()) return;
             module.setCompetitive(!module.competitive());
             if (onChange != null) onChange.run();
         }

@@ -142,8 +142,9 @@ impl Outcome {
             && self.placement == other.placement
     }
 
-    /// Les nombres du panneau de fin de duel, dans l'ordre de
-    /// `history::ranked_of` (contrat `NativeCombat.RANKED_*`).
+    /// Les nombres du panneau de fin de duel (contrat `NativeCombat.RANKED_*`) :
+    /// total, base, jeu, adversaire, répétition, position avant puis après,
+    /// placement terminé, casual.
     pub fn numbers(&self, casual: bool) -> [f64; super::history::RANKED_LEN] {
         [
             self.total as f64,

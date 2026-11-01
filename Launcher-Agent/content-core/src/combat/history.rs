@@ -15,8 +15,7 @@ use std::collections::HashMap;
 use std::io::Read;
 use std::path::Path;
 
-use super::ranked::{Change, Ladder, Played};
-use super::score::{score_with, Journal, Mode, Prior, Report};
+use super::score::{score_with, Journal, Prior, Report};
 
 /// Duels rendus au plus : les plus récents.
 const MAX_DUELS: usize = 200;
@@ -31,27 +30,19 @@ fn read_journal(path: &Path) -> Option<String> {
     Some(text)
 }
 
-/// Le texte d'un journal sur le disque — pour la file du classement vérifié.
+/// Le texte d'un journal sur le disque — pour le nettoyage du classement.
 pub(crate) fn read_journal_text(path: &Path) -> Option<String> {
     read_journal(path)
 }
 
-/// Voir [`super::ranked::played_of`] — partagé avec le classement vérifié.
-fn played(report: &Report, foe: &Prior) -> Option<Played> {
-    super::ranked::played_of(report, foe)
-}
-
-/// Les duels terminés du dossier `matches`, du plus récent au plus ancien,
-/// chacun avec ce qu'il a rapporté au classement ; et le classement final.
+/// Les duels terminés du dossier `matches`, du plus récent au plus ancien.
 ///
 /// Les journaux sont notés dans l'ORDRE OÙ ILS ONT ÉTÉ JOUÉS : la note d'un
 /// duel dépend de la force de son adversaire connue avant lui, c'est-à-dire
-/// de son niveau dans nos duels précédents contre lui ([`Prior`]), et le
-/// classement se rejoue duel après duel. Tous sont donc relus, pas seulement
-/// les derniers listés.
-fn duels(matches: &Path) -> (Vec<(Report, Option<Change>)>, Ladder) {
-    let mut ladder = Ladder::default();
-    let Ok(entries) = std::fs::read_dir(matches) else { return (Vec::new(), ladder) };
+/// de son niveau dans nos duels précédents contre lui ([`Prior`]). Tous sont
+/// donc relus, pas seulement les derniers listés.
+fn duels(matches: &Path) -> Vec<Report> {
+    let Ok(entries) = std::fs::read_dir(matches) else { return Vec::new() };
     let mut journals: Vec<_> = entries
         .filter_map(|e| e.ok())
         .map(|e| e.path())
@@ -67,15 +58,9 @@ fn duels(matches: &Path) -> (Vec<(Report, Option<Change>)>, Ladder) {
         let key = journal.foe_key();
         let prior = key.as_ref().and_then(|k| known.get(k)).map(|levels| Prior::from_levels(levels)).unwrap_or_default();
         let report = score_with(&journal, &prior);
-        // Sa force pour le classement : ses duels passés et celui-ci.
-        let foe = match (key, report.informs_prior()) {
-            (Some(key), true) => {
-                let levels = known.entry(key).or_default();
-                levels.push(report.rating.opponent.z);
-                Prior::from_levels(levels)
-            }
-            _ => Prior::from_levels(&[report.rating.opponent.z]),
-        };
+        if let (Some(key), true) = (key, report.informs_prior()) {
+            known.entry(key).or_default().push(report.rating.opponent.z);
+        }
         if !matches!(report.result.as_deref(), Some("win" | "loss" | "draw")) {
             continue;
         }
@@ -85,47 +70,16 @@ fn duels(matches: &Path) -> (Vec<(Report, Option<Change>)>, Ladder) {
                 eprintln!("[YuyuFrame] résumé du duel {} non mis à jour : {e}", path.display());
             }
         }
-        // Un duel casual ne touche pas au classement : on calcule seulement ce
-        // qu'il aurait rapporté, pour le montrer.
-        let change = played(&report, &foe).and_then(|p| if report.casual { ladder.preview(&p) } else { ladder.play(&p) });
-        out.push((report, change));
+        out.push(report);
     }
     out.reverse();
     out.truncate(MAX_DUELS);
-    (out, ladder)
+    out
 }
 
-/// Nombre de valeurs de [`ranked_of`].
+/// Nombre de valeurs du classement d'un duel pour le panneau de fin de duel
+/// (`verified::Outcome::numbers`).
 pub const RANKED_LEN: usize = 13;
-
-/// Ce qu'un duel du dossier `matches` a rapporté au classement, pour le
-/// panneau de fin de duel : `total, base, jeu, adversaire, répétition`, puis
-/// la position avant (`division, points, duels`) et après (`division, points,
-/// duels, placement terminé`), puis 1 s'il a été joué en casual (les points
-/// sont alors ceux qu'il aurait rapportés). `None` s'il n'y compte pas.
-///
-/// Rejoue tout l'historique (le classement d'un duel dépend de tous ceux
-/// d'avant) : quelques millisecondes par duel, à appeler hors du fil du jeu.
-pub fn ranked_of(matches: &Path, time: u64) -> Option<[f64; RANKED_LEN]> {
-    let (reports, _) = duels(matches);
-    let change = reports.iter().find(|(r, _)| r.time == Some(time)).and_then(|(_, c)| *c)?;
-    let (b, a) = (change.before, change.after);
-    Some([
-        change.total as f64,
-        change.base,
-        change.play,
-        change.foe_factor,
-        change.repeat_factor,
-        b.division as f64,
-        b.points as f64,
-        b.duels as f64,
-        a.division as f64,
-        a.points as f64,
-        a.duels as f64,
-        a.placed() as u8 as f64,
-        change.casual as u8 as f64,
-    ])
-}
 
 /// La force connue d'un adversaire, pour un duel qui vient de se terminer :
 /// lue dans les résumés des duels précédents du même dossier (les fichiers
@@ -181,51 +135,41 @@ pub fn detail(instance_dir: &Path, time: u64) -> String {
 ///
 /// ```text
 /// avg ⇥ <moyenne des notes, −1 s'il n'y en a pas> ⇥ <duels notés> ⇥ <duels listés>
+/// ready ⇥ <le classement est-il possible : `ranked_sync::Readiness`>
 /// rank ⇥ <code du mode> ⇥ <division, 0 = Bois 1> ⇥ <points> ⇥ <duels classés> ⇥ <placement terminé, 0 ou 1>
 /// duel ⇥ <heure, ms depuis 1970> ⇥ <pseudo de l'adversaire> ⇥ <les nombres du résumé, séparés par des virgules> ⇥ <classement>
 /// ```
 ///
-/// Les nombres d'un duel sont ceux de `Report::numbers`, dans le même ordre
-/// que pour le panneau de fin de duel. Une ligne `rank` par mode classé
-/// (masse, épée), même sans duel. Le classement d'un duel, vide s'il n'y
-/// compte pas : `total,base,jeu,adversaire,répétition,division après,points
-/// après,placement,casual` — placement 0 après le placement, 1 duel de
-/// placement, 2 joué pendant le placement sans y compter ; casual 1 pour un
-/// duel joué en casual, dont les points sont ceux qu'il AURAIT rapportés
-/// (voir `ranked::Change`).
+/// Le rang et le classement de chaque duel viennent du SERVEUR
+/// (`ranked_sync`) : les lignes `rank` n'existent que si l'état du compte de
+/// la partie est connu, une par mode classé (masse, épée). Les nombres d'un
+/// duel sont ceux de `Report::numbers`, dans le même ordre que pour le
+/// panneau de fin de duel. Le classement d'un duel, vide si le serveur ne
+/// l'a pas vérifié : `points,0,0,1,1,division après,points après,placement,0`
+/// — points 0 pendant le placement (ils sont cachés), placement 1 pour un
+/// duel joué pendant le placement.
 pub fn history(instance_dir: &Path) -> String {
-    let (reports, ladder) = duels(&instance_dir.join("yuyuframe").join("matches"));
-    let scores: Vec<f64> = reports.iter().filter_map(|(r, _)| r.rating.score).collect();
+    super::ranked_sync::watch(instance_dir);
+    let reports = duels(&instance_dir.join("yuyuframe").join("matches"));
+    let scores: Vec<f64> = reports.iter().filter_map(|r| r.rating.score).collect();
     let average = if scores.is_empty() { -1.0 } else { (scores.iter().sum::<f64>() / scores.len() as f64).round() };
     let mut text = format!("avg\t{average}\t{}\t{}\n", scores.len(), reports.len());
-    // Le rang affiché est celui du classement VÉRIFIÉ dès qu'un compte a été
-    // synchronisé avec le serveur (`ranked_sync`) ; sinon le classement local.
-    match super::ranked_sync::cached_in(instance_dir) {
-        Some(cache) => {
-            for (code, division, points, duels, placed) in super::verified::standings(&cache.state) {
-                text.push_str(&format!("rank\t{code}\t{division}\t{points}\t{duels}\t{}\n", placed as u8));
-            }
-        }
-        None => {
-            for mode in [Mode::Mace, Mode::Sword] {
-                let s = ladder.standing(mode);
-                text.push_str(&format!("rank\t{}\t{}\t{}\t{}\t{}\n", mode.code(), s.division, s.points, s.duels, s.placed() as u8));
-            }
+    text.push_str(&format!("ready\t{}\n", super::ranked_sync::readiness() as i32));
+    if let Some(cache) = super::ranked_sync::displayed(instance_dir) {
+        for (code, division, points, duels, placed) in super::verified::standings(&cache.state) {
+            text.push_str(&format!("rank\t{code}\t{division}\t{points}\t{duels}\t{}\n", placed as u8));
         }
     }
-    for (report, change) in &reports {
+    for report in &reports {
         let numbers: Vec<String> = report.numbers().iter().map(|n| n.to_string()).collect();
         // Un pseudo ne contient ni tabulation ni retour à la ligne (le journal
         // n'écrit que des pseudos valides), mais on ne s'y fie pas pour le format.
         let name: String = report.foe_name.as_deref().unwrap_or("").chars().filter(|c| !c.is_control()).collect();
-        let ranked = change
-            .map(|c| {
-                format!(
-                    "{},{},{},{},{},{},{},{},{}",
-                    c.total, c.base, c.play, c.foe_factor, c.repeat_factor, c.after.division, c.after.points, c.placement.code(),
-                    c.casual as u8
-                )
-            })
+        let ranked = report
+            .time
+            .filter(|_| !report.casual)
+            .and_then(super::ranked_sync::server_duel)
+            .map(|d| format!("{},0,0,1,1,{},{},{},0", d.rr, d.after_division, d.after_points, d.placement as u8))
             .unwrap_or_default();
         text.push_str(&format!("duel\t{}\t{}\t{}\t{ranked}\n", report.time.unwrap_or(0), name, numbers.join(",")));
     }
@@ -257,29 +201,18 @@ mod tests {
 
         let text = history(&dir);
         let all: Vec<&str> = text.lines().collect();
-        assert_eq!(all.len(), 5, "{text}");
+        assert_eq!(all.len(), 4, "{text}");
         let head: Vec<&str> = all[0].split('\t').collect();
         assert_eq!((head[0], head[2], head[3]), ("avg", "2", "2"));
         let average: f64 = head[1].parse().unwrap();
         assert!((0.0..=500.0).contains(&average));
 
-        // Le classement : deux duels de placement à la masse, le rang encore
-        // caché ; l'épée, sans duel.
-        assert_eq!(all[1], "rank\t1\t0\t0\t2\t0");
-        assert_eq!(all[2], "rank\t2\t0\t0\t0\t0");
-        let lines = &all[2..];
-        let ranked = |line: &str| -> Vec<f64> { line.split('\t').nth(4).unwrap().split(',').map(|n| n.parse().unwrap()).collect() };
-        let (newer, first) = (ranked(lines[1]), ranked(lines[2]));
-        assert!(first[0] <= -5.0, "une défaite coûte : {first:?}");
-        assert_eq!(first[4], 1.0, "premier duel contre lui ce jour-là");
-        assert_eq!(newer[4], 0.5, "le même adversaire le même jour : la moitié");
-        assert_eq!((first[7], newer[7]), (1.0, 1.0), "deux duels de placement");
-
-        // Ce que le panneau de fin de duel reçoit pour ce duel : les mêmes points.
-        let time: u64 = lines[1].split('\t').nth(1).unwrap().parse().unwrap();
-        let panel = ranked_of(&dir.join("yuyuframe").join("matches"), time).expect("un duel classé");
-        assert_eq!(panel[0], newer[0], "le total");
-        assert_eq!((panel[8], panel[9]), (newer[5], newer[6]), "la position après");
+        // Sans launcher ni compte : le classement n'est pas possible, aucun
+        // rang n'est inventé, et aucun duel n'a de points (le serveur seul en donne).
+        assert_eq!(all[1], "ready\t2");
+        let lines = &all[1..];
+        assert_eq!(lines[1].split('\t').nth(4), Some(""), "pas de classement local");
+        assert_eq!(lines[2].split('\t').nth(4), Some(""));
 
         let duel: Vec<&str> = lines[1].split('\t').collect();
         assert_eq!(duel[0], "duel");
@@ -302,25 +235,9 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
-    /// Le classement rejoué sur les journaux d'une vraie instance :
-    /// `YF_INSTANCE=<dossier de l'instance> cargo test --lib classement_d_une_instance -- --ignored --nocapture`.
-    #[test]
-    #[ignore]
-    fn classement_d_une_instance() {
-        let dir = std::env::var("YF_INSTANCE").expect("YF_INSTANCE : le dossier de l'instance");
-        for line in history(Path::new(&dir)).lines() {
-            let fields: Vec<&str> = line.split('\t').collect();
-            match fields[0] {
-                "rank" => println!("{line}"),
-                "duel" => println!("{} {} note {} → {}", fields[1], fields[2], fields[3].split(',').next().unwrap_or(""), fields.get(4).unwrap_or(&"")),
-                _ => {}
-            }
-        }
-    }
-
     #[test]
     fn un_dossier_sans_duel_rend_un_historique_vide() {
         let text = history(Path::new("un-dossier-qui-n-existe-pas"));
-        assert_eq!(text, "avg\t-1\t0\t0\nrank\t1\t0\t0\t0\t0\nrank\t2\t0\t0\t0\t0\n");
+        assert_eq!(text, "avg\t-1\t0\t0\nready\t2\n");
     }
 }

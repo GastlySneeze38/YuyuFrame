@@ -138,6 +138,10 @@ pub struct Journal {
     competitive: bool,
     /// Le type du duel ouvert, figé à son ouverture (voir `competitive`).
     open_competitive: bool,
+    /// Le serveur de classement est joint pour le compte de la partie
+    /// ([`Journal::set_rankable`]). Vrai par défaut pour les tests ; le fil
+    /// d'écriture le pose avant chaque enregistrement.
+    rankable: bool,
     /// Combien de fois notre armure est arrivée hors duel : le serveur nous
     /// équipe pour un nouveau duel, avant le premier coup. L'interface y
     /// efface le panneau du duel précédent.
@@ -168,9 +172,17 @@ impl Journal {
             quiet_until: 0,
             competitive: true,
             open_competitive: true,
+            rankable: true,
             kits: 0,
             last_result: None,
         }
+    }
+
+    /// Le classement est-il possible en ce moment (`ranked_sync::can_rank` :
+    /// compte YuyuFrame, compte Microsoft, serveur joint) ? Sans lui, un duel
+    /// s'ouvre en casual quel que soit le choix du joueur.
+    pub fn set_rankable(&mut self, on: bool) {
+        self.rankable = on;
     }
 
     /// `now_ms` : l'heure du système, qui n'entre que dans l'en-tête d'un
@@ -388,9 +400,13 @@ impl Journal {
         // Hors d'un monde, il n'y a nulle part où écrire ni rien à écrire.
         let Some(dir) = self.dir.clone() else { return };
         self.recording = true;
-        self.open_competitive = self.competitive;
+        // Compétitif seulement si le serveur de classement est joint ET que
+        // le serveur de jeu prouve notre compte : un serveur en mode hors
+        // ligne donne un UUID version 3, dérivé du pseudo.
+        let proven = self.me.and_then(|me| self.players.get(&me)).is_none_or(|(uuid, _)| (uuid >> 76) & 0xf == 4);
+        self.open_competitive = self.competitive && self.rankable && proven;
         out.push(Out::Open(dir.join("yuyuframe").join("matches").join(format!("{now_ms}.events.ndjson.zst"))));
-        let header = json!({ "k": "h", "v": TELEMETRY_VERSION, "server": self.server, "mc": self.mc, "time": now_ms, "me": self.me, "t": self.tick, "open": by, "ranked": self.competitive });
+        let header = json!({ "k": "h", "v": TELEMETRY_VERSION, "server": self.server, "mc": self.mc, "time": now_ms, "me": self.me, "t": self.tick, "open": by, "ranked": self.open_competitive });
         out.push(Out::Line(header.to_string()));
         self.write_identities(out);
         let oldest = self.tick.saturating_sub(PREROLL_TICKS);

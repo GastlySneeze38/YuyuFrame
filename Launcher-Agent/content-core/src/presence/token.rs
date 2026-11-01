@@ -23,11 +23,29 @@ const MAX_TOKEN_LEN: usize = 4096;
 pub struct TokenStore {
     current: Mutex<Option<Arc<str>>>,
     visible: AtomicBool,
+    /// Le compte Minecraft de la partie (UUID sans tirets, en minuscules),
+    /// tel que le launcher le connaît : il suit un changement de compte en jeu.
+    account: Mutex<Option<String>>,
 }
 
 impl TokenStore {
     pub fn get(&self) -> Option<Arc<str>> {
         self.current.lock().unwrap_or_else(|p| p.into_inner()).clone()
+    }
+
+    /// Le compte Minecraft de la partie, `None` tant que le launcher ne l'a pas dit.
+    pub fn account(&self) -> Option<String> {
+        self.account.lock().unwrap_or_else(|p| p.into_inner()).clone()
+    }
+
+    /// Le compte Minecraft donné par le launcher ; rend vrai s'il a changé.
+    /// Seul un UUID bien formé est gardé.
+    pub fn set_account(&self, uuid: Option<&str>) -> bool {
+        let uuid = uuid.map(|u| u.replace('-', "").to_ascii_lowercase()).filter(|u| u.len() == 32 && u.bytes().all(|b| b.is_ascii_hexdigit()));
+        let mut current = self.account.lock().unwrap_or_else(|p| p.into_inner());
+        let changed = *current != uuid;
+        *current = uuid;
+        changed
     }
 
     /// Le joueur veut-il apparaître aux autres ? Faux tant que le launcher ne l'a pas dit.
@@ -89,6 +107,16 @@ mod tests {
         // Déconnexion de YuyuFrame dans le launcher : plus de jeton.
         store.update(None, false);
         assert!(store.get().is_none());
+    }
+
+    #[test]
+    fn le_compte_de_la_partie_est_un_uuid_sans_tirets() {
+        let store = TokenStore::default();
+        assert!(store.set_account(Some("0123ABCD-89ab-4def-0123-456789abcdef")));
+        assert_eq!(store.account().as_deref(), Some("0123abcd89ab4def0123456789abcdef"));
+        assert!(!store.set_account(Some("0123abcd89ab4def0123456789abcdef")), "même compte : rien ne change");
+        assert!(store.set_account(Some("pas-un-uuid")));
+        assert!(store.account().is_none());
     }
 
     #[test]

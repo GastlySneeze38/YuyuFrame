@@ -36,7 +36,10 @@ use super::writer::send;
 /// `yf_combat_live_mode` répond aussi hors duel.
 /// 20 (2026-10-23) : le classement vérifié par le serveur —
 /// `yf_combat_ranked_status`, `yf_combat_own_badge`, `yf_combat_show_rank`.
-const ABI_VERSION: u32 = 20;
+/// 21 (2026-11-01) : le serveur est la seule source du classement —
+/// `yf_combat_ranked_ready` ; statut 3 = serveur muet (le duel ne compte
+/// pas), 6 n'existe plus ; ligne `ready` de l'historique.
+const ABI_VERSION: u32 = 21;
 
 /// Autres joueurs transmis par tick, au plus.
 const MAX_OTHERS: usize = 16;
@@ -74,6 +77,8 @@ pub unsafe extern "C" fn yf_combat_context(dir: *const u8, dir_len: i32, server:
     }
     // La file des duels partagés de cette instance : surveillée dès maintenant.
     super::share::watch(std::path::Path::new(&dir));
+    // Son classement aussi : copie de l'état, nettoyage de l'ancien classement.
+    super::ranked_sync::watch(std::path::Path::new(&dir));
     send(Record::Context { dir: PathBuf::from(dir), server: text(server, server_len), mc: text(mc, mc_len) });
 }
 
@@ -124,10 +129,10 @@ pub unsafe extern "C" fn yf_combat_report(out: *mut f64, len: i32) -> i32 {
 }
 
 /// Ce que le dernier duel fermé a rapporté au classement
-/// (`history::ranked_of`, `RANKED_LEN` nombres). Rend le numéro du résumé
-/// auquel il se rapporte — celui de [`yf_combat_report`] — ou 0 tant que
-/// rien n'est calculé : il arrive un peu après le résumé, le temps de
-/// rejouer l'historique sur un fil à part. Un duel qui ne compte pas au
+/// (`verified::Outcome::numbers`, `RANKED_LEN` nombres). Rend le numéro du
+/// résumé auquel il se rapporte — celui de [`yf_combat_report`] — ou 0 tant
+/// que rien n'est calculé : il arrive un peu après le résumé, le temps d'un
+/// aller-retour avec le serveur sur un fil à part. Un duel qui ne compte pas au
 /// classement ne publie rien : Java garde alors l'ancien numéro.
 ///
 /// # Safety
@@ -142,13 +147,22 @@ pub unsafe extern "C" fn yf_combat_ranked(out: *mut f64, len: i32) -> i32 {
 }
 
 /// Le statut du classement du dernier duel (`ranked_sync::Status` : 1 vérifié,
-/// 2 refusé par le serveur, 3 en attente, 4 sans compte, 5 casual, 6
-/// classement local, 7 serveur de jeu hors ligne), pour le résumé numéro
-/// `number` — 0 si ce n'est pas le sien.
+/// 2 refusé par le serveur, 3 serveur muet, 4 sans compte, 5 casual, 7
+/// serveur de jeu hors ligne), pour le résumé numéro `number` — 0 si ce
+/// n'est pas le sien.
 #[no_mangle]
 pub extern "C" fn yf_combat_ranked_status(number: i32) -> i32 {
     let (of, status) = super::ranked_sync::status();
     if of == number { status } else { 0 }
+}
+
+/// Le compétitif est-il possible en ce moment (`ranked_sync::Readiness`) :
+/// 0 vérification en cours, 1 oui, 2 pas de compte YuyuFrame, 3 compte
+/// Minecraft hors ligne, 4 serveur injoignable, 5 classement inconnu de
+/// l'API. Hors de 1, un duel s'ouvre en casual.
+#[no_mangle]
+pub extern "C" fn yf_combat_ranked_ready() -> i32 {
+    super::ranked_sync::readiness() as i32
 }
 
 /// Le code du logo de notre propre joueur, tel que les autres le voient

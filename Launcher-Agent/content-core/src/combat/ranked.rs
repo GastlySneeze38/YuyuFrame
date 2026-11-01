@@ -292,6 +292,8 @@ impl Ladder {
 
     /// Ce qu'un duel joué en casual aurait rapporté en compétitif, sans rien
     /// toucher au classement : ni la position, ni les adversaires déjà vus.
+    /// (Le jeu passe par `verified::preview` ; gardé pour les tests du calcul.)
+    #[cfg(test)]
     pub fn preview(&self, played: &Played) -> Option<Change> {
         let mut copy = self.clone();
         copy.play(played).map(|change| Change { casual: true, ..change })

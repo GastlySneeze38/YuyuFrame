@@ -66,9 +66,9 @@ pub fn last_report() -> (i32, [f64; super::score::REPORT_LEN]) {
     *LAST_REPORT.lock().unwrap_or_else(|p| p.into_inner())
 }
 
-/// Ce que le dernier duel fermé a rapporté au classement
-/// (`history::ranked_of`), avec le numéro de son résumé : il arrive un peu
-/// après lui, le temps de rejouer l'historique. Numéro 0 : rien encore.
+/// Ce que le dernier duel fermé a rapporté au classement (`ranked_sync`),
+/// avec le numéro de son résumé : il arrive un peu après lui, le temps d'un
+/// aller-retour avec le serveur. Numéro 0 : rien encore.
 static LAST_RANKED: std::sync::Mutex<(i32, [f64; super::history::RANKED_LEN])> =
     std::sync::Mutex::new((0, [0.0; super::history::RANKED_LEN]));
 
@@ -76,29 +76,16 @@ pub fn last_ranked() -> (i32, [f64; super::history::RANKED_LEN]) {
     *LAST_RANKED.lock().unwrap_or_else(|p| p.into_inner())
 }
 
-/// Calcule, sur un fil à part, ce que le duel `number` (ouvert à `time`) a
-/// rapporté au classement : rejouer l'historique prend quelques
-/// millisecondes par duel, et le fil d'écriture ne doit pas s'arrêter pendant
-/// ce temps (le duel suivant peut commencer).
-///
-/// Le classement VÉRIFIÉ passe d'abord (`ranked_sync` : même calcul fait par
-/// le serveur, un aller-retour réseau) ; le classement local ne sert plus que
-/// pour un duel qui n'y compte pas, ou tant que l'API ne connaît pas encore
-/// ces routes.
-fn rank_later(number: i32, matches: std::path::PathBuf, time: u64, text: String) {
+/// Classe, sur un fil à part, le duel `number` : c'est le serveur qui le
+/// vérifie (`ranked_sync`, un aller-retour réseau), et le fil d'écriture ne
+/// doit pas s'arrêter pendant ce temps (le duel suivant peut commencer).
+/// Il n'y a plus de classement local : sans serveur, rien n'est classé.
+fn rank_later(number: i32, matches: std::path::PathBuf, text: String) {
     let spawned = std::thread::Builder::new().name("yf-ranked".into()).spawn(move || {
-        let instance = matches.parent().and_then(Path::parent).map(Path::to_path_buf);
-        let journal = matches.join(format!("{time}.events.ndjson.zst"));
-        if let Some(instance) = instance {
-            if let Some((values, status)) = super::ranked_sync::on_duel(&instance, &journal, &text) {
-                *LAST_RANKED.lock().unwrap_or_else(|p| p.into_inner()) = (number, values);
-                super::ranked_sync::publish(number, status);
-                return;
-            }
-        }
-        if let Some(values) = super::history::ranked_of(&matches, time) {
+        let Some(instance) = matches.parent().and_then(Path::parent).map(Path::to_path_buf) else { return };
+        if let Some((values, status)) = super::ranked_sync::on_duel(&instance, &text) {
             *LAST_RANKED.lock().unwrap_or_else(|p| p.into_inner()) = (number, values);
-            super::ranked_sync::publish(number, super::ranked_sync::Status::Legacy);
+            super::ranked_sync::publish(number, status);
         }
     });
     if let Err(e) = spawned {
@@ -171,8 +158,8 @@ impl Sink {
             eprintln!("[YuyuFrame] résumé du duel {} impossible à écrire : {e}", self.summary.display());
         }
         // Après le résumé : le rejeu réécrit les résumés, celui-ci compris.
-        if let (Some(dir), Some(time)) = (self.summary.parent(), journal.time()) {
-            rank_later(number, dir.to_path_buf(), time, self.text.clone());
+        if let Some(dir) = self.summary.parent() {
+            rank_later(number, dir.to_path_buf(), self.text.clone());
         }
     }
 
@@ -210,6 +197,8 @@ fn run(records: std::sync::mpsc::Receiver<Record>) {
             Some(Record::Event { kind, a, b, text, .. }) => Some(super::live::Seen::Event { kind: *kind, a: *a, b: *b, text: text.clone() }),
             _ => None,
         };
+        // Un duel ne s'ouvre compétitif que si le serveur de classement est joint.
+        journal.set_rankable(super::ranked_sync::can_rank());
         let outs = record.map(|r| journal.feed(r, now_ms())).unwrap_or_default();
         live.observe(seen, &journal);
         live.publish();
@@ -217,6 +206,7 @@ fn run(records: std::sync::mpsc::Receiver<Record>) {
             match out {
                 Out::Open(path) => {
                     close(&mut sink);
+                    super::ranked_sync::opened(&path);
                     sink = match Sink::open(&path) {
                         Ok(sink) => Some(sink),
                         Err(e) => {
