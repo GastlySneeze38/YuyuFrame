@@ -126,6 +126,10 @@ pub async fn launch(app: tauri::AppHandle, run: HorizonLaunch<'_>, cancel: watch
     let mut cmd = crate::app::process::hidden_command(installed.dir.join(release::CLIENT));
     cmd.current_dir(run.game_dir)
         .env("HORIZON_HOME", &home)
+        // Le statut Discord est celui du launcher (`integrations::discord`),
+        // comme pour une partie Java : celui d'Horizon le remplaçait pendant
+        // la partie, les deux se disputaient l'affichage.
+        .env("HORIZON_NO_DISCORD", "1")
         .arg("--resources")
         .arg(&resources)
         .stdin(Stdio::null())
