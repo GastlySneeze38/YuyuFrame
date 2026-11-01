@@ -24,6 +24,8 @@ import { useModalQueue } from '@/stores/useModalQueue'
 import { useSupportWatch, POLL_MS as SUPPORT_POLL_MS } from '@/stores/useSupportWatch'
 import { useCrashWatch } from '@/stores/useCrashWatch'
 import { listenFriendEvents, useFriends } from '@/stores/useFriends'
+import { useDemo } from '@/stores/useDevFlags'
+import { demoFriends } from '@/lib/friendsDemo'
 import { api } from '@/api/client'
 import { showError } from '@/stores/useErrorToast'
 import { AUTH_SYSTEM_VERSION, YUYU_AUTH_VERSION } from '@/config/authVersion'
@@ -605,6 +607,16 @@ export default function App() {
       stop?.()
     }
   }, [yuyuSignedIn, emailVerificationRequired])
+
+  // Le menu YuyuFrame en jeu demande ses amis au launcher par le canal du
+  // jeu : avec l'interrupteur « données de démonstration » de l'atelier, il
+  // reçoit les mêmes amis de démo que le panneau du launcher. Le Rust
+  // l'ignore en build release.
+  const demoData = useDemo()
+  useEffect(() => {
+    if (isConsoleWindow) return
+    void api.friends.gameDemo(demoData ? demoFriends() : null).catch(() => {})
+  }, [demoData])
 
   // Comptes Minecraft connus du serveur. L'envoi fait à la connexion ne
   // suffit pas : une session ouverte avant que la liste n'existe ne repasse

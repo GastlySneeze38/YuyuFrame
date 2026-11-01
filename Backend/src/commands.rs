@@ -80,6 +80,7 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         crate::friends::notify::notifications_configure,
         crate::friends::notify::set_unread_badge,
         crate::friends::notify::friends_demo_event,
+        crate::play::game_link::game_friends_demo,
         crate::server::support::support_categories,
         crate::server::support::support_list,
         crate::server::support::support_get,

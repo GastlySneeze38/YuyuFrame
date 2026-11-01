@@ -115,6 +115,28 @@ fn is_public_id(id: &str) -> bool {
 
 /// La réponse à `friends`, depuis la liste du serveur (`GET /friends`) : les
 /// amis en jeu d'abord, puis en ligne, puis les autres, chacun par pseudo.
+/// Liste d'amis de démonstration posée par l'interface de dev (interrupteur
+/// « données de démonstration » de l'atelier, `lib/friendsDemo.ts`) : le jeu
+/// la reçoit à la place de la vraie, et une invitation y répond « ok » sans
+/// rien envoyer. `None` = les vraies données.
+static DEMO_FRIENDS: Mutex<Option<serde_json::Value>> = Mutex::new(None);
+
+/// Pose ou retire la liste de démonstration. Sans effet en build release :
+/// rien de factice ne doit jamais atteindre le jeu d'un joueur.
+#[tauri::command]
+pub fn game_friends_demo(list: Option<serde_json::Value>) {
+    if !cfg!(debug_assertions) {
+        return;
+    }
+    if let Ok(mut demo) = DEMO_FRIENDS.lock() {
+        *demo = list;
+    }
+}
+
+fn demo_friends() -> Option<serde_json::Value> {
+    DEMO_FRIENDS.lock().ok().and_then(|d| d.clone())
+}
+
 fn friends_line(list: &serde_json::Value) -> String {
     let friends = list.get("friends").and_then(|f| f.as_array()).map(Vec::as_slice).unwrap_or_default();
     let mut rows: Vec<(u8, String, &str, &str, &str, bool)> = friends
@@ -205,10 +227,14 @@ async fn answer(ctx: &Context, question: &str) -> String {
             Some(uuid) if !uuid.is_empty() => switch_account(ctx, uuid).await,
             _ => error("Compte non précisé"),
         },
-        "friends" => match crate::server::get(&ctx.state, "/friends", &[]).await {
-            Ok(list) => friends_line(&list),
-            Err(e) => error(&e.message),
+        "friends" => match demo_friends() {
+            Some(demo) => friends_line(&demo),
+            None => match crate::server::get(&ctx.state, "/friends", &[]).await {
+                Ok(list) => friends_line(&list),
+                Err(e) => error(&e.message),
+            },
         },
+        "invite" if demo_friends().is_some() => "ok".to_string(),
         // Le bouton « Inviter » du jeu : même invitation que celle du
         // launcher (le serveur la lit dans notre présence, et l'écrit aussi
         // en message privé Discord à l'ami qui l'a demandé).

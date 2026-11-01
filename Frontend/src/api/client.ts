@@ -889,6 +889,8 @@ export const api = {
    *  l'événement `friends_event` (voir `stores/useFriends.ts`). */
   friends: {
     list: () => invoke<FriendList>('friends_list'),
+    /** Atelier de dev : amis de démonstration rendus au jeu à la place des vrais (`null` = les vrais). Sans effet en release. */
+    gameDemo: (list: FriendList | null) => invoke<void>('game_friends_demo', { list }),
     /** Qui est derrière un code ami, avant de l'ajouter. */
     lookup: (code: string) => invoke<LookupResult>('friends_lookup', { code }),
     /** Par code ami (« Ghasty#4821 ») ou par l'identifiant public d'un aperçu. */

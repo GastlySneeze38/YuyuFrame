@@ -1,5 +1,6 @@
 package com.yuyuframe.launcheragent.runtime.ui.ingameui;
 
+import com.yuyuframe.launcheragent.runtime.friends.GameFriends;
 import com.yuyuframe.launcheragent.runtime.i18n.Lang;
 import com.yuyuframe.launcheragent.runtime.ui.GlobalUiSettings;
 import com.yuyuframe.launcheragent.runtime.ui.HudConfigStore;
@@ -335,10 +336,15 @@ public class UiMainMenuScreen extends UiScreenBase {
         TaffyNode sidebar = new TaffyNode("sidebar", sidebarStyle);
         sidebar.child(navNode("nav.home", navH));
         sidebar.child(navNode("nav.settings", navH));
-        // Cale élastique — c'est ELLE qui épingle "Modifier le HUD" en bas,
-        // à la place de l'ancienne position absolue `(MARGIN, MARGIN)` :
-        // ajouter un item au-dessus ne demande plus aucun recalcul.
-        sidebar.child(LayoutSolver.spacer());
+        // La liste des amis prend toute la place libre entre la navigation et
+        // "Modifier le HUD" — c'est elle, élastique, qui épingle ce bouton en
+        // bas (rôle de l'ancienne cale). Elle n'affiche que les lignes qui
+        // tiennent, le reste en "+N" (voir FriendsPanel).
+        TaffyStyle friendsStyle = new TaffyStyle();
+        friendsStyle.flexGrow = 1f;
+        friendsStyle.margin = new String[]{
+            TaffyStyle.px(UiTheme.scaled(14f)), TaffyStyle.px(0f), TaffyStyle.px(UiTheme.scaled(8f)), TaffyStyle.px(0f) };
+        sidebar.child(new TaffyNode("friends", friendsStyle));
         sidebar.child(navNode("nav.hud", navH));
         screen.child(sidebar);
 
@@ -392,6 +398,7 @@ public class UiMainMenuScreen extends UiScreenBase {
             () -> closeTo(new UiModConfigScreen(UiMainMenuScreen.this, GlobalUiSettings.INSTANCE)));
         SidebarItem navHud = new SidebarItem("Modifier le HUD", false,
             () -> closeTo(new UiHudEditorScreen(UiMainMenuScreen.this)));
+        FriendsPanel friendsPanel = new FriendsPanel();
         CloseButton closeButton = new CloseButton(0, 0, closeSize);
         // Icône à côté de la barre de recherche (demandé explicitement :
         // "choisir avec une icon a coté de la bar de recherche") — cycle
@@ -410,6 +417,7 @@ public class UiMainMenuScreen extends UiScreenBase {
             layout.apply("nav.home", navHome);
             layout.apply("nav.settings", navSettings);
             layout.apply("nav.hud", navHud);
+            layout.apply("friends", friendsPanel);
             layout.apply("close", closeButton);
             layout.apply("search", searchField);
             layout.apply("layoutbtn", layoutButton);
@@ -439,6 +447,8 @@ public class UiMainMenuScreen extends UiScreenBase {
         widgets.add(navHome);
         widgets.add(navSettings);
         widgets.add(navHud);
+        // Sans layout (repli), le panneau garde une taille nulle et ne dessine rien.
+        widgets.add(friendsPanel);
         widgets.add(closeButton);
         widgets.add(searchField);
         widgets.add(layoutButton);
@@ -1288,6 +1298,193 @@ public class UiMainMenuScreen extends UiScreenBase {
         @Override
         public void onClick() {
             if (action != null) action.run();
+        }
+    }
+
+    /**
+     * Liste des amis YuyuFrame dans la sidebar (2026-11-01), entre la
+     * navigation et "Modifier le HUD".
+     *
+     * <p>Les données viennent du launcher par le canal du jeu
+     * ({@link GameFriends}), déjà triées : en jeu, en ligne, hors ligne. Le
+     * panneau n'affiche que les lignes qui tiennent dans sa hauteur ; s'il en
+     * reste, la dernière ligne devient "+N". Survoler un ami en ligne fait
+     * apparaître "Inviter" : l'invitation est celle du launcher (le serveur
+     * lit dans notre présence où l'on joue).
+     *
+     * <p>Un seul widget pour toute la liste plutôt qu'un par ligne : elle se
+     * redessine à chaque réponse du launcher sans reconstruire l'écran, et le
+     * clic est routé vers la ligne survolée (relevée dans {@link #draw}).
+     */
+    private final class FriendsPanel extends UiWidget {
+        /** Ligne survolée dont le bouton "Inviter" est sous la souris, ou {@code null}. */
+        private GameFriends.Friend hoveredInvite;
+
+        FriendsPanel() {
+            super(0f, 0f, 0f, 0f);
+        }
+
+        @Override
+        public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
+            hoveredInvite = null;
+            if (w <= 0f || h <= 0f) return;
+            GameFriends.keepFresh();
+
+            float top = y + h;
+            float textScale = UiTheme.scaled(0.38f);
+            float smallScale = UiTheme.scaled(0.32f);
+            float padX = UiTheme.scaled(12f);
+            float headerH = UiTheme.scaled(22f);
+            float rowH = UiTheme.scaled(24f);
+
+            // Trait de séparation avec la navigation, puis l'en-tête.
+            renderer.drawRoundedRect(x + padX, top - UiTheme.scaled(1f), x + w - padX, top, 0f,
+                UiTheme.TEXT_MUTED.multiplyAlpha(0.25f), vpWidth, vpHeight);
+            float headerBase = top - headerH + UiTheme.scaled(5f);
+            renderer.drawText(Lang.tr("Amis"), x + padX, headerBase, UiTheme.TEXT_SECONDARY, textScale, vpWidth, vpHeight);
+            List<GameFriends.Friend> list = GameFriends.friends();
+            int online = 0;
+            for (GameFriends.Friend f : list) if (f.online()) online++;
+            if (GameFriends.loaded() && !list.isEmpty()) {
+                String count = online + " " + Lang.tr("en ligne");
+                float cw = renderer.textWidth(count, smallScale);
+                renderer.drawText(count, x + w - padX - cw, headerBase, UiTheme.TEXT_MUTED, smallScale, vpWidth, vpHeight);
+            }
+
+            // Résultat d'une invitation : réservé en bas, au-dessus de "Modifier le HUD".
+            String notice = GameFriends.notice();
+            float noticeH = notice != null ? UiTheme.scaled(30f) : 0f;
+            if (notice != null) {
+                UiColor c = GameFriends.noticeIsError() ? UiTheme.DANGER : UiTheme.SUCCESS;
+                drawWrapped(renderer, notice, x + padX, y + noticeH - UiTheme.scaled(10f), w - padX * 2f, 2, c, smallScale, vpWidth, vpHeight);
+            }
+
+            float listTop = top - headerH - UiTheme.scaled(4f);
+            float listBottom = y + noticeH;
+            float messageBase = listTop - UiTheme.scaled(14f);
+            float maxW = w - padX * 2f;
+
+            if (!GameFriends.available()) {
+                drawWrapped(renderer, Lang.tr("Lance le jeu depuis le launcher YuyuFrame pour voir tes amis"),
+                    x + padX, messageBase, maxW, 4, UiTheme.TEXT_MUTED, smallScale, vpWidth, vpHeight);
+                return;
+            }
+            if (!GameFriends.loaded()) {
+                String text = GameFriends.error() != null ? GameFriends.error() : Lang.tr("Chargement...");
+                drawWrapped(renderer, text, x + padX, messageBase, maxW, 4, UiTheme.TEXT_MUTED, smallScale, vpWidth, vpHeight);
+                return;
+            }
+            if (list.isEmpty()) {
+                drawWrapped(renderer, Lang.tr("Aucun ami pour l'instant. Ajoute-les depuis le launcher."),
+                    x + padX, messageBase, maxW, 4, UiTheme.TEXT_MUTED, smallScale, vpWidth, vpHeight);
+                return;
+            }
+
+            int fit = Math.max(0, (int) Math.floor((listTop - listBottom) / rowH));
+            if (fit == 0) return;
+            boolean overflow = list.size() > fit;
+            int shown = overflow ? fit - 1 : list.size();
+
+            for (int i = 0; i < shown; i++) {
+                GameFriends.Friend f = list.get(i);
+                float rowTop = listTop - i * rowH;
+                float rowBottom = rowTop - rowH;
+                boolean hovered = mouseX >= x && mouseX <= x + w && mouseY >= rowBottom && mouseY <= rowTop;
+                if (hovered) {
+                    renderer.drawRoundedRect(x, rowBottom, x + w, rowTop, UiTheme.RADIUS_SM, UiTheme.SIDEBAR_HOVER, vpWidth, vpHeight);
+                }
+
+                // Pastille d'état : en jeu = accent, en ligne = vert, absent = jaune, ne pas déranger = rouge.
+                float dot = UiTheme.scaled(3.5f);
+                float cx = x + padX + dot, cy = rowBottom + rowH / 2f;
+                renderer.drawRoundedRect(cx - dot, cy - dot, cx + dot, cy + dot, dot, stateColor(f), vpWidth, vpHeight);
+
+                float nameX = cx + dot + UiTheme.scaled(8f);
+                float right = x + w - padX;
+                String tag = null;
+                boolean invite = hovered && f.online();
+                if (invite) {
+                    tag = GameFriends.inviting() ? Lang.tr("Envoi...") : Lang.tr("Inviter");
+                } else if (f.inGame) {
+                    tag = Lang.tr("En jeu");
+                }
+                float tagW = 0f;
+                if (tag != null) {
+                    tagW = renderer.textWidth(tag, smallScale);
+                    float tagBase = cy - UiTheme.scaled(3.5f);
+                    if (invite) {
+                        float px = UiTheme.scaled(6f), py = UiTheme.scaled(4f);
+                        float bx1 = right - tagW - px * 2f, bx2 = right;
+                        float by1 = cy - UiTheme.scaled(8f), by2 = cy + UiTheme.scaled(8f);
+                        boolean onButton = mouseX >= bx1 && mouseX <= bx2 && mouseY >= by1 && mouseY <= by2;
+                        renderer.drawRoundedRect(bx1, by1, bx2, by2, UiTheme.RADIUS_SM,
+                            onButton ? UiTheme.ACCENT : UiTheme.ACCENT_DIM, vpWidth, vpHeight);
+                        renderer.drawText(tag, bx1 + px, tagBase, UiTheme.TEXT_PRIMARY, smallScale, vpWidth, vpHeight);
+                        tagW += px * 2f;
+                        if (onButton) hoveredInvite = f;
+                    } else {
+                        renderer.drawText(tag, right - tagW, tagBase, UiTheme.ACCENT, smallScale, vpWidth, vpHeight);
+                    }
+                    tagW += UiTheme.scaled(6f);
+                }
+
+                String name = fit(renderer, f.name, right - tagW - nameX, textScale);
+                UiColor nameColor = f.online() ? UiTheme.TEXT_PRIMARY : UiTheme.TEXT_MUTED;
+                renderer.drawText(name, nameX, cy - UiTheme.scaled(4f), nameColor, textScale, vpWidth, vpHeight);
+            }
+
+            if (overflow) {
+                float rowTop = listTop - shown * rowH;
+                String more = "+" + (list.size() - shown);
+                renderer.drawText(more, x + padX, rowTop - rowH / 2f - UiTheme.scaled(4f), UiTheme.TEXT_MUTED, textScale, vpWidth, vpHeight);
+            }
+        }
+
+        @Override
+        public void onClick() {
+            if (hoveredInvite != null) GameFriends.invite(hoveredInvite);
+        }
+
+        private UiColor stateColor(GameFriends.Friend f) {
+            if (f.inGame) return UiTheme.ACCENT;
+            switch (f.state) {
+                case "online": return UiTheme.SUCCESS;
+                case "away": return new UiColor(232, 184, 72, 255);
+                case "dnd": return UiTheme.DANGER;
+                default: return UiTheme.TEXT_MUTED.multiplyAlpha(0.6f);
+            }
+        }
+
+        /** {@code text} raccourci avec "…" pour tenir dans {@code maxW}. */
+        private String fit(UiRenderer renderer, String text, float maxW, float scale) {
+            if (renderer.textWidth(text, scale) <= maxW) return text;
+            String s = text;
+            while (s.length() > 1 && renderer.textWidth(s + "…", scale) > maxW) s = s.substring(0, s.length() - 1);
+            return s + "…";
+        }
+
+        /** Texte coupé aux mots sur au plus {@code maxLines} lignes, la première ligne à {@code baseline}. */
+        private void drawWrapped(UiRenderer renderer, String text, float tx, float baseline, float maxW, int maxLines,
+                                 UiColor color, float scale, int vpWidth, int vpHeight) {
+            String[] words = text.split(" ");
+            List<String> lines = new ArrayList<>();
+            StringBuilder line = new StringBuilder();
+            for (String word : words) {
+                String candidate = line.length() == 0 ? word : line + " " + word;
+                if (line.length() > 0 && renderer.textWidth(candidate, scale) > maxW) {
+                    lines.add(line.toString());
+                    line = new StringBuilder(word);
+                } else {
+                    line = new StringBuilder(candidate);
+                }
+            }
+            if (line.length() > 0) lines.add(line.toString());
+            float lineH = UiTheme.scaled(11f);
+            for (int i = 0; i < lines.size() && i < maxLines; i++) {
+                String l = lines.get(i);
+                if (i == maxLines - 1 && lines.size() > maxLines) l = fit(renderer, l + " …", maxW, scale);
+                renderer.drawText(l, tx, baseline - i * lineH, color, scale, vpWidth, vpHeight);
+            }
         }
     }
 
