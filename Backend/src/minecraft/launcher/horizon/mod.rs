@@ -51,9 +51,6 @@ pub struct HorizonLaunch<'a> {
     pub session_id: Option<i64>,
     pub connect_server: Option<&'a str>,
     pub window_size: Option<(u32, u32)>,
-    /// Plein écran imposé par l'instance. Horizon a son propre drapeau, qui
-    /// ne touche pas à `options.txt`.
-    pub fullscreen: bool,
     /// Version d'Horizon épinglée sur l'instance (`instances.loader_version`),
     /// vide = la recommandée.
     pub pinned: &'a str,
@@ -111,55 +108,63 @@ pub async fn launch(app: tauri::AppHandle, run: HorizonLaunch<'_>, cancel: watch
     set_progress_monotonic(&app, &floor, 100, 100, &format!("Démarrage d'Horizon {}...", installed.tag));
     log_to_console(&app, run.console_label, &format!("[Horizon] Version {} — Minecraft {}", installed.tag, lock.version), "out");
 
-    // Journaux et rapports de plantage d'Horizon : dans l'instance, à part du
-    // reste, pour qu'on les retrouve sans les mêler aux mondes.
+    // Options de ligne de commande : seulement celles que lit `horizon-client`
+    // depuis ses premières versions stables (relevées dans le code de la
+    // v0.2.97, `game.rs`). Leur documentation décrit déjà des options plus
+    // récentes (`--game-dir`, `--home`, `--session-stdin`, `--fullscreen`)
+    // que la v0.2.97 refuse d'un « unknown option » ; ce qui suit marche
+    // pour les deux.
+    //
+    // - Dossier de jeu (mondes, options.txt) : le dossier courant.
+    // - Journaux et rapports de plantage : `HORIZON_HOME`, ici dans
+    //   l'instance, à part des mondes.
+    // - Plein écran : lu dans `options.txt`, que `force_fullscreen` a déjà
+    //   écrit avant le lancement.
     let home = run.game_dir.join("horizon");
     tokio::fs::create_dir_all(&home).await?;
 
     let mut cmd = crate::app::process::hidden_command(installed.dir.join(release::CLIENT));
     cmd.current_dir(run.game_dir)
+        .env("HORIZON_HOME", &home)
         .arg("--resources")
         .arg(&resources)
-        .arg("--game-dir")
-        .arg(run.game_dir)
-        .arg("--home")
-        .arg(&home)
+        .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
     if let Some((w, h)) = run.window_size {
         cmd.arg("--width").arg(w.to_string()).arg("--height").arg(h.to_string());
     }
-    if run.fullscreen {
-        cmd.arg("--fullscreen");
-    }
     if let Some(server) = run.connect_server.filter(|s| !s.trim().is_empty()) {
         cmd.arg("--quickPlayMultiplayer").arg(server.trim());
     }
-    // Le jeton passe par l'entrée standard, jamais par la ligne de commande
-    // (lisible par tout programme de la machine) ni par un fichier — c'est ce
-    // qu'Horizon recommande aux autres launchers.
-    let session_json = online.then(|| {
-        serde_json::json!({
-            "name": run.session.username,
-            "uuid": run.session.uuid.replace('-', ""),
-            "access_token": run.session.access_token,
-            "user_type": "msa",
-            "xuid": serde_json::Value::Null,
-        })
-        .to_string()
-    });
-    if session_json.is_some() {
-        cmd.arg("--session-stdin").stdin(Stdio::piped());
+
+    // Le compte passe par un fichier de session : c'est le seul moyen que la
+    // v0.2.97 connaisse (l'entrée standard n'existe que dans les versions
+    // suivantes). Jamais sur la ligne de commande, lisible par tout programme
+    // de la machine. Le jeu le lit puis le supprime aussitôt, refuse un
+    // fichier de plus de deux minutes, et on le supprime nous-mêmes s'il est
+    // encore là à la fin (jeu tombé avant de le lire).
+    let session_file = if online {
+        Some(write_session_file(&home, run.session).await?)
     } else {
-        cmd.arg("--name").arg(&run.session.username).stdin(Stdio::null());
+        cmd.arg("--name").arg(&run.session.username);
+        None
+    };
+    if let Some(path) = &session_file {
+        cmd.arg("--session-file").arg(path);
     }
 
-    let mut child = cmd.spawn().map_err(|e| anyhow!("Horizon n'a pas démarré : {e}"))?;
-    if let (Some(json), Some(mut stdin)) = (session_json, child.stdin.take()) {
-        stdin.write_all(json.as_bytes()).await?;
-        stdin.shutdown().await?;
-    }
+    let spawned = cmd.spawn();
+    let mut child = match spawned {
+        Ok(child) => child,
+        Err(e) => {
+            if let Some(path) = &session_file {
+                let _ = tokio::fs::remove_file(path).await;
+            }
+            return Err(anyhow!("Horizon n'a pas démarré : {e}"));
+        }
+    };
 
     let stop = Arc::new(AtomicBool::new(false));
     if let Some(id) = run.session_id {
@@ -207,6 +212,9 @@ pub async fn launch(app: tauri::AppHandle, run: HorizonLaunch<'_>, cancel: watch
         }
     };
     stop.store(true, Ordering::Relaxed);
+    if let Some(path) = &session_file {
+        let _ = tokio::fs::remove_file(path).await;
+    }
 
     if let Some(id) = run.session_id {
         let ended = chrono::Utc::now().timestamp();
@@ -233,6 +241,30 @@ pub async fn launch(app: tauri::AppHandle, run: HorizonLaunch<'_>, cancel: watch
         "Horizon s'est arrêté (code {code}){}",
         if last.is_empty() { String::new() } else { format!(" : {last}") }
     ))
+}
+
+/// Écrit le compte pour `--session-file` : un nom tiré au hasard, créé neuf
+/// (jamais par-dessus un fichier existant), dans le dossier Horizon de
+/// l'instance. Format d'Horizon (`auth.rs`) : `name`, `uuid`,
+/// `access_token`, `user_type`, `xuid`.
+async fn write_session_file(home: &std::path::Path, session: &MinecraftSession) -> Result<std::path::PathBuf> {
+    let dir = home.join("sessions");
+    tokio::fs::create_dir_all(&dir).await?;
+    let random: [u8; 12] = rand::random();
+    let name: String = random.iter().map(|b| format!("{b:02x}")).collect();
+    let path = dir.join(format!("session-{name}.json"));
+    let body = serde_json::json!({
+        "name": session.username,
+        "uuid": session.uuid.replace('-', ""),
+        "access_token": session.access_token,
+        "user_type": "msa",
+        "xuid": serde_json::Value::Null,
+    })
+    .to_string();
+    let mut file = tokio::fs::OpenOptions::new().write(true).create_new(true).open(&path).await?;
+    file.write_all(body.as_bytes()).await?;
+    file.flush().await?;
+    Ok(path)
 }
 
 /// La ligne de session reçoit le PID et un battement toutes les trente

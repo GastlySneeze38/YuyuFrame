@@ -102,11 +102,9 @@ export function ModsContent({ instance }: { instance: Instance }) {
   const instanceId = instance.id
   const mcVersion = instance.mc_version
   const loader = instance.loader
-  // Vanilla et Horizon : aucun chargeur de mods Java.
+  // Vanilla et Horizon : aucun chargeur de mods Java. Les packs de ressources
+  // et les shaders restent : Horizon lit aussi les shaders (vérifié en jeu).
   const isPlugin = !isModLoader(loader)
-  // Horizon a son propre format de shaders : ceux d'Iris ou d'OptiFine ne s'y
-  // chargent pas, donc on ne les propose pas.
-  const isHorizon = loader === 'horizon'
   const { avoidBetaDependencies, pinnedMods } = useStore()
 
   const pinnedProjectIds = useMemo(() => {
@@ -1277,7 +1275,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
             active={tab.startsWith('packs-')}
             activeId={tab}
             items={[
-              ...(isHorizon ? [] : [{ id: 'packs-shader', icon: TOOLBAR_ICON.star, label: t('mods.menuBrowseShaders'), onSelect: () => setTab('packs-shader') }]),
+              { id: 'packs-shader', icon: TOOLBAR_ICON.star, label: t('mods.menuBrowseShaders'), onSelect: () => setTab('packs-shader') },
               { id: 'packs-resourcepack', icon: TOOLBAR_ICON.grid, label: t('mods.menuBrowseResourcepacks'), onSelect: () => setTab('packs-resourcepack') },
               { id: 'packs-installed', icon: TOOLBAR_ICON.list, label: t('mods.menuInstalledPacks'), badge: packCount, onSelect: () => setTab('packs-installed') },
             ]}
