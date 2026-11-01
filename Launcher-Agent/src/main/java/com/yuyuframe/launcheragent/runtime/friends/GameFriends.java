@@ -11,9 +11,10 @@ import java.util.List;
  * Les amis YuyuFrame, vus du jeu : la liste et l'invitation.
  *
  * <p>Tout passe par le launcher, qui parle au serveur avec le compte
- * YuyuFrame (questions {@code friends} et {@code invite} du canal du jeu,
+ * YuyuFrame (questions {@code friends2} et {@code invite} du canal du jeu,
  * {@code Backend/src/play/game_link.rs}) — le jeu n'a jamais le jeton. La
- * réponse arrive triée : en jeu, puis en ligne, puis hors ligne, par pseudo.
+ * réponse arrive triée comme le panneau du launcher : en jeu, en ligne, puis
+ * hors ligne (les plus récemment vus d'abord).
  *
  * <p>Même mécanique que {@code GameAccounts} : rien ne bloque, une question
  * est déposée et {@link #tick()} relève la réponse à une image suivante.
@@ -23,7 +24,7 @@ public final class GameFriends {
     private GameFriends() {
     }
 
-    /** Un ami, tel que le launcher le décrit. */
+    /** Un ami, tel que le launcher le décrit. Les champs absents sont des chaînes vides. */
     public static final class Friend {
         /** Identifiant public (UUID), seul à repartir dans une invitation. */
         public final String id;
@@ -31,12 +32,40 @@ public final class GameFriends {
         /** {@code online}, {@code away}, {@code dnd} ou {@code offline}. */
         public final String state;
         public final boolean inGame;
+        /** Compte Minecraft principal, pour la tête ; vide sans compte prouvé. */
+        public final String minecraftUuid;
+        /** Statut personnalisé encore valable. */
+        public final String custom;
+        /** {@code game}, {@code launcher} ou vide. */
+        public final String activity;
+        public final String version;
+        public final String loader;
+        /** {@code ranked:<mode>} ou {@code casual:<mode>}, vide hors duel. */
+        public final String duel;
+        /** « hôte:port », seulement si l'ami le montre. */
+        public final String server;
+        /** Hors ligne : dernière présence en secondes Unix, 0 si inconnue. */
+        public final long lastSeen;
 
-        Friend(String id, String name, String state, boolean inGame) {
-            this.id = id;
-            this.name = name;
-            this.state = state;
-            this.inGame = inGame;
+        Friend(String[] p, int i) {
+            this.id = p[i];
+            this.name = p[i + 1];
+            this.state = p[i + 2];
+            this.inGame = "1".equals(p[i + 3]);
+            this.minecraftUuid = p[i + 4];
+            this.custom = drawable(p[i + 5]);
+            this.activity = p[i + 6];
+            this.version = p[i + 7];
+            this.loader = p[i + 8];
+            this.duel = p[i + 9];
+            this.server = p[i + 10];
+            long seen = 0L;
+            try {
+                if (!p[i + 11].isEmpty()) seen = Long.parseLong(p[i + 11]);
+            } catch (NumberFormatException ignored) {
+                // Champ illisible : « vu il y a… » n'est simplement pas affiché.
+            }
+            this.lastSeen = seen;
         }
 
         public boolean online() {
@@ -44,6 +73,25 @@ public final class GameFriends {
         }
     }
 
+    /**
+     * Le texte sans ce que la police du jeu ne sait pas dessiner : les
+     * émojis (hors du plan de base, ou symboles), leurs sélecteurs de
+     * variante et leurs jointures. Un statut « En vacances 🏖️ » s'affichait
+     * « En vacances ??? ».
+     */
+    static String drawable(String text) {
+        StringBuilder out = new StringBuilder(text.length());
+        text.codePoints().forEach(cp -> {
+            boolean emoji = cp > 0xFFFF
+                || cp == 0xFE0F || cp == 0xFE0E || cp == 0x200D
+                || Character.getType(cp) == Character.OTHER_SYMBOL;
+            if (!emoji) out.appendCodePoint(cp);
+        });
+        return out.toString().replaceAll("\\s{2,}", " ").trim();
+    }
+
+    /** Champs par ami dans la réponse {@code friends2}. */
+    private static final int FIELDS = 12;
     /** La liste est redemandée au plus toutes les 20 s tant qu'elle est affichée. */
     private static final long REFRESH_MS = 20_000L;
     /** Durée d'affichage du résultat d'une invitation. */
@@ -105,7 +153,7 @@ public final class GameFriends {
             return;
         }
         lastRequestAt = now;
-        listRequest = NativeLink.send("friends");
+        listRequest = NativeLink.send("friends2");
         if (listRequest == 0L) {
             error = Lang.tr("Le launcher YuyuFrame n'est plus joignable");
         }
@@ -145,16 +193,16 @@ public final class GameFriends {
         }
     }
 
-    /** {@code friends⇥(<id>⇥<pseudo>⇥<état>⇥<en jeu 0/1>)…} */
+    /** {@code friends2⇥(douze champs)…} — voir {@code friends_line_v2} côté launcher. */
     private static void readList(String reply) {
         String[] parts = reply.split("\t", -1);
-        if (parts.length < 1 || !"friends".equals(parts[0]) || (parts.length - 1) % 4 != 0) {
+        if (parts.length < 1 || !"friends2".equals(parts[0]) || (parts.length - 1) % FIELDS != 0) {
             error = failure(parts);
             return;
         }
         List<Friend> list = new ArrayList<>();
-        for (int i = 1; i + 3 < parts.length; i += 4) {
-            list.add(new Friend(parts[i], parts[i + 1], parts[i + 2], "1".equals(parts[i + 3])));
+        for (int i = 1; i + FIELDS - 1 < parts.length; i += FIELDS) {
+            list.add(new Friend(parts, i));
         }
         friends = Collections.unmodifiableList(list);
         error = null;

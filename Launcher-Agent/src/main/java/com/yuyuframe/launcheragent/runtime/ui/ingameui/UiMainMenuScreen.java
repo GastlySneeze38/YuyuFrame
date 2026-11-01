@@ -39,9 +39,11 @@ import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Écran d'accueil du moteur config custom — équivalent de OneConfigGui.create() :
@@ -71,7 +73,9 @@ public class UiMainMenuScreen extends UiScreenBase {
     // GlobalUiSettings, réglage "Taille de l'interface") : un champ figé au
     // chargement de la classe ne pourrait jamais refléter un changement
     // d'échelle fait APRÈS coup depuis Paramètres.
-    private float SIDEBAR_W = 190f;
+    // 250 et non plus 190 depuis la liste des amis (2026-11-01) : une ligne
+    // d'ami porte une tête, un pseudo et ce qu'il fait, comme dans le launcher.
+    private float SIDEBAR_W = 280f;
     private float MARGIN = 24f;
     private float CARD_GAP = 16f;
     private float CARD_H = 76f;
@@ -128,6 +132,13 @@ public class UiMainMenuScreen extends UiScreenBase {
 
     private final Object lastScreen;
     private UiTextField searchField;
+    /** Recherche de la liste des amis, repliée derrière la loupe de son en-tête (voir FriendsPanel). Même instance d'une reconstruction à l'autre, comme {@link #searchField}. */
+    private UiTextField friendSearch;
+    private FriendsPanel friendsPanel;
+    /** État de la liste des amis gardé d'une ouverture du menu à l'autre. */
+    private static boolean friendSearchOpen;
+    private static final Set<String> collapsedFriendGroups = new HashSet<>();
+    private static int friendScroll;
     /** Grille de cartes mods — SÉPARÉE de {@code widgets} (voir UiScrollContainer/ConfigScreenBuilder pour le même motif) : permet de scroller quand le nombre de mods dépasse la hauteur visible, ce que {@code widgets} seul ne permet pas (pas de clipping/offset). */
     private UiScrollContainer modScroll;
     private int lastLayoutWidth = -1, lastLayoutHeight = -1;
@@ -148,7 +159,10 @@ public class UiMainMenuScreen extends UiScreenBase {
         // cartes/toggles qu'elle contient — scroll.pollInput() gère tout ça
         // (voir UiModConfigScreen, même motif) puisque ces widgets ne sont
         // PLUS dans `widgets` (dispatché par super.uiPollInput() ci-dessus).
-        if (modScroll != null) modScroll.pollInput(input);
+        // La bulle d'un ami recouvre la grille : un clic dessus ne doit pas
+        // atteindre la carte cachée dessous.
+        boolean overBubble = friendsPanel != null && friendsPanel.overlayContains(input.mouseX, input.mouseY);
+        if (modScroll != null && !overBubble) modScroll.pollInput(input);
     }
 
     @Override
@@ -175,6 +189,8 @@ public class UiMainMenuScreen extends UiScreenBase {
         try {
             UiRenderer renderer = UiRenderer.get(getClass().getClassLoader());
             if (modScroll != null) modScroll.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
+            // La bulle d'un ami passe par-dessus tout, cartes comprises.
+            if (friendsPanel != null) friendsPanel.drawBubble(renderer, mouseX, mouseY, screenWidth, screenHeight);
             // Titres par-dessus TOUT (widgets inclus) — le fond de la sidebar,
             // lui, est un widget ordinaire ajouté EN PREMIER dans rebuildAll()
             // (voir SidebarBackground) pour être dessiné AVANT les items de
@@ -275,7 +291,7 @@ public class UiMainMenuScreen extends UiScreenBase {
         // seule façon de refléter un changement de "Taille de l'interface"
         // fait depuis Paramètres sans redémarrer l'agent, voir uiDraw()
         // (rebuildAll() redéclenché dès que UiTheme.UI_SCALE change).
-        SIDEBAR_W = UiTheme.scaled(190f);
+        SIDEBAR_W = UiTheme.scaled(280f);
         MARGIN = UiTheme.scaled(24f);
         CARD_GAP = UiTheme.scaled(16f);
         CARD_H = UiTheme.scaled(76f);
@@ -293,7 +309,8 @@ public class UiMainMenuScreen extends UiScreenBase {
         cardLocalPos.clear();
 
         float closeSize = UiTheme.scaled(28f), closeMargin = UiTheme.scaled(24f);
-        float navH = UiTheme.scaled(26f);
+        // 36 et non plus 26 (2026-11-01) : la navigation porte une icône et un texte plus grand.
+        float navH = UiTheme.scaled(36f);
         float layoutBtnGap = UiTheme.scaled(8f);
         float layoutBtnSize = SEARCH_H;
         // Écart entre la barre de recherche et le haut de la zone défilante.
@@ -331,8 +348,8 @@ public class UiMainMenuScreen extends UiScreenBase {
         // Padding haut = ancien `scaled(104) - navH` : laisse la place du
         // logo et de son halo dessinés par uiDraw() au-dessus des items.
         sidebarStyle.padding = new String[]{
-            TaffyStyle.px(UiTheme.scaled(104f) - navH), TaffyStyle.px(MARGIN),
-            TaffyStyle.px(MARGIN), TaffyStyle.px(MARGIN) };
+            TaffyStyle.px(UiTheme.scaled(104f) - navH), TaffyStyle.px(UiTheme.scaled(16f)),
+            TaffyStyle.px(MARGIN), TaffyStyle.px(UiTheme.scaled(16f)) };
         TaffyNode sidebar = new TaffyNode("sidebar", sidebarStyle);
         sidebar.child(navNode("nav.home", navH));
         sidebar.child(navNode("nav.settings", navH));
@@ -393,12 +410,22 @@ public class UiMainMenuScreen extends UiScreenBase {
         }
 
         SidebarBackground sidebarBg = new SidebarBackground();
-        SidebarItem navHome = new SidebarItem("Accueil", true, null);
-        SidebarItem navSettings = new SidebarItem("Parametres", false,
+        SidebarItem navHome = new SidebarItem("Accueil", LauncherModule.icons8("home"), true, null);
+        SidebarItem navSettings = new SidebarItem("Parametres", LauncherModule.icons8("settings"), false,
             () -> closeTo(new UiModConfigScreen(UiMainMenuScreen.this, GlobalUiSettings.INSTANCE)));
-        SidebarItem navHud = new SidebarItem("Modifier le HUD", false,
+        SidebarItem navHud = new SidebarItem("Modifier le HUD", LauncherModule.icons8("dashboard"), false,
             () -> closeTo(new UiHudEditorScreen(UiMainMenuScreen.this)));
-        FriendsPanel friendsPanel = new FriendsPanel();
+        if (friendSearch == null) {
+            // Invisible tant que la recherche est repliée : le panneau lui
+            // donne une taille nulle, et il ne se dessine alors pas.
+            friendSearch = new UiTextField(0, 0, 0, 0, Lang.tr("Rechercher un ami..."), v -> friendScroll = 0) {
+                @Override
+                public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
+                    if (w > 1f && h > 1f) super.draw(renderer, mouseX, mouseY, vpWidth, vpHeight);
+                }
+            }.searchIcon();
+        }
+        friendsPanel = new FriendsPanel();
         CloseButton closeButton = new CloseButton(0, 0, closeSize);
         // Icône à côté de la barre de recherche (demandé explicitement :
         // "choisir avec une icon a coté de la bar de recherche") — cycle
@@ -449,6 +476,8 @@ public class UiMainMenuScreen extends UiScreenBase {
         widgets.add(navHud);
         // Sans layout (repli), le panneau garde une taille nulle et ne dessine rien.
         widgets.add(friendsPanel);
+        // Après le panneau : il pose les bornes du champ pendant son propre dessin.
+        widgets.add(friendSearch);
         widgets.add(closeButton);
         widgets.add(searchField);
         widgets.add(layoutButton);
@@ -633,6 +662,27 @@ public class UiMainMenuScreen extends UiScreenBase {
         // Consommé : l'éclat ne doit jouer qu'UNE fois, pas à chaque
         // reconstruction ultérieure (frappe dans la recherche, resize...).
         pendingChangePulseId = null;
+    }
+
+    /**
+     * Une petite icône (icons8, 100 px) dessinée nette à {@code size} pixels.
+     *
+     * <p>La carte graphique ne réduit proprement qu'à moitié : de 100 px à
+     * 16 px elle saute des pixels, et l'icône sort pixelisée. On lui donne
+     * donc une copie déjà réduite à la bonne taille
+     * ({@link UiRemoteImage#scaled}, faite une fois, sur un autre fil), avec
+     * sa propre clé de texture par taille. Tant que la copie n'est pas prête,
+     * rien n'est dessiné : une image de moins pendant une image vaut mieux
+     * qu'un éclat pixelisé.
+     */
+    private static void drawCrispIcon(UiRenderer renderer, String url, float ix, float iy, float size, float alpha,
+                                      int vpWidth, int vpHeight) {
+        int n = Math.max(1, Math.round(size));
+        BufferedImage img = UiRemoteImage.scaled(url, n, n);
+        if (img == null) return;
+        // Posée sur des pixels entiers, à sa taille exacte : un demi-pixel de
+        // décalage suffirait à la rendre floue.
+        renderer.drawIcon(url + "@" + n, img, Math.round(ix), Math.round(iy), n, n, alpha, vpWidth, vpHeight);
     }
 
     /** Nœud d'un item de navigation — largeur laissée libre : la colonne sidebar l'étire d'elle-même à sa largeur de contenu. */
@@ -1253,11 +1303,14 @@ public class UiMainMenuScreen extends UiScreenBase {
         private final String label;
         private final boolean active;
         private final Runnable action;
+        /** Icône blanche posée devant l'étiquette (icons8, comme les cartes). */
+        private final String iconUrl;
         private final UiAnimatedFloat hoverAnim = new UiAnimatedFloat(0f, 16f);
 
         /** Bornes posées APRÈS coup par le layout (Taffy, ou repli manuel) — voir rebuildAll(). */
-        SidebarItem(String label, boolean active, Runnable action) {
-            super(0f, 0f, 0f, UiTheme.scaled(26f));
+        SidebarItem(String label, String iconUrl, boolean active, Runnable action) {
+            super(0f, 0f, 0f, UiTheme.scaled(36f));
+            this.iconUrl = iconUrl;
             this.label = label;
             this.active = active;
             this.action = action;
@@ -1292,7 +1345,15 @@ public class UiMainMenuScreen extends UiScreenBase {
             // place" au lieu de rester planté dessus. Amplitude minuscule (3px)
             // : au-delà, la nav se met à tressauter à chaque passage de souris.
             float slide = hover * UiTheme.scaled(3f);
-            renderer.drawText(Lang.tr(label), x + UiTheme.scaled(12f) + slide, y + h / 2f - UiTheme.scaled(4f), textColor, UiTheme.scaled(0.4f), vpWidth, vpHeight);
+            float iconS = UiTheme.scaled(16f);
+            float textX = x + UiTheme.scaled(12f) + slide;
+            if (iconUrl != null) {
+                // Pâle au repos, pleine au survol ou sur l'élément actif : elle suit le texte.
+                float iconAlpha = active ? 1f : 0.55f + 0.45f * hover;
+                drawCrispIcon(renderer, iconUrl, textX, y + (h - iconS) / 2f, iconS, iconAlpha, vpWidth, vpHeight);
+            }
+            if (iconUrl != null) textX += iconS + UiTheme.scaled(10f);
+            renderer.drawText(Lang.tr(label), textX, y + h / 2f - UiTheme.scaled(5f), textColor, UiTheme.scaled(0.48f), vpWidth, vpHeight);
         }
 
         @Override
@@ -1303,164 +1364,472 @@ public class UiMainMenuScreen extends UiScreenBase {
 
     /**
      * Liste des amis YuyuFrame dans la sidebar (2026-11-01), entre la
-     * navigation et "Modifier le HUD".
+     * navigation et "Modifier le HUD" — même lecture que le panneau du
+     * launcher ({@code components/friends/FriendsPanel.tsx}) : groupes
+     * "En jeu", "En ligne", "Hors ligne" repliables, une ligne par ami avec
+     * sa tête, son pseudo et ce qu'il fait.
      *
-     * <p>Les données viennent du launcher par le canal du jeu
-     * ({@link GameFriends}), déjà triées : en jeu, en ligne, hors ligne. Le
-     * panneau n'affiche que les lignes qui tiennent dans sa hauteur ; s'il en
-     * reste, la dernière ligne devient "+N". Survoler un ami en ligne fait
-     * apparaître "Inviter" : l'invitation est celle du launcher (le serveur
-     * lit dans notre présence où l'on joue).
+     * <p>Aucun bouton sur les lignes : survoler un ami ouvre une bulle à
+     * droite de la sidebar avec tout ce qu'on sait de lui et les gestes
+     * possibles (inviter sur son serveur). La bulle reste ouverte tant que la
+     * souris est sur la ligne ou sur elle, avec un court délai pour franchir
+     * l'écart entre les deux. Elle est dessinée en tout dernier par
+     * {@link #uiDraw} ({@link #drawBubble}), au-dessus des cartes.
      *
-     * <p>Un seul widget pour toute la liste plutôt qu'un par ligne : elle se
-     * redessine à chaque réponse du launcher sans reconstruire l'écran, et le
-     * clic est routé vers la ligne survolée (relevée dans {@link #draw}).
+     * <p>La recherche se replie derrière la loupe de l'en-tête. La liste
+     * défile ligne par ligne à la molette : on ne dessine que des lignes
+     * entières, donc sans découpe.
+     *
+     * <p>Données : {@link GameFriends}, par le canal du jeu.
      */
     private final class FriendsPanel extends UiWidget {
-        /** Ligne survolée dont le bouton "Inviter" est sous la souris, ou {@code null}. */
-        private GameFriends.Friend hoveredInvite;
+        private static final String ICON_SEARCH = "https://img.icons8.com/ios-filled/100/ffffff/search.png";
+        private static final String ICON_CLOSE = "https://img.icons8.com/ios-filled/100/ffffff/multiply.png";
+        private static final String ICON_OPEN = "https://img.icons8.com/ios-filled/100/ffffff/expand-arrow.png";
+        private static final String ICON_CLOSED = "https://img.icons8.com/ios-filled/100/ffffff/forward.png";
+        private static final String ICON_FRIENDS = "https://img.icons8.com/ios-filled/100/ffffff/conference-call.png";
+
+        /** Ce qui est sous la souris dans le panneau, pour {@link #onClick()}. */
+        private String hoveredAction;
+        /** L'ami dont la bulle est ouverte, le haut de sa ligne, et le dernier instant où la souris était sur l'un des deux. */
+        private GameFriends.Friend bubbleFriend;
+        private float bubbleRowTop;
+        private long bubbleSeenAt;
+        /** Bornes de la bulle et de son bouton, relevées au dessin ; {@code null} quand fermée. */
+        private float[] bubbleRect, inviteRect;
+        private int maxScroll;
 
         FriendsPanel() {
             super(0f, 0f, 0f, 0f);
         }
 
+        private float px(float v) { return UiTheme.scaled(v); }
+
         @Override
         public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
-            hoveredInvite = null;
-            if (w <= 0f || h <= 0f) return;
+            hoveredAction = null;
+            if (w <= 0f || h <= 0f) {
+                friendSearch.w = 0f;
+                friendSearch.h = 0f;
+                return;
+            }
             GameFriends.keepFresh();
 
             float top = y + h;
-            float textScale = UiTheme.scaled(0.38f);
-            float smallScale = UiTheme.scaled(0.32f);
-            float padX = UiTheme.scaled(12f);
-            float headerH = UiTheme.scaled(22f);
-            float rowH = UiTheme.scaled(24f);
+            float pad = px(10f);
 
-            // Trait de séparation avec la navigation, puis l'en-tête.
-            renderer.drawRoundedRect(x + padX, top - UiTheme.scaled(1f), x + w - padX, top, 0f,
-                UiTheme.TEXT_MUTED.multiplyAlpha(0.25f), vpWidth, vpHeight);
-            float headerBase = top - headerH + UiTheme.scaled(5f);
-            renderer.drawText(Lang.tr("Amis"), x + padX, headerBase, UiTheme.TEXT_SECONDARY, textScale, vpWidth, vpHeight);
-            List<GameFriends.Friend> list = GameFriends.friends();
+            // ── En-tête : "Amis", combien en ligne, la loupe ────────────────
+            float headerH = px(40f);
+            renderer.drawRoundedRect(x + pad, top - px(1f), x + w - pad, top, 0f,
+                UiTheme.TEXT_MUTED.multiplyAlpha(0.22f), vpWidth, vpHeight);
+            float headerMid = top - headerH / 2f - px(3f);
+            // Même icône devant "Amis" que devant les autres entrées de la navigation.
+            float titleIcon = px(17f);
+            drawCrispIcon(renderer, ICON_FRIENDS, x + pad, headerMid - titleIcon / 2f + px(1f), titleIcon, 1f, vpWidth, vpHeight);
+            float titleX = x + pad + titleIcon + px(10f);
+            renderer.drawText(UiFont.BOLD, Lang.tr("Amis"), titleX, headerMid - px(5f), UiTheme.TEXT_PRIMARY,
+                px(0.56f), vpWidth, vpHeight);
+            List<GameFriends.Friend> all = GameFriends.friends();
             int online = 0;
-            for (GameFriends.Friend f : list) if (f.online()) online++;
-            if (GameFriends.loaded() && !list.isEmpty()) {
-                String count = online + " " + Lang.tr("en ligne");
-                float cw = renderer.textWidth(count, smallScale);
-                renderer.drawText(count, x + w - padX - cw, headerBase, UiTheme.TEXT_MUTED, smallScale, vpWidth, vpHeight);
+            for (GameFriends.Friend f : all) if (f.online()) online++;
+            if (GameFriends.loaded() && !all.isEmpty()) {
+                float titleW = renderer.textWidth(UiFont.BOLD, Lang.tr("Amis"), px(0.56f));
+                renderer.drawText(online + " " + Lang.tr("en ligne"), titleX + titleW + px(9f), headerMid - px(4f),
+                    UiTheme.TEXT_MUTED, px(0.42f), vpWidth, vpHeight);
+            }
+            float iconS = px(16f);
+            float ix = x + w - pad - iconS, iy = headerMid - iconS / 2f + px(1f);
+            boolean onSearchIcon = mouseX >= ix - px(5f) && mouseX <= ix + iconS + px(5f)
+                && mouseY >= iy - px(5f) && mouseY <= iy + iconS + px(5f);
+            if (onSearchIcon) {
+                renderer.drawRoundedRect(ix - px(5f), iy - px(5f), ix + iconS + px(5f), iy + iconS + px(5f),
+                    UiTheme.RADIUS_SM, UiTheme.SIDEBAR_HOVER, vpWidth, vpHeight);
+                hoveredAction = "search";
+            }
+            String iconUrl = friendSearchOpen ? ICON_CLOSE : ICON_SEARCH;
+            drawCrispIcon(renderer, iconUrl, ix, iy, iconS, 1f, vpWidth, vpHeight);
+
+            // ── Recherche, repliée derrière la loupe ────────────────────────
+            float cursor = top - headerH;
+            if (friendSearchOpen) {
+                float fieldH = px(32f);
+                friendSearch.x = x + pad * 0.5f;
+                friendSearch.w = w - pad;
+                friendSearch.h = fieldH;
+                friendSearch.y = cursor - fieldH - px(2f);
+                cursor -= fieldH + px(10f);
+            } else {
+                friendSearch.w = 0f;
+                friendSearch.h = 0f;
+                if (friendSearch.focused()) friendSearch.setFocused(false);
             }
 
-            // Résultat d'une invitation : réservé en bas, au-dessus de "Modifier le HUD".
+            // ── Résultat d'une invitation, réservé en bas ───────────────────
             String notice = GameFriends.notice();
-            float noticeH = notice != null ? UiTheme.scaled(30f) : 0f;
+            float bottom = y;
             if (notice != null) {
                 UiColor c = GameFriends.noticeIsError() ? UiTheme.DANGER : UiTheme.SUCCESS;
-                drawWrapped(renderer, notice, x + padX, y + noticeH - UiTheme.scaled(10f), w - padX * 2f, 2, c, smallScale, vpWidth, vpHeight);
+                drawWrapped(renderer, notice, x + pad, y + px(24f), w - pad * 2f, 2, c, px(0.4f), vpWidth, vpHeight);
+                bottom += px(38f);
             }
 
-            float listTop = top - headerH - UiTheme.scaled(4f);
-            float listBottom = y + noticeH;
-            float messageBase = listTop - UiTheme.scaled(14f);
-            float maxW = w - padX * 2f;
-
+            float maxW = w - pad * 2f;
+            float messageBase = cursor - px(18f);
+            String message = null;
             if (!GameFriends.available()) {
-                drawWrapped(renderer, Lang.tr("Lance le jeu depuis le launcher YuyuFrame pour voir tes amis"),
-                    x + padX, messageBase, maxW, 4, UiTheme.TEXT_MUTED, smallScale, vpWidth, vpHeight);
-                return;
+                message = Lang.tr("Lance le jeu depuis le launcher YuyuFrame pour voir tes amis");
+            } else if (!GameFriends.loaded()) {
+                message = GameFriends.error() != null ? GameFriends.error() : Lang.tr("Chargement...");
+            } else if (all.isEmpty()) {
+                message = Lang.tr("Aucun ami pour l'instant. Ajoute-les depuis le launcher.");
             }
-            if (!GameFriends.loaded()) {
-                String text = GameFriends.error() != null ? GameFriends.error() : Lang.tr("Chargement...");
-                drawWrapped(renderer, text, x + padX, messageBase, maxW, 4, UiTheme.TEXT_MUTED, smallScale, vpWidth, vpHeight);
-                return;
-            }
-            if (list.isEmpty()) {
-                drawWrapped(renderer, Lang.tr("Aucun ami pour l'instant. Ajoute-les depuis le launcher."),
-                    x + padX, messageBase, maxW, 4, UiTheme.TEXT_MUTED, smallScale, vpWidth, vpHeight);
+            if (message != null) {
+                drawWrapped(renderer, message, x + pad, messageBase, maxW, 5, UiTheme.TEXT_MUTED, px(0.42f), vpWidth, vpHeight);
+                keepBubble(mouseX, mouseY);
                 return;
             }
 
-            int fit = Math.max(0, (int) Math.floor((listTop - listBottom) / rowH));
-            if (fit == 0) return;
-            boolean overflow = list.size() > fit;
-            int shown = overflow ? fit - 1 : list.size();
+            // ── Les lignes : en-têtes de groupe et amis, filtrés ───────────
+            String needle = friendSearchOpen ? friendSearch.text().trim().toLowerCase(Locale.ROOT) : "";
+            List<Object> entries = new ArrayList<>();
+            String[][] groups = {
+                { "game", Lang.tr("En jeu") }, { "online", Lang.tr("En ligne") }, { "offline", Lang.tr("Hors ligne") } };
+            for (String[] g : groups) {
+                List<GameFriends.Friend> members = new ArrayList<>();
+                for (GameFriends.Friend f : all) {
+                    String group = f.inGame ? "game" : f.online() ? "online" : "offline";
+                    if (!group.equals(g[0])) continue;
+                    if (!needle.isEmpty() && !f.name.toLowerCase(Locale.ROOT).contains(needle)) continue;
+                    members.add(f);
+                }
+                if (members.isEmpty()) continue;
+                entries.add(new String[]{ g[0], g[1] + " · " + members.size() });
+                if (!collapsedFriendGroups.contains(g[0])) entries.addAll(members);
+            }
+            if (entries.isEmpty()) {
+                drawWrapped(renderer, Lang.tr("Aucun résultat"), x + pad, messageBase, maxW, 2, UiTheme.TEXT_MUTED,
+                    px(0.42f), vpWidth, vpHeight);
+                keepBubble(mouseX, mouseY);
+                return;
+            }
 
-            for (int i = 0; i < shown; i++) {
-                GameFriends.Friend f = list.get(i);
-                float rowTop = listTop - i * rowH;
-                float rowBottom = rowTop - rowH;
+            float groupH = px(32f), rowH = px(58f);
+            // Combien d'entrées tiennent à partir de la fin : borne du défilement.
+            float avail = cursor - bottom;
+            float used = 0f;
+            int fromEnd = 0;
+            for (int i = entries.size() - 1; i >= 0; i--) {
+                float eh = entries.get(i) instanceof String[] ? groupH : rowH;
+                if (used + eh > avail) break;
+                used += eh;
+                fromEnd++;
+            }
+            maxScroll = Math.max(0, entries.size() - fromEnd);
+            friendScroll = Math.max(0, Math.min(friendScroll, maxScroll));
+
+            GameFriends.Friend hoveredFriend = null;
+            float hoveredTop = 0f;
+            float rowTop = cursor;
+            for (int i = friendScroll; i < entries.size(); i++) {
+                Object e = entries.get(i);
+                float eh = e instanceof String[] ? groupH : rowH;
+                if (rowTop - eh < bottom - 0.5f) break;
+                float rowBottom = rowTop - eh;
                 boolean hovered = mouseX >= x && mouseX <= x + w && mouseY >= rowBottom && mouseY <= rowTop;
-                if (hovered) {
-                    renderer.drawRoundedRect(x, rowBottom, x + w, rowTop, UiTheme.RADIUS_SM, UiTheme.SIDEBAR_HOVER, vpWidth, vpHeight);
-                }
-
-                // Pastille d'état : en jeu = accent, en ligne = vert, absent = jaune, ne pas déranger = rouge.
-                float dot = UiTheme.scaled(3.5f);
-                float cx = x + padX + dot, cy = rowBottom + rowH / 2f;
-                renderer.drawRoundedRect(cx - dot, cy - dot, cx + dot, cy + dot, dot, stateColor(f), vpWidth, vpHeight);
-
-                float nameX = cx + dot + UiTheme.scaled(8f);
-                float right = x + w - padX;
-                String tag = null;
-                boolean invite = hovered && f.online();
-                if (invite) {
-                    tag = GameFriends.inviting() ? Lang.tr("Envoi...") : Lang.tr("Inviter");
-                } else if (f.inGame) {
-                    tag = Lang.tr("En jeu");
-                }
-                float tagW = 0f;
-                if (tag != null) {
-                    tagW = renderer.textWidth(tag, smallScale);
-                    float tagBase = cy - UiTheme.scaled(3.5f);
-                    if (invite) {
-                        float px = UiTheme.scaled(6f), py = UiTheme.scaled(4f);
-                        float bx1 = right - tagW - px * 2f, bx2 = right;
-                        float by1 = cy - UiTheme.scaled(8f), by2 = cy + UiTheme.scaled(8f);
-                        boolean onButton = mouseX >= bx1 && mouseX <= bx2 && mouseY >= by1 && mouseY <= by2;
-                        renderer.drawRoundedRect(bx1, by1, bx2, by2, UiTheme.RADIUS_SM,
-                            onButton ? UiTheme.ACCENT : UiTheme.ACCENT_DIM, vpWidth, vpHeight);
-                        renderer.drawText(tag, bx1 + px, tagBase, UiTheme.TEXT_PRIMARY, smallScale, vpWidth, vpHeight);
-                        tagW += px * 2f;
-                        if (onButton) hoveredInvite = f;
-                    } else {
-                        renderer.drawText(tag, right - tagW, tagBase, UiTheme.ACCENT, smallScale, vpWidth, vpHeight);
+                if (e instanceof String[]) {
+                    String[] g = (String[]) e;
+                    if (hovered) hoveredAction = "group:" + g[0];
+                    boolean closed = collapsedFriendGroups.contains(g[0]);
+                    String chevron = closed ? ICON_CLOSED : ICON_OPEN;
+                    float cs = px(11f);
+                    float textX = x + pad;
+                    UiColor c = hovered ? UiTheme.TEXT_PRIMARY : UiTheme.TEXT_SECONDARY;
+                    renderer.drawText(UiFont.BOLD, g[1], textX, rowBottom + eh / 2f - px(4.5f), c, px(0.44f), vpWidth, vpHeight);
+                    float tw = renderer.textWidth(UiFont.BOLD, g[1], px(0.44f));
+                    drawCrispIcon(renderer, chevron, textX + tw + px(6f), rowBottom + eh / 2f - cs / 2f, cs, 1f, vpWidth, vpHeight);
+                } else {
+                    GameFriends.Friend f = (GameFriends.Friend) e;
+                    boolean open = bubbleFriend != null && bubbleFriend.id.equals(f.id);
+                    if (hovered || open) {
+                        renderer.drawRoundedRect(x, rowBottom + px(1f), x + w, rowTop - px(1f), px(6f),
+                            UiTheme.SIDEBAR_HOVER, vpWidth, vpHeight);
                     }
-                    tagW += UiTheme.scaled(6f);
+                    if (hovered) {
+                        hoveredFriend = f;
+                        hoveredTop = rowTop;
+                    }
+                    drawFriendRow(renderer, f, x + pad * 0.6f, rowBottom, w - pad * 1.2f, eh, vpWidth, vpHeight);
                 }
+                rowTop = rowBottom;
+            }
+            if (hoveredFriend != null) {
+                bubbleFriend = hoveredFriend;
+                bubbleRowTop = hoveredTop;
+                bubbleSeenAt = System.currentTimeMillis();
+            } else {
+                keepBubble(mouseX, mouseY);
+            }
+            // Liste relue entre-temps : la bulle suit l'ami (nouvel objet), ou se ferme s'il a disparu.
+            if (bubbleFriend != null) {
+                GameFriends.Friend same = null;
+                for (Object e : entries) {
+                    if (e instanceof GameFriends.Friend && ((GameFriends.Friend) e).id.equals(bubbleFriend.id)) {
+                        same = (GameFriends.Friend) e;
+                    }
+                }
+                bubbleFriend = same;
+            }
+        }
 
-                String name = fit(renderer, f.name, right - tagW - nameX, textScale);
-                UiColor nameColor = f.online() ? UiTheme.TEXT_PRIMARY : UiTheme.TEXT_MUTED;
-                renderer.drawText(name, nameX, cy - UiTheme.scaled(4f), nameColor, textScale, vpWidth, vpHeight);
+        /** Garde la bulle tant que la souris est dessus, ou vient de quitter la ligne. */
+        private void keepBubble(double mouseX, double mouseY) {
+            if (bubbleFriend == null) return;
+            if (inside(bubbleRect, mouseX, mouseY)) {
+                bubbleSeenAt = System.currentTimeMillis();
+                return;
+            }
+            if (System.currentTimeMillis() - bubbleSeenAt > 160L) {
+                bubbleFriend = null;
+                bubbleRect = null;
+                inviteRect = null;
+            }
+        }
+
+        private boolean inside(float[] r, double mx, double my) {
+            return r != null && mx >= r[0] && mx <= r[2] && my >= r[1] && my <= r[3];
+        }
+
+        /** Une ligne : tête avec la pastille d'état, pseudo, et ce qu'il fait. */
+        private void drawFriendRow(UiRenderer renderer, GameFriends.Friend f, float rx, float ry, float rw, float rh,
+                                   int vpWidth, int vpHeight) {
+            float avatar = px(42f);
+            float ax = rx, ay = ry + (rh - avatar) / 2f;
+            drawHead(renderer, f, ax, ay, avatar, vpWidth, vpHeight);
+            if (!f.online()) {
+                renderer.drawRoundedRect(ax, ay, ax + avatar, ay + avatar, px(5f), new UiColor(10, 10, 14, 120), vpWidth, vpHeight);
+            }
+            float dot = px(13f);
+            float dx = ax + avatar - dot + px(2f), dy = ay - px(2f);
+            renderer.drawRoundedRect(dx - px(2f), dy - px(2f), dx + dot + px(2f), dy + dot + px(2f), dot / 2f + px(2f),
+                UiTheme.SIDEBAR_BG, vpWidth, vpHeight);
+            renderer.drawRoundedRect(dx, dy, dx + dot, dy + dot, dot / 2f, stateColor(f.state), vpWidth, vpHeight);
+
+            float tx = ax + avatar + px(12f);
+            float maxW = rx + rw - tx;
+            float mid = ry + rh / 2f;
+            UiColor nameColor = f.online() ? UiTheme.TEXT_PRIMARY : UiTheme.TEXT_MUTED;
+            String sub = subtitle(f);
+            if (sub == null) {
+                renderer.drawText(UiFont.BOLD, fit(renderer, UiFont.BOLD, f.name, maxW, px(0.54f)), tx, mid - px(5f),
+                    nameColor, px(0.54f), vpWidth, vpHeight);
+                return;
+            }
+            renderer.drawText(UiFont.BOLD, fit(renderer, UiFont.BOLD, f.name, maxW, px(0.54f)), tx, mid + px(3f),
+                nameColor, px(0.54f), vpWidth, vpHeight);
+            UiColor subColor = f.inGame ? UiTheme.SUCCESS
+                : (f.online() && !f.custom.isEmpty()) ? UiTheme.TEXT_SECONDARY : UiTheme.TEXT_MUTED;
+            renderer.drawText(fit(renderer, null, sub, maxW, px(0.42f)), tx, mid - px(14f), subColor, px(0.42f), vpWidth, vpHeight);
+        }
+
+        /** La deuxième ligne, mêmes règles que {@code PresenceLine} du launcher. */
+        private String subtitle(GameFriends.Friend f) {
+            if (!f.online()) {
+                String seen = f.lastSeen > 0 ? Lang.tr("Vu") + " " + ago(f.lastSeen) : null;
+                if (!f.custom.isEmpty() && seen != null) return f.custom + " · " + seen;
+                return !f.custom.isEmpty() ? f.custom : seen;
+            }
+            if (f.inGame) return activityText(f);
+            if (!f.custom.isEmpty()) return f.custom;
+            if ("launcher".equals(f.activity)) return Lang.tr("Dans le launcher");
+            return null;
+        }
+
+        private String activityText(GameFriends.Friend f) {
+            if (!f.duel.isEmpty()) {
+                String[] d = f.duel.split(":", 2);
+                String kind = "ranked".equals(d[0]) ? Lang.tr("En duel classé") : Lang.tr("En duel amical");
+                String mode = d.length > 1 ? modeName(d[1]) : "";
+                return mode.isEmpty() ? kind : kind + " · " + mode;
+            }
+            String text = "Minecraft " + f.version;
+            if (!f.loader.isEmpty() && !"vanilla".equals(f.loader)) {
+                text += " · " + f.loader.substring(0, 1).toUpperCase(Locale.ROOT) + f.loader.substring(1);
+            }
+            return text;
+        }
+
+        private String modeName(String mode) {
+            switch (mode) {
+                case "mace": return Lang.tr("Masse");
+                case "sword": return Lang.tr("Épée");
+                default: return "";
+            }
+        }
+
+        /**
+         * « il y a 2 h », « hier »… Le mot de devant peut être vide dans une
+         * langue qui met tout derrière (« 3 days ago ») : d'où les {@code trim}.
+         */
+        private String ago(long unixSeconds) {
+            long s = Math.max(0L, System.currentTimeMillis() / 1000L - unixSeconds);
+            if (s < 60L) return Lang.tr("à l'instant");
+            if (s < 3600L) return (Lang.tr("il y a") + " " + (s / 60L) + " min").trim();
+            if (s < 86400L) return (Lang.tr("il y a") + " " + (s / 3600L) + " h").trim();
+            long days = s / 86400L;
+            if (days == 1L) return Lang.tr("hier");
+            return (Lang.tr("il y a") + " " + days + " " + Lang.tr("jours")).trim();
+        }
+
+        private String stateLabel(GameFriends.Friend f) {
+            if (f.inGame) return Lang.tr("En jeu");
+            switch (f.state) {
+                case "online": return Lang.tr("En ligne");
+                case "away": return Lang.tr("Absent");
+                case "dnd": return Lang.tr("Ne pas déranger");
+                default: return Lang.tr("Hors ligne");
+            }
+        }
+
+        /** Les couleurs de pastille du launcher ({@code STATUS_COLORS}). */
+        private UiColor stateColor(String state) {
+            switch (state) {
+                case "online": return new UiColor(59, 165, 93, 255);
+                case "away": return new UiColor(250, 166, 26, 255);
+                case "dnd": return new UiColor(237, 66, 69, 255);
+                default: return new UiColor(128, 132, 142, 255);
+            }
+        }
+
+        /** La tête du compte Minecraft principal (mc-heads, comme le launcher), sinon l'initiale. */
+        private void drawHead(UiRenderer renderer, GameFriends.Friend f, float hx, float hy, float size, int vpWidth, int vpHeight) {
+            if (!f.minecraftUuid.isEmpty()) {
+                String url = "https://mc-heads.net/avatar/" + f.minecraftUuid.replace("-", "") + "/64";
+                BufferedImage head = UiRemoteImage.get(url);
+                if (head != null) {
+                    renderer.drawIcon(url, head, hx, hy, size, size, vpWidth, vpHeight);
+                    return;
+                }
+            }
+            renderer.drawRoundedRect(hx, hy, hx + size, hy + size, px(5f), UiTheme.ACCENT_DIM, vpWidth, vpHeight);
+            String initial = f.name.isEmpty() ? "?" : f.name.substring(0, 1).toUpperCase(Locale.ROOT);
+            float s = size / px(42f) * px(0.62f);
+            float tw = renderer.textWidth(UiFont.BOLD, initial, s);
+            renderer.drawText(UiFont.BOLD, initial, hx + (size - tw) / 2f, hy + size / 2f - px(5.5f) * size / px(42f),
+                UiTheme.TEXT_PRIMARY, s, vpWidth, vpHeight);
+        }
+
+        /**
+         * La bulle de l'ami survolé, à droite de la sidebar — dessinée par
+         * {@link #uiDraw} après tout le reste.
+         */
+        void drawBubble(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
+            GameFriends.Friend f = bubbleFriend;
+            if (f == null || w <= 0f) {
+                bubbleRect = null;
+                inviteRect = null;
+                return;
+            }
+            float bw = px(320f), pad = px(16f);
+            List<String[]> lines = new ArrayList<>();
+            if (f.inGame) lines.add(new String[]{ "accent", activityText(f) });
+            else if ("launcher".equals(f.activity)) lines.add(new String[]{ "muted", Lang.tr("Dans le launcher") });
+            if (!f.server.isEmpty()) lines.add(new String[]{ "secondary", Lang.tr("Serveur") + " : " + f.server });
+            if (!f.custom.isEmpty()) lines.add(new String[]{ "secondary", "« " + f.custom + " »" });
+            if (!f.online() && f.lastSeen > 0) lines.add(new String[]{ "muted", Lang.tr("Vu") + " " + ago(f.lastSeen) });
+            boolean canInvite = f.online();
+
+            float headS = px(58f), lineH = px(20f), buttonH = px(36f);
+            float bh = pad + headS + px(12f) + lines.size() * lineH + (canInvite ? px(10f) + buttonH : 0f) + pad;
+            float bx = SIDEBAR_W + px(8f);
+            float btop = Math.min(bubbleRowTop + px(6f), screenHeight - px(12f));
+            float bbottom = btop - bh;
+            if (bbottom < px(12f)) { bbottom = px(12f); btop = bbottom + bh; }
+            // Le rectangle « vivant » de la bulle déborde vers la sidebar : la
+            // souris qui passe de la ligne à la bulle ne la ferme pas en route.
+            bubbleRect = new float[]{ bx - px(10f), bbottom, bx + bw, btop };
+
+            renderer.drawShadow(bx, bbottom, bx + bw, btop, px(10f), px(18f), 0f, new UiColor(0, 0, 0, 150), vpWidth, vpHeight);
+            renderer.drawRoundedRect(bx, bbottom, bx + bw, btop, px(10f), UiTheme.PANEL_BG, vpWidth, vpHeight);
+            renderer.drawRoundedRect(bx + px(10f), btop - px(3f), bx + bw - px(10f), btop, px(1.5f),
+                stateColor(f.state).multiplyAlpha(0.8f), vpWidth, vpHeight);
+
+            float hx = bx + pad, hy = btop - pad - headS;
+            drawHead(renderer, f, hx, hy, headS, vpWidth, vpHeight);
+            float tx = hx + headS + px(12f), maxW = bx + bw - pad - tx;
+            renderer.drawText(UiFont.BOLD, fit(renderer, UiFont.BOLD, f.name, maxW, px(0.64f)), tx, hy + headS / 2f + px(4f),
+                UiTheme.TEXT_PRIMARY, px(0.64f), vpWidth, vpHeight);
+            float dot = px(11f), dotY = hy + headS / 2f - px(17f);
+            renderer.drawRoundedRect(tx, dotY, tx + dot, dotY + dot, dot / 2f, stateColor(f.state), vpWidth, vpHeight);
+            renderer.drawText(stateLabel(f), tx + dot + px(7f), dotY + px(1.5f), UiTheme.TEXT_SECONDARY, px(0.44f), vpWidth, vpHeight);
+
+            float ly = hy - px(12f) - lineH + px(4f);
+            for (String[] l : lines) {
+                UiColor c = "accent".equals(l[0]) ? UiTheme.SUCCESS : "secondary".equals(l[0]) ? UiTheme.TEXT_SECONDARY : UiTheme.TEXT_MUTED;
+                renderer.drawText(fit(renderer, null, l[1], bw - pad * 2f, px(0.44f)), bx + pad, ly, c, px(0.44f), vpWidth, vpHeight);
+                ly -= lineH;
             }
 
-            if (overflow) {
-                float rowTop = listTop - shown * rowH;
-                String more = "+" + (list.size() - shown);
-                renderer.drawText(more, x + padX, rowTop - rowH / 2f - UiTheme.scaled(4f), UiTheme.TEXT_MUTED, textScale, vpWidth, vpHeight);
+            if (canInvite) {
+                float by1 = bbottom + pad, by2 = by1 + buttonH;
+                float bx1 = bx + pad, bx2 = bx + bw - pad;
+                inviteRect = new float[]{ bx1, by1, bx2, by2 };
+                boolean hot = inside(inviteRect, mouseX, mouseY) && !GameFriends.inviting();
+                renderer.drawRoundedRect(bx1, by1, bx2, by2, px(7f), hot ? UiTheme.accentLight() : UiTheme.ACCENT, vpWidth, vpHeight);
+                String label = GameFriends.inviting() ? Lang.tr("Envoi...") : Lang.tr("Inviter sur mon serveur");
+                float lw = renderer.textWidth(UiFont.BOLD, label, px(0.48f));
+                renderer.drawText(UiFont.BOLD, label, bx1 + (bx2 - bx1 - lw) / 2f, by1 + buttonH / 2f - px(5f),
+                    UiTheme.TEXT_PRIMARY, px(0.48f), vpWidth, vpHeight);
+            } else {
+                inviteRect = null;
+            }
+        }
+
+        @Override
+        public boolean overlayContains(double mouseX, double mouseY) {
+            return bubbleFriend != null && inside(bubbleRect, mouseX, mouseY);
+        }
+
+        @Override
+        public void pollContinuous(UiInputPoller input) {
+            if (bubbleFriend != null && input.leftClicked && inside(inviteRect, input.mouseX, input.mouseY)) {
+                GameFriends.invite(bubbleFriend);
+            }
+            if (input.scrollDelta != 0 && w > 0f && input.mouseX >= x && input.mouseX <= x + w
+                    && input.mouseY >= y && input.mouseY <= y + h) {
+                friendScroll = Math.max(0, Math.min(maxScroll, friendScroll - Integer.signum(input.scrollDelta)));
             }
         }
 
         @Override
         public void onClick() {
-            if (hoveredInvite != null) GameFriends.invite(hoveredInvite);
-        }
-
-        private UiColor stateColor(GameFriends.Friend f) {
-            if (f.inGame) return UiTheme.ACCENT;
-            switch (f.state) {
-                case "online": return UiTheme.SUCCESS;
-                case "away": return new UiColor(232, 184, 72, 255);
-                case "dnd": return UiTheme.DANGER;
-                default: return UiTheme.TEXT_MUTED.multiplyAlpha(0.6f);
+            String action = hoveredAction;
+            if (action == null) return;
+            if (action.equals("search")) {
+                friendSearchOpen = !friendSearchOpen;
+                if (friendSearchOpen) {
+                    friendSearch.setFocused(true);
+                } else {
+                    friendSearch.setText("");
+                    friendSearch.setFocused(false);
+                }
+                friendScroll = 0;
+            } else if (action.startsWith("group:")) {
+                String g = action.substring(6);
+                if (!collapsedFriendGroups.remove(g)) collapsedFriendGroups.add(g);
             }
         }
 
-        /** {@code text} raccourci avec "…" pour tenir dans {@code maxW}. */
-        private String fit(UiRenderer renderer, String text, float maxW, float scale) {
-            if (renderer.textWidth(text, scale) <= maxW) return text;
+        /** {@code text} raccourci avec "..." pour tenir dans {@code maxW} ({@code font} nul = police normale). */
+        private String fit(UiRenderer renderer, UiFont font, String text, float maxW, float scale) {
+            if (width(renderer, font, text, scale) <= maxW) return text;
             String s = text;
-            while (s.length() > 1 && renderer.textWidth(s + "…", scale) > maxW) s = s.substring(0, s.length() - 1);
-            return s + "…";
+            // "..." et non le caractère unique : la police du jeu ne l'a pas (il s'affichait "?").
+            while (s.length() > 1 && width(renderer, font, s + "...", scale) > maxW) s = s.substring(0, s.length() - 1);
+            return s + "...";
+        }
+
+        private float width(UiRenderer renderer, UiFont font, String text, float scale) {
+            return font == null ? renderer.textWidth(text, scale) : renderer.textWidth(font, text, scale);
         }
 
         /** Texte coupé aux mots sur au plus {@code maxLines} lignes, la première ligne à {@code baseline}. */
@@ -1479,11 +1848,11 @@ public class UiMainMenuScreen extends UiScreenBase {
                 }
             }
             if (line.length() > 0) lines.add(line.toString());
-            float lineH = UiTheme.scaled(11f);
+            float lh = px(16f);
             for (int i = 0; i < lines.size() && i < maxLines; i++) {
                 String l = lines.get(i);
-                if (i == maxLines - 1 && lines.size() > maxLines) l = fit(renderer, l + " …", maxW, scale);
-                renderer.drawText(l, tx, baseline - i * lineH, color, scale, vpWidth, vpHeight);
+                if (i == maxLines - 1 && lines.size() > maxLines) l = fit(renderer, null, l + " ...", maxW, scale);
+                renderer.drawText(l, tx, baseline - i * lh, color, scale, vpWidth, vpHeight);
             }
         }
     }

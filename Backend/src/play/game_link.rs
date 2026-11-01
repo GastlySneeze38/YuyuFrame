@@ -113,8 +113,6 @@ fn is_public_id(id: &str) -> bool {
     id.len() == 36 && id.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
 }
 
-/// La réponse à `friends`, depuis la liste du serveur (`GET /friends`) : les
-/// amis en jeu d'abord, puis en ligne, puis les autres, chacun par pseudo.
 /// Liste d'amis de démonstration posée par l'interface de dev (interrupteur
 /// « données de démonstration » de l'atelier, `lib/friendsDemo.ts`) : le jeu
 /// la reçoit à la place de la vraie, et une invitation y répond « ok » sans
@@ -137,9 +135,37 @@ fn demo_friends() -> Option<serde_json::Value> {
     DEMO_FRIENDS.lock().ok().and_then(|d| d.clone())
 }
 
-fn friends_line(list: &serde_json::Value) -> String {
+/// Un ami lu dans la liste du serveur (`GET /friends`), avec ce que le jeu
+/// affiche. Les champs absents sont des chaînes vides.
+struct GameFriend<'a> {
+    id: &'a str,
+    name: &'a str,
+    state: &'a str,
+    in_game: bool,
+    /// Le compte Minecraft principal (pour la tête), sinon vide.
+    mc: &'a str,
+    /// Statut personnalisé encore valable.
+    custom: String,
+    /// `game`, `launcher` ou vide.
+    activity: &'a str,
+    version: &'a str,
+    loader: &'a str,
+    /// `ranked:<mode>` ou `casual:<mode>`, vide hors duel.
+    duel: String,
+    /// « hôte:port », seulement si l'ami le montre.
+    server: &'a str,
+    /// Hors ligne : dernière présence, en secondes Unix (0 = inconnue).
+    last_seen: i64,
+}
+
+fn text<'a>(v: &'a serde_json::Value, path: &str) -> &'a str {
+    v.pointer(path).and_then(|s| s.as_str()).unwrap_or("")
+}
+
+fn read_friends(list: &serde_json::Value) -> Vec<GameFriend<'_>> {
+    let now = chrono::Utc::now();
     let friends = list.get("friends").and_then(|f| f.as_array()).map(Vec::as_slice).unwrap_or_default();
-    let mut rows: Vec<(u8, String, &str, &str, &str, bool)> = friends
+    let mut rows: Vec<GameFriend> = friends
         .iter()
         .filter_map(|f| {
             let id = f.get("id")?.as_str().filter(|id| is_public_id(id))?;
@@ -148,15 +174,99 @@ fn friends_line(list: &serde_json::Value) -> String {
                 Some(s @ ("online" | "away" | "dnd")) => s,
                 _ => "offline",
             };
-            let in_game = f.pointer("/presence/activity/kind").and_then(|k| k.as_str()) == Some("game");
-            let order = if in_game { 0 } else if state != "offline" { 1 } else { 2 };
-            Some((order, name.to_lowercase(), id, name, state, in_game))
+            let online = state != "offline";
+            let activity = if online { text(f, "/presence/activity/kind") } else { "" };
+            let activity = if matches!(activity, "game" | "launcher") { activity } else { "" };
+            let accounts = f.get("minecraft").and_then(|m| m.as_array()).map(Vec::as_slice).unwrap_or_default();
+            let mc = accounts
+                .iter()
+                .find(|a| a.get("main").and_then(|m| m.as_bool()) == Some(true))
+                .or_else(|| accounts.first())
+                .and_then(|a| a.get("uuid")?.as_str())
+                .filter(|u| u.chars().all(|c| c.is_ascii_hexdigit() || c == '-'))
+                .unwrap_or("");
+            let expired = f
+                .pointer("/presence/custom/expires_at")
+                .and_then(|e| e.as_str())
+                .and_then(|e| chrono::DateTime::parse_from_rfc3339(e).ok())
+                .is_some_and(|e| e <= now);
+            let custom = if expired { String::new() } else { field(text(f, "/presence/custom/text")) };
+            let duel = match f.pointer("/presence/activity/duel") {
+                Some(d) if d.is_object() && activity == "game" => format!(
+                    "{}:{}",
+                    if d.get("ranked").and_then(|r| r.as_bool()) == Some(true) { "ranked" } else { "casual" },
+                    text(d, "/mode")
+                ),
+                _ => String::new(),
+            };
+            let last_seen = f
+                .pointer("/presence/last_seen")
+                .and_then(|e| e.as_str())
+                .and_then(|e| chrono::DateTime::parse_from_rfc3339(e).ok())
+                .map(|e| e.timestamp())
+                .unwrap_or(0);
+            Some(GameFriend {
+                id,
+                name,
+                state,
+                in_game: activity == "game",
+                mc,
+                custom,
+                activity,
+                version: if activity == "game" { text(f, "/presence/activity/mc_version") } else { "" },
+                loader: if activity == "game" { text(f, "/presence/activity/loader") } else { "" },
+                duel,
+                server: if activity == "game" { text(f, "/presence/activity/server") } else { "" },
+                last_seen,
+            })
         })
         .collect();
-    rows.sort();
+    // En jeu, en ligne, hors ligne ; par pseudo, et les plus récemment vus
+    // d'abord parmi les hors ligne — l'ordre du panneau du launcher.
+    let order = |f: &GameFriend| if f.in_game { 0 } else if f.state != "offline" { 1 } else { 2 };
+    rows.sort_by(|a, b| {
+        order(a)
+            .cmp(&order(b))
+            .then_with(|| if order(a) == 2 { b.last_seen.cmp(&a.last_seen) } else { std::cmp::Ordering::Equal })
+            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+    });
+    rows
+}
+
+/// La réponse à `friends` : `friends⇥(<id>⇥<pseudo>⇥<état>⇥<en jeu 0/1>)…`.
+fn friends_line(list: &serde_json::Value) -> String {
     let mut line = String::from("friends");
-    for (_, _, id, name, state, in_game) in rows {
-        line.push_str(&format!("\t{id}\t{}\t{state}\t{}", field(name), in_game as u8));
+    for f in read_friends(list) {
+        line.push_str(&format!("\t{}\t{}\t{}\t{}", f.id, field(f.name), f.state, f.in_game as u8));
+    }
+    line
+}
+
+/// La réponse à `friends2`, ce qu'affiche le menu YuyuFrame en jeu (bulle
+/// comprise) : `friends2⇥(<id>⇥<pseudo>⇥<état>⇥<en jeu 0/1>⇥<uuid Minecraft>⇥
+/// <statut perso>⇥<activité>⇥<version>⇥<loader>⇥<duel>⇥<serveur>⇥<vu, s Unix>)…`,
+/// douze champs par ami, vides quand ils n'ont pas de valeur.
+fn friends_line_v2(list: &serde_json::Value) -> String {
+    let mut line = String::from("friends2");
+    for f in read_friends(list) {
+        let fields = [
+            f.id.to_string(),
+            field(f.name),
+            f.state.to_string(),
+            (f.in_game as u8).to_string(),
+            f.mc.to_string(),
+            f.custom,
+            f.activity.to_string(),
+            field(f.version),
+            field(f.loader),
+            field(&f.duel),
+            field(f.server),
+            if f.last_seen > 0 { f.last_seen.to_string() } else { String::new() },
+        ];
+        for value in fields {
+            line.push('\t');
+            line.push_str(&value);
+        }
     }
     line
 }
@@ -231,6 +341,13 @@ async fn answer(ctx: &Context, question: &str) -> String {
             Some(demo) => friends_line(&demo),
             None => match crate::server::get(&ctx.state, "/friends", &[]).await {
                 Ok(list) => friends_line(&list),
+                Err(e) => error(&e.message),
+            },
+        },
+        "friends2" => match demo_friends() {
+            Some(demo) => friends_line_v2(&demo),
+            None => match crate::server::get(&ctx.state, "/friends", &[]).await {
+                Ok(list) => friends_line_v2(&list),
                 Err(e) => error(&e.message),
             },
         },
@@ -462,6 +579,32 @@ pub use pipe::open;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn la_liste_detaillee_des_amis_garde_douze_champs_par_ami() {
+        let list = serde_json::json!({ "friends": [
+            { "id": "00000000-0000-4000-8000-000000000005", "username": "Philza",
+              "minecraft": [], "presence": { "state": "offline", "custom": { "text": "En\tvacances", "expires_at": null },
+              "activity": null, "last_seen": "2026-11-01T10:00:00Z" } },
+            { "id": "00000000-0000-4000-8000-000000000001", "username": "Technoblade",
+              "minecraft": [{ "uuid": "b876ec32e396476ba1158438d83c67d4", "name": "Technoblade", "main": true }],
+              "presence": { "state": "online", "custom": null, "activity": { "kind": "game", "mc_version": "1.21.11",
+              "loader": "fabric", "duel": { "ranked": true, "mode": "mace" }, "server": "eu.minemen.club:25565" }, "last_seen": null } },
+        ]});
+        let line = friends_line_v2(&list);
+        let parts: Vec<&str> = line.split('\t').collect();
+        assert_eq!(parts[0], "friends2");
+        assert_eq!(parts.len(), 1 + 2 * 12);
+        // L'ami en jeu passe devant, avec tout ce que la bulle affiche.
+        assert_eq!(&parts[1..13], &[
+            "00000000-0000-4000-8000-000000000001", "Technoblade", "online", "1", "b876ec32e396476ba1158438d83c67d4",
+            "", "game", "1.21.11", "fabric", "ranked:mace", "eu.minemen.club:25565", "",
+        ]);
+        // Hors ligne : ni activité ni serveur, le statut perso sans sa tabulation, la dernière présence.
+        assert_eq!(&parts[13..25], &[
+            "00000000-0000-4000-8000-000000000005", "Philza", "offline", "0", "", "Envacances", "", "", "", "", "", "1793527200",
+        ]);
+    }
 
     #[test]
     fn un_champ_ne_peut_pas_decaler_les_suivants() {

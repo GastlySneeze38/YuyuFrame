@@ -155,17 +155,19 @@ public final class UiRemoteImage {
                         g.setRenderingHint(java.awt.RenderingHints.KEY_RENDERING,
                             java.awt.RenderingHints.VALUE_RENDER_QUALITY);
                         // Réduction en UNE passe bilinéaire : au-delà d'un
-                        // facteur 2 elle saute des pixels, d'où un passage
-                        // intermédiaire à mi-chemin pour les grandes réductions.
+                        // facteur 2 elle saute des pixels, d'où des passages
+                        // intermédiaires, chacun de moitié au plus, jusqu'à
+                        // être à moins de deux fois la taille visée (une
+                        // icône de 100 px dessinée à 16 en demande deux).
                         BufferedImage from = source;
-                        if (ratio < 0.5f) {
-                            int mw = Math.max(w, source.getWidth() / 2), mh = Math.max(h, source.getHeight() / 2);
+                        while (from.getWidth() > w * 2 || from.getHeight() > h * 2) {
+                            int mw = Math.max(w, from.getWidth() / 2), mh = Math.max(h, from.getHeight() / 2);
                             BufferedImage mid = new BufferedImage(mw, mh, BufferedImage.TYPE_INT_ARGB);
                             java.awt.Graphics2D gm = mid.createGraphics();
                             try {
                                 gm.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION,
                                     java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-                                gm.drawImage(source, 0, 0, mw, mh, null);
+                                gm.drawImage(from, 0, 0, mw, mh, null);
                             } finally {
                                 gm.dispose();
                             }
