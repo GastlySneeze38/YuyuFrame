@@ -213,7 +213,7 @@ export interface ServerPingInfo {
 /** Ce qui empêche le client intégré de se charger — `null` quand rien ne
  *  l'empêche. Renvoyé brut par le Rust (`agent_compat.rs`) : c'est
  *  l'interface qui met des mots dessus, dans la langue de l'utilisateur. */
-export type AgentBlock = 'version' | 'loader' | 'files'
+export type AgentBlock = 'version' | 'loader' | 'files' | 'horizon'
 
 export interface AgentStatus {
   available: boolean

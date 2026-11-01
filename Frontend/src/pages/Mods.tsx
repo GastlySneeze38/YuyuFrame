@@ -31,6 +31,7 @@ import { ModpackDetailModal } from '@/components/mods/ModpackDetailModal'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { pageCountFor } from '@/components/ui/Pagination'
 import { showError, showApiError } from '@/stores/useErrorToast'
+import { isModLoader } from '@/lib/loader'
 import { useT } from '@/i18n'
 import {
   displayName, baseFilename, fetchVersionsByHash, checkForUpdates, fetchModrinthSearch, fetchLatestVersion,
@@ -101,7 +102,11 @@ export function ModsContent({ instance }: { instance: Instance }) {
   const instanceId = instance.id
   const mcVersion = instance.mc_version
   const loader = instance.loader
-  const isPlugin = loader === 'vanilla'
+  // Vanilla et Horizon : aucun chargeur de mods Java.
+  const isPlugin = !isModLoader(loader)
+  // Horizon a son propre format de shaders : ceux d'Iris ou d'OptiFine ne s'y
+  // chargent pas, donc on ne les propose pas.
+  const isHorizon = loader === 'horizon'
   const { avoidBetaDependencies, pinnedMods } = useStore()
 
   const pinnedProjectIds = useMemo(() => {
@@ -1272,7 +1277,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
             active={tab.startsWith('packs-')}
             activeId={tab}
             items={[
-              { id: 'packs-shader', icon: TOOLBAR_ICON.star, label: t('mods.menuBrowseShaders'), onSelect: () => setTab('packs-shader') },
+              ...(isHorizon ? [] : [{ id: 'packs-shader', icon: TOOLBAR_ICON.star, label: t('mods.menuBrowseShaders'), onSelect: () => setTab('packs-shader') }]),
               { id: 'packs-resourcepack', icon: TOOLBAR_ICON.grid, label: t('mods.menuBrowseResourcepacks'), onSelect: () => setTab('packs-resourcepack') },
               { id: 'packs-installed', icon: TOOLBAR_ICON.list, label: t('mods.menuInstalledPacks'), badge: packCount, onSelect: () => setTab('packs-installed') },
             ]}

@@ -8,6 +8,7 @@ import { ShareLinkInput } from '@/components/ui/ShareLinkInput'
 import { useStore } from '@/stores/useStore'
 import { showError } from '@/stores/useErrorToast'
 import { useT } from '@/i18n'
+import { useAgentAvailable } from '@/lib/agentStatus'
 
 /**
  * Options du client intégré et partage des options par lien — onglet
@@ -111,10 +112,16 @@ export function ClientOptionsTransfer({ instanceId }: { instanceId: string }) {
 }
 
 /** Créer un lien avec les options de cette instance. */
-export function OptionsLinkCreate({ instanceId }: { instanceId: string }) {
+export function OptionsLinkCreate({ instanceId, withClient = true }: {
+  instanceId: string
+  /** Faux quand le client intégré ne se charge pas sur cette instance : ses
+   *  options n'y existent pas, la case n'est pas proposée. */
+  withClient?: boolean
+}) {
   const t = useT()
   const [game, setGame] = useState(true)
-  const [client, setClient] = useState(true)
+  const [checkedClient, setClient] = useState(true)
+  const client = withClient && checkedClient
 
   return (
     <div className="flex flex-col gap-3">
@@ -124,7 +131,7 @@ export function OptionsLinkCreate({ instanceId }: { instanceId: string }) {
       </div>
       <div className="flex flex-wrap gap-4">
         <Check checked={game} onChange={setGame} label={t('optionsShare.game')} />
-        <Check checked={client} onChange={setClient} label={t('optionsShare.client')} />
+        {withClient && <Check checked={client} onChange={setClient} label={t('optionsShare.client')} />}
       </div>
       <p className="text-[11px] text-txt-muted">{t('optionsShare.linkPrivacy')}</p>
       <ShareLinkButton make={() => api.optionsShare.link(instanceId, game, client)} disabled={!game && !client} />
@@ -150,12 +157,19 @@ function Check({ checked, onChange, label }: { checked: boolean; onChange: (v: b
  * Appliquer un lien d'options reçu à une instance. Le lien se colle, ou
  * arrive déjà rempli (`initialLink`) quand on l'a cliqué.
  */
-export function OptionsLinkApply({ instanceId, initialLink }: { instanceId: string; initialLink?: string }) {
+export function OptionsLinkApply({ instanceId, initialLink, withClient = true }: {
+  instanceId: string
+  initialLink?: string
+  /** Voir `OptionsLinkCreate` : sans client intégré, ses options du lien sont ignorées. */
+  withClient?: boolean
+}) {
   const t = useT()
   const [link, setLink] = useState<string | null>(null)
-  const [info, setInfo] = useState<OptionsLinkInfo | null>(null)
+  const [rawInfo, setInfo] = useState<OptionsLinkInfo | null>(null)
+  const info = rawInfo && !withClient ? { ...rawInfo, client: null } : rawInfo
   const [game, setGame] = useState(true)
-  const [client, setClient] = useState(true)
+  const [checkedClient, setClient] = useState(true)
+  const client = withClient && checkedClient
   const [busy, setBusy] = useState(false)
   const [applied, setApplied] = useState<OptionsLinkInfo | null>(null)
 
@@ -251,10 +265,19 @@ export function OptionsLinkModal({ link, onClose }: { link: string; onClose: () 
                 ))}
               </select>
             </div>
-            {target && <OptionsLinkApply key={target} instanceId={target} initialLink={link} />}
+            {target && <TargetApply key={target} instanceId={target} link={link} />}
           </>
         )}
       </div>
     </ModalShell>
   )
+}
+
+/** L'application d'un lien sur l'instance choisie, selon que le client
+ *  intégré s'y charge ou non. */
+function TargetApply({ instanceId, link }: { instanceId: string; link: string }) {
+  const instance = useStore((s) => s.instances.find((i) => i.id === instanceId))
+  const agentAvailable = useAgentAvailable(instance?.mc_version ?? '', instance?.loader ?? 'vanilla')
+  if (agentAvailable === null) return null
+  return <OptionsLinkApply instanceId={instanceId} initialLink={link} withClient={agentAvailable} />
 }

@@ -311,6 +311,8 @@ pub async fn launch_game(
                     session_id,
                     connect_server: connect_server.as_deref(),
                     window_size,
+                    fullscreen: instance.window_custom && instance.window_fullscreen,
+                    pinned: &instance.loader_version,
                 },
                 cancel_rx,
             )

@@ -65,7 +65,8 @@ export interface McOption {
   value: string
 }
 
-export type Loader = 'vanilla' | 'fabric' | 'forge' | 'neoforge' | 'quilt'
+/** `horizon` : Minecraft réécrit en Rust, 26.3 seulement (`launcher::horizon` côté Rust). */
+export type Loader = 'vanilla' | 'fabric' | 'forge' | 'neoforge' | 'quilt' | 'horizon'
 
 export interface DetectedSource {
   kind: 'multimc_prism' | 'curseforge' | 'atlauncher' | 'modrinth_app' | 'unknown'

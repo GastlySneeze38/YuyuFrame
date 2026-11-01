@@ -203,6 +203,8 @@ pub(super) async fn setup_launcher_agent(
             AgentBlock::Version => format!("aucun profil de mixins pour MC {}", version_id),
             AgentBlock::Loader => format!("MC {} en {} tourne en Java 8", version_id, loader.unwrap_or("vanilla")),
             AgentBlock::Files => "fichiers de l'agent absents de l'installation".to_string(),
+            // Jamais atteint : une instance Horizon ne passe pas par la JVM.
+            AgentBlock::Horizon => "instance Horizon, sans JVM".to_string(),
         };
         log_to_console(app, console_label, &format!("[LauncherAgent] désactivé : {}", raison), "out");
         return AgentSetup::default();

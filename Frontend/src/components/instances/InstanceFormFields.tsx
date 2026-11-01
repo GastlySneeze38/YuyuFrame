@@ -1,5 +1,5 @@
 import type { Loader } from '@/types'
-import { LOADERS } from '@/lib/loader'
+import { offeredLoaders } from '@/lib/loader'
 import { useT } from '@/i18n'
 
 export function NameInput({ value, onChange, onEnter }: { value: string; onChange: (v: string) => void; onEnter?: () => void }) {
@@ -89,7 +89,7 @@ export function LoaderPicker({ value, onChange, available }: { value: Loader; on
     <div>
       <label className="text-[10px] text-[rgba(255,255,255,0.4)] tracking-[0.1em] uppercase font-semibold">Loader</label>
       <div className="flex gap-1 mt-1">
-        {LOADERS.filter((l) => !available || available.includes(l)).map((l) => (
+        {offeredLoaders(available).map((l) => (
           <button
             key={l}
             onClick={() => onChange(l)}

@@ -13,7 +13,8 @@ import { CloseButton } from '@/components/ui/CloseButton'
 import { RamPicker, type RamStatus } from '@/components/ui/RamPicker'
 import { Toggle } from '@/components/ui/Toggle'
 import { showError } from '@/stores/useErrorToast'
-import { loaderColor, LOADERS } from '@/lib/loader'
+import { isModLoader, loaderColor, offeredLoaders } from '@/lib/loader'
+import { useAgentAvailable } from '@/lib/agentStatus'
 import { useLoadersFor } from '@/lib/loaderCompat'
 import { formatRam } from '@/lib/format'
 import { press } from '@/lib/motion'
@@ -51,6 +52,8 @@ import { useT } from '@/i18n'
  */
 const TABS = ['general', 'installation', 'window', 'java', 'game', 'compat', 'repair', 'share'] as const
 type Tab = (typeof TABS)[number]
+/** Onglets sans objet pour une instance Horizon — voir `tabs` plus bas. */
+const HORIZON_HIDDEN_TABS: Tab[] = ['java', 'compat', 'repair', 'share']
 
 export function InstanceSettingsModal({
   instance,
@@ -134,6 +137,12 @@ export function InstanceSettingsModal({
     description !== instance.description ||
     ram !== instance.ram_mb
 
+  // Horizon n'a ni JVM ni mémoire réglable (`horizon-client` n'a aucune
+  // option pour ça), ne passe pas par l'essai de compatibilité ni par la
+  // réparation (qui vérifient le jeu Java), et son partage deviendrait une
+  // instance vanilla à l'arrivée. Ces onglets ne sont donc pas proposés,
+  // plutôt que de proposer des réglages sans effet.
+  const isHorizon = instance.loader === 'horizon'
   const tabs = useMemo(
     () => [
       { id: 'general' as const, label: t('instancesPage.tabGeneral'), icon: <IconInfo /> },
@@ -144,9 +153,15 @@ export function InstanceSettingsModal({
       { id: 'compat' as const, label: t('instancesPage.tabCompat'), icon: <IconPlayCheck /> },
       { id: 'repair' as const, label: t('instancesPage.tabRepair'), icon: <IconWrench /> },
       { id: 'share' as const, label: t('instancesPage.tabShare'), icon: <IconShare /> },
-    ],
-    [t],
+    ].filter((item) => !isHorizon || !HORIZON_HIDDEN_TABS.includes(item.id)),
+    [t, isHorizon],
   )
+
+  // Un onglet retiré (instance passée sur Horizon pendant que la fenêtre est
+  // ouverte, adresse qui le demande) ramène au début.
+  useEffect(() => {
+    if (!tabs.some((item) => item.id === tab)) setTab('general')
+  }, [tabs, tab])
 
   const save = async () => {
     if (!name.trim()) { showError(t('instancesPage.nameRequired')); return }
@@ -373,7 +388,7 @@ export function InstanceSettingsModal({
 
             {tab === 'window' && <WindowTab instance={instance} onUpdate={onUpdate} />}
 
-            {tab === 'game' && <GameSettings instanceId={instance.id} />}
+            {tab === 'game' && <GameSettings instance={instance} />}
 
             {tab === 'repair' && <RepairTab instance={instance} />}
 
@@ -449,8 +464,10 @@ export function InstanceSettingsModal({
  * l'autre, et dont le pendant — appliquer — n'existait nulle part dans
  * l'interface alors que la commande était là depuis le début.
  */
-function GameSettings({ instanceId }: { instanceId: string }) {
+function GameSettings({ instance }: { instance: Instance }) {
   const t = useT()
+  const instanceId = instance.id
+  const agentAvailable = useAgentAvailable(instance.mc_version, instance.loader)
   const [status, setStatus] = useState<SharedOptionsStatus | null>(null)
   const [busy, setBusy] = useState<'export' | 'apply' | null>(null)
   const [done, setDone] = useState<'export' | 'apply' | null>(null)
@@ -527,12 +544,16 @@ function GameSettings({ instanceId }: { instanceId: string }) {
 
       <Separator />
 
-      <ClientOptionsTransfer instanceId={instanceId} />
+      {/* Les options du client intégré n'ont de sens que là où il se charge. */}
+      {agentAvailable && (
+        <>
+          <ClientOptionsTransfer instanceId={instanceId} />
+          <Separator />
+        </>
+      )}
 
-      <Separator />
-
-      <OptionsLinkCreate instanceId={instanceId} />
-      <OptionsLinkApply instanceId={instanceId} />
+      <OptionsLinkCreate instanceId={instanceId} withClient={!!agentAvailable} />
+      <OptionsLinkApply instanceId={instanceId} withClient={!!agentAvailable} />
     </div>
   )
 }
@@ -1448,9 +1469,9 @@ function InstallationTab({
   }
 
   const versionChanged = mcVersion !== instance.mc_version || loader !== instance.loader
-  /** On quitte un loader pour vanilla : les mods installés ne se chargeront
-   *  plus, quelle que soit leur version. */
-  const goingVanilla = loader === 'vanilla' && instance.loader !== 'vanilla'
+  /** On quitte un loader pour vanilla ou Horizon : les mods installés ne se
+   *  chargeront plus, quelle que soit leur version. */
+  const goingVanilla = !isModLoader(loader) && isModLoader(instance.loader)
 
   /**
    * Ce que le launcher installe quand rien n'est épinglé.
@@ -1490,6 +1511,12 @@ function InstallationTab({
         },
         loaderVersion,
       )
+      // Horizon n'a pas de JVM : une configuration JVM reliée ne s'y
+      // appliquerait plus, le lien est retiré plutôt que laissé à mentir.
+      if (loader === 'horizon' && updated.jvm_profile_id) {
+        await api.instances.setJvmProfile(instance.id, null)
+        updated.jvm_profile_id = null
+      }
       if (goingVanilla) {
         if (wipeMods) {
           setSavingLabel(t('instancesPage.wipingMods'))
@@ -1502,7 +1529,7 @@ function InstallationTab({
             await api.mods.delete(instance.id, mod.name).catch(() => {})
           }
         }
-      } else if (versionChanged && updateMods) {
+      } else if (versionChanged && updateMods && isModLoader(loader)) {
         setSavingLabel(t('instancesPage.updatingMods'))
         await updateModsForNewVersion(instance.id, mcVersion, loader)
       }
@@ -1592,7 +1619,7 @@ function InstallationTab({
                 d'indisponibilité plus bas reste, en filet — il attrape le cas
                 où la vérification n'a pas pu se faire. */}
             <div className="flex flex-wrap gap-1.5">
-              {LOADERS.filter((l) => !available || available.includes(l)).map((l) => (
+              {offeredLoaders(available).map((l) => (
                 <button
                   key={l}
                   onClick={() => setLoader(l)}
@@ -1665,7 +1692,7 @@ function InstallationTab({
               Et celle-là part décochée : un dossier de mods vidé ne se
               récupère pas, alors qu'un dossier laissé en place ne coûte que
               de la place et redevient utile en revenant sur un loader. */}
-          {versionChanged && (
+          {versionChanged && (goingVanilla || isModLoader(loader)) && (
             <button
               onClick={() => (goingVanilla ? setWipeMods(!wipeMods) : setUpdateMods(!updateMods))}
               className="flex items-center gap-3 rounded-xl border border-line bg-surface-1 px-3 py-2.5 text-left transition-colors hover:border-line-strong"

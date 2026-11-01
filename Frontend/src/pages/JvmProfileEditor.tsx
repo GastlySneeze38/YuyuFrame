@@ -16,6 +16,7 @@ import { Warn } from '@/components/jvm/controls'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import type { JvmConfigPreview, JvmFlagCategory, JvmProfile } from '@/types'
+import { jvmLinkBlock } from '@/lib/loader'
 
 const CATEGORIES: JvmFlagCategory[] = ['jvm', 'gc', 'jit']
 
@@ -52,7 +53,9 @@ const ARGS_KEY: Record<JvmFlagCategory, 'args_jvm' | 'args_gc' | 'args_jit'> = {
 export default function JvmProfileEditor() {
   const navigate = useNavigate()
   const { profileId } = useParams<{ profileId: string }>()
-  const instances = useStore((s) => s.instances)
+  // Les instances Horizon n'ont pas de JVM : rien à prévisualiser pour elles.
+  const allInstances = useStore((s) => s.instances)
+  const instances = useMemo(() => allInstances.filter((i) => !jvmLinkBlock(i)), [allInstances])
 
   const [loaded, setLoaded] = useState<JvmProfile | null>(null)
   const [notFound, setNotFound] = useState(false)

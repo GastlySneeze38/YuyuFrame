@@ -8,6 +8,7 @@ import { autoVendorFor, effectiveGc, familyFor, parseJvmArgs, type JvmFamily } f
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import type { Instance, JvmProfile } from '@/types'
+import { jvmLinkBlock } from '@/lib/loader'
 
 const VENDOR_LABELS: Record<string, string> = {
   auto: 'Auto',
@@ -150,7 +151,10 @@ export default function JvmProfiles() {
     return map
   }, [instances])
 
-  const unlinkedInstances = useMemo(() => instances.filter((i) => !i.jvm_profile_id), [instances])
+  // Seules les instances qui tournent sur Java comptent ici : une instance
+  // Horizon n'a aucune JVM, aucun drapeau ne s'y applique.
+  const javaInstances = useMemo(() => instances.filter((i) => !jvmLinkBlock(i)), [instances])
+  const unlinkedInstances = useMemo(() => javaInstances.filter((i) => !i.jvm_profile_id), [javaInstances])
 
   const described = useMemo(
     () => (profiles ?? []).map((p) => ({ profile: p, info: describe(p), linked: byProfile.get(p.id) ?? [] })),
@@ -232,7 +236,7 @@ export default function JvmProfiles() {
     }
   }
 
-  const linkedCount = instances.length - unlinkedInstances.length
+  const linkedCount = javaInstances.length - unlinkedInstances.length
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-[#09090D]">
@@ -240,7 +244,7 @@ export default function JvmProfiles() {
         <PageHeaderSeparator />
         <h1 className="text-[16px] font-black tracking-[-0.01em] text-white">Configurations JVM</h1>
         <span className="rounded-md bg-[rgba(255,255,255,0.05)] px-2 py-0.5 text-[11px] font-semibold text-[rgba(255,255,255,0.4)]">
-          {linkedCount}/{instances.length} instance{instances.length > 1 ? 's' : ''} reliée{linkedCount > 1 ? 's' : ''}
+          {linkedCount}/{javaInstances.length} instance{javaInstances.length > 1 ? 's' : ''} reliée{linkedCount > 1 ? 's' : ''}
         </span>
       </PageHeader>
 
@@ -438,6 +442,23 @@ export default function JvmProfiles() {
                         {instances.map((i) => {
                           const here = i.jvm_profile_id === p.id
                           const elsewhere = !!i.jvm_profile_id && !here
+                          // Une instance où la configuration ne peut pas
+                          // s'appliquer reste visible, grisée et expliquée :
+                          // la retirer de la liste ferait chercher pourquoi
+                          // elle n'y est pas.
+                          const blocked = jvmLinkBlock(i)
+                          if (blocked) {
+                            return (
+                              <span
+                                key={i.id}
+                                title={blocked}
+                                className="flex h-[24px] cursor-not-allowed items-center rounded-md border border-dashed border-[rgba(255,255,255,0.08)] px-2 text-[10px] font-semibold text-[rgba(255,255,255,0.25)]"
+                              >
+                                {i.name}
+                                <span className="opacity-70"> · {blocked}</span>
+                              </span>
+                            )
+                          }
                           return (
                             <button
                               key={i.id}

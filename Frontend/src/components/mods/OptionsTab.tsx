@@ -3,7 +3,6 @@ import { motion } from 'framer-motion'
 import { press } from '@/lib/motion'
 import { api } from '@/api/client'
 import { showError } from '@/stores/useErrorToast'
-import { WarningIcon } from '@/components/home/AgentModal'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { OptionSearchBar } from './OptionSearchBar'
@@ -458,7 +457,7 @@ export function OptionsTab({ instance }: { instance: Instance }) {
                 deux fichiers différents, et une clé `zoom.setting.niveau`
                 perdue au milieu des raccourcis de Minecraft ne se
                 comprendrait pas. */}
-            {agentRows.length > 0 && (
+            {!agentBlocked && agentRows.length > 0 && (
               <>
                 <h3 className="mt-4 text-[10.5px] font-bold uppercase tracking-[0.1em] text-[rgba(255,255,255,0.3)]">
                   {t('options.groupAgent')}
@@ -522,6 +521,10 @@ export function OptionsTab({ instance }: { instance: Instance }) {
           </button>
 
           {/* ── Réglages du client intégré ──────────────────────────────── */}
+          {/* Absents là où le client ne se charge pas (version non couverte,
+              Horizon) : des interrupteurs qui ne changeraient rien au jeu
+              n'ont pas à être affichés. */}
+          {!agentBlocked && (<>
           <div className="flex flex-col gap-2 border-t border-[rgba(255,255,255,0.06)] pt-4">
             <h3 className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-[rgba(255,255,255,0.3)]">
               {t('options.groupAgent')}
@@ -529,16 +532,6 @@ export function OptionsTab({ instance }: { instance: Instance }) {
             <p className="text-[11px] leading-relaxed text-[rgba(255,255,255,0.4)]">
               {t('options.agentIntro')}
             </p>
-
-            {/* Dit avant de laisser toucher : sur une version non supportée,
-                rien n'est injecté, et ces interrupteurs ne changeraient rien
-                au jeu qui va se lancer. */}
-            {agentBlocked && (
-              <div className="flex items-start gap-2 rounded-xl border border-[rgba(250,204,21,0.25)] bg-[rgba(250,204,21,0.08)] px-3.5 py-2.5 text-[11.5px] leading-relaxed text-[rgba(250,204,21,0.85)]">
-                <WarningIcon className="mt-[2px] h-3.5 w-3.5 flex-shrink-0" />
-                {t('options.agentUnavailable', { version: instance.mc_version })}
-              </div>
-            )}
           </div>
 
           {/* Les mêmes contrôles que pour Minecraft, sur l'autre fichier :
@@ -547,7 +540,7 @@ export function OptionsTab({ instance }: { instance: Instance }) {
           {AGENT_KNOWN.map((group) => (
             <section
               key={group.groupKey}
-              className={`flex flex-col gap-2 ${agentBlocked ? 'pointer-events-none opacity-45' : ''}`}
+              className="flex flex-col gap-2"
             >
               <h4 className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-[rgba(255,255,255,0.3)]">
                 {t(group.groupKey)}
@@ -587,6 +580,7 @@ export function OptionsTab({ instance }: { instance: Instance }) {
               })}
             </button>
           )}
+          </>)}
         </div>
       )}
     </div>

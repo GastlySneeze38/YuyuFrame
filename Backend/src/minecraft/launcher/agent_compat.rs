@@ -44,6 +44,9 @@ pub enum AgentBlock {
     Loader,
     /// L'installation du launcher n'a pas les fichiers de l'agent.
     Files,
+    /// Une instance Horizon : le jeu est réécrit en Rust, il n'y a pas de
+    /// JVM où charger un agent.
+    Horizon,
 }
 
 /// `true` si un profil de mixins couvre cette version.
@@ -63,6 +66,9 @@ pub fn version_supported(version_id: &str) -> bool {
 /// vérifiée là-bas — ici on n'anticipe que le cas déterministe du 1.8.9
 /// moddé, dont on sait d'avance qu'il partira en Java 8.
 pub fn blocked_by(version_id: &str, loader: Option<&str>) -> Option<AgentBlock> {
+    if loader == Some(super::horizon::LOADER) {
+        return Some(AgentBlock::Horizon);
+    }
     if !version_supported(version_id) {
         return Some(AgentBlock::Version);
     }

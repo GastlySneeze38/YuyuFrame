@@ -39,6 +39,9 @@ pub async fn loader_versions(loader: String, mc_version: String) -> Result<Vec<L
         "quilt" => quilt::list_versions(&mc_version).await,
         "forge" => forge::list_versions(&mc_version).await,
         "neoforge" => neoforge::list_versions(&mc_version).await,
+        // Les versions d'Horizon ne dépendent pas de `mc_version` tant qu'il
+        // n'en recrée qu'une ; le lancement vérifie la concordance.
+        "horizon" => Ok(crate::minecraft::launcher::horizon::list_versions().await),
         _ => Ok(Vec::new()),
     }
     .map_err(|e| e.to_string())

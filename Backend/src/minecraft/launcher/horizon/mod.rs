@@ -51,6 +51,24 @@ pub struct HorizonLaunch<'a> {
     pub session_id: Option<i64>,
     pub connect_server: Option<&'a str>,
     pub window_size: Option<(u32, u32)>,
+    /// Plein écran imposé par l'instance. Horizon a son propre drapeau, qui
+    /// ne touche pas à `options.txt`.
+    pub fullscreen: bool,
+    /// Version d'Horizon épinglée sur l'instance (`instances.loader_version`),
+    /// vide = la recommandée.
+    pub pinned: &'a str,
+}
+
+/// Les versions stables d'Horizon, pour le choix de l'onglet Installation.
+pub async fn list_versions() -> Vec<crate::minecraft::loaders::LoaderVersion> {
+    let client = reqwest::Client::builder()
+        .user_agent(concat!("YuyuFrame/", env!("CARGO_PKG_VERSION")))
+        .timeout(std::time::Duration::from_secs(15))
+        .build();
+    match client {
+        Ok(client) => release::list_versions(&client).await,
+        Err(_) => Vec::new(),
+    }
 }
 
 /// Installe et prépare Horizon si besoin, puis joue jusqu'à la fermeture du jeu.
@@ -64,7 +82,8 @@ pub async fn launch(app: tauri::AppHandle, run: HorizonLaunch<'_>, cancel: watch
             .build()?,
     );
 
-    let installed = release::ensure_installed(&client, &app, &floor).await?;
+    let pinned = (!run.pinned.is_empty()).then_some(run.pinned);
+    let installed = release::ensure_installed(&client, &app, &floor, pinned).await?;
     let lock = prepare::read_lock(&installed.dir)?;
     if lock.version != run.mc_version {
         return Err(anyhow!(
@@ -110,6 +129,9 @@ pub async fn launch(app: tauri::AppHandle, run: HorizonLaunch<'_>, cancel: watch
         .kill_on_drop(true);
     if let Some((w, h)) = run.window_size {
         cmd.arg("--width").arg(w.to_string()).arg("--height").arg(h.to_string());
+    }
+    if run.fullscreen {
+        cmd.arg("--fullscreen");
     }
     if let Some(server) = run.connect_server.filter(|s| !s.trim().is_empty()) {
         cmd.arg("--quickPlayMultiplayer").arg(server.trim());

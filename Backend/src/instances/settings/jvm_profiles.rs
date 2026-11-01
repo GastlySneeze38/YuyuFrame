@@ -90,6 +90,17 @@ pub async fn instance_set_jvm_profile(
     let s = state.read().await;
     let uid = user_id(&s);
     let db = s.db.lock().await;
+    // Une instance Horizon n'a pas de JVM : aucun drapeau d'une configuration
+    // ne s'y appliquerait, la relier ferait croire le contraire.
+    if profile_id.is_some() {
+        let loader = db::instance_get(&db, &instance_id, uid)
+            .map_err(|e| e.to_string())?
+            .map(|i| i.loader)
+            .unwrap_or_default();
+        if loader == crate::minecraft::launcher::horizon::LOADER {
+            return Err("Une instance Horizon ne tourne pas sur Java : aucune configuration JVM ne s'y applique".to_string());
+        }
+    }
     db::instance_set_jvm_profile(&db, &instance_id, uid, profile_id.as_deref())
         .map_err(|e| e.to_string())
 }

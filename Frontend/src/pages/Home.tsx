@@ -874,7 +874,9 @@ export default function Home() {
                     ne manquait à personne, la barre y mène déjà. Il ouvre
                     maintenant la fenêtre du client intégré : c'était la seule
                     fonctionnalité du launcher dont on ne parlait nulle part,
-                    elle s'injectait au lancement sans jamais se présenter. */}
+                    elle s'injectait au lancement sans jamais se présenter.
+                    Absent pour Horizon : il n'y a pas de JVM où le charger. */}
+                {instance?.loader !== 'horizon' && (
                 <motion.button {...press}
                   onClick={() => setShowAgentModal(true)}
                   disabled={!instance}
@@ -893,6 +895,7 @@ export default function Home() {
                     </span>
                   )}
                 </motion.button>
+                )}
               </div>
             )}
 

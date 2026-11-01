@@ -121,9 +121,11 @@ fn asset_url(tag: &str, name: &str) -> String {
     format!("https://github.com/{REPO}/releases/download/{tag}/{name}")
 }
 
-/// Le tag de la version stable la plus récente qui publie l'archive Windows.
-async fn latest_tag(client: &reqwest::Client) -> Result<String> {
-    let url = format!("https://api.github.com/repos/{REPO}/releases?per_page=40");
+/// Les tags des versions stables qui publient l'archive Windows, de la plus
+/// récente à la plus ancienne. Les versions quotidiennes et les
+/// pré-versions n'en font jamais partie.
+async fn stable_tags(client: &reqwest::Client) -> Result<Vec<String>> {
+    let url = format!("https://api.github.com/repos/{REPO}/releases?per_page=100");
     let list: serde_json::Value = client
         .get(&url)
         .header("Accept", "application/vnd.github+json")
@@ -132,7 +134,8 @@ async fn latest_tag(client: &reqwest::Client) -> Result<String> {
         .error_for_status()?
         .json()
         .await?;
-    list.as_array()
+    let mut tags: Vec<(Vec<u64>, String)> = list
+        .as_array()
         .into_iter()
         .flatten()
         .filter(|r| !r["draft"].as_bool().unwrap_or(true) && !r["prerelease"].as_bool().unwrap_or(true))
@@ -143,9 +146,51 @@ async fn latest_tag(client: &reqwest::Client) -> Result<String> {
         })
         .filter_map(|r| r["tag_name"].as_str().map(str::to_string))
         .filter_map(|tag| stable_version(&tag).map(|v| (v, tag)))
-        .max_by(|a, b| a.0.cmp(&b.0))
-        .map(|(_, tag)| tag)
+        .collect();
+    tags.sort_by(|a, b| b.0.cmp(&a.0));
+    Ok(tags.into_iter().map(|(_, tag)| tag).collect())
+}
+
+async fn latest_tag(client: &reqwest::Client) -> Result<String> {
+    stable_tags(client)
+        .await?
+        .into_iter()
+        .next()
         .ok_or_else(|| anyhow!("Aucune version stable d'Horizon pour Windows n'est publiée"))
+}
+
+/// Les versions d'Horizon proposables, pour l'onglet Installation.
+///
+/// « Recommandée » = celle que le lancement prend sans épinglage : la plus
+/// récente déjà installée, sinon la dernière publiée (voir `ensure_installed`).
+/// Hors ligne, seules les versions installées sont listées.
+pub async fn list_versions(client: &reqwest::Client) -> Vec<crate::minecraft::loaders::LoaderVersion> {
+    let mut tags = stable_tags(client).await.unwrap_or_default();
+    for installed in installed_tags() {
+        if !tags.contains(&installed) {
+            tags.push(installed);
+        }
+    }
+    tags.sort_by(|a, b| stable_version(b).cmp(&stable_version(a)));
+    let recommended = newest_installed().map(|i| i.tag).or_else(|| tags.first().cloned());
+    tags.into_iter()
+        .map(|tag| crate::minecraft::loaders::LoaderVersion {
+            recommended: Some(&tag) == recommended.as_ref(),
+            stable: true,
+            version: tag,
+        })
+        .collect()
+}
+
+fn installed_tags() -> Vec<String> {
+    std::fs::read_dir(versions_dir())
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|e| e.path().join(COMPLETE).is_file() && e.path().join(CLIENT).is_file())
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|tag| stable_version(tag).is_some())
+        .collect()
 }
 
 async fn fetch_small(client: &reqwest::Client, url: &str) -> Result<Vec<u8>> {
@@ -156,18 +201,30 @@ async fn fetch_small(client: &reqwest::Client, url: &str) -> Result<Vec<u8>> {
     Ok(bytes.to_vec())
 }
 
-/// La version d'Horizon à lancer : la plus récente déjà installée, sinon la
-/// dernière version stable, installée maintenant.
+/// La version d'Horizon à lancer : celle épinglée sur l'instance, sinon la
+/// plus récente déjà installée, sinon la dernière version stable — installée
+/// maintenant si elle manque.
 ///
 /// Pas de mise à jour automatique : une version installée a ses ressources
-/// préparées, et une nouvelle version peut demander de tout refaire. Le
-/// projet publie plusieurs versions par jour ; rester sur une version qui
-/// marche est le choix sûr.
+/// préparées, et une nouvelle version demande de tout refaire. Le projet
+/// publie plusieurs versions par jour ; rester sur une version qui marche est
+/// le choix sûr, et en changer se fait dans l'onglet Installation.
 pub(super) async fn ensure_installed(
     client: &reqwest::Client,
     app: &tauri::AppHandle,
     floor: &ProgressFloor,
+    pinned: Option<&str>,
 ) -> Result<Installed> {
+    if let Some(tag) = pinned {
+        if stable_version(tag).is_none() {
+            return Err(anyhow!("« {tag} » n'est pas une version stable d'Horizon"));
+        }
+        let dir = versions_dir().join(tag);
+        if dir.join(COMPLETE).is_file() && dir.join(CLIENT).is_file() {
+            return Ok(Installed { tag: tag.to_string(), dir });
+        }
+        return install(client, app, floor, tag).await;
+    }
     if let Some(installed) = newest_installed() {
         return Ok(installed);
     }
@@ -198,8 +255,8 @@ async fn install(client: &reqwest::Client, app: &tauri::AppHandle, floor: &Progr
         hash.update(&chunk);
         file.write_all(&chunk).await?;
         done += chunk.len() as u64;
-        if total > 0 {
-            set_progress_monotonic(app, floor, 3 + done * 17 / total, 100, &format!("Téléchargement d'Horizon {tag}..."));
+        if let Some(share) = (done * 17).checked_div(total) {
+            set_progress_monotonic(app, floor, 3 + share, 100, &format!("Téléchargement d'Horizon {tag}..."));
         }
     }
     file.flush().await?;

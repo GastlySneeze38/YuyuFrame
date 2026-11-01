@@ -254,6 +254,13 @@ export function CreateInstanceModal({
               <div className="flex flex-col gap-4">
                 <VersionSelect versions={versions} value={mcVersion} onChange={handleVersionChange} />
                 <LoaderPicker value={loader} onChange={setLoader} available={availableLoaders} />
+                {/* Horizon n'est pas un loader : il faut le dire avant la
+                    création, pas le découvrir au lancement. */}
+                {loader === 'horizon' && (
+                  <p className="rounded-xl border border-[rgba(79,209,197,0.3)] bg-[rgba(79,209,197,0.08)] px-3 py-2.5 text-[11.5px] leading-relaxed text-[rgba(255,255,255,0.7)]">
+                    {t('instancesPage.horizonHint')}
+                  </p>
+                )}
               </div>
             ) : (
               <div className="flex flex-col gap-2">
@@ -271,7 +278,11 @@ export function CreateInstanceModal({
               </div>
             )}
 
-            <RamPicker value={ram} onChange={setRam} loader={loader} modCount={selectedPreset?.mods.length ?? 0} onStatusChange={setRamStatus} />
+            {/* Horizon n'a pas de réglage de mémoire : le proposer serait un
+                choix sans effet. */}
+            {loader !== 'horizon' && (
+              <RamPicker value={ram} onChange={setRam} loader={loader} modCount={selectedPreset?.mods.length ?? 0} onStatusChange={setRamStatus} />
+            )}
 
             <DescriptionInput value={description} onChange={setDescription} />
 
@@ -284,6 +295,7 @@ export function CreateInstanceModal({
                 commande, ce qu'une section repliable ne pouvait pas porter.
                 L'instance part donc sur les réglages par défaut, et se relie
                 à une configuration quand on le souhaite. */}
+            {loader !== 'horizon' && (
             <motion.button {...press}
               onClick={() => { onClose(); navigate('/jvm') }}
               className="flex items-center justify-between gap-3 rounded-xl border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.03)] px-3 py-2.5 text-left transition-colors hover:border-white/20"
@@ -300,8 +312,9 @@ export function CreateInstanceModal({
                 {t('instancesPage.jvmConfigOpen')}
               </span>
             </motion.button>
+            )}
 
-            {!ramStatus.isKnownTier ? (
+            {loader === 'horizon' ? null : !ramStatus.isKnownTier ? (
               <p className="text-[11px] text-[rgba(240,180,90,0.75)] -mt-2">
                 ⚠ {t('instancesPage.ramNotSelected')}
               </p>
@@ -313,7 +326,7 @@ export function CreateInstanceModal({
 
             <SubmitButton
               loading={loading}
-              disabled={!ramStatus.isKnownTier}
+              disabled={loader !== 'horizon' && !ramStatus.isKnownTier}
               label={t('instancesPage.createInstanceButton')}
               loadingLabel={loadingLabel}
               onClick={handleCreate}

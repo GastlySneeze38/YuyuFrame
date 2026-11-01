@@ -32,6 +32,17 @@ pub(super) struct Lock {
     /// La version de Minecraft que cette version d'Horizon recrée.
     pub version: String,
     java_major: u32,
+    /// Le JSON de version que cette version d'Horizon épingle (SHA-1).
+    manifest_sha1: String,
+    /// Les autres republications de ce JSON par Mojang qu'elle accepte.
+    accepted_manifests: Vec<String>,
+}
+
+impl Lock {
+    fn manifest_accepted(&self, sha1: &str) -> bool {
+        self.manifest_sha1.eq_ignore_ascii_case(sha1)
+            || self.accepted_manifests.iter().any(|s| s.eq_ignore_ascii_case(sha1))
+    }
 }
 
 pub(super) fn read_lock(dir: &Path) -> Result<Lock> {
@@ -46,6 +57,13 @@ pub(super) fn read_lock(dir: &Path) -> Result<Lock> {
             .to_string(),
         // Les versions d'avant ce champ demandaient Java 25, comme leur launcher le suppose.
         java_major: mc["java_major"].as_u64().unwrap_or(25) as u32,
+        manifest_sha1: mc["manifest_sha1"].as_str().unwrap_or_default().to_string(),
+        accepted_manifests: mc["accepted_manifest_sha1"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|v| v.as_str().map(str::to_string))
+            .collect(),
     })
 }
 
@@ -89,6 +107,7 @@ pub(super) async fn ensure_prepared(
 
     let mc_dir = minecraft_dir();
     let details = game_files(&mc_dir, &lock.version, client, app, floor, cancel).await?;
+    pinned_manifest(dir, lock, &mc_dir, client).await?;
     let server_jar = server_jar(&lock.version, &details, client, app, floor).await?;
 
     let (component, major) = match &details.java_version {
@@ -192,6 +211,48 @@ async fn game_files(
 
     assets.await.map_err(|e| anyhow!("Assets : {e}"))??;
     Ok(details)
+}
+
+/// Le JSON de version tel qu'Horizon l'épingle, quand le nôtre est une autre
+/// republication.
+///
+/// Mojang republie le JSON d'une version sous le même nom (traductions,
+/// index d'assets), et notre `.minecraft` garde celui qu'il a téléchargé la
+/// première fois. Horizon n'accepte que les republications qu'il connaît ;
+/// pour les autres, il lit une copie de remplacement dans
+/// `<version>/.local/minecraft/<mc>/manifest.json`. On y pose celui qu'il
+/// épingle, téléchargé chez Mojang par son SHA-1 et vérifié. Notre propre JSON
+/// n'est pas touché : le jeu Java le lit.
+async fn pinned_manifest(dir: &Path, lock: &Lock, mc_dir: &Path, client: &reqwest::Client) -> Result<()> {
+    use sha1::{Digest, Sha1};
+    let sha1_of = |bytes: &[u8]| format!("{:x}", Sha1::digest(bytes));
+
+    let ours = mc_dir.join("versions").join(&lock.version).join(format!("{}.json", lock.version));
+    if let Ok(bytes) = tokio::fs::read(&ours).await {
+        if lock.manifest_accepted(&sha1_of(&bytes)) {
+            return Ok(());
+        }
+    }
+    let target = dir.join(".local").join("minecraft").join(&lock.version).join("manifest.json");
+    if let Ok(bytes) = tokio::fs::read(&target).await {
+        if lock.manifest_accepted(&sha1_of(&bytes)) {
+            return Ok(());
+        }
+    }
+    let pinned = &lock.manifest_sha1;
+    if pinned.len() != 40 || !pinned.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err(anyhow!("research-lock.json d'Horizon n'épingle pas de JSON de version"));
+    }
+    let url = format!("https://piston-meta.mojang.com/v1/packages/{pinned}/{}.json", lock.version);
+    let bytes = client.get(&url).send().await?.error_for_status()?.bytes().await?;
+    if !sha1_of(&bytes).eq_ignore_ascii_case(pinned) {
+        return Err(anyhow!("Le JSON de Minecraft {} reçu de Mojang ne correspond pas à celui qu'Horizon attend", lock.version));
+    }
+    if let Some(parent) = target.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+    }
+    tokio::fs::write(&target, &bytes).await?;
+    Ok(())
 }
 
 /// Le jar serveur de `version`, téléchargé chez Mojang et vérifié par son
