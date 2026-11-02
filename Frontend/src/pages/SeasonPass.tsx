@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { RewardImage } from '@/components/competitive/RewardImage'
 import { TopoBackdrop } from '@/components/competitive/TopoBackdrop'
-import { Missions, PASS_COLOR } from '@/components/competitive/Challenges'
+import { FREE_COLOR, Missions, PASS_COLOR } from '@/components/competitive/Challenges'
 import { type BattlePass, type Challenge, type MissionsMeta, type PassReward } from '@/lib/competitive'
 import { usePass } from '@/lib/usePass'
 import { useStore } from '@/stores/useStore'
@@ -34,15 +34,22 @@ const HERO_MAX = 200
 const HERO_MIN = 64
 const HERO_RESERVED = 100
 
-type TierState = 'obtained' | 'current' | 'upcoming'
+/** `waiting` : palier atteint, mais du passe et le passe n'est pas pris — la
+ *  récompense attend, elle sera donnée dès qu'il l'est. */
+type TierState = 'obtained' | 'waiting' | 'current' | 'upcoming'
+
+/** La teinte d'un palier : vert s'il est gratuit, celle du passe sinon. */
+const toneOf = (reward: PassReward | undefined) => (reward?.free ? FREE_COLOR : PASS_COLOR)
 
 /**
  * Le passe de saison en page entière, ouvert depuis sa carte des Missions.
  *
  * La récompense choisie en grand au centre, les paliers par chapitres de cinq
- * en dessous, et une frise de chapitres pour aller de l'un à l'autre. Sans le
- * passe (plan gratuit), tout reste visible, cadenassé : on voit ce qu'il
- * donnerait.
+ * en dessous, et une frise de chapitres pour aller de l'un à l'autre. Chaque
+ * chapitre ouvre sur un palier gratuit (vert, à tout le monde), puis quatre
+ * paliers du passe. Sans le passe, ceux-là restent visibles et cadenassés, et
+ * ceux déjà atteints attendent : on voit ce que le passe donnerait tout de
+ * suite.
  */
 export default function SeasonPass() {
   const t = useT()
@@ -90,7 +97,13 @@ function PassBoard({ pass, challenges, meta, reroll }: {
   const [chapter, setChapter] = useState(Math.floor((nextTier - 1) / CHAPTER_SIZE))
 
   const stateOf = (tier: number): TierState =>
-    tier <= pass.tier && owned ? 'obtained' : tier === pass.tier + 1 ? 'current' : 'upcoming'
+    tier <= pass.tier
+      ? owned || pass.rewards[tier - 1]?.free
+        ? 'obtained'
+        : 'waiting'
+      : tier === pass.tier + 1
+        ? 'current'
+        : 'upcoming'
 
   const goChapter = (next: number) => {
     const c = Math.max(0, Math.min(chapters - 1, next))
@@ -117,6 +130,7 @@ function PassBoard({ pass, challenges, meta, reroll }: {
 
   const reward: PassReward = pass.rewards[selected - 1] ?? pass.rewards[0]
   const state = stateOf(selected)
+  const tone = toneOf(reward)
   const firstOfChapter = chapter * CHAPTER_SIZE + 1
   const chapterTiers = Array.from(
     { length: Math.min(CHAPTER_SIZE, pass.tiers - firstOfChapter + 1) },
@@ -159,7 +173,7 @@ function PassBoard({ pass, challenges, meta, reroll }: {
       {/* Fond : la topographie du passe et un halo derrière la récompense. */}
       <div aria-hidden="true" className="absolute inset-0 -z-10">
         <TopoBackdrop color={PASS_COLOR} />
-        <div className="absolute inset-0" style={{ background: `radial-gradient(34rem 26rem at 55% 38%, rgb(${PASS_COLOR} / 0.2), transparent 70%)` }} />
+        <div className="absolute inset-0" style={{ background: `radial-gradient(34rem 26rem at 55% 38%, rgb(${tone} / 0.2), transparent 70%)` }} />
       </div>
 
       {/* Volet des missions, à gauche : d'où vient l'XP qui fait avancer le
@@ -236,23 +250,36 @@ function PassBoard({ pass, challenges, meta, reroll }: {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.92, y: -6 }}
             transition={{ type: 'spring', stiffness: 260, damping: 22 }}
-            style={{ filter: `drop-shadow(0 0 40px rgb(${PASS_COLOR} / 0.45))` }}
+            style={{ filter: `drop-shadow(0 0 40px rgb(${tone} / 0.45))` }}
           >
             <motion.div animate={{ y: [0, -6, 0] }} transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}>
-              <RewardImage reward={reward} color={PASS_COLOR} tierIndex={3} size={heroSize} />
+              <RewardImage reward={reward} color={tone} tierIndex={3} size={heroSize} />
             </motion.div>
           </motion.div>
         </AnimatePresence>
 
         {/* Le nom reste entre la carte et son reflet quand la carte est en haut. */}
-        <div className="max-w-full text-center" style={!cardBelow && !cardInTheWay ? { maxWidth: free } : undefined}>
-          <p className="truncate text-[clamp(15px,2.6vh,20px)] font-black uppercase tracking-[0.02em]">
+        <div className="flex max-w-full flex-col items-center text-center" style={!cardBelow && !cardInTheWay ? { maxWidth: free } : undefined}>
+          {/* Gratuit ou du passe : la première chose qu'on lit. */}
+          <span
+            className="mb-1.5 flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-[0.08em]"
+            style={{ background: `rgb(${tone} / 0.16)`, color: `rgb(${tone})` }}
+          >
+            {!reward.free && !owned && <LockIcon className="h-2.5 w-2.5" />}
+            {reward.free ? t('competitive.pass.freeTier') : t('competitive.pass.passTier')}
+          </span>
+          <p className="max-w-full truncate text-[clamp(15px,2.6vh,20px)] font-black uppercase tracking-[0.02em]">
             {t(`competitive.seasons.kinds.${reward.kind}`, { rank: reward.name })}
           </p>
-          <p className={`mt-1 truncate text-[12px] font-semibold ${state === 'obtained' ? 'text-success' : 'text-txt-secondary'}`}>
+          <p
+            className={`mt-1 max-w-full truncate text-[12px] font-semibold ${state === 'obtained' ? 'text-success' : state === 'waiting' ? '' : 'text-txt-secondary'}`}
+            style={state === 'waiting' ? { color: `rgb(${PASS_COLOR})` } : undefined}
+          >
             {state === 'obtained'
               ? t('competitive.pass.obtained')
-              : state === 'current'
+              : state === 'waiting'
+                ? t('competitive.pass.waiting')
+                : state === 'current'
                 ? t('competitive.pass.xpProgress', { xp: pass.xpInTier.toLocaleString(), total: pass.xpPerTier.toLocaleString() })
                 : t('competitive.pass.tierLabel', { tier: selected })}
           </p>
@@ -288,7 +315,7 @@ function PassBoard({ pass, challenges, meta, reroll }: {
           <ChapterTrack
             chapters={chapters}
             chapter={chapter}
-            doneChapters={owned ? Math.floor(pass.tier / CHAPTER_SIZE) : 0}
+            doneChapters={Math.floor(pass.tier / CHAPTER_SIZE)}
             width={rowWidth}
             onPick={goChapter}
           />
@@ -315,6 +342,12 @@ function ProgressCard({ pass, owned }: { pass: BattlePass; owned: boolean }) {
   const t = useT()
   const navigate = useNavigate()
   const xpLeft = pass.xpPerTier - pass.xpInTier
+  // Sans le passe : ce qu'il donnerait tout de suite (paliers du passe déjà
+  // atteints, accordés dès qu'on le prend), sinon ce qu'il ajoute en tout.
+  const paid = pass.rewards.filter((r) => !r.free)
+  const waiting = pass.rewards.filter((r, i) => !r.free && i < pass.tier).length
+  const freeTotal = pass.rewards.length - paid.length
+  const freeDone = pass.rewards.filter((r, i) => r.free && i < pass.tier).length
   const bar = (
     <div className="h-2 overflow-hidden rounded-full bg-white/[0.08]">
       <motion.div
@@ -330,12 +363,31 @@ function ProgressCard({ pass, owned }: { pass: BattlePass; owned: boolean }) {
       {t('competitive.pass.owned')}
     </span>
   ) : (
-    <button
-      onClick={() => navigate('/plans')}
-      className="rounded-xl bg-white py-2.5 text-[11.5px] font-black uppercase tracking-[0.05em] text-black transition-transform hover:scale-[1.02] active:scale-[0.98]"
-    >
-      {t('competitive.pass.unlock')}
-    </button>
+    <div className="flex flex-col gap-2">
+      {freeTotal > 0 && (
+        <span className="flex items-center justify-between text-[10.5px] font-semibold" style={{ color: `rgb(${FREE_COLOR})` }}>
+          {t('competitive.pass.freeTiers', { done: freeDone, total: freeTotal })}
+        </span>
+      )}
+      {paid.length > 0 && (
+        <span
+          className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-bold"
+          style={{ background: `rgb(${PASS_COLOR} / 0.14)`, color: `rgb(${PASS_COLOR})` }}
+        >
+          <LockIcon className="h-3 w-3 shrink-0" />
+          {waiting > 0 ? t('competitive.pass.waitingCount', { count: waiting }) : t('competitive.pass.passAdds', { count: paid.length })}
+        </span>
+      )}
+      <motion.button
+        onClick={() => navigate('/plans')}
+        // Une récompense attend : le bouton respire pour le dire.
+        animate={waiting > 0 ? { boxShadow: [`0 0 0px rgb(${PASS_COLOR} / 0)`, `0 0 22px rgb(${PASS_COLOR} / 0.65)`, `0 0 0px rgb(${PASS_COLOR} / 0)`] } : undefined}
+        transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+        className="rounded-xl bg-white py-2.5 text-[11.5px] font-black uppercase tracking-[0.05em] text-black transition-transform hover:scale-[1.02] active:scale-[0.98]"
+      >
+        {t('competitive.pass.unlock')}
+      </motion.button>
+    </div>
   )
 
   return (
@@ -376,34 +428,45 @@ function TierTile({ tier, reward, state, owned, selected, ratio, index, width, o
   onPick: () => void
 }) {
   const t = useT()
+  const tone = toneOf(reward)
+  const locked = !reward.free && !owned
   return (
     <motion.button
       initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.04 }}
+      animate={
+        state === 'waiting'
+          ? { opacity: 1, y: 0, boxShadow: [`0 0 0px rgb(${PASS_COLOR} / 0)`, `0 0 18px rgb(${PASS_COLOR} / 0.55)`, `0 0 0px rgb(${PASS_COLOR} / 0)`] }
+          : { opacity: 1, y: 0 }
+      }
+      transition={{ delay: index * 0.04, boxShadow: { duration: 2.4, repeat: Infinity, ease: 'easeInOut' } }}
       whileHover={{ y: -3 }}
       onClick={onPick}
       title={t(`competitive.seasons.kinds.${reward.kind}`, { rank: reward.name })}
-      className={`relative flex shrink-0 flex-col overflow-hidden rounded-xl border-2 bg-surface-1/80 backdrop-blur transition-colors ${
-        selected ? 'border-white' : state === 'current' ? 'border-accent/60' : 'border-line hover:border-line-strong'
-      }`}
-      style={{ width }}
+      className={`relative flex shrink-0 flex-col overflow-hidden rounded-xl border-2 bg-surface-1/80 backdrop-blur transition-colors ${selected ? 'border-white' : ''}`}
+      style={{
+        width,
+        borderColor: selected ? undefined : `rgb(${tone} / ${state === 'current' || state === 'waiting' ? 0.75 : reward.free ? 0.5 : 0.25})`,
+        backgroundImage: `linear-gradient(180deg, rgb(${tone} / ${reward.free ? 0.14 : 0.1}), transparent 70%)`,
+      }}
     >
+      {/* Gratuit ou du passe, en tête de la case. */}
+      <span
+        className={`flex items-center justify-center gap-1 py-[3px] font-black uppercase tracking-[0.08em] ${width < 90 ? 'text-[8px]' : 'text-[9px]'}`}
+        style={{ background: `rgb(${tone} / 0.2)`, color: `rgb(${tone})` }}
+      >
+        {locked && <LockIcon className="h-2.5 w-2.5" />}
+        {reward.free ? t('competitive.pass.freeTier') : t('competitive.pass.passTier')}
+      </span>
       <div
         className={`flex items-center justify-center ${state === 'upcoming' && !selected ? 'opacity-55' : ''}`}
-        style={{ height: Math.round(width * 0.86) }}
+        style={{ height: Math.round(width * 0.78) }}
       >
-        <RewardImage reward={reward} color={PASS_COLOR} tierIndex={3} size={Math.round(width * 0.58)} />
+        <RewardImage reward={reward} color={tone} tierIndex={3} size={Math.round(width * 0.58)} />
       </div>
       {state === 'obtained' && (
-        <span className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-success text-black">
+        <span className="absolute right-1.5 top-6 flex h-4 w-4 items-center justify-center rounded-full bg-success text-black">
           <svg viewBox="0 0 24 24" className="h-2.5 w-2.5" fill="none" stroke="currentColor" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
         </span>
-      )}
-      {!owned && (
-        <svg viewBox="0 0 24 24" className="absolute bottom-9 left-2 h-3.5 w-3.5 text-warning" fill="currentColor">
-          <path d="M12 2a5 5 0 00-5 5v3H6a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2v-8a2 2 0 00-2-2h-1V7a5 5 0 00-5-5zm-3 8V7a3 3 0 016 0v3z" />
-        </svg>
       )}
       <span
         className={`relative truncate px-1 py-1.5 text-center font-bold uppercase tracking-[0.04em] ${width < 90 ? 'text-[9.5px]' : 'text-[10.5px]'} ${
@@ -501,5 +564,13 @@ function ArrowButton({ dir, disabled, onClick, label }: { dir: 'left' | 'right';
         <path d={dir === 'left' ? 'M15 6l-6 6 6 6' : 'M9 6l6 6-6 6'} />
       </svg>
     </button>
+  )
+}
+
+function LockIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden="true">
+      <path d="M12 2a5 5 0 00-5 5v3H6a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2v-8a2 2 0 00-2-2h-1V7a5 5 0 00-5-5zm-3 8V7a3 3 0 016 0v3z" />
+    </svg>
   )
 }

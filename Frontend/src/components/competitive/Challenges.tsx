@@ -21,6 +21,8 @@ import { clamp, useElementSize } from '@/lib/useElementSize'
 
 /** Couleur du passe de saison : l'accent du launcher. */
 export const PASS_COLOR = '129 120 255'
+/** Couleur des paliers gratuits du passe (repris par l'aperçu du back-office). */
+export const FREE_COLOR = '52 211 153'
 
 /** L'heure, rafraîchie chaque seconde : pour les comptes à rebours. */
 function useNow(): number {
@@ -349,8 +351,9 @@ function PassHero({ pass, season }: { pass: BattlePass; season: Season | null })
   const navigate = useNavigate()
   const plan = useStore((s) => s.yuyuPlan)
   const owned = plan !== 'free'
-  // Le passe entier est réservé aux plans payants.
-  const locked = !owned
+  // La récompense suivante n'est réservée au passe que si son palier n'est
+  // pas gratuit.
+  const locked = !owned && !pass.rewards[pass.featured.tier - 1]?.free
   const daysLeft = season?.end ? Math.max(0, Math.ceil((season.end - Date.now()) / 86_400_000)) : null
   const xpLeft = pass.xpPerTier - pass.xpInTier
   const openPass = () => navigate('/missions/pass')

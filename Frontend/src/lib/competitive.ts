@@ -266,14 +266,16 @@ export interface BattlePass {
   rewards: PassReward[]
 }
 
+/** Une récompense du passe : une couleur de profil, une bannière ou le titre
+ *  de la saison (LauncherAPI `migrations/0033`), dessinée par le launcher. */
 export interface PassReward {
   kind: CosmeticKind
-  /** Nom propre de la récompense (« Impact »), pas traduit. */
+  /** Nom de la couleur ou de la bannière, texte du titre ; pas traduit. */
   name: string
-  /** Son image, réglée dans le back-office ; absente : l'icône de la sorte. */
-  asset?: string | null
-  /** La bannière ou la couleur débloquée (sortes `banner`, `accent`). */
+  /** La bannière (`aurora`…), la couleur (`#rrggbb`) ou le code du titre. */
   code?: string | null
+  /** Palier gratuit : accordé à tout le monde, pas seulement au passe. */
+  free?: boolean
 }
 
 // ── Missions et passe (`GET /v1/pass`, LauncherAPI `launcher/pass.rs`) ───
@@ -303,11 +305,12 @@ export interface ApiPass {
   xp_per_tier: number
   tier: number
   tiers: number
-  rewards: { tier: number; kind: CosmeticKind; name: string; code: string | null; asset: string | null }[]
+  /** `free` absent d'un serveur d'avant les paliers gratuits. */
+  rewards: { tier: number; kind: CosmeticKind; name: string; code: string | null; free?: boolean }[]
 }
 
-/** Les cosmétiques qui méritent d'être mis en avant comme objectif. */
-const BIG_REWARDS: CosmeticKind[] = ['cape', 'aura']
+/** Les récompenses qui méritent d'être mises en avant comme objectif. */
+const BIG_REWARDS: CosmeticKind[] = ['title', 'banner']
 
 /**
  * La réponse du serveur, comme les écrans la lisent. `pass` vaut `null` sans
@@ -339,7 +342,7 @@ export function readPass(api: ApiPass): { challenges: Challenge[] | null; pass: 
   const byTier = new Map(api.rewards.map((r) => [r.tier, r]))
   const rewards: PassReward[] = Array.from({ length: api.tiers }, (_, i) => {
     const r = byTier.get(i + 1)
-    return r ? { kind: r.kind, name: r.name, code: r.code, asset: r.asset } : { kind: 'badge', name: '—', asset: null }
+    return r ? { kind: r.kind, name: r.name, code: r.code, free: r.free ?? false } : { kind: 'badge', name: '—' }
   })
   const perTier = Math.max(1, api.xp_per_tier)
   const maxed = api.tier >= api.tiers
@@ -706,25 +709,38 @@ function demoBattlePass(): BattlePass {
     tiers: 50,
     xpInTier: 2112,
     xpPerTier: 3000,
-    featured: { kind: 'cape', name: 'Impact', tier: 34 },
+    featured: { kind: 'accent', name: 'Turquoise', tier: 34 },
     checkpointXp: 1000,
     checkpointsDone: 2,
     checkpoints: 4,
     objectives: [
-      { kind: 'unlock', reward: 'aura', name: 'Impact', xpLeft: 165_300, ratio: 0.18, endsAt: Date.now() + 26 * day },
+      { kind: 'unlock', reward: 'title', name: 'Le Rapide', xpLeft: 51_888, ratio: 0.66, endsAt: Date.now() + 26 * day },
       { kind: 'tiers', done: 33, total: 50 },
       { kind: 'rank', tier: 'diamond', reward: 'aura', ratio: 0.68 },
     ],
-    rewards: Array.from({ length: 50 }, (_, i): PassReward => {
-      const tier = i + 1
-      // Une grosse récompense tous les dix paliers, la cape au 34e (celle
-      // mise en avant), des insignes et titres entre les deux.
-      if (tier === 34) return { kind: 'cape', name: 'Impact' }
-      if (tier === 50) return { kind: 'aura', name: 'Impact' }
-      if (tier % 10 === 0) return { kind: 'nametag', name: `Impact ${tier / 10}` }
-      return tier % 3 === 0 ? { kind: 'title', name: `Impact ${tier}` } : { kind: 'badge', name: `Impact ${tier}` }
-    }),
+    rewards: demoPassRewards(),
   }
+}
+
+/** Un passe de 10 chapitres selon la règle du back-office : par chapitre une
+ *  couleur gratuite, deux couleurs et deux bannières du passe ; le titre au
+ *  dernier palier. */
+function demoPassRewards(): PassReward[] {
+  const colors: [string, string][] = [
+    ['#4fd1c5', 'Turquoise'], ['#f97316', 'Orange'], ['#22c55e', 'Émeraude'], ['#ef4444', 'Rubis'], ['#facc15', 'Citron'],
+    ['#06b6d4', 'Cyan'], ['#a855f7', 'Améthyste'], ['#ec4899', 'Fuchsia'], ['#84cc16', 'Lime'], ['#0ea5e9', 'Azur'],
+  ]
+  const banners: [string, string][] = [['sunset', 'Couchant'], ['nether', 'Nether'], ['end', 'End'], ['night', 'Nuit'], ['candy', 'Bonbon'], ['gold', 'Or']]
+  return Array.from({ length: 50 }, (_, i): PassReward => {
+    if (i === 49) return { kind: 'title', name: 'Le Rapide', code: 'pass-s1' }
+    const slot = i % 5
+    if (slot < 3) {
+      const [code, name] = colors[(i * 7) % colors.length]
+      return { kind: 'accent', name, code, free: slot === 0 }
+    }
+    const [code, name] = banners[(Math.floor(i / 5) * 2 + slot - 3) % banners.length]
+    return { kind: 'banner', name, code }
+  })
 }
 
 function demoDuels(): DuelRow[] {
