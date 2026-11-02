@@ -111,6 +111,12 @@ struct ModrinthIndex {
 pub struct ModpackIndexInfo {
     pub mc_version: Option<String>,
     pub loader: String,
+    /// La version du loader que le pack exige (`fabric-loader: 0.16.5`…) :
+    /// une instance créée pour ce pack l'épingle, au lieu de partir sur « la
+    /// plus récente », que le pack n'a jamais vue. `None` pour un pack vanilla
+    /// ou un manifeste CurseForge.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub loader_version: Option<String>,
     /// Noms de fichiers `mods/` référencés par le pack — sert uniquement à
     /// l'aperçu (ModpackDetailModal côté frontend), pas à l'installation.
     pub mods: Vec<String>,
@@ -128,6 +134,16 @@ fn loader_from_dependencies(deps: &std::collections::HashMap<String, String>) ->
     } else {
         "vanilla".to_string()
     }
+}
+
+/// La version du loader déclarée par l'index, sous la même clé que celle qui
+/// a désigné le loader dans [`loader_from_dependencies`].
+fn loader_version_from_dependencies(deps: &std::collections::HashMap<String, String>) -> Option<String> {
+    ["quilt-loader", "fabric-loader", "neoforge", "forge"]
+        .iter()
+        .find_map(|key| deps.get(*key))
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
 }
 
 fn check_modrinth_url(url: &str) -> Result<(), String> {
@@ -176,6 +192,7 @@ pub async fn modpack_fetch_index(file_url: String) -> Result<ModpackIndexInfo, S
     Ok(ModpackIndexInfo {
         mc_version: index.dependencies.get("minecraft").cloned(),
         loader: loader_from_dependencies(&index.dependencies),
+        loader_version: loader_version_from_dependencies(&index.dependencies),
         mods,
     })
 }
@@ -598,6 +615,7 @@ pub async fn modpack_fetch_curseforge_index(
     Ok(ModpackIndexInfo {
         mc_version: if manifest.minecraft.version.is_empty() { None } else { Some(manifest.minecraft.version.clone()) },
         loader: loader_from_cf_manifest(&manifest.minecraft),
+        loader_version: None,
         mods,
     })
 }

@@ -460,6 +460,8 @@ export interface ShareImport {
 export interface ModpackIndexInfo {
   mc_version: string | null
   loader: string
+  /** Version du loader exigée par le pack (absente pour vanilla et CurseForge). */
+  loader_version?: string
   mods: string[]
 }
 

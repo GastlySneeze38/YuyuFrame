@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { listen } from '@tauri-apps/api/event'
 import { open as openUrl } from '@tauri-apps/plugin-shell'
 import { api } from '@/api/client'
 import type { CatalogServer, CatalogServerDetail } from '@/api/client'
@@ -13,6 +12,7 @@ import { JoinServerModal, type JoinRequest } from '@/components/servers/JoinServ
 import { useStore } from '@/stores/useStore'
 import { showError, showNotice } from '@/stores/useErrorToast'
 import { SNAP } from '@/lib/motion'
+import { createInstanceFromPack } from '@/lib/modpackInstance'
 import { useT } from '@/i18n'
 import { Select, categoryLabel, compact, languageName, regionLabel, useJoinServer } from './bits'
 
@@ -144,31 +144,20 @@ export function CatalogDetail({ server, onClose, onAdded }: { server: CatalogSer
   const installPack = async () => {
     if (!modpack) return
     setInstalling(t('servers.page.detail.preparing'))
-    const off = await listen<{ current: number; total: number }>('modpack_install_progress', (e) => {
-      setInstalling(t('servers.page.detail.installingProgress', { current: e.payload.current, total: e.payload.total }))
-    })
     try {
-      const pack = await api.servers.modpack(modpack.version_id)
-      const index = await api.modpacks.fetchIndex(pack.file_url)
-      const mc = index.mc_version ?? pack.game_versions[0]
-      if (!mc) throw new Error(t('servers.page.detail.noVersion'))
-      const loader = index.loader || pack.loaders[0] || 'vanilla'
-      // Un modpack de serveur demande vite plus que la mémoire par défaut.
-      const instance = await api.instances.create(server.name, mc, loader, Math.max(defaultRam, 4096))
-      addInstance(instance)
-      await api.modpacks.install({
-        instanceId: instance.id,
-        fileUrl: pack.file_url,
-        projectId: pack.project_id,
-        versionId: pack.version_id,
-        name: pack.name,
+      // Même chemin que la fenêtre « Nouvelle instance » (lib/modpackInstance.ts).
+      const instance = await createInstanceFromPack({
+        versionId: modpack.version_id,
+        name: server.name,
+        // Un modpack de serveur demande vite plus que la mémoire par défaut.
+        ramMb: Math.max(defaultRam, 4096),
         author: server.author ?? '',
-        summary: pack.summary,
-        iconUrl: pack.icon_url,
-        versionNumber: pack.version_number,
-        downloads: pack.downloads,
-        dateModified: pack.date_modified,
-        categories: pack.categories,
+        onCreated: addInstance,
+        onProgress: (step) => {
+          if (step.kind === 'installing') {
+            setInstalling(t('servers.page.detail.installingProgress', { current: step.current, total: step.total }))
+          }
+        },
       })
       await api.servers.add(instance.id, server.name, server.address).catch(() => false)
       onAdded()
@@ -177,8 +166,6 @@ export function CatalogDetail({ server, onClose, onAdded }: { server: CatalogSer
     } catch (e) {
       showError(e)
       setInstalling(null)
-    } finally {
-      off()
     }
   }
 
