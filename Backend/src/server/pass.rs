@@ -22,6 +22,14 @@ pub async fn pass_state(state: tauri::State<'_, SharedState>) -> Result<Value, S
     api::get(&state, "/pass", &[]).await.map_err(String::from)
 }
 
+/// Remplace une mission du jour par une autre (une relance par jour, réglée
+/// par le serveur), puis rend l'état à jour.
+#[tauri::command]
+pub async fn pass_reroll(state: tauri::State<'_, SharedState>, id: i64) -> Result<Value, String> {
+    api::post(&state, &format!("/pass/missions/{id}/reroll"), Value::Null).await.map_err(String::from)?;
+    api::get(&state, "/pass", &[]).await.map_err(String::from)
+}
+
 /// Une image plus grande n'est pas gardée (le serveur borne à 2 Mio).
 const MAX_BYTES: usize = 2 * 1024 * 1024;
 

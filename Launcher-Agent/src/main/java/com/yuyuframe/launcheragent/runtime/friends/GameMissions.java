@@ -25,8 +25,10 @@ public final class GameMissions {
     public static final class Mission {
         /** {@code daily} ou {@code weekly}. */
         public final String period;
-        /** {@code winDuels}, {@code scoreAbove}, {@code streak}, {@code servers}, {@code beatHigher}, {@code playDuels}. */
+        /** {@code winDuels}, {@code playDuels}, {@code scoreAbove}, {@code scoresAbove}, {@code streak}, {@code quickWin},
+         *  {@code longWin}, {@code foes}, {@code servers}, {@code bothModes}, {@code rrGain} (LauncherAPI {@code launcher/missions/}). */
         public final String kind;
+        /** {@code target} : la valeur de la phrase (note, secondes, RR) ; {@code goal} : le nombre à atteindre. */
         /** {@code mace}, {@code sword}, ou vide pour tous les modes. */
         public final String mode;
         public final long target, progress, goal;

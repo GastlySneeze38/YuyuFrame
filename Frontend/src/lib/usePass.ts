@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '@/api/client'
-import { demoData, readPass, type BattlePass, type Challenge, type Season } from '@/lib/competitive'
+import { demoData, readPass, type BattlePass, type Challenge, type MissionsMeta, type Season } from '@/lib/competitive'
+import { showError } from '@/stores/useErrorToast'
 import { useDemo } from '@/stores/useDevFlags'
 import { useStore } from '@/stores/useStore'
 
@@ -10,7 +11,14 @@ export interface PassData {
   challenges: Challenge[] | null
   pass: BattlePass | null
   season: Season | null
+  /** Relances et bonus de journée ; `null` tant qu'on ne sait pas. */
+  meta: MissionsMeta | null
+  /** Remplace une mission du jour par une autre (la relance du jour). */
+  reroll: (id: string) => Promise<void>
 }
+
+const EMPTY = { loading: false, challenges: null, pass: null, season: null, meta: null }
+const DEMO_META: MissionsMeta = { rerollsLeft: 1, dayBonusXp: 200, dayBonusDone: false }
 
 /**
  * Missions et passe de la saison, pour les écrans Missions et Passe :
@@ -23,23 +31,52 @@ export function usePass(): PassData {
   const username = useStore((s) => s.username)
   const signedIn = useStore((s) => s.yuyuSignedIn)
   const demo = useMemo(() => (demoOn ? demoData(username ?? 'Steve') : null), [demoOn, username])
-  const [live, setLive] = useState<PassData>({ loading: true, challenges: null, pass: null, season: null })
+  const [live, setLive] = useState<Omit<PassData, 'reroll'>>({ ...EMPTY, loading: true })
+  // En démo, la relance retire la mission de la liste : de quoi voir le geste.
+  const [demoRerolled, setDemoRerolled] = useState<string[]>([])
 
   useEffect(() => {
     if (demo || !signedIn) {
-      setLive({ loading: false, challenges: null, pass: null, season: null })
+      setLive(EMPTY)
       return
     }
     let alive = true
     api.pass
       .state()
       .then((answer) => alive && setLive({ loading: false, ...readPass(answer) }))
-      .catch(() => alive && setLive({ loading: false, challenges: null, pass: null, season: null }))
+      .catch(() => alive && setLive(EMPTY))
     return () => {
       alive = false
     }
   }, [demo, signedIn])
 
-  if (demo) return { loading: false, challenges: demo.challenges, pass: demo.battlePass, season: demo.seasons?.[0] ?? null }
-  return live
+  const reroll = useCallback(
+    async (id: string) => {
+      if (demo) {
+        setDemoRerolled((ids) => [...ids, id])
+        return
+      }
+      try {
+        // Le serveur remplace la mission et rend l'état à jour.
+        setLive({ loading: false, ...readPass(await api.pass.reroll(Number(id))) })
+      } catch (e) {
+        showError(e)
+      }
+    },
+    [demo],
+  )
+
+  if (demo) {
+    const challenges = demo.challenges?.filter((c) => !demoRerolled.includes(c.id)) ?? null
+    const meta = { ...DEMO_META, rerollsLeft: Math.max(0, DEMO_META.rerollsLeft - demoRerolled.length) }
+    return {
+      loading: false,
+      challenges: challenges?.map((c) => ({ ...c, rerollable: c.rerollable && meta.rerollsLeft > 0 })) ?? null,
+      pass: demo.battlePass,
+      season: demo.seasons?.[0] ?? null,
+      meta,
+      reroll,
+    }
+  }
+  return { ...live, reroll }
 }

@@ -940,6 +940,8 @@ export const api = {
   /** Missions et passe de saison (`/v1/pass`), images du back-office. */
   pass: {
     state: () => invoke<ApiPass>('pass_state'),
+    /** Remplace une mission du jour (une relance par jour) ; rend l'état à jour. */
+    reroll: (id: number) => invoke<ApiPass>('pass_reroll', { id }),
     /** Atelier de dev : missions de démonstration rendues au jeu à la place des vraies (`null` = les vraies). Sans effet en release. */
     gameDemo: (list: unknown[] | null) => invoke<void>('game_missions_demo', { list }),
     /** Une image en data URI ; `null` si elle manque (icône par défaut). */

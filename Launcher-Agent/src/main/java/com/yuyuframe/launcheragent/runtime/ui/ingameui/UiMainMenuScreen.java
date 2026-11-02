@@ -1579,19 +1579,28 @@ public class UiMainMenuScreen extends UiScreenBase {
             }
         }
 
-        /** La phrase d'une mission, mêmes textes que le launcher ({@code competitive.challenges.kinds}). */
+        /**
+         * La phrase d'une mission, mêmes textes que le launcher
+         * ({@code competitive.challenges.kinds}). {@code {n}} : le nombre à
+         * atteindre ; {@code {v}} : la valeur de la phrase (note, secondes, RR).
+         */
         private String missionText(GameMissions.Mission m) {
             String key;
             switch (m.kind) {
                 case "winDuels": key = "Gagne {n} duels"; break;
-                case "scoreAbove": key = "Fais une note de {n} ou plus"; break;
-                case "streak": key = "Enchaîne {n} victoires"; break;
-                case "servers": key = "Gagne sur {n} serveurs différents"; break;
-                case "beatHigher": key = "Bats {n} joueurs mieux classés que toi"; break;
                 case "playDuels": key = "Joue {n} duels classés"; break;
+                case "scoreAbove": key = "Fais une note de {v} ou plus"; break;
+                case "scoresAbove": key = "Fais {n} duels à {v} ou plus"; break;
+                case "streak": key = "Enchaîne {n} victoires"; break;
+                case "quickWin": key = "Gagne un duel en moins de {v} s"; break;
+                case "longWin": key = "Gagne un duel de plus de {v} s"; break;
+                case "foes": key = "Bats {n} adversaires différents"; break;
+                case "servers": key = "Joue sur {n} serveurs différents"; break;
+                case "bothModes": key = "Gagne à la masse et à l'épée"; break;
+                case "rrGain": key = "Gagne {v} RR"; break;
                 default: return m.kind;
             }
-            return Lang.tr(key).replace("{n}", String.valueOf(m.target));
+            return Lang.tr(key).replace("{n}", String.valueOf(m.goal)).replace("{v}", String.valueOf(m.target));
         }
 
         /** « 08:24:55 » sous un jour, « 3:16:49:05 » (jours en tête) au-delà — comme le launcher. */

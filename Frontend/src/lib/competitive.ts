@@ -199,23 +199,52 @@ export function serverStats(duels: DuelRow[]): ServerStats[] {
 
 /** Les sortes de défis ; chacune a sa phrase dans les traductions
  *  (`competitive.challenges.kinds.<kind>`). */
-export type ChallengeKind = 'winDuels' | 'scoreAbove' | 'streak' | 'servers' | 'beatHigher' | 'playDuels'
+export type ChallengeKind =
+  | 'winDuels'
+  | 'playDuels'
+  | 'scoreAbove'
+  | 'scoresAbove'
+  | 'streak'
+  | 'quickWin'
+  | 'longWin'
+  | 'foes'
+  | 'servers'
+  | 'bothModes'
+  | 'rrGain'
 
+/** Facile, moyenne, difficile ; `challenge` : le défi de la semaine. */
+export type ChallengeDifficulty = 'easy' | 'medium' | 'hard' | 'challenge'
+
+/** Une mission, tirée pour ce joueur par le serveur (LauncherAPI `launcher/missions/`). */
 export interface Challenge {
   id: string
   kind: ChallengeKind
   period: 'daily' | 'weekly'
+  difficulty: ChallengeDifficulty
   /** `null` : n'importe quel mode. */
   mode: ModeKey | null
-  /** La valeur à atteindre (nombre de duels, note…). */
+  /** La valeur de la phrase : une note, des secondes, des RR ; pour une
+   *  mission qui compte, le même nombre que `goal`. */
   target: number
   /** Où l'on en est, sur `goal`. */
   progress: number
   goal: number
-  /** Fin du défi, en millisecondes. */
+  /** Fin de la mission, en millisecondes. */
   endsAt: number
   /** XP du passe de saison que rapporte la mission. */
   xp: number
+  /** Une mission d'un jour précédent, encore ouverte. */
+  carried?: boolean
+  /** Peut être relancée maintenant. */
+  rerollable?: boolean
+}
+
+/** Ce qui entoure les missions : relances, bonus de journée. */
+export interface MissionsMeta {
+  rerollsLeft: number
+  /** XP du bonus « les trois missions du jour finies ». */
+  dayBonusXp: number
+  dayBonusDone: boolean
 }
 
 /** Le passe de saison : des paliers d'XP, chacun avec un cosmétique. Réservé
@@ -255,6 +284,7 @@ export interface ApiPass {
     id: number
     kind: ChallengeKind
     period: 'daily' | 'weekly'
+    difficulty?: ChallengeDifficulty
     mode: ModeKey | null
     target: number
     progress: number
@@ -262,7 +292,13 @@ export interface ApiPass {
     done: boolean
     ends_at: number
     xp: number
+    carried?: boolean
+    rerollable?: boolean
   }[]
+  /** Absents d'un serveur d'avant les missions tirées. */
+  rerolls_left?: number
+  day_bonus_xp?: number
+  day_bonus_done?: boolean
   xp: number
   xp_per_tier: number
   tier: number
@@ -278,22 +314,26 @@ const BIG_REWARDS: CosmeticKind[] = ['cape', 'aura']
  * saison en cours ou sans palier réglé (« bientôt »), `challenges` sans
  * mission active.
  */
-export function readPass(api: ApiPass): { challenges: Challenge[] | null; pass: BattlePass | null; season: Season | null } {
+export function readPass(api: ApiPass): { challenges: Challenge[] | null; pass: BattlePass | null; season: Season | null; meta: MissionsMeta } {
   const challenges: Challenge[] = api.challenges.map((c) => ({
     id: String(c.id),
     kind: c.kind,
     period: c.period,
+    difficulty: c.difficulty ?? (c.period === 'weekly' ? 'medium' : 'easy'),
     mode: c.mode,
     target: c.target,
     progress: c.progress,
     goal: c.goal,
     endsAt: c.ends_at,
     xp: c.xp,
+    carried: c.carried,
+    rerollable: c.rerollable,
   }))
+  const meta: MissionsMeta = { rerollsLeft: api.rerolls_left ?? 0, dayBonusXp: api.day_bonus_xp ?? 0, dayBonusDone: api.day_bonus_done ?? false }
   const season: Season | null = api.season
     ? { id: String(api.season.number), number: api.season.number, name: api.season.name, start: null, end: api.season.ends_at, rewards: ['badge', 'badge', 'badge', 'badge', 'badge', 'badge', 'title'], peak: null }
     : null
-  if (!api.season || api.tiers === 0) return { challenges: challenges.length ? challenges : null, pass: null, season }
+  if (!api.season || api.tiers === 0) return { challenges: challenges.length ? challenges : null, pass: null, season, meta }
 
   // Un palier sans récompense réglée (trou dans la liste) : un insigne sans nom.
   const byTier = new Map(api.rewards.map((r) => [r.tier, r]))
@@ -304,7 +344,8 @@ export function readPass(api: ApiPass): { challenges: Challenge[] | null; pass: 
   const perTier = Math.max(1, api.xp_per_tier)
   const maxed = api.tier >= api.tiers
   const featuredIndex = Math.min(api.tier, api.tiers - 1)
-  const daily = challenges.filter((c) => c.period === 'daily')
+  // Les paliers du jour : les missions tirées aujourd'hui, pas celles reportées.
+  const daily = challenges.filter((c) => c.period === 'daily' && !c.carried)
   const nextBig = rewards.findIndex((r, i) => i >= api.tier && BIG_REWARDS.includes(r.kind))
   const objectives: PassObjective[] = [{ kind: 'tiers', done: api.tier, total: api.tiers }]
   if (nextBig >= 0) {
@@ -321,6 +362,7 @@ export function readPass(api: ApiPass): { challenges: Challenge[] | null; pass: 
   return {
     challenges: challenges.length ? challenges : null,
     season,
+    meta,
     pass: {
       tier: api.tier,
       tiers: api.tiers,
@@ -645,13 +687,15 @@ function demoChallenges(): Challenge[] {
   // Le lundi suivant, à minuit.
   const endOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() + ((8 - now.getDay()) % 7 || 7)).getTime()
   return [
-    { id: 'd1', kind: 'winDuels', period: 'daily', mode: 'mace', target: 5, progress: 3, goal: 5, endsAt: endOfDay, xp: 1000 },
-    { id: 'd2', kind: 'scoreAbove', period: 'daily', mode: null, target: 350, progress: 1, goal: 1, endsAt: endOfDay, xp: 1000 },
-    { id: 'd3', kind: 'playDuels', period: 'daily', mode: 'sword', target: 3, progress: 0, goal: 3, endsAt: endOfDay, xp: 1000 },
-    { id: 'd4', kind: 'servers', period: 'daily', mode: null, target: 2, progress: 2, goal: 2, endsAt: endOfDay, xp: 1000 },
-    { id: 'w1', kind: 'streak', period: 'weekly', mode: null, target: 5, progress: 3, goal: 5, endsAt: endOfWeek, xp: 4500 },
-    { id: 'w2', kind: 'winDuels', period: 'weekly', mode: null, target: 25, progress: 17, goal: 25, endsAt: endOfWeek, xp: 4500 },
-    { id: 'w3', kind: 'beatHigher', period: 'weekly', mode: 'mace', target: 10, progress: 4, goal: 10, endsAt: endOfWeek, xp: 6000 },
+    // Une mission d'hier encore ouverte, puis les trois du jour.
+    { id: 'c1', kind: 'foes', period: 'daily', difficulty: 'medium', mode: null, target: 3, progress: 1, goal: 3, endsAt: endOfDay + 86_400_000, xp: 250, carried: true, rerollable: true },
+    { id: 'd1', kind: 'winDuels', period: 'daily', difficulty: 'easy', mode: 'mace', target: 3, progress: 3, goal: 3, endsAt: endOfDay + 2 * 86_400_000, xp: 150 },
+    { id: 'd2', kind: 'scoreAbove', period: 'daily', difficulty: 'medium', mode: null, target: 320, progress: 0, goal: 1, endsAt: endOfDay + 2 * 86_400_000, xp: 250, rerollable: true },
+    { id: 'd3', kind: 'quickWin', period: 'daily', difficulty: 'hard', mode: 'sword', target: 45, progress: 0, goal: 1, endsAt: endOfDay + 2 * 86_400_000, xp: 400, rerollable: true },
+    { id: 'w1', kind: 'streak', period: 'weekly', difficulty: 'medium', mode: null, target: 4, progress: 3, goal: 4, endsAt: endOfWeek, xp: 1000 },
+    { id: 'w2', kind: 'scoresAbove', period: 'weekly', difficulty: 'medium', mode: null, target: 300, progress: 5, goal: 8, endsAt: endOfWeek, xp: 1000 },
+    { id: 'w3', kind: 'rrGain', period: 'weekly', difficulty: 'hard', mode: 'mace', target: 100, progress: 42, goal: 100, endsAt: endOfWeek, xp: 1000 },
+    { id: 'w4', kind: 'bothModes', period: 'weekly', difficulty: 'challenge', mode: null, target: 2, progress: 1, goal: 2, endsAt: endOfWeek, xp: 2500 },
   ]
 }
 

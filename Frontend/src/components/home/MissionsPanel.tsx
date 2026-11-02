@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { Missions } from '@/components/competitive/Challenges'
-import type { BattlePass, Challenge } from '@/lib/competitive'
+import type { BattlePass, Challenge, MissionsMeta } from '@/lib/competitive'
 import { useT } from '@/i18n'
 
 /**
@@ -15,11 +15,13 @@ import { useT } from '@/i18n'
  * Rendu dans `document.body`, pour la même raison que celui des amis : la
  * bannière d'où il s'ouvre est transformée par ses animations.
  */
-export function MissionsPanel({ open, onClose, challenges, pass }: {
+export function MissionsPanel({ open, onClose, challenges, pass, meta, onReroll }: {
   open: boolean
   onClose: () => void
   challenges: Challenge[] | null
   pass: BattlePass | null
+  meta?: MissionsMeta | null
+  onReroll?: (id: string) => void
 }) {
   const t = useT()
   const navigate = useNavigate()
@@ -69,7 +71,7 @@ export function MissionsPanel({ open, onClose, challenges, pass }: {
 
             {/* Le panneau des missions, sur toute la hauteur du tiroir. */}
             <div className="flex min-h-0 flex-1 flex-col p-3 [&>*]:min-h-0 [&>*]:flex-1">
-              <Missions challenges={challenges} pass={pass} />
+              <Missions challenges={challenges} pass={pass} meta={meta} onReroll={onReroll} />
             </div>
 
             {/* Le passe, où va l'XP gagnée. */}

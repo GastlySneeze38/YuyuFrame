@@ -6,7 +6,7 @@ import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { RewardImage } from '@/components/competitive/RewardImage'
 import { TopoBackdrop } from '@/components/competitive/TopoBackdrop'
 import { Missions, PASS_COLOR } from '@/components/competitive/Challenges'
-import { type BattlePass, type Challenge, type PassReward } from '@/lib/competitive'
+import { type BattlePass, type Challenge, type MissionsMeta, type PassReward } from '@/lib/competitive'
 import { usePass } from '@/lib/usePass'
 import { useStore } from '@/stores/useStore'
 import { useT } from '@/i18n'
@@ -47,7 +47,7 @@ type TierState = 'obtained' | 'current' | 'upcoming'
 export default function SeasonPass() {
   const t = useT()
   // Démonstration (atelier) ou `GET /v1/pass` ; sans passe réglé, « bientôt ».
-  const { challenges, pass, season } = usePass()
+  const { challenges, pass, season, meta, reroll } = usePass()
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-bg-primary text-txt-primary">
@@ -66,13 +66,18 @@ export default function SeasonPass() {
           <p className="text-[12.5px] text-txt-muted">{t('competitive.pass.soon')}</p>
         </div>
       ) : (
-        <PassBoard pass={pass} challenges={challenges} />
+        <PassBoard pass={pass} challenges={challenges} meta={meta} reroll={reroll} />
       )}
     </div>
   )
 }
 
-function PassBoard({ pass, challenges }: { pass: BattlePass; challenges: Challenge[] | null }) {
+function PassBoard({ pass, challenges, meta, reroll }: {
+  pass: BattlePass
+  challenges: Challenge[] | null
+  meta: MissionsMeta | null
+  reroll: (id: string) => Promise<void>
+}) {
   const t = useT()
   const owned = useStore((s) => s.yuyuPlan) !== 'free'
   const chapters = Math.ceil(pass.tiers / CHAPTER_SIZE)
@@ -182,7 +187,7 @@ function PassBoard({ pass, challenges }: { pass: BattlePass; challenges: Challen
       >
         {/* Le panneau des missions remplit la hauteur du volet. */}
         <div className="flex h-full flex-col py-4 pl-4 pr-1 [&>*]:min-h-0 [&>*]:flex-1" style={{ width: MISSIONS_WIDTH }}>
-          <Missions challenges={challenges} pass={pass} />
+          <Missions challenges={challenges} pass={pass} meta={meta} onReroll={reroll} />
         </div>
       </motion.aside>
 

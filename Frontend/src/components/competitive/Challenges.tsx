@@ -3,7 +3,17 @@ import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { useT } from '@/i18n'
 import { useStore } from '@/stores/useStore'
-import { DIVISIONS_PER_TIER, TIER_COLORS, TIER_KEYS, type BattlePass, type Challenge, type PassObjective, type Season } from '@/lib/competitive'
+import {
+  DIVISIONS_PER_TIER,
+  TIER_COLORS,
+  TIER_KEYS,
+  type BattlePass,
+  type Challenge,
+  type ChallengeDifficulty,
+  type MissionsMeta,
+  type PassObjective,
+  type Season,
+} from '@/lib/competitive'
 import { RewardImage } from './RewardImage'
 import { RankTile } from './RankCard'
 import { TopoBackdrop } from './TopoBackdrop'
@@ -42,25 +52,56 @@ export function ChallengesView({
   challenges,
   pass,
   season,
+  meta,
+  onReroll,
 }: {
   challenges: Challenge[] | null
   pass: BattlePass | null
   season: Season | null
+  meta?: MissionsMeta | null
+  onReroll?: (id: string) => void
 }) {
   return (
     // Les missions prennent une colonne qui s'élargit avec la fenêtre ; le
     // passe a le reste.
     <div className="grid h-full grid-cols-[290px_minmax(0,1fr)] gap-3 lg:grid-cols-[330px_minmax(0,1fr)] lg:gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
-      <Missions challenges={challenges} pass={pass} />
+      <Missions challenges={challenges} pass={pass} meta={meta} onReroll={onReroll} />
       <PassColumn pass={pass} season={season} />
     </div>
   )
 }
 
+/** Prochain minuit UTC : l'heure du tirage des missions du jour. */
+function nextUtcMidnight(now: number): number {
+  const d = new Date(now)
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1)
+}
+
+/** La couleur et le nombre de crans d'une difficulté. */
+const DIFFICULTY: Record<ChallengeDifficulty, { pips: number; color: string }> = {
+  easy: { pips: 1, color: '94 214 140' },
+  medium: { pips: 2, color: '120 170 255' },
+  hard: { pips: 3, color: '255 170 80' },
+  challenge: { pips: 3, color: '255 96 120' },
+}
+
 // ── Missions ─────────────────────────────────────────────────────────────
 
-/** Missions du jour et de la semaine : aussi le volet de la page du passe. */
-export function Missions({ challenges, pass }: { challenges: Challenge[] | null; pass: BattlePass | null }) {
+/** Missions du jour et de la semaine : aussi le volet de la page du passe.
+ *  Les missions du jour sont tirées chaque jour à minuit UTC ; celles des
+ *  jours d'avant pas encore finies restent en tête de liste, marquées
+ *  « reportée », jusqu'à leur fin. */
+export function Missions({
+  challenges,
+  pass,
+  meta,
+  onReroll,
+}: {
+  challenges: Challenge[] | null
+  pass: BattlePass | null
+  meta?: MissionsMeta | null
+  onReroll?: (id: string) => void
+}) {
   const t = useT()
   const now = useNow()
   if (challenges === null) {
@@ -70,8 +111,11 @@ export function Missions({ challenges, pass }: { challenges: Challenge[] | null;
       </div>
     )
   }
-  const daily = challenges.filter((c) => c.period === 'daily')
+  // Les reportées d'abord : ce sont elles qui finissent le plus tôt.
+  const daily = challenges.filter((c) => c.period === 'daily').sort((a, b) => Number(!!b.carried) - Number(!!a.carried))
   const weekly = challenges.filter((c) => c.period === 'weekly')
+  const today = daily.filter((c) => !c.carried)
+  const reroll = meta && meta.rerollsLeft > 0 ? onReroll : undefined
 
   // Une ligne par mission, sans cadre ni barre ; les lignes et les écarts se
   // resserrent avec la hauteur de la fenêtre. Les deux sections se partagent
@@ -80,15 +124,23 @@ export function Missions({ challenges, pass }: { challenges: Challenge[] | null;
   return (
     <div className="flex min-h-0 flex-col justify-between gap-[clamp(10px,2.2vh,20px)] overflow-y-auto rounded-2xl border border-line bg-surface-1 px-4 py-[clamp(12px,2.2vh,20px)] lg:px-5">
       <section className="flex flex-col gap-[clamp(6px,1.3vh,12px)]">
-        <SectionHead title={t('competitive.challenges.daily')} refill={daily[0] ? countdown(daily[0].endsAt - now) : null} />
+        <SectionHead title={t('competitive.challenges.daily')} refill={daily.length ? countdown(nextUtcMidnight(now) - now) : null} />
         {pass && (
           <div title={t('competitive.missions.perCheckpoint', { xp: pass.checkpointXp.toLocaleString() })}>
             <Checkpoints done={pass.checkpointsDone} total={pass.checkpoints} />
           </div>
         )}
+        {/* Le bonus de la journée complète : ce qui donne envie de finir les trois. */}
+        {meta && meta.dayBonusXp > 0 && today.length > 0 && (
+          <p className={`text-center text-[10.5px] font-bold uppercase tracking-[0.05em] ${meta.dayBonusDone ? 'text-success' : 'text-txt-muted'}`}>
+            {meta.dayBonusDone
+              ? t('competitive.missions.dayBonusDone', { xp: meta.dayBonusXp.toLocaleString() })
+              : t('competitive.missions.dayBonus', { xp: meta.dayBonusXp.toLocaleString() })}
+          </p>
+        )}
         <div className="flex flex-col">
           {daily.map((c, i) => (
-            <MissionRow key={c.id} mission={c} index={i} />
+            <MissionRow key={c.id} mission={c} index={i} now={now} onReroll={c.rerollable ? reroll : undefined} />
           ))}
         </div>
       </section>
@@ -100,7 +152,7 @@ export function Missions({ challenges, pass }: { challenges: Challenge[] | null;
         ) : (
           <div className="flex flex-col">
             {weekly.map((c, i) => (
-              <MissionRow key={c.id} mission={c} index={i} />
+              <MissionRow key={c.id} mission={c} index={i} now={now} />
             ))}
           </div>
         )}
@@ -154,20 +206,30 @@ function Checkpoints({ done, total }: { done: number; total: number }) {
   )
 }
 
+/** La phrase d'une mission : `count` est le nombre à atteindre, les autres
+ *  la valeur de la phrase (note, secondes, RR). */
+export function missionText(t: ReturnType<typeof useT>, c: Challenge): string {
+  return t(`competitive.challenges.kinds.${c.kind}`, { count: c.goal, score: c.target, seconds: c.target, rr: c.target })
+}
+
 /** Une mission sur une ligne : un anneau de progression (une coche quand
- *  c'est fait), la phrase, le mode en petit, où l'on en est, l'XP. */
-function MissionRow({ mission: c, index }: { mission: Challenge; index: number }) {
+ *  c'est fait), la phrase, la difficulté en crans, le mode en petit, où l'on
+ *  en est, l'XP ; au survol, la relance quand elle est possible. */
+function MissionRow({ mission: c, index, now, onReroll }: { mission: Challenge; index: number; now: number; onReroll?: (id: string) => void }) {
   const t = useT()
+  const [busy, setBusy] = useState(false)
   const done = c.progress >= c.goal
   const ratio = Math.min(1, c.progress / c.goal)
   const R = 8
   const C = 2 * Math.PI * R
+  const level = DIFFICULTY[c.difficulty]
+  const daysLeft = Math.max(0, Math.ceil((c.endsAt - now) / 86_400_000))
   return (
     <motion.div
       initial={{ opacity: 0, x: -6 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ delay: index * 0.04 }}
-      className="flex items-center gap-3 border-b border-white/[0.05] py-[clamp(5px,1.2vh,10px)] last:border-b-0"
+      className="group flex items-center gap-3 border-b border-white/[0.05] py-[clamp(5px,1.2vh,10px)] last:border-b-0"
     >
       {done ? (
         <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-success/20 text-success">
@@ -192,14 +254,50 @@ function MissionRow({ mission: c, index }: { mission: Challenge; index: number }
         </svg>
       )}
       <div className="min-w-0 flex-1">
-        <p className={`truncate text-[12.5px] font-semibold ${done ? 'text-txt-muted line-through decoration-white/20' : ''}`}>
-          {t(`competitive.challenges.kinds.${c.kind}`, { count: c.target, score: c.target })}
+        <p title={missionText(t, c)} className={`truncate text-[12.5px] font-semibold ${done ? 'text-txt-muted line-through decoration-white/20' : ''}`}>
+          {missionText(t, c)}
         </p>
-        <p className="text-[10.5px] tabular-nums text-txt-muted">
-          {c.progress} / {c.goal}
-          {c.mode && <> · {t(`competitive.modes.${c.mode}`)}</>}
+        <p className="flex items-center gap-1.5 text-[10.5px] tabular-nums text-txt-muted">
+          {/* La difficulté en crans : un, deux, trois ; le défi en rouge. */}
+          <span title={t(`competitive.missions.difficulty.${c.difficulty}`)} className="flex items-center gap-[2px]">
+            {Array.from({ length: 3 }, (_, i) => (
+              <span
+                key={i}
+                className="h-[7px] w-[3px] rounded-full"
+                style={{ background: i < level.pips ? `rgb(${level.color})` : 'rgb(255 255 255 / 0.12)' }}
+              />
+            ))}
+          </span>
+          <span>
+            {c.progress} / {c.goal}
+          </span>
+          {c.mode && <span>· {t(`competitive.modes.${c.mode}`)}</span>}
+          {c.carried && !done && (
+            <span className="font-semibold text-warning">· {t('competitive.missions.carried', { count: daysLeft })}</span>
+          )}
         </p>
       </div>
+      {onReroll && !done && (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true)
+            try {
+              await onReroll(c.id)
+            } finally {
+              setBusy(false)
+            }
+          }}
+          title={t('competitive.missions.reroll')}
+          aria-label={t('competitive.missions.reroll')}
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-txt-muted opacity-0 transition-opacity hover:bg-white/[0.06] hover:text-white focus-visible:opacity-100 group-hover:opacity-100 disabled:opacity-40"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={`h-3.5 w-3.5 ${busy ? 'animate-spin' : ''}`}>
+            <path d="M21 12a9 9 0 11-2.64-6.36M21 4v5h-5" />
+          </svg>
+        </button>
+      )}
       <span className={`shrink-0 text-[11px] font-bold tabular-nums ${done ? 'text-success' : 'text-accent-hover'}`}>
         {t('competitive.missions.xp', { xp: c.xp.toLocaleString() })}
       </span>

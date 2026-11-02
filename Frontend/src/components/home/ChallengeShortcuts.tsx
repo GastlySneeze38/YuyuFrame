@@ -31,7 +31,7 @@ const HOVER = { whileHover: { scale: 1.03 }, whileTap: { scale: 0.97 }, transiti
 export function HomeShortcuts() {
   const t = useT()
   const navigate = useNavigate()
-  const { challenges, pass } = usePass()
+  const { challenges, pass, meta, reroll } = usePass()
   const owned = useStore((s) => s.yuyuPlan) !== 'free'
   const todo = challenges?.filter((c) => c.progress < c.goal).length ?? 0
   // Les missions s'ouvrent en tiroir : on les consulte sans quitter l'accueil.
@@ -39,7 +39,7 @@ export function HomeShortcuts() {
 
   return (
     <div className="grid w-[clamp(250px,24vw,300px)] grid-cols-2 gap-2">
-      <MissionsPanel open={missionsOpen} onClose={() => setMissionsOpen(false)} challenges={challenges} pass={pass} />
+      <MissionsPanel open={missionsOpen} onClose={() => setMissionsOpen(false)} challenges={challenges} pass={pass} meta={meta} onReroll={reroll} />
 
       <motion.button
         {...HOVER}
