@@ -268,6 +268,7 @@ export default function Competitive() {
                     wins={data.seasonWins ? data.seasonWins[shown] ?? [] : null}
                     count={data.seasonWinCount?.[shown]}
                     season={data.seasons?.[0] ?? null}
+                    current={standing}
                     mode={shown}
                     readOnly={!!friendId}
                   />

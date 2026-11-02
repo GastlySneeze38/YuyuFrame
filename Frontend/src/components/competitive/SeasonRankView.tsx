@@ -96,12 +96,18 @@ export function SeasonRankView({
   wins,
   count,
   season,
+  current,
   mode,
   readOnly = false,
 }: {
   wins: number[] | null
   count?: number
   season: Season | null
+  /** Le rang actuel dans ce mode. Le titre ne descend jamais sous lui : les
+   *  duels de placement ne remplissent pas la grille, donc juste après le
+   *  placement il n'y a encore aucune victoire classée, et le titre disait
+   *  « Non classé » à un joueur déjà classé. */
+  current?: { division: number; placed: boolean }
   /** Le mode montré : c'est sa grille qui va (ou non) dans la vitrine. */
   mode: ModeKey
   readOnly?: boolean
@@ -120,7 +126,8 @@ export function SeasonRankView({
   }
 
   const best = [...wins].sort((a, b) => b - a).slice(0, CELLS)
-  const top = best[0] ?? null
+  const bestWin = best[0] ?? null
+  const top = current?.placed ? Math.max(bestWin ?? 0, current.division) : bestWin
   const color = top !== null ? TIER_COLORS[tierOf(top)] : '160 150 190'
   const total = Math.max(count ?? 0, wins.length)
   const level = borderLevel(total)

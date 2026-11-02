@@ -84,8 +84,10 @@ export function Leaderboard({
           <span className="text-[10.5px] text-txt-muted">{t('competitive.leaderboard.winRate')}</span>
         </div>
         {friends && rows.length === 0 && <p className="px-2.5 text-[12px] text-txt-muted">{t('competitive.leaderboard.noFriends')}</p>}
-        <div className="-mx-1 flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden px-1">
-          {/* Les lignes se partagent toute la hauteur de la carte. */}
+        <div className="-mx-1 grid min-h-0 flex-1 grid-rows-[repeat(15,minmax(0,1fr))] gap-0.5 overflow-hidden px-1">
+          {/* Quinze cases de même hauteur, remplies depuis le haut : avec peu
+              de joueurs, les lignes gardent leur taille au lieu de se partager
+              toute la carte (une seule ligne flottait au milieu). */}
           {rest.map((r, i) => (
             <Line key={`${r.position}-${r.name}`} row={r} index={i} fill mark={mark} />
           ))}
@@ -105,17 +107,49 @@ export function Leaderboard({
   )
 }
 
-/** Les trois premiers : la 1re place au centre et plus haute. */
+/** Les trois premiers : la 1re place au centre et plus haute. Les trois
+ *  places sont toujours là : une place encore libre garde sa marche, avec une
+ *  tête « ? » — un podium à une seule marche ne se lit plus comme un podium. */
 function Podium({ rows }: { rows: LeaderboardRow[] }) {
   const rankName = useRankName()
-  // Ordre d'affichage : 2e, 1re, 3e.
-  const order = [rows[1], rows[0], rows[2]].filter(Boolean)
   const height = (position: number) => (position === 1 ? '62%' : position === 2 ? '46%' : '36%')
 
   return (
     <div className="relative flex min-h-0 items-end justify-center gap-3 overflow-hidden rounded-2xl border border-line bg-surface-1 px-5 pb-0 pt-6">
-      {order.map((r, i) => {
-        const medal = PODIUM[r.position - 1]
+      {/* Ordre d'affichage : 2e, 1re, 3e. */}
+      {[2, 1, 3].map((position, i) => {
+        const medal = PODIUM[position - 1]
+        const r = rows.find((row) => row.position === position)
+        if (!r) {
+          return (
+            <motion.div
+              key={`empty-${position}`}
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 + i * 0.08, type: 'spring', stiffness: 220, damping: 22 }}
+              className="flex h-full min-w-0 flex-1 flex-col items-center justify-end"
+            >
+              <div
+                className="flex items-center justify-center rounded-lg border border-dashed border-white/15 bg-white/[0.03] font-black text-white/30"
+                style={{ width: position === 1 ? 64 : 48, height: position === 1 ? 64 : 48, fontSize: position === 1 ? 28 : 22 }}
+              >
+                ?
+              </div>
+              <p className={`mt-2.5 font-black text-white/25 ${position === 1 ? 'text-[15px]' : 'text-[13px]'}`}>?</p>
+              <div className="mt-1 h-4" />
+              <div
+                className="mt-3 flex w-full flex-col items-center rounded-t-xl pt-3"
+                style={{
+                  height: height(position),
+                  background: `linear-gradient(180deg, rgb(${medal} / 0.1), rgb(${medal} / 0.02))`,
+                  borderTop: `2px dashed rgb(${medal} / 0.3)`,
+                }}
+              >
+                <span className="text-[30px] font-black leading-none" style={{ color: `rgb(${medal} / 0.35)` }}>{position}</span>
+              </div>
+            </motion.div>
+          )
+        }
         const color = TIER_COLORS[tierOf(r.division)]
         return (
           <motion.div
@@ -164,7 +198,7 @@ function Line({ row: r, index, fill = false, mark }: { row: LeaderboardRow; inde
       initial={{ opacity: 0, x: -6 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ delay: Math.min(index, 12) * 0.025 }}
-      className={`flex items-center gap-3 rounded-xl px-2.5 py-1 ${fill ? 'min-h-0 flex-1' : 'shrink-0'} ${r.me ? 'bg-accent/[0.14] ring-1 ring-accent/40' : 'hover:bg-white/[0.03]'}`}
+      className={`flex items-center gap-3 rounded-xl px-2.5 py-1 ${fill ? 'h-full min-h-0' : 'shrink-0'} ${r.me ? 'bg-accent/[0.14] ring-1 ring-accent/40' : 'hover:bg-white/[0.03]'}`}
     >
       <span
         className="w-12 text-right text-[12.5px] font-black tabular-nums"

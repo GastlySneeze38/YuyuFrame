@@ -72,7 +72,10 @@ export function DuelHistory({ duels }: { duels: DuelRow[] | null }) {
                 <span className="hidden cw-md:inline">{t('competitive.history.score', { score: d.score })}</span>
               </span>
               <span
-                className={`w-[50px] shrink-0 text-right text-[12px] font-black tabular-nums cw-md:w-[62px] cw-md:text-[12.5px] cw-lg:w-[78px] ${
+                // Une largeur MINIMALE et non fixe : « PLACEMENT » (et ses
+                // traductions) est plus large qu'un « +18 RR » et débordait
+                // sur le bouton « Revoir ».
+                className={`min-w-[50px] shrink-0 whitespace-nowrap text-right text-[12px] font-black tabular-nums cw-md:min-w-[62px] cw-md:text-[12.5px] cw-lg:min-w-[78px] ${
                   d.placement ? 'text-[10px] uppercase tracking-[0.05em] text-accent-hover' : d.rr === null ? 'text-txt-muted' : d.rr > 0 ? 'text-success' : d.rr < 0 ? 'text-danger' : 'text-txt-secondary'
                 }`}
               >
