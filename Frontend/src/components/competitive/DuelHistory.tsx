@@ -2,6 +2,7 @@ import { motion } from 'framer-motion'
 import { useT } from '@/i18n'
 import { useStore } from '@/stores/useStore'
 import { SkinFace } from '@/components/ui/SkinFace'
+import { playerSkinSrc } from '@/lib/heads'
 import type { DuelRow } from '@/lib/competitive'
 
 const RESULT_STYLE: Record<DuelRow['result'], string> = {
@@ -59,7 +60,7 @@ export function DuelHistory({ duels }: { duels: DuelRow[] | null }) {
               >
                 {t(`competitive.history.${d.result}`)}
               </span>
-              <SkinFace dataUri={`https://mc-heads.net/skin/${encodeURIComponent(d.opponent)}`} size={22} className="shrink-0 rounded-[4px]" />
+              <SkinFace dataUri={playerSkinSrc(d.opponentUuid, d.opponent)} size={22} className="shrink-0 rounded-[4px]" />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[12px] font-semibold cw-md:text-[12.5px]">{t('competitive.history.vs', { name: d.opponent })}</p>
                 <p className="truncate text-[10.5px] text-txt-muted">

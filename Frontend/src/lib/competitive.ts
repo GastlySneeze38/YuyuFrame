@@ -130,6 +130,8 @@ export function readStandings(answer: unknown): Standing[] {
 export interface LeaderboardRow {
   position: number
   name: string
+  /** Compte Minecraft : la tête se lit chez Mojang (lib/heads.ts). Absent en démo. */
+  uuid?: string
   division: number
   points: number
   /** Pourcentage de victoires. */
@@ -143,6 +145,8 @@ export interface DuelRow {
   /** Heure du duel, en millisecondes. */
   at: number
   opponent: string
+  /** Compte Minecraft de l'adversaire, quand le serveur l'a recoupé. */
+  opponentUuid?: string | null
   result: 'win' | 'loss' | 'draw'
   /** Note du duel, sur 500. */
   score: number
@@ -483,6 +487,7 @@ export function readDuel(d: ApiDuel): DuelRow {
     mode: d.mode,
     at: d.at,
     opponent: d.opponent ?? '?',
+    opponentUuid: d.opponent_uuid,
     result: d.result === 'win' || d.result === 'loss' ? d.result : 'draw',
     score: Math.round(d.score ?? 0),
     rr: d.rr,
@@ -537,13 +542,14 @@ export function readBoard(board: ApiBoard, myUuid: string | null, pinMe = false)
   const rows: LeaderboardRow[] = board.rows.map((r) => ({
     position: r.position ?? 0,
     name: r.name ?? '?',
+    uuid: r.uuid,
     division: r.division,
     points: r.points,
     winRate: r.win_rate ?? 0,
     me: same(r.uuid, myUuid) || undefined,
   }))
   if (pinMe && board.me && board.me.position !== null && !rows.some((r) => r.me)) {
-    rows.push({ position: board.me.position, name: board.me.name ?? '?', division: board.me.division, points: board.me.points, winRate: board.me.win_rate ?? 0, me: true })
+    rows.push({ position: board.me.position, name: board.me.name ?? '?', uuid: board.me.uuid, division: board.me.division, points: board.me.points, winRate: board.me.win_rate ?? 0, me: true })
   }
   return rows
 }

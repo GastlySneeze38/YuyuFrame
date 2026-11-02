@@ -712,6 +712,8 @@ export const api = {
   skin: {
     /** Skin d'un joueur premium, cherché par son pseudo. */
     resolvePlayer: (username: string) => invoke<ResolvedSkin>('skin_resolve_player', { username }),
+    /** Skin actuel de chaque joueur, lu chez Mojang (data URI, `null` = défaut). Voir lib/heads.ts. */
+    heads: (uuids: string[]) => invoke<(string | null)[]>('skin_heads', { uuids }),
     /** Skin que Mojang sert pour ce compte en ce moment. */
     ofAccount: (uuid: string) => invoke<ResolvedSkin>('skin_of_account', { uuid }),
     /** Vérifie qu'une URL mène bien à un skin, et en rend l'aperçu. */

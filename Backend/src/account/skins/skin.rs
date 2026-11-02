@@ -280,6 +280,85 @@ pub(super) async fn fetch_preview(url: &str) -> Result<String, String> {
     Ok(to_data_uri(&bytes))
 }
 
+// ── Têtes des autres joueurs (classement, amis, historique) ─────────────────
+
+/// Combien de temps on garde le lien UUID → texture avant de redemander à
+/// Mojang : un joueur qui change de skin le voit changer chez nous dans ce délai.
+const HEAD_TTL: std::time::Duration = std::time::Duration::from_secs(30 * 60);
+/// Profils demandés à Mojang en même temps, au plus.
+const HEAD_PARALLEL: usize = 6;
+/// UUID demandés en un appel, au plus (une page de classement en compte 15).
+const HEAD_BATCH_MAX: usize = 64;
+
+/// UUID → (adresse de la texture, ou rien pour l'apparence par défaut ; heure
+/// de la lecture). En mémoire seulement : les textures, elles, sont sur le
+/// disque (`fetch_preview`), et leur adresse ne change jamais de contenu.
+fn head_index() -> &'static std::sync::Mutex<std::collections::HashMap<String, (Option<String>, std::time::Instant)>> {
+    static INDEX: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<String, (Option<String>, std::time::Instant)>>> =
+        std::sync::OnceLock::new();
+    INDEX.get_or_init(Default::default)
+}
+
+/// Un UUID de compte Microsoft (version 4), sans tirets et en minuscules.
+/// Les autres (comptes hors ligne : version 3, dérivée du pseudo) n'ont pas de
+/// profil chez Mojang : inutile de demander.
+fn head_uuid(raw: &str) -> Option<String> {
+    let uuid = undashed(raw).to_ascii_lowercase();
+    (uuid.len() == 32 && uuid.bytes().all(|b| b.is_ascii_hexdigit()) && uuid.as_bytes()[12] == b'4').then_some(uuid)
+}
+
+async fn head_of(uuid: String) -> Option<String> {
+    let known = head_index().lock().ok().and_then(|index| index.get(&uuid).cloned());
+    let url = match known {
+        Some((url, at)) if at.elapsed() < HEAD_TTL => url,
+        _ => match textures_of_uuid(&uuid).await {
+            Ok((_, url, _)) => {
+                if let Ok(mut index) = head_index().lock() {
+                    index.insert(uuid.clone(), (Some(url.clone()), std::time::Instant::now()));
+                }
+                Some(url)
+            }
+            // Pas de skin : l'apparence par défaut, mémorisée comme telle.
+            Err(e) if e.contains("pas de skin") || e.contains("aucune texture") => {
+                if let Ok(mut index) = head_index().lock() {
+                    index.insert(uuid.clone(), (None, std::time::Instant::now()));
+                }
+                None
+            }
+            // Mojang muet ou qui limite : l'ancienne adresse sert encore, sinon rien.
+            Err(_) => known.and_then(|(url, _)| url),
+        },
+    };
+    fetch_preview(&url?).await.ok()
+}
+
+/// Le skin actuel de chaque joueur demandé, tel que Mojang le sert, en data
+/// URI (même ordre que `uuids`, `None` = apparence par défaut ou inconnu).
+///
+/// Les têtes passaient par mc-heads.net, dont le cache garde parfois un skin
+/// longtemps après son changement : un joueur se voyait en Steve dans le
+/// classement. On lit donc la texture chez Mojang, une requête de profil par
+/// joueur et par demi-heure ; la texture elle-même est dans le cache disque.
+/// Une seule commande pour toute une liste : le classement en demande quinze
+/// d'un coup, les amis autant.
+#[tauri::command]
+pub async fn skin_heads(uuids: Vec<String>) -> Result<Vec<Option<String>>, String> {
+    use futures::StreamExt;
+    if uuids.len() > HEAD_BATCH_MAX {
+        return Err(format!("Au plus {HEAD_BATCH_MAX} têtes par demande"));
+    }
+    Ok(futures::stream::iter(uuids)
+        .map(|raw| async move {
+            match head_uuid(&raw) {
+                Some(uuid) => head_of(uuid).await,
+                None => None,
+            }
+        })
+        .buffered(HEAD_PARALLEL)
+        .collect()
+        .await)
+}
+
 // ── Lecture d'un profil Mojang ───────────────────────────────────────────────
 
 async fn textures_of_uuid(uuid: &str) -> Result<(String, String, String), String> {

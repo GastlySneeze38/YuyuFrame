@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { useT } from '@/i18n'
 import { SkinFace } from '@/components/ui/SkinFace'
+import { playerSkinSrc } from '@/lib/heads'
 import { TIER_COLORS, tierOf, type LeaderboardRow } from '@/lib/competitive'
 import { RankTile, useRankName } from './RankCard'
 
@@ -11,7 +12,8 @@ const PODIUM = ['255 206 72', '210 214 222', '214 150 96']
  *  ligne du joueur est épinglée en bas s'il est plus loin). */
 const TOP = 15
 
-const skinOf = (name: string) => `https://mc-heads.net/skin/${encodeURIComponent(name)}`
+/** La tête d'une ligne : par son compte (lue chez Mojang), sinon par pseudo. */
+const skinOf = (r: LeaderboardRow) => playerSkinSrc(r.uuid, r.name)
 
 /**
  * Écran Classement, en deux portées :
@@ -159,7 +161,7 @@ function Podium({ rows }: { rows: LeaderboardRow[] }) {
             transition={{ delay: 0.1 + i * 0.08, type: 'spring', stiffness: 220, damping: 22 }}
             className="flex h-full min-w-0 flex-1 flex-col items-center justify-end"
           >
-            <SkinFace dataUri={skinOf(r.name)} size={r.position === 1 ? 64 : 48} className="rounded-lg" />
+            <SkinFace dataUri={skinOf(r)} size={r.position === 1 ? 64 : 48} className="rounded-lg" />
             <p className={`mt-2.5 max-w-full truncate font-black ${r.position === 1 ? 'text-[15px]' : 'text-[13px]'} ${r.me ? 'text-accent-hover' : ''}`}>
               {r.name}
             </p>
@@ -206,7 +208,7 @@ function Line({ row: r, index, fill = false, mark }: { row: LeaderboardRow; inde
       >
         {r.position}
       </span>
-      <SkinFace dataUri={skinOf(r.name)} size={24} className="rounded-[4px]" />
+      <SkinFace dataUri={skinOf(r)} size={24} className="rounded-[4px]" />
       <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">
         {r.name}
         {r.me && <span className="ml-2 text-[10px] font-bold uppercase tracking-[0.06em] text-accent-hover">{mark}</span>}

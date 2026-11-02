@@ -106,6 +106,7 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         crate::account::minecraft::accounts::mc_delete,
         crate::account::minecraft::offline::mc_add_offline,
         crate::account::skins::skin::skin_resolve_player,
+        crate::account::skins::skin::skin_heads,
         crate::account::skins::skin::skin_of_account,
         crate::account::skins::skin::skin_check_url,
         crate::account::skins::skin::skin_import_file,

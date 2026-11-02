@@ -1,3 +1,5 @@
+import { useHead } from '@/lib/heads'
+
 /**
  * La tête d'un skin en 2D, comme le jeu la dessine.
  *
@@ -30,25 +32,32 @@ export function SkinFace({
   size,
   className = '',
 }: {
-  /** PNG du skin, en data URI ou en URL. */
+  /** PNG du skin, en data URI ou en URL. Une adresse
+   *  `https://mc-heads.net/skin/<uuid>` est lue chez Mojang (lib/heads.ts). */
   dataUri: string
   /** Côté du carré rendu, en pixels. */
   size: number
   className?: string
 }) {
-  const sheet = `${size * 8}px ${size * 8}px`
-  return (
-    <div
+  // Depuis le 2026-11-02, les deux couches sont découpées une fois en une
+  // image de 8 × 8 (lib/heads.ts) au lieu d'être recadrées en fond CSS : le
+  // recadrage laissait déborder les pixels voisins sur un écran agrandi, et
+  // chaque tête relisait le skin entier. Le principe des deux couches
+  // ci-dessus est inchangé, il vit dans `cropHead`.
+  const head = useHead(dataUri)
+  return head ? (
+    <img
+      src={head}
+      alt=""
       aria-hidden="true"
+      draggable={false}
+      width={size}
+      height={size}
       className={`shrink-0 [image-rendering:pixelated] ${className}`}
-      style={{
-        width: size,
-        height: size,
-        backgroundImage: `url(${dataUri}), url(${dataUri})`,
-        backgroundSize: `${sheet}, ${sheet}`,
-        backgroundPosition: `${-size * 5}px ${-size}px, ${-size}px ${-size}px`,
-        backgroundRepeat: 'no-repeat, no-repeat',
-      }}
+      style={{ width: size, height: size }}
     />
+  ) : (
+    // En attendant la tête : un carré neutre de la même taille, pour que rien ne bouge.
+    <div aria-hidden="true" className={`shrink-0 bg-white/[0.06] ${className}`} style={{ width: size, height: size }} />
   )
 }
