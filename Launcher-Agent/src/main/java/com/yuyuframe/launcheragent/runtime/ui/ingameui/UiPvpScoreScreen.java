@@ -50,7 +50,9 @@ public final class UiPvpScoreScreen extends UiScreenBase {
     private static final int GLASS_PASSES = 3;
 
     private final Object lastScreen;
-    private final DuelHistory history = DuelHistory.load();
+    private DuelHistory history = DuelHistory.load();
+    /** La réponse du noyau au dernier passage : le serveur de classement est-il joint ? */
+    private int rankedReady = NativeCombat.rankedReady();
     /** Le mode affiché ({@link PvpScoreUi#MODES}), et ses duels notés, du plus récent au plus ancien. */
     private int mode;
     private final List<DuelHistory.Duel> scored = new ArrayList<DuelHistory.Duel>();
@@ -188,6 +190,17 @@ public final class UiPvpScoreScreen extends UiScreenBase {
                 && (screenWidth != lastW || screenHeight != lastH || UiTheme.UI_SCALE != lastScale)) {
             buildLayout();
             lastW = screenWidth; lastH = screenHeight; lastScale = UiTheme.UI_SCALE;
+        }
+        // La synchronisation avec le serveur vient d'aboutir (ou de tomber) :
+        // le rang affiché et l'interrupteur suivent sans rouvrir l'écran.
+        int ready = NativeCombat.rankedReady();
+        if (ready != rankedReady && screenWidth > 0) {
+            rankedReady = ready;
+            if (ready == NativeCombat.RANKED_READY_YES) {
+                history = DuelHistory.load();
+                selectMode(mode);
+            }
+            buildLayout();
         }
         if (info != null && info.closed()) info = null;
         this.mouseX = mouseX;
@@ -564,8 +577,10 @@ public final class UiPvpScoreScreen extends UiScreenBase {
                 // ne dit plus qu'une chose, au-dessus du bouton.
                 PvpScoreUi.rect(r, left, bottom, right, top, PvpScoreUi.radius(), UiTheme.GLASS_TINT.withAlpha(0.86f), vw, vh);
                 float textY = playing.y + playing.h + UiTheme.scaled(40f);
-                for (String line : PvpScoreUi.wrap(r, UiFont.REGULAR, Lang.tr("Tes duels sont notés, mais ne comptent pas pour ton rang."),
-                        UiTheme.scaled(0.42f), width)) {
+                String why = PvpScoreUi.PlayingSwitch.available()
+                    ? Lang.tr("Tes duels sont notés, mais ne comptent pas pour ton rang.")
+                    : PvpScoreUi.PlayingSwitch.unavailableReason();
+                for (String line : PvpScoreUi.wrap(r, UiFont.REGULAR, why, UiTheme.scaled(0.42f), width)) {
                     PvpScoreUi.centered(r, UiFont.REGULAR, line, center, textY, width, UiTheme.TEXT_MUTED, UiTheme.scaled(0.42f), vw, vh);
                     textY -= UiTheme.scaled(20f);
                 }

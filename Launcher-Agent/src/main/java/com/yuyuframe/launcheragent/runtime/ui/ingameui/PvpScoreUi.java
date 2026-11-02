@@ -654,6 +654,21 @@ public final class PvpScoreUi {
                 == com.yuyuframe.launcheragent.runtime.combat.NativeCombat.RANKED_READY_YES;
         }
 
+        /** Pourquoi le compétitif n'est pas possible en ce moment. */
+        static String unavailableReason() {
+            switch (com.yuyuframe.launcheragent.runtime.combat.NativeCombat.rankedReady()) {
+                case com.yuyuframe.launcheragent.runtime.combat.NativeCombat.RANKED_READY_CHECKING:
+                    return Lang.tr("Connexion au serveur de classement...");
+                case com.yuyuframe.launcheragent.runtime.combat.NativeCombat.RANKED_READY_NOT_MICROSOFT:
+                    return Lang.tr("Le compétitif demande un compte Minecraft Microsoft.");
+                case com.yuyuframe.launcheragent.runtime.combat.NativeCombat.RANKED_READY_UNREACHABLE:
+                case com.yuyuframe.launcheragent.runtime.combat.NativeCombat.RANKED_READY_UNSUPPORTED:
+                    return Lang.tr("Le serveur de classement ne répond pas : tu joues en casual.");
+                default:
+                    return Lang.tr("Connecte ton compte YuyuFrame dans le launcher pour jouer en compétitif.");
+            }
+        }
+
         @Override
         public void draw(UiRenderer r, double mouseX, double mouseY, int vw, int vh) {
             // Dessiné par la page, par-dessus la carte : voir paint.
@@ -682,12 +697,26 @@ public final class PvpScoreUi {
             } else {
                 // Le bouton qui ramène au compétitif : il respire pour appeler le clic.
                 // Il respire à peine : il appelle le clic sans crier.
-                float breath = 0.5f + 0.5f * (float) Math.sin((System.nanoTime() - createdAt) / 1e9 * 2.0);
-                r.drawRoundedRect(x, y, x + w, y + h, UiTheme.scaled(12f),
-                    a(UiColor.lerp(UiTheme.ACCENT.withAlpha(0.72f), UiTheme.ACCENT, Math.max(t, 0.25f * breath))), vw, vh);
-                float scale = UiTheme.scaled(0.52f);
-                centered(r, UiFont.BOLD, Lang.tr("REPASSER EN COMPÉTITIF"), x + w / 2f, middle(y + h / 2f, scale), w - UiTheme.scaled(24f),
-                    UiTheme.TEXT_PRIMARY, scale, vw, vh);
+                // Un bouton de verre, comme la pastille du compétitif. Allumé,
+                // un voile d'accent qui respire à peine et une bordure qui
+                // s'éclaire au survol ; éteint (pas de serveur de classement),
+                // du verre nu et un texte estompé.
+                float scale = UiTheme.scaled(0.5f);
+                float corner = UiTheme.scaled(12f);
+                float line = Math.max(1f, UiTheme.scaled(1f));
+                boolean on = available();
+                UiColor border = on
+                    ? UiColor.lerp(UiTheme.GLASS_BORDER, UiTheme.ACCENT.withAlpha(0.85f), 0.45f + 0.55f * t)
+                    : UiTheme.GLASS_BORDER;
+                r.drawGlassPanel(x, y, x + w, y + h, corner, UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_FIELD, a(UiTheme.CARD_BG),
+                    r.isGlassAvailable() ? a(border) : null, line, vw, vh);
+                if (on) {
+                    float breath = 0.5f + 0.5f * (float) Math.sin((System.nanoTime() - createdAt) / 1e9 * 2.0);
+                    float glow = 0.10f + 0.08f * breath + 0.14f * t;
+                    r.drawRoundedRect(x, y, x + w, y + h, corner, a(UiTheme.ACCENT.withAlpha(glow)), vw, vh);
+                }
+                centered(r, UiFont.BOLD, Lang.tr(on ? "REPASSER EN COMPÉTITIF" : "COMPÉTITIF INDISPONIBLE"), x + w / 2f,
+                    middle(y + h / 2f, scale), w - UiTheme.scaled(24f), on ? UiTheme.TEXT_PRIMARY : UiTheme.TEXT_MUTED, scale, vw, vh);
             }
         }
 

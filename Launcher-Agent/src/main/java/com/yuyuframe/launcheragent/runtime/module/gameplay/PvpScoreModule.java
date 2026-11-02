@@ -380,8 +380,10 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
         int mode = NativeCombat.liveMode();
         if (mode != 1 && mode != 2) return;
         announcedAtNanos = now;
-        banner.duelStarted(competitive, rankOf(mode));
-        PvpSounds.play(PvpSounds.CHIME, competitive ? 1.2f : 0.9f, 0.6f);
+        // Sans serveur de classement, le noyau ouvre le duel en casual : l'annonce aussi.
+        boolean ranked = competitive && NativeCombat.rankedReady() == NativeCombat.RANKED_READY_YES;
+        banner.duelStarted(ranked, rankOf(mode));
+        PvpSounds.play(PvpSounds.CHIME, ranked ? 1.2f : 0.9f, 0.6f);
     }
 
     /** La touche compétitif / casual, sur son front montant, hors des écrans (tchat, champs de texte). */
@@ -786,7 +788,7 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
         /** Un duel compétitif que le serveur n'a pas (ou pas encore) vérifié : il ne compte pas. */
         private boolean unverified() {
             int status = rankedStatus;
-            return status == NativeCombat.RANKED_STATUS_REJECTED || status == NativeCombat.RANKED_STATUS_QUEUED
+            return status == NativeCombat.RANKED_STATUS_REJECTED || status == NativeCombat.RANKED_STATUS_UNREACHABLE
                 || status == NativeCombat.RANKED_STATUS_NO_ACCOUNT || status == NativeCombat.RANKED_STATUS_OFFLINE_SERVER;
         }
 
@@ -806,9 +808,9 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
                     how = Lang.tr("Le serveur n'a pas trouvé le même résultat");
                     tone = PvpScoreUi.BAD;
                 }
-                case NativeCombat.RANKED_STATUS_QUEUED -> {
-                    text = Lang.tr("En attente de vérification");
-                    how = Lang.tr("Il comptera dès que le serveur répondra");
+                case NativeCombat.RANKED_STATUS_UNREACHABLE -> {
+                    text = Lang.tr("Le serveur n'a pas répondu : le duel ne compte pas");
+                    how = Lang.tr("Le classement est vérifié par le serveur");
                     tone = UiTheme.TEXT_SECONDARY;
                 }
                 case NativeCombat.RANKED_STATUS_NO_ACCOUNT -> {

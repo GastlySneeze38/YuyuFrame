@@ -175,13 +175,11 @@ public final class NativeCombat {
     public static final int RANKED_STATUS_VERIFIED = 1;
     /** Le serveur a trouvé autre chose : le duel ne compte pas. */
     public static final int RANKED_STATUS_REJECTED = 2;
-    /** Pas de réponse : le duel attend et partira plus tard. */
-    public static final int RANKED_STATUS_QUEUED = 3;
+    /** Le serveur n'a pas répondu : le duel ne compte pas. */
+    public static final int RANKED_STATUS_UNREACHABLE = 3;
     /** Pas de compte YuyuFrame connecté. */
     public static final int RANKED_STATUS_NO_ACCOUNT = 4;
     public static final int RANKED_STATUS_CASUAL = 5;
-    /** L'API ne connaît pas encore le classement vérifié : le classement local d'avant. */
-    public static final int RANKED_STATUS_LEGACY = 6;
     /** Serveur de jeu en mode hors ligne : identité non prouvée. */
     public static final int RANKED_STATUS_OFFLINE_SERVER = 7;
 
