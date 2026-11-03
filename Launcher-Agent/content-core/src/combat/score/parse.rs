@@ -151,6 +151,13 @@ pub struct Duel {
     /// `nodamage`). Comme les critiques, rattachés au coup confirmé du même
     /// tick, pas au joueur le plus proche.
     pub attack_sounds: Vec<(u64, String)>,
+    /// Le serveur n'a envoyé aucun type de dégât `mace_smash` : les smashs
+    /// ont été reconnus à la règle du jeu ([`infer_smashes`]).
+    pub smashes_inferred: bool,
+    /// Le serveur n'envoie pas (ou presque pas) les sons des coups —
+    /// critiques, bouclier, charge : leur absence ne dit alors rien
+    /// ([`Duel::sees_crits`], [`sounds_missing`]).
+    pub sounds_missing: bool,
     /// Objets que notre joueur a utilisés : (tick, identifiant).
     pub uses: Vec<(u64, String)>,
     /// L'équipement de chacun, à chaque changement.
@@ -183,14 +190,17 @@ impl Duel {
         self.version >= 2
     }
 
-    /// Le journal porte-t-il les sons des coups critiques (version 3) ?
+    /// Le journal porte-t-il les sons des coups critiques (version 3), et le
+    /// serveur les envoie-t-il ? Sans eux, un coup n'est ni « critique » ni
+    /// « pas critique » : on ne sait pas.
     pub fn sees_crits(&self) -> bool {
-        self.version >= 3
+        self.version >= 3 && !self.sounds_missing
     }
 
-    /// Le journal porte-t-il les sons de charge et de sprint d'un coup (version 4) ?
+    /// Le journal porte-t-il les sons de charge et de sprint d'un coup
+    /// (version 4), et le serveur les envoie-t-il ?
     pub fn sees_attack_sounds(&self) -> bool {
-        self.version >= 4
+        self.version >= 4 && !self.sounds_missing
     }
 }
 
@@ -294,6 +304,8 @@ pub fn parse(text: &str) -> Option<Duel> {
         shield_cooldowns: Vec::new(),
         crits: Vec::new(),
         attack_sounds: Vec::new(),
+        smashes_inferred: false,
+        sounds_missing: false,
         uses: Vec::new(),
         my_gear: Vec::new(),
         foe_gear: Vec::new(),
@@ -428,7 +440,96 @@ pub fn parse(text: &str) -> Option<Duel> {
     // Un tri stable : deux lignes du même tick gardent l'ordre du fichier, la dernière est la bonne.
     duel.my_gear.sort_by_key(|g| g.t);
     duel.foe_gear.sort_by_key(|g| g.t);
+    duel.sounds_missing = sounds_missing(&duel);
+    if duel.mode == Mode::Mace {
+        infer_smashes(&mut duel);
+    }
     Some(duel)
+}
+
+// --- Les serveurs qui n'envoient pas tout --------------------------------
+//
+// Vu le 2026-11-03 sur 584 duels partagés d'un même serveur (26.1.2 et
+// 26.3) : aucun type de dégât `mace_smash` (le coup de masse arrive en
+// `player_attack`), aucune recharge d'objet, presque aucun son de coup. Les
+// autres serveurs en envoient 1 à 4 smashs, 13 à 37 recharges et 5 à 25 sons
+// par duel. Sans ce qui suit, les smashs réussis n'y existaient pas : la
+// qualité du smash tombait à −5 écarts DES DEUX CÔTÉS, et la note moyenne à
+// 90 sur 500.
+
+/// La chute au-delà de laquelle un coup de masse est un smash
+/// (`MaceItem.canSmashAttack` : `fallDistance > 1.5`, hors élytre).
+const SMASH_MIN_FALL: f64 = 1.5;
+/// Du clic au paquet de dégâts, ping compris : la chute se lit sur ces
+/// ticks-là (le smash la remet à zéro juste après).
+const SMASH_WINDOW_TICKS: u64 = 6;
+/// Retard de l'équipement de l'adversaire sur son coup.
+const FOE_GEAR_LAG_TICKS: u64 = 3;
+/// Assez de coups pour juger qu'un serveur se tait…
+const MUTE_MIN_HITS: usize = 15;
+/// … quand moins d'un coup sur vingt a fait entendre un son (critique,
+/// bouclier, charge). Un serveur qui les envoie en fait entendre un sur
+/// sept au moins, même en épée sans saut.
+const MUTE_MAX_RATIO: f64 = 0.05;
+
+/// Le serveur n'envoie pas les sons des coups.
+fn sounds_missing(duel: &Duel) -> bool {
+    let hits = duel.hits.iter().filter(|h| h.kind == "player_attack" || h.kind == "mace_smash").count();
+    let heard = duel.crits.len() + duel.shield_sounds.len() + duel.attack_sounds.len();
+    hits >= MUTE_MIN_HITS && (heard as f64) < MUTE_MAX_RATIO * hits as f64
+}
+
+/// Sur un serveur qui n'envoie jamais `mace_smash`, un coup est un smash à
+/// la règle du jeu : masse en main et plus de 1,5 bloc de chute au coup. La
+/// chute est celle que lisent les familles : la nôtre telle que le jeu la
+/// compte, celle de l'adversaire depuis son dernier sommet.
+pub(super) fn infer_smashes(duel: &mut Duel) {
+    if duel.hits.iter().any(|h| h.kind == "mace_smash") {
+        return;
+    }
+    let mine = super::features::falls(&duel.samples, true);
+    let theirs = super::features::falls(&duel.samples, false);
+    let fall_before = |falls: &[(u64, f64)], t: u64| {
+        let from = t.saturating_sub(SMASH_WINDOW_TICKS);
+        falls.iter().filter(|(ft, _)| *ft >= from && *ft <= t).map(|(_, f)| *f).fold(0.0, f64::max)
+    };
+    let mut any = false;
+    for i in 0..duel.hits.len() {
+        let (t, by_me) = (duel.hits[i].t, duel.hits[i].by_me);
+        if duel.hits[i].kind != "player_attack" {
+            continue;
+        }
+        // Le clic s'il est connu (version 2) : son objet, et sa chute — le
+        // jeu juge le smash au clic. Sinon l'équipement, et la chute de la fenêtre.
+        let click = duel.attacks.iter().rev().find(|a| a.on_foe && a.t <= t && t - a.t <= SMASH_WINDOW_TICKS);
+        let held = if by_me {
+            click.map(|a| a.item.clone()).or_else(|| gear_at(&duel.my_gear, t).map(|g| g.item(SLOT_HAND).to_string()))
+        } else {
+            // L'équipement de l'adversaire arrive APRÈS le coup qu'il a
+            // permis : sur les vrais `mace_smash` du serveur témoin, la masse
+            // s'affiche au tick du coup ou 2 ticks plus tard (318 sur 346).
+            let later = duel.foe_gear.iter().any(|g| g.t > t && g.t <= t + FOE_GEAR_LAG_TICKS && g.item(SLOT_HAND) == "mace");
+            if later {
+                Some("mace".to_string())
+            } else {
+                gear_at(&duel.foe_gear, t).map(|g| g.item(SLOT_HAND).to_string())
+            }
+        };
+        if held.as_deref() != Some("mace") {
+            continue;
+        }
+        let fall = match (by_me, click) {
+            // La chute du dernier tick relevé avant le clic.
+            (true, Some(a)) => mine.iter().rev().find(|(ft, _)| *ft <= a.t).map(|(_, f)| *f).unwrap_or(0.0),
+            (true, None) => fall_before(&mine, t),
+            (false, _) => fall_before(&theirs, t),
+        };
+        if fall > SMASH_MIN_FALL {
+            duel.hits[i].smash = true;
+            any = true;
+        }
+    }
+    duel.smashes_inferred = any;
 }
 
 #[cfg(test)]

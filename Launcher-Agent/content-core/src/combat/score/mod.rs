@@ -32,7 +32,11 @@ pub use rating::Prior;
 // Version 8 (2026-10-22) : les familles de l'épée.
 // Version 9 (2026-10-23) : un clic droit avec l'épée ne fait plus sortir un
 // duel du mode épée.
-pub const EXTRACTOR_VERSION: u32 = 9;
+// Version 10 (2026-11-03) : un serveur qui n'envoie pas `mace_smash` voit ses
+// smashs reconnus à la règle du jeu (masse en main, chute > 1,5), et un
+// serveur qui n'envoie pas les sons des coups ne fait plus juger les coups
+// « sans critique » (`parse::infer_smashes`, `parse::sounds_missing`).
+pub const EXTRACTOR_VERSION: u32 = 10;
 
 /// Le décompte des opportunités d'un joueur.
 #[derive(Debug, Serialize)]

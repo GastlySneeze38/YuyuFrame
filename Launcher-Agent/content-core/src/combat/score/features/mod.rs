@@ -21,6 +21,15 @@ mod strike;
 mod sword;
 mod views;
 
+/// La chute de l'un des deux joueurs à chaque tick relevé, `(tick, chute)` :
+/// la nôtre telle que le jeu la compte, celle de l'adversaire reconstruite
+/// depuis son dernier sommet — la même que lisent les familles (`views`).
+/// Sert au parseur pour reconnaître un smash quand le serveur n'envoie pas
+/// le type de dégât `mace_smash`.
+pub(super) fn falls(samples: &[super::parse::Sample], mine: bool) -> Vec<(u64, f64)> {
+    views::views(samples, mine).iter().map(|v| (v.t, v.fall)).collect()
+}
+
 pub use detail::Detail;
 pub use mace::{BugUse, Detection, Opportunity, Smash, Split};
 pub use measure::{Action, Measure};

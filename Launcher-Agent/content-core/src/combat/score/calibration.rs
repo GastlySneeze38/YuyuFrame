@@ -291,6 +291,51 @@ fn load_duels(matches: &str) -> (Vec<(String, parse::Duel)>, usize) {
     (out, skipped)
 }
 
+/// La déduction des smashs (`parse::infer_smashes`) mise à l'épreuve là où
+/// la vérité est connue : sur les duels d'un serveur qui envoie
+/// `mace_smash`, on cache ce type de dégât, on laisse la déduction faire, et
+/// on compare coup par coup.
+///
+/// ```text
+/// YF_MATCHES=<dossier> cargo test --lib inference_des_smashs -- --ignored --nocapture
+/// ```
+#[test]
+#[ignore]
+fn inference_des_smashs() {
+    let matches = std::env::var("YF_MATCHES").expect("YF_MATCHES : le dossier des journaux ou des exports");
+    let (duels, _) = load_duels(&matches);
+    // (vrais smashs trouvés, vrais smashs manqués, coups pris à tort), par côté.
+    let mut tally = [[0usize; 3]; 2];
+    let mut checked = 0;
+    for (_, mut duel) in duels {
+        if duel.mode != parse::Mode::Mace || !duel.hits.iter().any(|h| h.kind == "mace_smash") {
+            continue;
+        }
+        checked += 1;
+        let truth: Vec<bool> = duel.hits.iter().map(|h| h.smash).collect();
+        for h in &mut duel.hits {
+            if h.kind == "mace_smash" {
+                h.kind = "player_attack".into();
+            }
+            h.smash = false;
+        }
+        parse::infer_smashes(&mut duel);
+        for (h, real) in duel.hits.iter().zip(truth) {
+            let side = &mut tally[usize::from(!h.by_me)];
+            match (real, h.smash) {
+                (true, true) => side[0] += 1,
+                (true, false) => side[1] += 1,
+                (false, true) => side[2] += 1,
+                _ => {}
+            }
+        }
+    }
+    for (name, [found, missed, wrong]) in ["moi", "adversaire"].iter().zip(tally) {
+        println!("{name} : {found} trouvés, {missed} manqués, {wrong} pris à tort");
+    }
+    println!("{checked} duels à la masse vérifiés");
+}
+
 /// Le relevé.
 #[test]
 #[ignore]
