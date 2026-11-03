@@ -913,6 +913,8 @@ export const api = {
     /** Demander à un ami de me montrer son serveur (mon « Rejoindre » est grisé). */
     requestServer: (id: string) => invoke<void>('friends_request_server', { id }),
     invite: (id: string) => invoke<void>('friends_invite', { id }),
+    /** Le serveur public où je joue (annoncé par le jeu), `null` sinon. */
+    myServer: () => invoke<string | null>('friends_my_server'),
     declineInvite: (invite: string) => invoke<void>('friends_decline_invite', { invite }),
     /** Relire une invitation (ouverte depuis son message privé Discord). */
     getInvite: (invite: string) => invoke<ApiReceivedInvite>('friends_get_invite', { invite }),

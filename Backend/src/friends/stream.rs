@@ -122,6 +122,8 @@ async fn listen(state: &SharedState, app: &tauri::AppHandle, client: &reqwest::C
                 *retry = FIRST_RETRY;
             }
             if let Some(payload) = payload(&event, &data) {
+                // La liste gardée pour le jeu ne vaut plus (`friends::current_list`).
+                super::mark_stale();
                 // Notification Windows d'abord : l'interface peut ne pas exister
                 // (fenêtre fermée pendant une partie).
                 super::notify::on_event(app, &payload);

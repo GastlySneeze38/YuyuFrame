@@ -395,9 +395,11 @@ async fn answer(ctx: &Context, question: &str) -> String {
                 Err(e) => error(&e.message),
             },
         },
+        // Redemandée toutes les 2 s par le jeu : servie depuis la liste gardée
+        // par le launcher, rechargée quand le flux temps réel signale un changement.
         "friends2" => match demo_friends() {
             Some(demo) => friends_line_v2(&demo),
-            None => match crate::server::get(&ctx.state, "/friends", &[]).await {
+            None => match crate::friends::current_list(&ctx.state).await {
                 Ok(list) => friends_line_v2(&list),
                 Err(e) => error(&e.message),
             },

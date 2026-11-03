@@ -37,6 +37,7 @@ export function FriendProfile({ friend, onDone }: { friend: Friend; onDone: () =
   const t = useT()
   const language = useStore((s) => s.language)
   const gameRunning = useStore((s) => s.gameRunning)
+  const onPublicServer = useOnPublicServer(gameRunning)
   const [joining, setJoining] = useState(false)
   const navigate = useNavigate()
   const [profile, setProfile] = useState<PublicProfile | null>(null)
@@ -97,7 +98,7 @@ export function FriendProfile({ friend, onDone }: { friend: Friend; onDone: () =
       {game && !game.server && <AskServer friendId={friend.id} />}
 
       {/* Je joue et il est là : l'inviter sur mon serveur. */}
-      {gameRunning && p.state !== 'offline' && <InviteFriend friendId={friend.id} />}
+      {onPublicServer && p.state !== 'offline' && <InviteFriend friendId={friend.id} />}
 
       {/* Ce qu'il fait, sa vitrine, ses comptes, depuis quand vous êtes amis. */}
       <div className="flex flex-col gap-2 px-4 pb-4 pt-3">
@@ -577,4 +578,23 @@ function MenuItem({ children, onClick, disabled, danger = false, armed = false }
       {children}
     </button>
   )
+}
+
+/**
+ * Suis-je sur un serveur public, celui qu'une invitation enverrait ? Le jeu
+ * l'annonce au launcher (`friends_my_server`) ; relu toutes les 2 s tant
+ * qu'une partie tourne. En solo, au menu ou sur un serveur privé : non.
+ */
+function useOnPublicServer(gameRunning: boolean): boolean {
+  const [server, setServer] = useState<string | null>(null)
+  useEffect(() => {
+    if (!gameRunning) { setServer(null); return }
+    if (isDemo()) { setServer('demo'); return }
+    let alive = true
+    const read = () => api.friends.myServer().then((s) => { if (alive) setServer(s) }).catch(() => {})
+    read()
+    const timer = window.setInterval(read, 2000)
+    return () => { alive = false; window.clearInterval(timer) }
+  }, [gameRunning])
+  return server !== null
 }

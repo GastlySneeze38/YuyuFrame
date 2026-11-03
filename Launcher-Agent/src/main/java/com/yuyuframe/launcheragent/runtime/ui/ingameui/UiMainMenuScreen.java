@@ -2,6 +2,7 @@ package com.yuyuframe.launcheragent.runtime.ui.ingameui;
 
 import com.yuyuframe.launcheragent.runtime.friends.GameFriends;
 import com.yuyuframe.launcheragent.runtime.friends.GameMissions;
+import com.yuyuframe.launcheragent.runtime.presence.PresenceContext;
 import com.yuyuframe.launcheragent.runtime.i18n.Lang;
 import com.yuyuframe.launcheragent.runtime.ui.GlobalUiSettings;
 import com.yuyuframe.launcheragent.runtime.ui.HudConfigStore;
@@ -2055,7 +2056,9 @@ public class UiMainMenuScreen extends UiScreenBase {
             if (!f.server.isEmpty()) lines.add(new String[]{ "secondary", Lang.tr("Serveur") + " : " + f.server });
             if (!f.custom.isEmpty()) lines.add(new String[]{ "secondary", "« " + f.custom + " »" });
             if (!f.online() && f.lastSeen > 0) lines.add(new String[]{ "muted", Lang.tr("Vu") + " " + ago(f.lastSeen) });
-            boolean canInvite = f.online();
+            // Inviter n'a de sens que sur un serveur public : en solo, au
+            // menu ou sur un serveur privé, il n'y a rien à rejoindre.
+            boolean canInvite = f.online() && PresenceContext.onPublicServer();
 
             float headS = px(58f), lineH = px(20f), buttonH = px(36f);
             float bh = pad + headS + px(12f) + lines.size() * lineH + (canInvite ? px(10f) + buttonH : 0f) + pad;

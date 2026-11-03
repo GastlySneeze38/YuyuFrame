@@ -90,6 +90,12 @@ pub fn set_game(instance_id: &str, activity: GameActivity) {
 }
 
 /// La partie s'arrête : ce qu'elle avait annoncé disparaît avec elle.
+/// Le serveur annoncé par une partie en cours (déjà filtré par le jeu : jamais
+/// une machine locale ni un réseau privé), ou rien.
+pub fn current_server() -> Option<String> {
+    games().as_ref()?.values().find_map(|g| g.server.clone())
+}
+
 pub fn clear_game(instance_id: &str) {
     if let Some(map) = games().as_mut() {
         map.remove(instance_id);

@@ -42,6 +42,18 @@ public final class PresenceContext {
 
     private static long lastRun;
     private static boolean errorLogged;
+    /** Le serveur public où l'on joue (forme tapée), {@code null} sinon. */
+    private static volatile String publicServer;
+
+    /**
+     * Joue-t-on sur un serveur public, celui qu'une invitation d'ami
+     * enverrait ? Faux en solo, au menu, sur un serveur local ou privé, et
+     * quand le réglage « Serveurs Microsoft uniquement » cache l'adresse —
+     * le launcher n'aurait alors aucun serveur à donner.
+     */
+    public static boolean onPublicServer() {
+        return publicServer != null;
+    }
 
     public static void tick() {
         long now = System.nanoTime();
@@ -70,6 +82,7 @@ public final class PresenceContext {
             host = sources[0] instanceof String ? typedForm((String) sources[0]) : null;
             ip = sources[1] instanceof InetSocketAddress ? joinedForm((InetSocketAddress) sources[1]) : null;
         }
+        publicServer = host;
         UUID id = null;
         String name = null;
         if (host != null || ip != null) {

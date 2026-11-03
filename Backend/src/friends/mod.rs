@@ -18,6 +18,10 @@ pub mod notify;
 pub mod presence;
 pub mod stream;
 
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
+
 use serde_json::{json, Value};
 
 use crate::server as api;
@@ -34,7 +38,52 @@ fn done(result: api::error::ApiResult<Value>) -> CmdResult {
 pub async fn friends_list(state: tauri::State<'_, SharedState>) -> CmdResult {
     let list = done(api::get(&state, "/friends", &[]).await)?;
     notify::remember_list(&list);
+    remember(&list);
     Ok(list)
+}
+
+// ── La liste gardée pour le jeu ─────────────────────────────────────────
+//
+// Le menu en jeu redemande la liste toutes les 2 s (`game_link`, `friends2`).
+// Elle est servie d'ici, sans appel au serveur, tant que le flux temps réel
+// (`stream`) n'a rien signalé : un événement la rend périmée, et la demande
+// suivante la recharge. Filet si le flux est coupé : 15 s au plus.
+
+/// Âge au-delà duquel la liste est rechargée même sans événement.
+const LIST_MAX_AGE: Duration = Duration::from_secs(15);
+
+static LIST: Mutex<Option<(Value, Instant)>> = Mutex::new(None);
+static STALE: AtomicBool = AtomicBool::new(true);
+
+fn remember(list: &Value) {
+    *LIST.lock().unwrap_or_else(|p| p.into_inner()) = Some((list.clone(), Instant::now()));
+    STALE.store(false, Ordering::Relaxed);
+}
+
+/// Un événement du flux (présence d'un ami, nouvel ami…) : la liste gardée ne vaut plus.
+pub fn mark_stale() {
+    STALE.store(true, Ordering::Relaxed);
+}
+
+/// La liste des amis, gardée ou rechargée (voir plus haut).
+pub async fn current_list(state: &SharedState) -> api::error::ApiResult<Value> {
+    if !STALE.load(Ordering::Relaxed) {
+        if let Some((list, at)) = LIST.lock().unwrap_or_else(|p| p.into_inner()).as_ref() {
+            if at.elapsed() < LIST_MAX_AGE {
+                return Ok(list.clone());
+            }
+        }
+    }
+    let list = api::get(state, "/friends", &[]).await?;
+    remember(&list);
+    Ok(list)
+}
+
+/// Le serveur public où je joue en ce moment (celui qu'une invitation
+/// enverrait), ou rien : en solo, au menu, sur un serveur privé.
+#[tauri::command]
+pub fn friends_my_server() -> Option<String> {
+    presence::current_server()
 }
 
 /// Demander à un ami de me montrer son serveur (mon « Rejoindre » est grisé).

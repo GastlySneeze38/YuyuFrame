@@ -92,8 +92,10 @@ public final class GameFriends {
 
     /** Champs par ami dans la réponse {@code friends2}. */
     private static final int FIELDS = 12;
-    /** La liste est redemandée au plus toutes les 20 s tant qu'elle est affichée. */
-    private static final long REFRESH_MS = 20_000L;
+    /** La liste est redemandée toutes les 2 s tant qu'elle est affichée : le
+     *  launcher la sert de sa mémoire, et ne la recharge au serveur que quand
+     *  un ami a changé (flux temps réel). */
+    private static final long REFRESH_MS = 2_000L;
     /** Durée d'affichage du résultat d'une invitation. */
     private static final long NOTICE_MS = 4_000L;
 

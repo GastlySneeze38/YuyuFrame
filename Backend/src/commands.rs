@@ -51,6 +51,7 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         crate::server::pass::content_asset,
         // Amis : liste, demandes, blocages, statut, visibilité.
         crate::friends::friends_list,
+        crate::friends::friends_my_server,
         crate::friends::friends_lookup,
         crate::friends::friends_request,
         crate::friends::friends_regenerate_code,
