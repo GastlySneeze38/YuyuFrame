@@ -41,6 +41,15 @@ export function loaderColor(loader: string): string {
 }
 
 /**
+ * L'instance a-t-elle une mémoire réservée à montrer ? Pas une instance
+ * Horizon : sans JVM, il n'y a pas de RAM allouée, et sa `ram_mb` (gardée
+ * en base) ne dit rien.
+ */
+export function showsRam(instance: { loader: string }): boolean {
+  return instance.loader !== 'horizon'
+}
+
+/**
  * Pourquoi une configuration JVM ne peut pas être reliée à cette instance,
  * `null` quand elle le peut. Le Rust refuse le même lien
  * (`instance_set_jvm_profile`) ; ceci sert à ne pas le proposer.

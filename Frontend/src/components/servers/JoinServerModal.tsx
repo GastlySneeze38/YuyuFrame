@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ModalShell } from '@/components/ui/ModalShell'
 import { FriendAvatar } from '@/components/friends/FriendBits'
-import { loaderColor } from '@/lib/loader'
+import { loaderColor, showsRam } from '@/lib/loader'
 import { formatRam } from '@/lib/format'
 import { errorMessage } from '@/lib/apiError'
 import { skinOf } from '@/lib/friends'
@@ -188,8 +188,12 @@ export function JoinServerModal({ request, onClose }: { request: JoinRequest; on
                     <span className="text-[10px] font-semibold" style={{ color: loaderColor(inst.loader) }}>{inst.loader}</span>
                     <span className="text-[10px] text-[rgba(255,255,255,0.2)]">·</span>
                     <span className="text-[10px] text-[rgba(255,255,255,0.3)]">{inst.mc_version}</span>
-                    <span className="text-[10px] text-[rgba(255,255,255,0.2)]">·</span>
-                    <span className="text-[10px] text-[rgba(255,255,255,0.3)]">{formatRam(inst.ram_mb)}</span>
+                    {showsRam(inst) && (
+                      <>
+                        <span className="text-[10px] text-[rgba(255,255,255,0.2)]">·</span>
+                        <span className="text-[10px] text-[rgba(255,255,255,0.3)]">{formatRam(inst.ram_mb)}</span>
+                      </>
+                    )}
                   </div>
                 </div>
                 <span className="flex-shrink-0 rounded-xl bg-[#4B3FCF] px-3 py-1.5 text-[11px] font-semibold text-white">

@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import type { Instance } from '@/types'
-import { loaderColor } from '@/lib/loader'
+import { loaderColor, showsRam } from '@/lib/loader'
 import { formatRam } from '@/lib/format'
 import { ModalShell } from '@/components/ui/ModalShell'
 import { useT } from '@/i18n'
@@ -55,8 +55,12 @@ export function InstanceSwitchModal({
           <span className="text-[10px] text-[rgba(255,255,255,0.35)]">{inst.mc_version}</span>
           <span className="text-[10px] text-[rgba(255,255,255,0.2)]">·</span>
           <span className="text-[10px] font-semibold" style={{ color: loaderColor(inst.loader) }}>{inst.loader}</span>
-          <span className="text-[10px] text-[rgba(255,255,255,0.2)]">·</span>
-          <span className="text-[10px] text-[rgba(255,255,255,0.3)]">{formatRam(inst.ram_mb)}</span>
+          {showsRam(inst) && (
+            <>
+              <span className="text-[10px] text-[rgba(255,255,255,0.2)]">·</span>
+              <span className="text-[10px] text-[rgba(255,255,255,0.3)]">{formatRam(inst.ram_mb)}</span>
+            </>
+          )}
         </div>
 
         {inst.description && (

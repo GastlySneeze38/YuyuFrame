@@ -2,7 +2,7 @@ import { memo, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { Instance } from '@/types'
-import { loaderColor } from '@/lib/loader'
+import { loaderColor, showsRam } from '@/lib/loader'
 import { formatRam } from '@/lib/format'
 import { useT } from '@/i18n'
 import { SNAP, listItemVariants } from '@/lib/motion'
@@ -275,8 +275,8 @@ export const InstanceCard = memo(function InstanceCard({
             {[
               <span key="v" className="text-[11px] text-[rgba(255,255,255,0.3)]">{instance.mc_version}</span>,
               <span key="l" className="text-[10px] font-semibold" style={{ color: loaderColor(instance.loader) }}>{instance.loader}</span>,
-              <span key="r" className="text-[10px] text-[rgba(255,255,255,0.2)]">{formatRam(instance.ram_mb)}</span>,
-            ].map((child, i) => (
+              showsRam(instance) && <span key="r" className="text-[10px] text-[rgba(255,255,255,0.2)]">{formatRam(instance.ram_mb)}</span>,
+            ].filter(Boolean).map((child, i) => (
               <motion.span
                 key={i}
                 variants={{ initial: { opacity: 0, y: 4 }, animate: { opacity: 1, y: 0 } }}
