@@ -12,6 +12,7 @@ import com.yuyuframe.launcheragent.apigraphic.value.UiTheme;
 import com.yuyuframe.launcheragent.apimixin.HookPoint;
 import com.yuyuframe.launcheragent.runtime.combat.CombatTracker;
 import com.yuyuframe.launcheragent.runtime.combat.NativeCombat;
+import com.yuyuframe.launcheragent.runtime.friends.GameMissions;
 import com.yuyuframe.launcheragent.runtime.i18n.Lang;
 import com.yuyuframe.launcheragent.runtime.ui.HudElementOwner;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
@@ -93,7 +94,16 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
     private final PvpCallouts callouts = new PvpCallouts();
     private final HudElement calloutElement = new HudElement("pvp-callouts", "Mots des bons coups", HudAnchor.TOP_CENTER, 0f, 42f,
         (HudElement.CustomRenderer) callouts);
-    private final Summary summary = new Summary(callouts);
+    /**
+     * « Mission accomplie » : son propre élément du HUD (déplaçable,
+     * redimensionnable), placé d'office juste à droite du panneau de fin de
+     * duel — l'écart du centre au milieu de l'écran : la moitié du panneau
+     * (320) et sa marge, un petit écart, la moitié de la bannière et sa marge.
+     */
+    private final PvpMissionBanner missionBanner = new PvpMissionBanner();
+    private final HudElement missionElement = new HudElement("pvp-mission-banner", "Mission accomplie", HudAnchor.TOP_CENTER,
+        252f, 36f, (HudElement.CustomRenderer) missionBanner);
+    private final Summary summary = new Summary(callouts, missionBanner);
     private final HudElement element = new HudElement("pvp-score", "Score PvP", HudAnchor.TOP_CENTER, 0f, 36f,
         (HudElement.CustomRenderer) summary);
     /** L'annonce de début de duel et du changement compétitif / casual. */
@@ -156,7 +166,7 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
     /** Les trois éléments, pour que chacun garde sa place d'une partie à l'autre. */
     @Override
     public java.util.List<HudElement> hudElements() {
-        return java.util.List.of(element, bannerElement, calloutElement);
+        return java.util.List.of(element, bannerElement, calloutElement, missionElement);
     }
 
     /**
@@ -253,12 +263,14 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
             HudRegistry.register(element);
             HudRegistry.register(bannerElement);
             HudRegistry.register(calloutElement);
+            HudRegistry.register(missionElement);
             NativeCombat.showRank(showRank);
             refreshRanks();
         } else {
             HudRegistry.unregister(element);
             HudRegistry.unregister(bannerElement);
             HudRegistry.unregister(calloutElement);
+            HudRegistry.unregister(missionElement);
         }
     }
 
@@ -333,6 +345,8 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
             lastKits = kits;
             summary.hide();
             announce(now);
+            // L'état des missions d'avant le duel, pour reconnaître celles qu'il fera finir.
+            GameMissions.refreshIfOlderThan(MISSIONS_BASELINE_MS);
         }
         // Un duel vient de s'ouvrir (premier échange) : le panneau s'efface
         // s'il était encore là — serveur qui n'équipe pas, ou duel enchaîné —,
@@ -342,6 +356,7 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
             summary.hide();
             callouts.duelStarted();
             if (now - announcedAtNanos > ANNOUNCE_VALID_NANOS) announce(now);
+            GameMissions.refreshIfOlderThan(MISSIONS_BASELINE_MS);
         }
         wasRecording = recording;
 
@@ -352,6 +367,8 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
         if (number != lastReport) {
             lastReport = number;
             summary.show(incoming, number);
+            // Un duel que le classement ne vérifie pas (casual) : relire un peu plus tard.
+            GameMissions.refreshIn(MISSIONS_LATE_MS);
             if (callouts.takeRecordsDirty()) com.yuyuframe.launcheragent.runtime.ui.HudConfigStore.save();
         }
         int ranked = NativeCombat.ranked(incomingRanked);
@@ -366,11 +383,28 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
                 callouts.add(PvpCallouts.GIANT, 4, 0);
             }
             refreshRanks();
+            // Le serveur vient de compter le duel : ses missions aussi. Une
+            // seconde lecture un peu après, en filet.
+            GameMissions.refreshIn(0L);
+            GameMissions.refreshIn(MISSIONS_LATE_MS);
         }
         summary.tickSounds();
 
+        // Les missions tout juste finies : annoncées à côté du panneau de ce
+        // duel. Sans panneau (rien joué depuis), on ne les annonce pas — elles
+        // ont été finies ailleurs, ou l'écran Missions l'a déjà dit.
+        for (GameMissions.Mission done = GameMissions.takeCompleted(); done != null; done = GameMissions.takeCompleted()) {
+            if (summary.received) missionBanner.offer(done);
+        }
+        missionBanner.tick(summary.received && !summary.ceremonyPending() && !summary.inCeremony());
+
         pollKey();
     }
+
+    /** À l'ouverture d'un duel, les missions sont relues si la dernière lecture a plus d'une minute. */
+    private static final long MISSIONS_BASELINE_MS = 60_000L;
+    /** Après un duel, la lecture de filet. */
+    private static final long MISSIONS_LATE_MS = 8_000L;
 
     /** Une victoire qui vaut au moins ce multiplicateur d'adversaire (le sien à 350, soit +100 sur la moyenne) : un géant tombé. */
     private static final double GIANT_FOE_FACTOR = 1.4;
@@ -437,9 +471,12 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
 
         /** Les mots du duel, pour son meilleur moment. */
         private final PvpCallouts callouts;
+        /** Les missions que ce duel a fait finir, dessinées à droite du panneau. */
+        private final PvpMissionBanner missions;
 
-        Summary(PvpCallouts callouts) {
+        Summary(PvpCallouts callouts, PvpMissionBanner missions) {
             this.callouts = callouts;
+            this.missions = missions;
         }
 
         /** Le verdict du duel affiché : 1 victoire, 2 défaite, 3 nul ; 0 sans duel. */
@@ -642,6 +679,7 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
         void hide() {
             received = false;
             ceremony = false;
+            missions.clear();
         }
 
         /** Noté, avec un verdict, à la masse ou à l'épée : de quoi compter au classement — ou y avoir compté. */
@@ -668,7 +706,8 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
         /** En jeu, seulement les secondes qui suivent un duel. L'éditeur de HUD l'affiche toujours (HudElement.hasContent). */
         @Override
         public boolean hasContent() {
-            return received && System.nanoTime() - shownAtNanos < SHOWN_NANOS;
+            // Une mission annoncée garde le panneau le temps de sa bannière.
+            return received && (System.nanoTime() - shownAtNanos < SHOWN_NANOS || missions.active());
         }
 
         /** La carte de verre, sauf pendant la cérémonie : le panneau a quitté sa place, il dessine son propre fond au centre. */
