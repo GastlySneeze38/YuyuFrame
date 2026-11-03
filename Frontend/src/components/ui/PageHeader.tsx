@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BackArrowIcon } from './icons/BackArrowIcon'
-import { HeaderAccountBadge } from './HeaderAccountBadge'
+import { HeaderFriendsShortcut } from './HeaderFriendsShortcut'
 
 // Avant ce fichier, ce bouton retour (icône + hover) était copié-collé à
 // l'identique dans 9 pages (Settings, Server, Stats, Instances, Mods, Sync,
@@ -34,7 +34,7 @@ export function PageHeader({ px = 6, backTo, children }: { px?: number; backTo?:
     >
       <PageBackButton to={backTo} />
       {children}
-      <HeaderAccountBadge />
+      <HeaderFriendsShortcut />
     </div>
   )
 }

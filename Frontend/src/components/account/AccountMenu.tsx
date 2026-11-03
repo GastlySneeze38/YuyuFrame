@@ -1,21 +1,27 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
 import type { YuyuPlan } from '@/stores/useStore'
 import { showApiError } from '@/stores/useErrorToast'
 import { PlanBadge } from '@/components/plans/PlanBadge'
-import { ButtonSpinner } from './ButtonSpinner'
+import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { useT } from '@/i18n'
 
-/** Pastille compte + plan affichée à droite de `PageHeader` sur toutes les
- * pages sauf Home (qui a déjà sa propre zone compte dans sa nav) — même
- * esprit que le bouton compte du site web (avatar + pseudo, menu déroulant
- * pour rafraîchir/se déconnecter), remplace l'ancien bloc vertical
- * (badge + lien + lien empilés) qui prenait toute la hauteur du header. */
-export function HeaderAccountBadge() {
+/** Le fond de l'initiale selon le plan : gris en gratuit, violet en Premium, ambre en Ultimate (les couleurs de `PlanBadge`). */
+const PLAN_COLORS: Record<'free' | 'premium' | 'ultimate', string> = {
+  free: 'bg-[rgba(255,255,255,0.12)] text-[rgba(255,255,255,0.75)] ring-[rgba(255,255,255,0.15)]',
+  premium: 'bg-[#4b3fcf] text-white ring-[rgba(129,140,248,0.55)]',
+  ultimate: 'bg-[#d97706] text-white ring-[rgba(245,158,11,0.6)]',
+}
+
+/**
+ * Le compte YuyuFrame, dans l'en-tête du panneau Amis : l'initiale du
+ * pseudo sur la couleur du plan. Au clic, le pseudo et le plan, puis
+ * rafraîchir le plan et se déconnecter. Rien sans compte connecté (le
+ * panneau a déjà de quoi se connecter).
+ */
+export function AccountMenu() {
   const t = useT()
-  const navigate = useNavigate()
   const { yuyuUsername, isPremium, isUltimate, setYuyuPlan, clearYuyuSession } = useStore()
   const [open, setOpen] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -30,18 +36,8 @@ export function HeaderAccountBadge() {
     return () => document.removeEventListener('mousedown', onClickOutside)
   }, [open])
 
-  if (!yuyuUsername) {
-    return (
-      <button
-        onClick={() => navigate('/yuyu')}
-        className="ml-auto rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-all duration-150 bg-[rgba(75,63,207,0.18)] border border-[rgba(75,63,207,0.35)] text-[rgba(180,170,255,0.9)] hover:bg-[rgba(75,63,207,0.3)]"
-      >
-        {t('plans.loginCta')}
-      </button>
-    )
-  }
-
-  const effectivePlan = isUltimate() ? 'ultimate' : isPremium() ? 'premium' : 'free'
+  if (!yuyuUsername) return null
+  const plan = isUltimate() ? 'ultimate' : isPremium() ? 'premium' : 'free'
 
   const handleRefresh = async () => {
     setRefreshing(true)
@@ -56,30 +52,31 @@ export function HeaderAccountBadge() {
   }
 
   const handleLogout = async () => {
-    // yuyu_logout est purement local (JWT stateless, rien à révoquer côté
-    // serveur) — vide la session locale (DB + mémoire) côté Backend.
+    // Vide la session locale (base + coffre + mémoire) côté Backend.
     await api.yuyu.logout().catch(() => {})
     clearYuyuSession()
     setOpen(false)
   }
 
   return (
-    <div ref={ref} className="relative ml-auto flex-shrink-0">
+    <div ref={ref} className="relative flex-shrink-0">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 rounded-lg border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] pl-1.5 pr-2 py-1 transition-all duration-150 hover:border-[rgba(255,255,255,0.18)] hover:bg-[rgba(255,255,255,0.05)]"
+        title={yuyuUsername}
+        aria-label={yuyuUsername}
+        aria-expanded={open}
+        className={`flex h-7 w-7 items-center justify-center rounded-full text-[12px] font-black ring-2 transition-transform duration-150 hover:scale-105 ${PLAN_COLORS[plan]}`}
       >
-        <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-[rgba(75,63,207,0.35)] text-[9px] font-bold text-[#c4b8ff]">
-          {yuyuUsername.charAt(0).toUpperCase()}
-        </span>
-        <span className="max-w-[90px] truncate text-[11px] font-semibold text-[rgba(255,255,255,0.7)]">
-          {yuyuUsername}
-        </span>
-        <PlanBadge plan={effectivePlan} />
+        {yuyuUsername.charAt(0).toUpperCase()}
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-10 mt-2 w-44 overflow-hidden rounded-xl border border-[rgba(255,255,255,0.1)] bg-[#111118] shadow-xl shadow-black/50">
+        <div className="absolute right-0 top-full z-20 mt-2 w-48 overflow-hidden rounded-xl border border-[rgba(255,255,255,0.1)] bg-[#111118] shadow-xl shadow-black/50">
+          {/* Qui je suis et mon plan. */}
+          <div className="flex items-center gap-2 border-b border-[rgba(255,255,255,0.07)] px-3 py-2.5">
+            <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-white">{yuyuUsername}</span>
+            <PlanBadge plan={plan} />
+          </div>
           <button
             onClick={handleRefresh}
             disabled={refreshing}

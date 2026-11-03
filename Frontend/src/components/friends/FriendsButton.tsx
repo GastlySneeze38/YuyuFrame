@@ -13,8 +13,10 @@ import { FriendsPanel } from './FriendsPanel'
  *
  * `className` : sa forme, quand il fait partie du carré de raccourcis
  * (`SHORTCUT_TILE` de `home/ChallengeShortcuts.tsx`) ; sinon, son bouton seul.
+ * `compact` : la forme de l'en-tête des pages (`PageHeader`), à la place de
+ * l'ancien bouton de compte — le compte est désormais dans le panneau.
  */
-export function FriendsButton({ className }: { className?: string }) {
+export function FriendsButton({ className, compact = false }: { className?: string; compact?: boolean }) {
   const t = useT()
   const [open, setOpen] = useState(false)
   // Un lien d'ami cliqué (`yuyuframe://friend/…`) ouvre le panneau sur l'ajout.
@@ -38,19 +40,21 @@ export function FriendsButton({ className }: { className?: string }) {
         aria-label={t('friends.title')}
         className={
           className ??
-          'relative flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-black/35 px-3 text-white/85 backdrop-blur-[8px] transition-colors hover:border-white/25 hover:text-white'
+          (compact
+            ? 'relative flex h-10 items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3.5 text-white/75 transition-colors hover:border-white/[0.18] hover:bg-white/[0.05] hover:text-white'
+            : 'relative flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-black/35 px-3 text-white/85 backdrop-blur-[8px] transition-colors hover:border-white/25 hover:text-white')
         }
       >
         {/* La pastille verte au coin de l'icône, seulement si quelqu'un est là. */}
         <span className="relative flex">
-          <FriendsIcon className="h-[18px] w-[18px]" />
+          <FriendsIcon className={compact ? 'h-5 w-5' : 'h-[18px] w-[18px]'} />
           {online > 0 && (
             <span className="absolute -bottom-0.5 -right-1 h-2.5 w-2.5 rounded-full bg-[#3ba55d] shadow-[0_0_0_2px_rgba(14,14,20,0.95),0_0_8px_rgba(59,165,93,0.8)]" />
           )}
         </span>
         {/* Dans le carré de raccourcis, il porte son nom comme les autres cases. */}
         {className && <span className="min-w-0 flex-1 truncate text-left text-[12.5px] font-bold">{t('friends.title')}</span>}
-        <span className="shrink-0 text-[13px] font-bold tabular-nums">{online}</span>
+        <span className={`shrink-0 font-bold tabular-nums ${compact ? 'text-[14px]' : 'text-[13px]'}`}>{online}</span>
         {waiting > 0 && (
           <span className="absolute -right-1.5 -top-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-danger px-1 text-[10.5px] font-black text-white shadow-[0_0_0_3px_rgba(10,10,14,0.9)]">
             {waiting}

@@ -9,7 +9,7 @@ import { getPlans } from '@/data/plans'
 import type { PlanMeta } from '@/data/plans'
 import { PlanIcon } from '@/components/plans/PlanIcon'
 import { UpgradeModal } from '@/components/plans/UpgradeModal'
-import { HeaderAccountBadge } from '@/components/ui/HeaderAccountBadge'
+import { HeaderFriendsShortcut } from '@/components/ui/HeaderFriendsShortcut'
 import { BackArrowIcon } from '@/components/ui/icons/BackArrowIcon'
 import { PageGlow } from '@/components/PageGlow'
 import { Reveal } from '@/components/Reveal'
@@ -140,7 +140,7 @@ export default function Plans() {
           {t('plans.back')}
         </button>
         <div className="flex-1" />
-        <HeaderAccountBadge />
+        <HeaderFriendsShortcut />
       </div>
 
       {/* ── Accroche + l'offre mise en avant ──────────────────────────── */}
