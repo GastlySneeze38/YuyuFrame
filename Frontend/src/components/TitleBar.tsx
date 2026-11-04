@@ -2,11 +2,12 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useStore } from '@/stores/useStore'
 import { useT } from '@/i18n'
 
-const win = getCurrentWindow()
-
 export function TitleBar() {
   const t = useT()
   const { username, apiOnline } = useStore()
+  // Pris au rendu et non au chargement du module : dans l'aperçu navigateur,
+  // la fausse fenêtre n'existe qu'une fois le module chargé.
+  const win = getCurrentWindow()
 
   const minimize = () => win.minimize()
   const maximize = () => win.toggleMaximize()

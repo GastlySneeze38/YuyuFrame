@@ -32,6 +32,7 @@ import { showError } from '@/stores/useErrorToast'
 import { AUTH_SYSTEM_VERSION, YUYU_AUTH_VERSION } from '@/config/authVersion'
 import { useTauriEvent } from '@/hooks/useTauriEvent'
 import { parseFriendUrl, parseInviteUrl, parseJoinUrl } from '@/lib/joinLink'
+import { inTauri } from '@/lib/platform'
 
 // Chargées à la demande — évite de tout regrouper dans un seul chunk JS au
 // premier chargement (pages secondaires comme Legal/Information/Stats
@@ -117,7 +118,9 @@ const DevModals = import.meta.env.DEV ? lazy(() => import('@/pages/DevModals')) 
 // temps d'un souffle. Un aplat sombre, lui, se voyait passer.
 const RouteFallback = null
 
-const label = getCurrentWindow().label
+// Lu au chargement du module, avant que l'aperçu navigateur n'ait posé sa
+// fausse fenêtre : hors de Tauri, on est forcément la fenêtre principale.
+const label = inTauri ? getCurrentWindow().label : 'main'
 const isConsoleWindow = label.startsWith('mc-console-')
 
 export default function App() {
