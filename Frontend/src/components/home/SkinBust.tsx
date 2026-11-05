@@ -310,8 +310,13 @@ export function SkinBust({ uuid, localSkin, className = '', onClick, title }: {
   // Steve plutôt qu'un vide pour un compte hors ligne sans skin.
   const source = localSkin ?? (uuid ? `https://mc-heads.net/skin/${uuid}` : null)
 
+  // Le buste est immobile : on ne le dessine que quand quelque chose change
+  // (taille, skin, lumière), jamais en boucle. Voir `renderPaused` plus bas.
   const reframe = useCallback(() => {
-    if (viewerRef.current && boxRef.current) frame(viewerRef.current, boxRef.current)
+    if (viewerRef.current && boxRef.current) {
+      frame(viewerRef.current, boxRef.current)
+      viewerRef.current.render()
+    }
   }, [])
 
   useEffect(() => {
@@ -331,6 +336,11 @@ export function SkinBust({ uuid, localSkin, className = '', onClick, title }: {
       canvas: canvasRef.current,
       width: width || 220,
       height: height || 220,
+      // Pas de boucle de rendu : skinview3d redessine sinon la scène à chaque
+      // image, 60 fois par seconde, pour un buste qui ne bouge pas — le plus
+      // gros poste de l'accueil sur téléphone (batterie, chauffe, défilement
+      // qui saccade). Chaque changement appelle `render()` lui-même.
+      renderPaused: true,
     })
     viewer.background = null
     // Aucun mouvement : le buste reste face à nous, toujours au même endroit.
@@ -353,7 +363,10 @@ export function SkinBust({ uuid, localSkin, className = '', onClick, title }: {
     // `camera.aspect` vaut n'importe quoi et le cadrage serait faux le temps
     // d'une image. L'observateur ci-dessous s'en charge dès que la taille est
     // connue.
-    if (width > 0 && height > 0) frame(viewer, box)
+    if (width > 0 && height > 0) {
+      frame(viewer, box)
+      viewer.render()
+    }
 
     const ro = new ResizeObserver(() => {
       const r = layoutSize(box)
@@ -363,19 +376,12 @@ export function SkinBust({ uuid, localSkin, className = '', onClick, title }: {
         // le cadrage pour y réappliquer l'étirement, en plus de recalculer la
         // largeur visible.
         frame(viewer, box)
+        viewer.render()
       }
     })
     ro.observe(box)
 
-    // Fenêtre masquée : plus personne ne regarde, la boucle de rendu n'a
-    // aucune raison de continuer à tourner sur l'écran le plus ouvert du
-    // launcher.
-    const onVisibility = () => { viewer.renderPaused = document.hidden }
-    document.addEventListener('visibilitychange', onVisibility)
-    onVisibility()
-
     return () => {
-      document.removeEventListener('visibilitychange', onVisibility)
       ro.disconnect()
       viewer.dispose()
       viewerRef.current = null
@@ -386,7 +392,7 @@ export function SkinBust({ uuid, localSkin, className = '', onClick, title }: {
     const viewer = viewerRef.current
     if (!viewer) return
     if (!source) {
-      void loadLatestSkin(viewer, null)
+      void loadLatestSkin(viewer, null).then(() => viewer.render())
       return
     }
     // `auto-detect` distingue les modèles fins (Alex) des classiques d'après

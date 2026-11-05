@@ -825,7 +825,14 @@ export const fr = {
     noOtherServer: 'Aucun autre serveur',
     allServers: 'Tous les serveurs',
     suggestedServer: 'Suggéré',
+    // Accueil du téléphone (src/mobile/MobileHome.tsx).
+    mobile: {
+      switchInstance: "Changer d'instance",
+      manageInstances: 'Gérer les instances',
+      play: 'Jouer',
+    },
     nav: {
+      home: 'Accueil',
       instances: 'Instances',
       settings: 'Réglages',
       sync: 'Sync',

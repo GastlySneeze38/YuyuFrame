@@ -1,5 +1,3 @@
-import { motion } from 'framer-motion'
-
 /**
  * Ligne d'arbres au pied de la bannière d'accueil.
  *
@@ -62,10 +60,11 @@ const TILE_URL = `url("data:image/svg+xml,${encodeURIComponent(TILE)}")`
 
 export function Skyline() {
   return (
-    <motion.div
-      // Le relief respire lentement.
-      animate={{ y: [0, -16, 0] }}
-      transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
+    <div
+      // Le relief respire lentement — en animation CSS (`skyline-breathe`,
+      // index.css) et non avec framer-motion : en boucle infinie, framer
+      // calculait la position en JavaScript à chaque image, pour toujours.
+      // Le CSS tourne hors du fil principal.
       // Hauteur bornée en pixels plutôt qu'en pourcentage de la bannière :
       // le motif garde ainsi une taille lisible même quand la bannière
       // rétrécit, au lieu de se tasser avec elle.
@@ -73,7 +72,7 @@ export function Skyline() {
       // le bas pour qu'elle ne découvre rien en montant — c'était inutile,
       // le dégradé sombre du pied de bannière masque déjà ce vide, et ça
       // rognait le sol au repos tout en amputant le balancement de sa course.
-      className="pointer-events-none absolute inset-x-0 bottom-0 h-[clamp(62px,15vh,124px)]"
+      className="skyline-breathe pointer-events-none absolute inset-x-0 bottom-0 h-[clamp(62px,15vh,124px)]"
       style={{
         backgroundImage: TILE_URL,
         backgroundRepeat: 'repeat-x',

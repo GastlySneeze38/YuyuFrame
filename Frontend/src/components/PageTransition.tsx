@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import type { ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
 import { pageVariants } from '@/lib/motion'
 
@@ -19,13 +19,23 @@ import { pageVariants } from '@/lib/motion'
  * personne ne voyait vraiment puisqu'elle durait 120 ms derrière l'entrée de
  * la suivante.
  */
-export function PageTransition({ children }: { children: ReactNode }) {
+export function PageTransition({ children, instantBetween }: {
+  children: ReactNode
+  /** Écrans entre lesquels on passe sans transition — les onglets du
+   *  téléphone : changer d'onglet est instantané sur iOS et Android. */
+  instantBetween?: string[]
+}) {
   const { pathname } = useLocation()
+  const previous = useRef(pathname)
+  const instant = !!instantBetween
+    && instantBetween.includes(pathname)
+    && instantBetween.includes(previous.current)
+  useEffect(() => { previous.current = pathname }, [pathname])
   return (
     <motion.div
       key={pathname}
       variants={pageVariants}
-      initial="initial"
+      initial={instant ? false : 'initial'}
       animate="animate"
       className="h-full w-full"
     >

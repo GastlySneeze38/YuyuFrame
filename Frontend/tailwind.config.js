@@ -1,6 +1,13 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: ['./src/**/*.{ts,tsx}', './index.html'],
+  // `hover:` ne s'applique qu'avec une souris : `@media (hover: hover) and
+  // (pointer: fine)`. Au doigt, le navigateur simule un survol au premier
+  // toucher et le laisse collé jusqu'au toucher suivant — un bouton restait
+  // éclairci après avoir été touché. Rien ne change avec une souris.
+  future: {
+    hoverOnlyWhenSupported: true,
+  },
   theme: {
     extend: {
       // Le launcher est une fenêtre redimensionnable, pas une page web : sa

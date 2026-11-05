@@ -33,6 +33,8 @@ import { AUTH_SYSTEM_VERSION, YUYU_AUTH_VERSION } from '@/config/authVersion'
 import { useTauriEvent } from '@/hooks/useTauriEvent'
 import { parseFriendUrl, parseInviteUrl, parseJoinUrl } from '@/lib/joinLink'
 import { inTauri } from '@/lib/platform'
+import { useIsMobile } from '@/mobile/useIsMobile'
+import { MobileNav, MOBILE_TABS } from '@/mobile/MobileNav'
 
 // Chargées à la demande — évite de tout regrouper dans un seul chunk JS au
 // premier chargement (pages secondaires comme Legal/Information/Stats
@@ -107,6 +109,9 @@ const JvmProfileEditor = lazy(() => import('@/pages/JvmProfileEditor'))
 const Skins = lazy(() => import('@/pages/Skins'))
 const SkinCatalog = lazy(() => import('@/pages/SkinCatalog'))
 const SkinEditor = lazy(() => import('@/pages/SkinEditor'))
+// Écrans du téléphone (`src/mobile/`), choisis par `useIsMobile`. Seul
+// l'accueil existe pour l'instant ; les autres routes gardent l'écran du PC.
+const MobileHome = lazy(() => import('@/mobile/MobileHome'))
 // Atelier des modales. Le `import()` est DANS la branche de développement,
 // pas seulement la route : écrit dehors, Vite voyait un module importable et
 // en sortait un morceau de JS livré à tout le monde — mort, mais livré.
@@ -651,6 +656,7 @@ export default function App() {
 
   // Sert à remettre la barrière d'erreur à zéro d'une page à l'autre.
   const location = useLocation()
+  const mobile = useIsMobile()
 
   if (isConsoleWindow) {
     return (
@@ -662,9 +668,14 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-bg-primary">
+    // `h-dvh` et non `h-screen` (100vh) : sur téléphone, 100vh est la hauteur
+    // barre d'adresse repliée, et la barre du bas passait dessous. Dans la
+    // fenêtre du PC les deux valent pareil.
+    <div className="flex h-dvh flex-col overflow-hidden bg-bg-primary">
       <ErrorToast />
-      <TitleBar />
+      {/* Pas de barre de titre sur téléphone : il n'y a pas de fenêtre à
+          déplacer, réduire ou fermer. */}
+      {!mobile && <TitleBar />}
       <UpdateChecker />
       {/* Une seule modale de communication à la fois, dans l'ordre décidé par
           la file. Les invitations à rejoindre et le mot de passe imposé
@@ -709,13 +720,13 @@ export default function App() {
             toujours, et plus rien ne s'affichait jusqu'au rechargement.
             C'est le bug de la page blanche quand on enchaîne vite les
             écrans. */}
-        <PageTransition>
+        <PageTransition instantBetween={mobile ? MOBILE_TABS : undefined}>
           <ErrorBoundary resetKey={location.pathname}>
           <Suspense fallback={RouteFallback}>
           <Routes>
             <Route path="/yuyu" element={<YuyuLogin />} />
             <Route path="/" element={<Navigate to="/home" replace />} />
-            <Route path="/home" element={<Home />} />
+            <Route path="/home" element={mobile ? <MobileHome /> : <Home />} />
             <Route path="/login" element={<Login />} />
             <Route path="/instances" element={<Instances />} />
             <Route path="/mods" element={<Mods />} />
@@ -763,6 +774,10 @@ export default function App() {
           </ErrorBoundary>
         </PageTransition>
       </div>
+      {/* La barre d'onglets du téléphone vit ici, hors de la transition de
+          page : elle ne bouge ni ne se recharge quand on change d'écran,
+          comme dans une appli native. Absente de l'écran de connexion. */}
+      {mobile && location.pathname !== '/yuyu' && <MobileNav />}
     </div>
   )
 }

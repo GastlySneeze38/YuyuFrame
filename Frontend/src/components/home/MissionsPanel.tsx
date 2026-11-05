@@ -1,7 +1,6 @@
 import { useEffect } from 'react'
-import { createPortal } from 'react-dom'
-import { AnimatePresence, motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
+import { DrawerPanel } from '@/components/ui/DrawerPanel'
 import { Missions } from '@/components/competitive/Challenges'
 import type { BattlePass, Challenge, MissionsMeta } from '@/lib/competitive'
 import { useT } from '@/i18n'
@@ -40,25 +39,9 @@ export function MissionsPanel({ open, onClose, challenges, pass, meta, onReroll 
     navigate(path)
   }
 
-  return createPortal(
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex justify-end bg-black/45 backdrop-blur-[2px]"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) onClose()
-          }}
-        >
-          <motion.aside
-            initial={{ x: 40, opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            exit={{ x: 40, opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 380, damping: 36 }}
-            className="m-2 flex w-[360px] max-w-[calc(100vw-16px)] flex-col overflow-hidden rounded-2xl border border-line bg-[#111116] text-txt-primary shadow-[0_24px_80px_rgba(0,0,0,0.7)]"
-          >
+  // Panneau à droite sur PC, feuille du bas sur téléphone (`DrawerPanel`).
+  return (
+    <DrawerPanel open={open} onClose={onClose} label={t('home.shortcuts.missions')}>
             {/* En-tête : comme celui des amis, plus la page entière. */}
             <div className="flex shrink-0 items-center gap-1 border-b border-line-soft px-3 py-2.5">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="ml-1 mr-1 h-[18px] w-[18px] text-txt-secondary">
@@ -88,11 +71,7 @@ export function MissionsPanel({ open, onClose, challenges, pass, meta, onReroll 
                 </button>
               </div>
             )}
-          </motion.aside>
-        </motion.div>
-      )}
-    </AnimatePresence>,
-    document.body,
+    </DrawerPanel>
   )
 }
 

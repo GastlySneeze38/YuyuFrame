@@ -122,7 +122,10 @@ export function WelcomeSequence({
         <AnimatePresence>
           {parked && (uuid || localSkin) && (
             <motion.div
-              initial={{ scale: 0.55, y: 28, opacity: 0 }}
+              // Le rebond n'appartient qu'à la séquence d'accueil, jouée une
+              // fois par jour. Hors d'elle, on revient sur l'accueil des
+              // dizaines de fois : le personnage est déjà là, sans entrée.
+              initial={playIntro ? { scale: 0.55, y: 28, opacity: 0 } : false}
               animate={{ scale: 1, y: 0, opacity: 1 }}
               transition={{ type: 'spring', stiffness: 200, damping: 17, mass: 0.85 }}
               // Posé sur toute la cellule, mais plus cliquable : le canevas

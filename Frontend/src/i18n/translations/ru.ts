@@ -827,7 +827,13 @@ export const ru: TranslationSchema = {
     noOtherServer: 'Других серверов нет',
     allServers: 'Все серверы',
     suggestedServer: 'Совет',
+    mobile: {
+      switchInstance: 'Сменить сборку',
+      manageInstances: 'Управление сборками',
+      play: 'Играть',
+    },
     nav: {
+      home: 'Главная',
       instances: 'Сборки',
       settings: 'Настройки',
       sync: 'Синхронизация',

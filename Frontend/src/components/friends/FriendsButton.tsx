@@ -16,7 +16,7 @@ import { FriendsPanel } from './FriendsPanel'
  * `compact` : la forme de l'en-tête des pages (`PageHeader`), à la place de
  * l'ancien bouton de compte — le compte est désormais dans le panneau.
  */
-export function FriendsButton({ className, compact = false }: { className?: string; compact?: boolean }) {
+export function FriendsButton({ className, compact = false, large = false }: { className?: string; compact?: boolean; large?: boolean }) {
   const t = useT()
   const [open, setOpen] = useState(false)
   // Un lien d'ami cliqué (`yuyuframe://friend/…`) ouvre le panneau sur l'ajout.
@@ -32,8 +32,9 @@ export function FriendsButton({ className, compact = false }: { className?: stri
   return (
     <>
       <motion.button
-        whileHover={{ scale: className ? 1.03 : 1.05 }}
-        whileTap={{ scale: className ? 0.97 : 0.95 }}
+        // Au téléphone (`large`), l'appui vient de la classe `.press` en CSS.
+        whileHover={large ? undefined : { scale: className ? 1.03 : 1.05 }}
+        whileTap={large ? undefined : { scale: className ? 0.97 : 0.95 }}
         transition={SNAP}
         onClick={() => setOpen(true)}
         title={t('friends.title')}
@@ -47,14 +48,14 @@ export function FriendsButton({ className, compact = false }: { className?: stri
       >
         {/* La pastille verte au coin de l'icône, seulement si quelqu'un est là. */}
         <span className="relative flex">
-          <FriendsIcon className={compact ? 'h-5 w-5' : 'h-[18px] w-[18px]'} />
+          <FriendsIcon className={compact || large ? 'h-5 w-5' : 'h-[18px] w-[18px]'} />
           {online > 0 && (
             <span className="absolute -bottom-0.5 -right-1 h-2.5 w-2.5 rounded-full bg-[#3ba55d] shadow-[0_0_0_2px_rgba(14,14,20,0.95),0_0_8px_rgba(59,165,93,0.8)]" />
           )}
         </span>
         {/* Dans le carré de raccourcis, il porte son nom comme les autres cases. */}
-        {className && <span className="min-w-0 flex-1 truncate text-left text-[12.5px] font-bold">{t('friends.title')}</span>}
-        <span className={`shrink-0 font-bold tabular-nums ${compact ? 'text-[14px]' : 'text-[13px]'}`}>{online}</span>
+        {className && <span className={`min-w-0 flex-1 truncate text-left font-bold ${large ? 'text-[15px]' : 'text-[12.5px]'}`}>{t('friends.title')}</span>}
+        <span className={`shrink-0 font-bold tabular-nums ${compact || large ? 'text-[14px]' : 'text-[13px]'}`}>{online}</span>
         {waiting > 0 && (
           <span className="absolute -right-1.5 -top-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-danger px-1 text-[10.5px] font-black text-white shadow-[0_0_0_3px_rgba(10,10,14,0.9)]">
             {waiting}

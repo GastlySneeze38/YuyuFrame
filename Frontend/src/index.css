@@ -81,6 +81,33 @@ option {
   color: rgb(var(--txt-primary));
 }
 
+/* Boucles décoratives de la bannière d'accueil, en CSS pour tourner hors du
+ * fil principal (framer-motion 13 anime `x`/`y` en JavaScript). */
+.skyline-breathe {
+  animation: skyline-breathe 6s ease-in-out infinite;
+}
+@keyframes skyline-breathe {
+  0%,
+  100% { transform: translateY(0); }
+  /* 6 px : un mouvement permanent dans le champ de vision doit rester discret. */
+  50% { transform: translateY(-6px); }
+}
+@keyframes confetti-fall {
+  0% { transform: translateY(-40px) rotate(0deg); opacity: 0; }
+  12% { opacity: 0.9; }
+  100% { transform: translateY(520px) rotate(560deg); opacity: 0.9; }
+}
+
+/* Retour à l'appui : l'élément s'enfonce dès que le doigt se pose. En CSS
+ * plutôt qu'avec `whileTap` de framer-motion : géré par le compositeur, il
+ * reste instantané même quand le JavaScript est occupé. */
+.press {
+  transition: transform 100ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.press:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
 /* Respect du réglage système « animations réduites » : plus aucun mouvement,
  * mais l'interface reste utilisable (Framer Motion a son propre garde-fou,
  * voir lib/motion.ts). */
@@ -107,6 +134,32 @@ textarea,
   user-select: text;
 }
 
+/* Couche « plateforme » du téléphone. Sans effet sur PC, où il n'y a ni
+   doigt, ni surbrillance au toucher, ni tirer-pour-rafraîchir. */
+html {
+  /* Le voile gris que le navigateur pose sur tout élément touché : chaque
+     contrôle a déjà son propre retour à l'appui. */
+  -webkit-tap-highlight-color: transparent;
+  /* Pas d'agrandissement automatique du texte en mode paysage. */
+  -webkit-text-size-adjust: 100%;
+}
+
+html,
+body {
+  /* L'application défile dans ses propres zones (overscroll-contain) : la
+     page elle-même ne doit ni rebondir ni déclencher le rafraîchissement. */
+  overscroll-behavior: none;
+}
+
+button,
+a,
+[role='button'] {
+  /* Pas d'attente du double-toucher : le clic part tout de suite. */
+  touch-action: manipulation;
+  /* Pas de menu « copier / partager » sur un appui long. */
+  -webkit-touch-callout: none;
+}
+
 body {
   margin: 0;
   padding: 0;
@@ -129,6 +182,25 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: rgb(var(--border) / 0.8);
+}
+
+/* Sur un écran tactile, aucune barre de défilement : aucune appli mobile
+   n'en montre, on fait défiler au doigt. Le défilement, lui, reste. */
+@media (hover: none) and (pointer: coarse) {
+  * {
+    scrollbar-width: none;
+  }
+  /* iOS agrandit la page dès qu'on touche un champ écrit sous 16 px, et ne
+     la rétrécit pas ensuite. Plus fort que les classes de taille (`!important`)
+     pour couvrir les champs écrits pour le PC (12 à 14 px). */
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+  ::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 /* Glow effect */

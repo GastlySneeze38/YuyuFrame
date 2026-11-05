@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { api } from '@/api/client'
@@ -18,6 +17,8 @@ import { FriendSettingsView } from './FriendSettingsView'
 import { MyStatusBar } from './MyStatusBar'
 import { MyProfileView } from './MyProfileView'
 import { AccountMenu } from '@/components/account/AccountMenu'
+import { DrawerPanel } from '@/components/ui/DrawerPanel'
+import { useIsMobile } from '@/mobile/useIsMobile'
 
 type View = { kind: 'list' } | { kind: 'settings' } | { kind: 'me' } | { kind: 'profile'; userId: string }
 type Section = 'invites' | 'requests' | 'outgoing' | 'inGame' | 'online' | 'offline'
@@ -32,31 +33,12 @@ type Section = 'invites' | 'requests' | 'outgoing' | 'inGame' | 'online' | 'offl
  * transformée par ses animations, et un `fixed` à l'intérieur s'y collerait.
  */
 export function FriendsPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
-  return createPortal(
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex justify-end bg-black/45 backdrop-blur-[2px]"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) onClose()
-          }}
-        >
-          <motion.aside
-            initial={{ x: 40, opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            exit={{ x: 40, opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 380, damping: 36 }}
-            className="m-2 flex w-[360px] max-w-[calc(100vw-16px)] flex-col overflow-hidden rounded-2xl border border-line bg-[#111116] text-txt-primary shadow-[0_24px_80px_rgba(0,0,0,0.7)]"
-          >
-            <PanelBody onClose={onClose} />
-          </motion.aside>
-        </motion.div>
-      )}
-    </AnimatePresence>,
-    document.body,
+  const t = useT()
+  // Panneau à droite sur PC, feuille du bas sur téléphone (`DrawerPanel`).
+  return (
+    <DrawerPanel open={open} onClose={onClose} label={t('friends.title')}>
+      <PanelBody onClose={onClose} />
+    </DrawerPanel>
   )
 }
 
@@ -366,6 +348,7 @@ const CODE_PATTERN = /^[A-Za-z0-9_.-]{3,32}#\d{1,4}$/
  */
 function AddFriendBar({ focusSignal, prefill }: { focusSignal: number; prefill: { code: string; n: number } | null }) {
   const t = useT()
+  const reveal = useReveal()
   const refresh = useFriends((s) => s.refresh)
   const myCode = useFriends((s) => s.list?.me.code ?? null)
   const [code, setCode] = useState('')
@@ -465,7 +448,7 @@ function AddFriendBar({ focusSignal, prefill }: { focusSignal: number; prefill: 
 
       <AnimatePresence initial={false}>
         {found && (
-          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
+          <motion.div {...reveal} className="overflow-hidden">
             <LookupCard found={found} busy={busy} onSend={() => void send(found)} onClose={() => setFound(null)} />
           </motion.div>
         )}
@@ -532,6 +515,7 @@ function Group({ label, count, collapsed, onToggle, accent = false, children }: 
   accent?: boolean
   children: React.ReactNode
 }) {
+  const reveal = useReveal()
   return (
     <div className="mt-3 flex flex-col">
       <button onClick={onToggle} className="mx-4 mb-1 flex items-center gap-1.5 text-[11.5px] font-bold text-txt-muted hover:text-txt-secondary">
@@ -544,7 +528,7 @@ function Group({ label, count, collapsed, onToggle, accent = false, children }: 
       </button>
       <AnimatePresence initial={false}>
         {!collapsed && (
-          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="flex flex-col overflow-hidden">
+          <motion.div {...reveal} className="flex flex-col overflow-hidden">
             {children}
           </motion.div>
         )}
@@ -554,11 +538,30 @@ function Group({ label, count, collapsed, onToggle, accent = false, children }: 
 }
 
 function ToolRow({ children }: { children: React.ReactNode }) {
+  const reveal = useReveal()
   return (
-    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+    <motion.div {...reveal} className="overflow-hidden">
       <div className="px-3 pt-3">{children}</div>
     </motion.div>
   )
+}
+
+/** Ouvrir ou fermer un bloc. Sur PC il se déplie (hauteur animée) ; sur
+ *  téléphone il apparaît en fondu : animer `height` recalcule la mise en page
+ *  de toute la liste à chaque image, ce qui saccade sur un petit appareil. */
+const REVEAL_HEIGHT = {
+  initial: { height: 0, opacity: 0 },
+  animate: { height: 'auto', opacity: 1 },
+  exit: { height: 0, opacity: 0 },
+}
+const REVEAL_FADE = {
+  initial: { opacity: 0 },
+  animate: { opacity: 1 },
+  exit: { opacity: 0 },
+  transition: { duration: 0.12 },
+}
+function useReveal() {
+  return useIsMobile() ? REVEAL_FADE : REVEAL_HEIGHT
 }
 
 function Empty({ text, action, onAction }: { text: string; action?: string; onAction?: () => void }) {

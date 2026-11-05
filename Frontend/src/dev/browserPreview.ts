@@ -18,8 +18,10 @@
  * démonstration (`useDemo`, atelier Ctrl+Maj+M).
  */
 import { mockIPC, mockWindows } from '@tauri-apps/api/mocks'
+import { emit } from '@tauri-apps/api/event'
+import { useStore } from '@/stores/useStore'
 import type { AuthStatus, Instance, SystemMemoryInfo } from '@/types'
-import type { AgentStatus, FleetConfig, McAccountInfo, SavedServer, YuyuStatusResp } from '@/api/client'
+import type { AgentStatus, FleetConfig, McAccountInfo, SavedServer, ServerPingInfo, YuyuStatusResp } from '@/api/client'
 
 const PLAYER_UUID = '0f6c1c3a-6a5e-4d2b-9b1a-3c7e2f8d4a10'
 
@@ -84,6 +86,15 @@ const ANSWERS: Record<string, unknown> = {
   system_memory_info: { total_mb: 16384, available_mb: 9216, suggested_mb: 4096 } satisfies SystemMemoryInfo,
   fleet_config: FLEET,
   fleet_refresh: FLEET,
+  ping_server: {
+    motd: 'Un serveur Minecraft',
+    players_online: 128,
+    players_max: 500,
+    version_name: '26.3',
+    favicon: null,
+    latency_ms: 42,
+    motd_spans: [],
+  } satisfies ServerPingInfo,
   yuyu_ping: true,
   yuyu_status: { has_account: true } satisfies YuyuStatusResp,
   presence_get_visible: true,
@@ -103,7 +114,17 @@ const LIST_LIKE = /(^list_|_list$|_list_|_history$|^servers_all$|_categories$|^l
 
 const reported = new Set<string>()
 
-function answer(cmd: string): unknown {
+/** Partie simulée : il n'y a pas de jeu derrière, donc personne pour annoncer
+ *  sa fin. Sans ça, l'accueil resterait sur « En jeu… » pour toujours, et
+ *  même après un rechargement (les instances lancées sont retenues). */
+const FAKE_GAME_MS = 4000
+
+function answer(cmd: string, payload: unknown): unknown {
+  if (cmd === 'launch_game') {
+    const instance_id = (payload as { instanceId?: string } | undefined)?.instanceId ?? ''
+    window.setTimeout(() => void emit('game_state', { running: false, instance_id }), FAKE_GAME_MS)
+    return null
+  }
   if (cmd in ANSWERS) return ANSWERS[cmd]
   // Fenêtre, événements du système… : rien à rendre.
   if (cmd.startsWith('plugin:')) return null
@@ -116,6 +137,16 @@ function answer(cmd: string): unknown {
 
 export function installBrowserPreview(): void {
   mockWindows('main')
-  mockIPC((cmd) => answer(cmd), { shouldMockEvents: true })
+  mockIPC((cmd, payload) => answer(cmd, payload), { shouldMockEvents: true })
+  // Une partie restée « en cours » d'une session précédente de l'aperçu ne
+  // finira jamais : on repart sans.
+  useStore.setState({ runningInstances: [], gameRunning: false })
+  // L'aperçu s'ouvre avec les serveurs sur l'accueil (réglage éteint par
+  // défaut dans le launcher) : c'est la vue qu'on veut explorer. Une seule
+  // fois, pour que le réglage reste ensuite libre de changer dans Réglages.
+  if (!localStorage.getItem('yf-preview-home-servers')) {
+    localStorage.setItem('yf-preview-home-servers', '1')
+    useStore.setState({ showHomeServers: true })
+  }
   console.info('[aperçu navigateur] Pas de Tauri : les commandes sont simulées (src/dev/browserPreview.ts).')
 }

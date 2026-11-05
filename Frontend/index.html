@@ -2,7 +2,18 @@
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      viewport-fit=cover : la page passe sous l'encoche et la barre de gestes,
+      et les écrans téléphone (src/mobile/) s'en écartent par
+      env(safe-area-inset-*) — sans ce mot-clé, ces valeurs valent toutes 0.
+      interactive-widget=resizes-content : sur Android, le clavier réduit la
+      zone de la page comme sur iOS. Le zoom reste permis, toujours.
+    -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
+    <!-- Barre d'état du téléphone : la couleur du haut de l'écran. Le launcher
+         n'a qu'un thème, sombre, donc une seule valeur. -->
+    <meta name="theme-color" content="#09090d" />
+    <meta name="color-scheme" content="dark" />
     <title>YuyuFrame</title>
     <!--
       Tout ce qui suit est EN LIGNE, sans fichier ni police à aller chercher :
@@ -41,6 +52,15 @@
         flex: none;
         padding: 0 16px;
         border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      }
+
+      /* Pas de barre de titre sur téléphone, comme dans l'application
+         (App.tsx, useIsMobile) : sinon elle apparaît le temps du
+         chargement, puis disparaît. */
+      @media (max-width: 640px) {
+        #boot .bar {
+          display: none;
+        }
       }
 
       #boot .mark {

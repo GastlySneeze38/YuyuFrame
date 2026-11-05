@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react'
+import { useEffect, type CSSProperties } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useFleet } from '@/stores/useFleet'
 import type { FleetAnnouncement } from '@/api/client'
@@ -51,30 +51,31 @@ const CARD_STYLES: Record<FleetAnnouncement['theme'], { card: CSSProperties; kic
   },
 }
 
+/** Les annonces déjà apparues pendant cette session : en revenant sur
+ *  l'accueil (des dizaines de fois par jour), elles sont déjà en place. */
+const SEEN = new Set<string>()
+
+/** Courbe de sortie franche, la même que le retour à l'appui (`.press`). */
+const EASE_OUT = [0.23, 1, 0.32, 1] as const
+
 export function HomeBanner({ banner, visible }: { banner: FleetAnnouncement | null; visible: boolean }) {
   const look = banner ? CARD_STYLES[banner.theme] ?? CARD_STYLES.none : CARD_STYLES.none
+  const id = banner ? String(banner.id) : null
+  // Lu au rendu, noté après : `initial` ne compte qu'au montage, donc
+  // l'annonce n'entre en mouvement que la première fois qu'on la voit.
+  const firstTime = id !== null && !SEEN.has(id)
+  useEffect(() => {
+    if (id !== null && visible) SEEN.add(id)
+  }, [id, visible])
   return (
     <AnimatePresence>
       {banner && visible && (
         <motion.div
           key={banner.id}
-          initial={{ opacity: 0, x: -60, scale: 0.85 }}
-          animate={{
-            opacity: 1,
-            x: 0,
-            scale: 1,
-            transition: {
-              // Un ressort mou : la bannière dépasse sa place puis revient,
-              // au lieu de s'arrêter net.
-              type: 'spring',
-              stiffness: 120,
-              damping: 11,
-              mass: 1.1,
-              delay: 0.35,
-              opacity: { duration: 0.35, delay: 0.35 },
-            },
-          }}
-          exit={{ opacity: 0, x: -50, scale: 0.88, transition: { duration: 0.42, ease: [0.4, 0, 1, 1] } }}
+          // Première fois : un court glissement, sans rebond ni attente.
+          initial={firstTime ? { opacity: 0, x: -8 } : false}
+          animate={{ opacity: 1, x: 0, transition: { duration: 0.2, ease: EASE_OUT } }}
+          exit={{ opacity: 0, x: -8, transition: { duration: 0.15, ease: EASE_OUT } }}
           // Posée sous le titre, dans son bloc (`Home.tsx`) : le coin en haut
           // à droite est au bouton Amis. La largeur est bornée pour qu'elle
           // ne vienne pas chercher le personnage, au centre, sur une fenêtre
@@ -120,11 +121,10 @@ export function Confetti() {
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
       <div className="absolute inset-0 bg-[radial-gradient(120%_70%_at_50%_0%,rgba(255,183,77,0.16)_0%,transparent_60%)]" />
       {CONFETTI.map((c, i) => (
-        <motion.div
+        // Chute en CSS (`confetti-fall`, index.css) : 22 boucles infinies en
+        // framer-motion, c'était 22 calculs JavaScript à chaque image.
+        <div
           key={i}
-          initial={{ y: -40, rotate: 0, opacity: 0 }}
-          animate={{ y: 520, rotate: 560, opacity: [0, 0.9, 0.9] }}
-          transition={{ duration: c.duration, delay: c.delay, repeat: Infinity, ease: 'linear' }}
           className="absolute top-0"
           style={{
             left: c.left,
@@ -132,7 +132,7 @@ export function Confetti() {
             height: c.height,
             borderRadius: c.round ? '50%' : 1,
             background: c.color,
-            willChange: 'transform',
+            animation: `confetti-fall ${c.duration}s linear ${c.delay}s infinite backwards`,
           }}
         />
       ))}

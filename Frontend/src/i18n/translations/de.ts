@@ -827,7 +827,13 @@ export const de: TranslationSchema = {
     noOtherServer: 'Kein weiterer Server',
     allServers: 'Alle Server',
     suggestedServer: 'Vorschlag',
+    mobile: {
+      switchInstance: 'Instanz wechseln',
+      manageInstances: 'Instanzen verwalten',
+      play: 'Spielen',
+    },
     nav: {
+      home: 'Start',
       instances: 'Instanzen',
       settings: 'Einstellungen',
       sync: 'Sync',
