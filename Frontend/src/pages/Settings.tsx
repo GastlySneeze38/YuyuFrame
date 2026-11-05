@@ -18,6 +18,8 @@ import { SettingsLinkModal, SettingsShareModal } from '@/components/settings/Set
 import { CREATOR_SETTINGS_LINK } from '@/lib/launcherSettingsShare'
 import { playHalloweenLaunchSound } from '@/components/home/Halloween'
 import { useT, LANGUAGES } from '@/i18n'
+import { useIsMobile } from '@/mobile/useIsMobile'
+import { MobileSettings } from '@/mobile/settings/MobileSettings'
 
 /** Valeurs courantes proposées en puces pour la RAM personnalisée (>8 Go) —
  * choix rapide sans taper, le champ Mo juste en dessous reste ouvert pour
@@ -27,6 +29,7 @@ const CUSTOM_RAM_PRESETS_GO = [9, 10, 12, 16, 24, 32]
 export default function Settings() {
   const t = useT()
   const navigate = useNavigate()
+  const mobile = useIsMobile()
   const {
     brightness, setBrightness, soundVolume, setSoundVolume, defaultRam, setDefaultRam, customRamMb, setCustomRamMb,
     closeOnLaunch, setCloseOnLaunch,
@@ -157,6 +160,64 @@ export default function Settings() {
     }
   }
 
+  // Fenêtres communes aux deux versions de l'écran.
+  const modals = (
+    <>
+      {sharing === 'share' && <SettingsShareModal onClose={() => setSharing(null)} onApplied={readAnalytics} />}
+      {sharing === 'optimized' && (
+        <SettingsLinkModal
+          link={CREATOR_SETTINGS_LINK}
+          title={t('settingsShare.optimizedTitle')}
+          desc={t('settingsShare.optimizedDesc')}
+          onClose={() => setSharing(null)}
+          onApplied={readAnalytics}
+        />
+      )}
+      <AnimatePresence>
+        {confirmBackgroundOff && (
+          <BackgroundOffModal
+            onCancel={() => setConfirmBackgroundOff(false)}
+            onConfirm={() => {
+              applyBackground(false)
+              setConfirmBackgroundOff(false)
+            }}
+          />
+        )}
+      </AnimatePresence>
+    </>
+  )
+
+  // Téléphone : liste de sections puis section poussée (voir MobileSettings).
+  // Même état, mêmes gestes : seul l'affichage change.
+  if (mobile) {
+    return (
+      <>
+        <MobileSettings
+          categories={CATEGORIES}
+          sharedOptions={sharedOptions}
+          analyticsDisabled={analyticsDisabled}
+          toggleAnalytics={toggleAnalytics}
+          presenceVisible={presenceVisible}
+          togglePresence={togglePresence}
+          dataRoot={dataRoot}
+          pendingParent={pendingParent}
+          movingData={movingData}
+          pickDataRoot={pickDataRoot}
+          confirmMoveDataRoot={confirmMoveDataRoot}
+          cancelMove={() => setPendingParent(null)}
+          onBackgroundToggle={() => {
+            if (allowBackground) setConfirmBackgroundOff(true)
+            else applyBackground(true)
+          }}
+          onShare={() => setSharing('share')}
+          onOptimized={() => setSharing('optimized')}
+          onLanguageTitlePress={countEnchantClick}
+        />
+        {modals}
+      </>
+    )
+  }
+
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-[#09090D]">
       <PageGlow />
@@ -173,16 +234,7 @@ export default function Settings() {
         </div>
       </PageHeader>
 
-      {sharing === 'share' && <SettingsShareModal onClose={() => setSharing(null)} onApplied={readAnalytics} />}
-      {sharing === 'optimized' && (
-        <SettingsLinkModal
-          link={CREATOR_SETTINGS_LINK}
-          title={t('settingsShare.optimizedTitle')}
-          desc={t('settingsShare.optimizedDesc')}
-          onClose={() => setSharing(null)}
-          onApplied={readAnalytics}
-        />
-      )}
+      {modals}
 
       {/* Content */}
       <div className="flex flex-1 overflow-hidden">
@@ -868,18 +920,6 @@ export default function Settings() {
         </div>
         </div>
       </div>
-
-      <AnimatePresence>
-        {confirmBackgroundOff && (
-          <BackgroundOffModal
-            onCancel={() => setConfirmBackgroundOff(false)}
-            onConfirm={() => {
-              applyBackground(false)
-              setConfirmBackgroundOff(false)
-            }}
-          />
-        )}
-      </AnimatePresence>
     </div>
   )
 }
