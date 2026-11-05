@@ -57,6 +57,7 @@ const INSTANCES: Instance[] = [
 
 const ACCOUNTS: McAccountInfo[] = [
   { mc_username: 'Steve', mc_uuid: PLAYER_UUID, is_active: true, is_offline: false },
+  { mc_username: 'Alex_Offline', mc_uuid: '6ab43178-89fd-4905-9d2b-8c4a7e1f2b33', is_active: false, is_offline: true },
 ]
 
 const SERVERS: SavedServer[] = [
@@ -90,6 +91,9 @@ const ANSWERS: Record<string, unknown> = {
   ] satisfies Mod[],
   mods_check_conflicts: [],
   curseforge_local_fingerprints: [],
+  // Connexion Microsoft : un code factice, et une attente qui ne finit jamais.
+  auth_start_device: { user_code: 'AB12CD34', verification_uri: 'https://www.microsoft.com/link' },
+  auth_poll: { status: 'pending' },
   // Quelques réglages, pour voir l'écran Options rempli (vue lisible et avancée).
   mc_options_read: [
     { key: 'renderDistance', value: '12' },

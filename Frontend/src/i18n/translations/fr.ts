@@ -414,6 +414,7 @@ export const fr = {
     select: 'Sélectionner',
     changeSkin: 'Changer de skin',
     disconnect: 'Déconnecter',
+    confirmRemove: 'Retirer ce compte du launcher ?',
     addAccount: 'Ajouter un compte',
     connectViaMicrosoft: 'Microsoft ou hors ligne',
     minecraftAccounts: 'Comptes Minecraft',

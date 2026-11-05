@@ -417,6 +417,7 @@ export const pt: TranslationSchema = {
     select: 'Selecionar',
     changeSkin: 'Trocar de skin',
     disconnect: 'Desconectar',
+    confirmRemove: 'Remover esta conta do launcher?',
     addAccount: 'Adicionar uma conta',
     connectViaMicrosoft: 'Microsoft ou offline',
     minecraftAccounts: 'Contas do Minecraft',

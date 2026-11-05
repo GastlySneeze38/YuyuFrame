@@ -416,6 +416,7 @@ export const ru: TranslationSchema = {
     select: 'Выбрать',
     changeSkin: 'Сменить скин',
     disconnect: 'Выйти',
+    confirmRemove: 'Удалить этот аккаунт из лаунчера?',
     addAccount: 'Добавить аккаунт',
     connectViaMicrosoft: 'Microsoft или офлайн',
     minecraftAccounts: 'Аккаунты Minecraft',

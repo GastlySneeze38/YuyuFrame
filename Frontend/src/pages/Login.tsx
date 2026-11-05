@@ -19,6 +19,8 @@ import { ModalShell } from '@/components/ui/ModalShell'
 import { fadeVariants, fastTransition, listItemVariants, listVariants, pressable } from '@/lib/motion'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useT } from '@/i18n'
+import { useIsMobile } from '@/mobile/useIsMobile'
+import { MobileAccount } from '@/mobile/account/MobileAccount'
 
 type Step = 'idle' | 'loading' | 'polling' | 'confirmed' | 'error'
 
@@ -30,6 +32,7 @@ const OVERLAY_MARGIN = 24
 export default function Login() {
   const t = useT()
   const navigate = useNavigate()
+  const mobile = useIsMobile()
   const { uuid, username, accounts, setAccounts, setUser, clearUser, removeAccount, addAccount } = useStore()
   const [showOfflineModal, setShowOfflineModal] = useState(false)
   // Choix Microsoft / hors ligne : un seul bouton d'ajout dans la liste.
@@ -70,6 +73,9 @@ export default function Login() {
   // Microsoft — sans ça, la fenêtre disparaît derrière le navigateur et
   // l'utilisateur perd de vue le code à entrer / le statut de connexion.
   const enterOverlay = async () => {
+    // Téléphone : pas de fenêtre à réduire, le code s'affiche dans une
+    // feuille du bas (MobileAccount).
+    if (mobile) return
     const win = getCurrentWindow()
     try {
       savedWindowGeometry.current = {
@@ -89,6 +95,7 @@ export default function Login() {
   // Agrandit l'overlay en hauteur pour la page de confirmation (avatar +
   // nom de compte), sans toucher à savedWindowGeometry ni à l'always-on-top.
   const growOverlayForConfirmation = async () => {
+    if (mobile) return
     const win = getCurrentWindow()
     try {
       const { size, position } = await computeOverlayGeometry(OVERLAY_CONFIRM_HEIGHT)
@@ -242,7 +249,8 @@ if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
     try {
       await api.mc.switch(acc.uuid)
       setUser(acc.username, acc.uuid, acc.is_offline)
-      navigate('/home')
+      // Téléphone : on reste sur l'écran, la coche et le buste changent.
+      if (!mobile) navigate('/home')
     } catch (e) { showError(e) }
   }
 
@@ -278,6 +286,48 @@ if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
   const addFitsInGrid = accounts.length + 1 <= capacity
   const visibleAccounts = addFitsInGrid ? accounts : accounts.slice(0, capacity - 1)
   const hiddenCount = accounts.length - visibleAccounts.length
+
+  // Téléphone : un écran à part (MobileAccount), même logique. Les fenêtres
+  // d'ajout de compte sont celles du PC (feuilles du bas sur téléphone).
+  if (mobile) {
+    return (
+      <>
+        <MobileAccount
+          accounts={accounts}
+          activeUuid={uuid}
+          skins={skins}
+          step={step}
+          userCode={userCode}
+          verifyUrl={verifyUrl}
+          error={error}
+          onSelect={handleSelect}
+          onRemove={handleRemove}
+          onAdd={() => setShowAddModal(true)}
+          onOpenVerify={() => open(verifyUrl)}
+          onCancelLogin={() => { stopPolling(); setStep('idle') }}
+          onRetry={() => { setStep('idle'); void startLogin() }}
+        />
+        <AnimatePresence>
+          {showAddModal && (
+            <AddAccountModal
+              onClose={() => setShowAddModal(false)}
+              onMicrosoft={startLogin}
+              onOffline={() => { setShowOfflineModal(true); api.analytics.track('offline_account_modal_opened') }}
+            />
+          )}
+          {showOfflineModal && (
+            <OfflineAccountModal
+              onClose={() => setShowOfflineModal(false)}
+              onAdded={(acc) => {
+                addAccount(acc.username, acc.uuid, acc.is_offline)
+                api.yuyu.syncMinecraftAccounts().catch(() => {})
+              }}
+            />
+          )}
+        </AnimatePresence>
+      </>
+    )
+  }
 
   if (overlayActive) {
     return (
