@@ -31,6 +31,7 @@ export const ru: TranslationSchema = {
       shaders: 'Шейдеры',
       resourcepacks: 'Ресурспаки',
       confirmDelete: 'Удалить этот мод?',
+      showResults: 'Показать результаты',
     },
     menuMods: 'Моды',
     menuInstalledMods: 'Установленные моды',

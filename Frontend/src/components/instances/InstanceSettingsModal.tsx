@@ -93,6 +93,9 @@ export function InstanceSettingsModal({
   const [tab, setTab] = useState<Tab>(
     TABS.includes(initialTab as Tab) ? (initialTab as Tab) : 'general',
   )
+  /** Téléphone : une section est ouverte (sinon on voit la liste des
+   *  sections). Un onglet demandé de l'extérieur s'ouvre directement. */
+  const [sectionOpen, setSectionOpen] = useState(TABS.includes(initialTab as Tab))
 
   /** Version du jeu que l'essai de compatibilité désigne comme attendue.
    *  Portée jusqu'à l'onglet Installation, qui ouvre alors son formulaire
@@ -210,48 +213,86 @@ export function InstanceSettingsModal({
       cardStyle={{ padding: 0, overflow: 'hidden', height: 'min(620px, 86vh)' }}
     >
       <div className="flex h-full min-h-0 flex-col">
-        <header className="flex shrink-0 items-center gap-3 border-b border-line px-5 py-4">
-          <InstanceIcon instance={instance} size={36} />
-          <div className="flex min-w-0 flex-1 items-baseline gap-2">
-            <p className="truncate text-[15px] font-bold text-txt-primary">{instance.name}</p>
-            <span className="shrink-0 text-txt-muted">›</span>
-            <p className="shrink-0 text-[15px] font-bold text-txt-primary">{t('instancesPage.settings')}</p>
-          </div>
-          <CloseButton onClick={requestClose} />
-        </header>
-
-        {/* Sur téléphone, la colonne d'onglets devient une rangée qui défile
-            de côté sous l'en-tête : une colonne de 196 px ne laisserait
-            presque rien au contenu. */}
-        <div className={`flex min-h-0 flex-1 ${mobile ? 'flex-col' : ''}`}>
-          <nav
-            className={
-              mobile
-                ? 'flex shrink-0 gap-2 overflow-x-auto overscroll-x-contain border-b border-line px-4 py-3'
-                : 'flex w-[196px] shrink-0 flex-col gap-1 overflow-y-auto border-r border-line p-3'
-            }
-          >
-            {tabs.map((item) => (
+        {mobile ? (
+          // Téléphone : la liste des sections d'abord, comme les Réglages
+          // d'iOS et d'Android ; une section ouverte a son titre centré et un
+          // retour vers la liste. Pas de croix : la poignée de la feuille la
+          // remplace (on la tire vers le bas pour fermer).
+          <header className="grid shrink-0 grid-cols-[48px_1fr_48px] items-center border-b border-line px-1 pb-3">
+            {sectionOpen ? (
               <button
-                key={item.id}
-                onClick={() => setTab(item.id)}
-                className={`flex shrink-0 items-center gap-2.5 text-left font-semibold transition-colors ${
-                  mobile ? 'h-10 rounded-full px-4 text-[14px]' : 'rounded-xl px-3 py-2.5 text-[12.5px]'
-                } ${
-                  tab === item.id
-                    ? 'bg-accent/20 text-txt-primary'
-                    : mobile
-                      ? 'bg-white/[0.04] text-txt-secondary'
-                      : 'text-txt-secondary hover:bg-surface-2 hover:text-txt-primary'
-                }`}
+                onClick={() => setSectionOpen(false)}
+                aria-label={t('instancesPage.settings')}
+                className="press flex h-11 w-11 items-center justify-center rounded-full text-[#a29bfe]"
               >
-                <span className={tab === item.id ? 'text-accent-hover' : 'text-txt-muted'}>{item.icon}</span>
-                <span className="truncate">{item.label}</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+                  <path d="M15 6l-6 6 6 6" />
+                </svg>
               </button>
-            ))}
-          </nav>
+            ) : <span />}
+            <div className="flex min-w-0 flex-col items-center text-center">
+              <p className="max-w-full truncate text-[16px] font-bold leading-tight text-txt-primary">
+                {sectionOpen ? tabs.find((item) => item.id === tab)?.label : t('instancesPage.settings')}
+              </p>
+              <p className="max-w-full truncate text-[12px] leading-tight text-txt-muted">{instance.name}</p>
+            </div>
+            <span />
+          </header>
+        ) : (
+          <header className="flex shrink-0 items-center gap-3 border-b border-line px-5 py-4">
+            <InstanceIcon instance={instance} size={36} />
+            <div className="flex min-w-0 flex-1 items-baseline gap-2">
+              <p className="truncate text-[15px] font-bold text-txt-primary">{instance.name}</p>
+              <span className="shrink-0 text-txt-muted">›</span>
+              <p className="shrink-0 text-[15px] font-bold text-txt-primary">{t('instancesPage.settings')}</p>
+            </div>
+            <CloseButton onClick={requestClose} />
+          </header>
+        )}
 
-          <div className={`min-h-0 flex-1 overflow-y-auto overscroll-contain ${mobile ? 'px-5 py-5' : 'px-6 py-5'}`}>
+        <div className="flex min-h-0 flex-1">
+          {mobile ? (
+            !sectionOpen && (
+              // La liste des sections : une ligne de 56 px par onglet du PC,
+              // icône, nom, chevron.
+              <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain px-3 py-3">
+                {tabs.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => { setTab(item.id); setSectionOpen(true) }}
+                    className="press flex h-14 w-full shrink-0 items-center gap-3.5 rounded-2xl px-3 text-left active:bg-white/[0.06]"
+                  >
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-accent-hover [&_svg]:h-[18px] [&_svg]:w-[18px]">
+                      {item.icon}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-[16px] font-medium text-txt-primary">{item.label}</span>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0 text-txt-muted">
+                      <path d="M9 6l6 6-6 6" />
+                    </svg>
+                  </button>
+                ))}
+              </nav>
+            )
+          ) : (
+            <nav className="flex w-[196px] shrink-0 flex-col gap-1 overflow-y-auto border-r border-line p-3">
+              {tabs.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => setTab(item.id)}
+                  className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-[12.5px] font-semibold transition-colors ${
+                    tab === item.id
+                      ? 'bg-accent/20 text-txt-primary'
+                      : 'text-txt-secondary hover:bg-surface-2 hover:text-txt-primary'
+                  }`}
+                >
+                  <span className={tab === item.id ? 'text-accent-hover' : 'text-txt-muted'}>{item.icon}</span>
+                  <span className="truncate">{item.label}</span>
+                </button>
+              ))}
+            </nav>
+          )}
+
+          <div className={`min-h-0 flex-1 overflow-y-auto overscroll-contain ${mobile ? (sectionOpen ? 'px-5 py-5' : 'hidden') : 'px-6 py-5'}`}>
             {tab === 'general' && (
               <div className="flex flex-col gap-5">
                 {/* Le nom et l'icône côte à côte : ce sont les deux faces de

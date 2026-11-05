@@ -63,8 +63,9 @@ export function DrawerPanel({ open, onClose, label, children }: {
             }}
           >
             {/* La poignée : la zone qu'on tire, laissée entièrement au glissé. */}
-            <div className="flex shrink-0 cursor-grab touch-none select-none justify-center pb-1.5 pt-2.5" onPointerDown={(e) => drag.start(e)}>
-              <span className="h-1 w-10 rounded-full bg-white/20" />
+            {/* Même poignée que `mobile/ui/Sheet`. */}
+            <div className="flex shrink-0 cursor-grab touch-none select-none justify-center pb-2 pt-2.5" onPointerDown={(e) => drag.start(e)}>
+              <span className="h-[5px] w-10 rounded-full bg-white/25" />
             </div>
             {children}
           </motion.aside>

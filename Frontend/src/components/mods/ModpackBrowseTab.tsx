@@ -10,6 +10,8 @@ import { PlugIcon } from '@/components/ui/icons/PlugIcon'
 import { SearchIcon } from '@/components/ui/icons/SearchIcon'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { useT } from '@/i18n'
+import { useIsMobile } from '@/mobile/useIsMobile'
+import { MobileFiltersButton, MobileSearchFilters, activeFilterCount } from './MobileSearchFilters'
 
 /// Résultat de recherche modpack fusionné Modrinth + CurseForge — même principe
 /// que `MergedHit` dans BrowseTab.tsx (mods), pas de dédoublonnage ici : les
@@ -55,6 +57,7 @@ export function ModpackBrowseTab({
   onOpenDetail: (hit: MergedModpackHit) => void
 }) {
   const t = useT()
+  const mobile = useIsMobile()
   const [showFilters, setShowFilters] = useState(false)
   const topRef = useRef<HTMLDivElement>(null)
 
@@ -91,12 +94,16 @@ export function ModpackBrowseTab({
             placeholder={t('mods.searchModpackPlaceholder')}
             value={query}
             onChange={onQueryChange}
-            className="w-full rounded-xl pl-9 pr-4 text-sm text-white outline-none h-10 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] focus:border-[rgba(75,63,207,0.6)]"
+            enterKeyHint="search"
+            className="w-full rounded-xl pl-9 pr-4 text-sm text-white outline-none h-10 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] focus:border-[rgba(75,63,207,0.6)] max-sm:h-11"
           />
           {searching && (
             <ButtonSpinner size={16} color="rgba(75,63,207,0.8)" trackColor="rgba(255,255,255,0.1)" className="absolute right-3 top-1/2 -translate-y-1/2" />
           )}
         </div>
+        {mobile ? (
+          <MobileFiltersButton count={activeFilterCount(filters, filters.categories ?? [])} onClick={() => setShowFilters(true)} />
+        ) : (
         <motion.button {...press}
           onClick={() => setShowFilters((v) => !v)}
           className={`flex flex-shrink-0 items-center gap-1.5 rounded-xl px-3.5 text-[12px] font-semibold h-10 border transition-colors ${
@@ -110,9 +117,23 @@ export function ModpackBrowseTab({
           </svg>
           {t('mods.filtersToggle')}
         </motion.button>
+        )}
       </div>
 
-      {showFilters && (
+      {/* Sur téléphone, les filtres sont une feuille du bas (`MobileSearchFilters`). */}
+      {mobile && (
+        <MobileSearchFilters
+          open={showFilters}
+          onClose={() => setShowFilters(false)}
+          categories={MODPACK_CATEGORIES}
+          selected={filters.categories ?? []}
+          onCategories={(next) => onFiltersChange({ ...filters, categories: next })}
+          filters={filters}
+          onFilters={onFiltersChange}
+        />
+      )}
+
+      {showFilters && !mobile && (
         <div className="flex flex-col gap-3 rounded-2xl p-3.5 bg-[rgba(255,255,255,0.025)] border border-[rgba(255,255,255,0.07)]">
           <div className="flex flex-col gap-1.5">
             <label className="text-[10px] text-[rgba(255,255,255,0.4)] tracking-[0.1em] uppercase font-semibold">

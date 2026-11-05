@@ -1,8 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { createPortal } from 'react-dom'
-import { AnimatePresence, motion } from 'framer-motion'
-import { SHEET_EXIT } from '@/components/ui/DrawerPanel'
 import { useT } from '@/i18n'
+import { Sheet } from './Sheet'
 
 export interface SheetAction {
   id: string
@@ -48,26 +46,13 @@ export function ActionSheet({ open, header, actions, onClose }: {
     action.onSelect()
   }
 
-  return createPortal(
-    <AnimatePresence>
-      {open && (
-        <div key="sheet" className="fixed inset-0 z-50 flex flex-col justify-end" role="dialog" aria-modal="true">
-          <motion.div
-            className="absolute inset-0 bg-black/60"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            onClick={onClose}
-          />
-          <motion.div
-            className="relative flex flex-col gap-1 rounded-t-[22px] border-t border-line bg-bg-secondary px-3 pb-[max(12px,env(safe-area-inset-bottom))] pt-4"
-            initial={{ transform: 'translateY(100%)' }}
-            animate={{ transform: 'translateY(0%)', transition: { duration: 0.3, ease: [0.32, 0.72, 0, 1] } }}
-            exit={{ transform: 'translateY(100%)', transition: SHEET_EXIT }}
-          >
-            <div className="mb-2 flex min-w-0 items-center gap-3 px-2">{header}</div>
-
+  return (
+    <Sheet
+      open={open}
+      onClose={onClose}
+      bodyClassName="flex flex-col gap-1 px-3"
+      header={<div className="mb-2 flex min-w-0 items-center gap-3 px-5">{header}</div>}
+    >
             {!asking ? (
               actions.map((action) => (
                 <button
@@ -103,11 +88,7 @@ export function ActionSheet({ open, header, actions, onClose }: {
                 </div>
               </div>
             )}
-          </motion.div>
-        </div>
-      )}
-    </AnimatePresence>,
-    document.body,
+    </Sheet>
   )
 }
 

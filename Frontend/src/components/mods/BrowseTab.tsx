@@ -10,6 +10,8 @@ import type { ModrinthHit, ModrinthSearchFilters } from './modUtils'
 import type { CurseforgeHit } from './curseforgeUtils'
 import { ModrinthCard } from './ModrinthCard'
 import { CurseforgeCard } from './CurseforgeCard'
+import { MobileFiltersButton, MobileSearchFilters, activeFilterCount } from './MobileSearchFilters'
+import { useIsMobile } from '@/mobile/useIsMobile'
 
 // Tags de contenu Modrinth réels (distincts du loader, déjà géré séparément) —
 // vocabulaire Modrinth lui-même, affiché tel quel (pas de traduction par tag).
@@ -66,6 +68,7 @@ export function BrowseTab({
   onOpenDetailCurseforge: (hit: CurseforgeHit) => void
 }) {
   const t = useT()
+  const mobile = useIsMobile()
   const [showFilters, setShowFilters] = useState(false)
   const topRef = useRef<HTMLDivElement>(null)
 
@@ -102,12 +105,16 @@ export function BrowseTab({
             placeholder={isPlugin ? t('mods.searchPluginPlaceholder') : t('mods.searchModPlaceholder')}
             value={query}
             onChange={onQueryChange}
-            className="w-full rounded-xl pl-9 pr-4 text-sm text-white outline-none h-10 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] focus:border-[rgba(75,63,207,0.6)]"
+            enterKeyHint="search"
+            className="w-full rounded-xl pl-9 pr-4 text-sm text-white outline-none h-10 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] focus:border-[rgba(75,63,207,0.6)] max-sm:h-11"
           />
           {searching && (
             <ButtonSpinner size={16} color="rgba(75,63,207,0.8)" trackColor="rgba(255,255,255,0.1)" className="absolute right-3 top-1/2 -translate-y-1/2" />
           )}
         </div>
+        {mobile ? (
+          <MobileFiltersButton count={activeFilterCount(filters, filters.categories ?? [])} onClick={() => setShowFilters(true)} />
+        ) : (
         <motion.button {...press}
           onClick={() => setShowFilters((v) => !v)}
           className={`flex flex-shrink-0 items-center gap-1.5 rounded-xl px-3.5 text-[12px] font-semibold h-10 border transition-colors ${
@@ -121,9 +128,24 @@ export function BrowseTab({
           </svg>
           {t('mods.filtersToggle')}
         </motion.button>
+        )}
       </div>
 
-      {showFilters && (
+      {/* Sur téléphone, les filtres sont une feuille du bas, qu'on rejette
+          d'un glissé ; sur PC, un panneau qui se déplie ici. */}
+      {mobile && (
+        <MobileSearchFilters
+          open={showFilters}
+          onClose={() => setShowFilters(false)}
+          categories={isPlugin ? [] : CONTENT_CATEGORIES}
+          selected={filters.categories ?? []}
+          onCategories={(next) => onFiltersChange({ ...filters, categories: next })}
+          filters={filters}
+          onFilters={onFiltersChange}
+        />
+      )}
+
+      {showFilters && !mobile && (
         <div className="flex flex-col gap-3 rounded-2xl p-3.5 bg-[rgba(255,255,255,0.025)] border border-[rgba(255,255,255,0.07)]">
           {!isPlugin && (
             <div className="flex flex-col gap-1.5">

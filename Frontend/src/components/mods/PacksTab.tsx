@@ -10,6 +10,8 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { SearchIcon } from '@/components/ui/icons/SearchIcon'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { useT } from '@/i18n'
+import { useIsMobile } from '@/mobile/useIsMobile'
+import { MobileFiltersButton, MobileSearchFilters } from './MobileSearchFilters'
 import { fetchVersionsByHash, type ModrinthHit } from './modUtils'
 import type { ModInstallProgress, PackInfo, PackKind } from '@/types'
 
@@ -85,6 +87,8 @@ export function PacksTab({
   onInstalledCountChange?: (count: number) => void
 }) {
   const t = useT()
+  const mobile = useIsMobile()
+  const [showFilters, setShowFilters] = useState(false)
   const [installed, setInstalled] = useState<PackInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
@@ -315,13 +319,27 @@ export function PacksTab({
             value={query}
             onChange={(e) => changeQuery(e.target.value)}
             placeholder={t(kind === 'shader' ? 'packs.searchShaders' : 'packs.searchResourcepacks')}
-            className="h-9 w-full rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] pl-9 pr-3 text-[13px] text-white outline-none transition-colors duration-150 focus:border-[rgba(75,63,207,0.5)]"
+            enterKeyHint="search"
+            className="h-9 w-full rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] pl-9 pr-3 text-[13px] text-white outline-none transition-colors duration-150 focus:border-[rgba(75,63,207,0.5)] max-sm:h-11"
           />
         </div>
         {searching && <ButtonSpinner size={16} />}
+        {mobile && <MobileFiltersButton count={categories.length} onClick={() => setShowFilters(true)} />}
       </div>
 
-      <div className="flex flex-wrap gap-1.5">
+      {/* Sur téléphone, les catégories sont dans une feuille du bas, qu'on
+          rejette d'un glissé, au lieu d'occuper le haut de la liste. */}
+      {mobile && (
+        <MobileSearchFilters
+          open={showFilters}
+          onClose={() => setShowFilters(false)}
+          categories={CATEGORIES[kind]}
+          selected={categories}
+          onCategories={changeCategories}
+        />
+      )}
+
+      <div className={`flex flex-wrap gap-1.5 ${mobile ? 'hidden' : ''}`}>
         {CATEGORIES[kind].map((c) => {
           const active = categories.includes(c)
           return (

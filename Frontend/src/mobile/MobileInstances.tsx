@@ -10,7 +10,6 @@ import { CreateInstanceModal } from '@/components/instances/CreateInstanceModal'
 import { InstanceSettingsModal } from '@/components/instances/InstanceSettingsModal'
 import { DuplicateInstanceModal } from '@/components/instances/DuplicateInstanceModal'
 import { ShareImportModal } from '@/components/instances/ShareImportModal'
-import { InstanceIcon } from '@/components/instances/InstanceIcon'
 import { showError } from '@/stores/useErrorToast'
 import { useT } from '@/i18n'
 import { InstanceRow } from './instances/InstanceRow'
@@ -241,23 +240,23 @@ export default function MobileInstances() {
             exit={{ transform: 'translateX(100%)', transition: { duration: 0.22, ease: PUSH_EASE } }}
             className="absolute inset-0 z-20 flex flex-col bg-bg-primary shadow-[-12px_0_32px_rgba(0,0,0,0.5)]"
           >
-            <header className="flex shrink-0 items-center gap-1 border-b border-white/[0.06] px-1 pb-2 pt-[max(8px,env(safe-area-inset-top))]">
+            {/* Barre de navigation à la manière d'iOS et d'Android : retour à
+                gauche, le titre centré (nom, puis version et loader), les
+                paramètres à droite — trois zones nettes au lieu d'une ligne où
+                retour, icône et nom se disputaient la place. */}
+            <header className="grid shrink-0 grid-cols-[48px_1fr_48px] items-center border-b border-white/[0.06] px-1 pb-2 pt-[max(8px,env(safe-area-inset-top))]">
               <button
                 onClick={closeInstance}
                 aria-label={t('instancesPage.title')}
-                className="press flex h-11 shrink-0 items-center gap-0.5 rounded-full pl-1 pr-2 text-[15px] font-medium text-[#a29bfe]"
+                className="press flex h-11 w-11 items-center justify-center rounded-full text-[#a29bfe]"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
                   <path d="M15 6l-6 6 6 6" />
                 </svg>
-                {t('instancesPage.title')}
               </button>
-              <div className="flex min-w-0 flex-1 items-center gap-2.5 px-1">
-                <InstanceIcon instance={opened} size={32} />
-                <div className="flex min-w-0 flex-col">
-                  <span className="truncate text-[15px] font-bold leading-tight text-white">{opened.name}</span>
-                  <span className="truncate text-[12px] leading-tight text-white/55">{opened.mc_version} · {loaderName(opened.loader)}</span>
-                </div>
+              <div className="flex min-w-0 flex-col items-center px-2 text-center">
+                <span className="max-w-full truncate text-[16px] font-bold leading-tight text-white">{opened.name}</span>
+                <span className="max-w-full truncate text-[12px] leading-tight text-white/55">{opened.mc_version} · {loaderName(opened.loader)}</span>
               </div>
               <button
                 onClick={() => setSettingsTargetId(opened.id)}

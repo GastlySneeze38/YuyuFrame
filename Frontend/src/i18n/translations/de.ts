@@ -31,6 +31,7 @@ export const de: TranslationSchema = {
       shaders: 'Shader',
       resourcepacks: 'Ressourcenpakete',
       confirmDelete: 'Diese Mod löschen?',
+      showResults: 'Ergebnisse anzeigen',
     },
     menuMods: 'Mods',
     menuInstalledMods: 'Installierte Mods',

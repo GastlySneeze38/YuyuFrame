@@ -29,6 +29,7 @@ export const fr = {
       shaders: 'Shaders',
       resourcepacks: 'Packs de ressources',
       confirmDelete: 'Supprimer ce mod ?',
+      showResults: 'Voir les résultats',
     },
     menuMods: 'Mods',
     menuInstalledMods: 'Mods installés',
