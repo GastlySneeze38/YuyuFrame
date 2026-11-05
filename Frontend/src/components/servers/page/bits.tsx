@@ -20,7 +20,7 @@ export const PANEL = 'border border-white/[0.07] bg-[#121217]/95'
 export function Motd({ info, lines = 2, className = '' }: { info: ServerPingInfo; lines?: 1 | 2; className?: string }) {
   const spans = info.motd_spans?.length ? info.motd_spans : [{ text: info.motd, color: null, bold: false, italic: false, underlined: false, strikethrough: false }]
   return (
-    <p className={`m-0 whitespace-pre-line break-words text-[12px] leading-[1.35] text-[#aaaaaa] ${lines === 1 ? 'line-clamp-1' : 'line-clamp-2'} ${className}`}>
+    <p className={`m-0 whitespace-pre-line break-words text-[12px] leading-[1.35] text-[#aaaaaa] max-sm:text-[13px] ${lines === 1 ? 'line-clamp-1' : 'line-clamp-2'} ${className}`}>
       {spans.map((s, i) => (
         <span
           key={i}
@@ -118,6 +118,34 @@ export function compact(n: number): string {
   } catch {
     return String(n)
   }
+}
+
+/**
+ * Aucune instance : rien à lister ni où ranger un serveur. Une carte en haut
+ * de l'onglet — pas une phrase flottant au milieu du vide — qui dit pourquoi
+ * et mène là où on en crée une.
+ */
+export function NoInstance() {
+  const t = useT()
+  const navigate = useNavigate()
+  return (
+    <div className="flex w-full flex-col items-center gap-4 rounded-2xl border border-white/[0.06] bg-white/[0.04] px-6 py-8 text-center sm:mx-auto sm:mt-10 sm:max-w-md">
+      <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent/15 text-accent-hover">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+          <rect x="3" y="4" width="18" height="6" rx="1.5" />
+          <rect x="3" y="14" width="18" height="6" rx="1.5" />
+          <path d="M7 7h.01M7 17h.01" />
+        </svg>
+      </span>
+      <p className="max-w-xs text-[14px] leading-relaxed text-white/75 max-sm:text-[15px]">{t('servers.page.mine.noInstance')}</p>
+      <button
+        onClick={() => navigate('/instances')}
+        className="press h-10 rounded-xl bg-[#4B3FCF] px-5 text-[13px] font-semibold text-white transition-colors hover:bg-[#5b4fe0] max-sm:h-12 max-sm:w-full max-sm:rounded-2xl max-sm:text-[15px]"
+      >
+        {t('servers.page.mine.createInstance')}
+      </button>
+    </div>
+  )
 }
 
 /** Lance une instance directement sur un serveur, comme les cartes de

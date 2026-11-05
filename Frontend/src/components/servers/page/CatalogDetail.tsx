@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { useIsMobile } from '@/mobile/useIsMobile'
+import { Sheet, SheetTitle } from '@/mobile/ui/Sheet'
+import { CheckRow, Segmented as KitSegmented } from '@/mobile/ui/kit'
 import { open as openUrl } from '@tauri-apps/plugin-shell'
 import { api } from '@/api/client'
 import type { CatalogServer, CatalogServerDetail } from '@/api/client'
@@ -54,6 +57,8 @@ export function CatalogDetail({ server, onClose, onAdded }: { server: CatalogSer
   const [installing, setInstalling] = useState<string | null>(null)
   const [zoomed, setZoomed] = useState<string | null>(null)
   const [moreList, setMoreList] = useState<MoreListState | null>(null)
+  const mobile = useIsMobile()
+  const reduce = useReducedMotion()
 
   const modpack = server.content.kind === 'modpack' ? server.content : null
 
@@ -173,6 +178,211 @@ export function CatalogDetail({ server, onClose, onAdded }: { server: CatalogSer
     { key: 'description', label: t('servers.page.detail.tabs.description') },
     { key: 'info', label: t('servers.page.detail.tabs.info') },
   ]
+
+  // ── Téléphone ────────────────────────────────────────────────────────────
+  // Un écran poussé : il glisse depuis la droite et repart par la droite, plus
+  // vite. L'image, l'identité et l'action restent en tête quel que soit
+  // l'onglet ; les listes (versions, langues, catégories, liens) s'affichent
+  // en entier, puisque l'écran défile — pas de « +N ». « Ajouter à une
+  // instance » ouvre le choix dans une feuille.
+  if (mobile) {
+    const primary = installing ? (
+      <div className="flex h-12 items-center justify-center gap-2.5 rounded-2xl bg-accent/20 px-4 text-[15px] font-semibold text-white">
+        <ButtonSpinner size={16} />
+        <span className="truncate">{installing}</span>
+      </div>
+    ) : (
+      <button
+        disabled={!modpack && !version}
+        onClick={() => (modpack ? (packHolder ? void playExistingPack(packHolder.id) : void installPack()) : play())}
+        className="press h-12 w-full truncate rounded-2xl bg-[#4B3FCF] px-4 text-[16px] font-semibold text-white disabled:opacity-40"
+      >
+        {modpack ? (packHolder ? t('servers.page.detail.playWith', { name: packHolder.name }) : t('servers.page.detail.install')) : t('servers.page.detail.play')}
+      </button>
+    )
+    const pills = (items: { key: string; label: string; strong?: boolean }[]) => (
+      <div className="flex flex-wrap gap-1.5">
+        {items.map((i) => (
+          <span key={i.key} className={`rounded-lg px-2.5 py-1 text-[14px] font-semibold ${i.strong ? 'bg-accent/30 text-white' : 'bg-white/[0.06] text-white/70'}`}>{i.label}</span>
+        ))}
+      </div>
+    )
+    const links = [
+      ...(detail?.links ?? []).map((l) => ({ key: l.url, url: l.url, label: l.platform || l.url })),
+      { key: 'modrinth', url: `https://modrinth.com/server/${server.slug || server.id}`, label: 'Modrinth' },
+    ]
+    return (
+      <>
+        <motion.div
+          className="absolute inset-0 z-30 flex flex-col bg-[#09090D] shadow-[-12px_0_32px_rgba(0,0,0,0.45)]"
+          initial={reduce ? { opacity: 0 } : { transform: 'translateX(100%)' }}
+          animate={reduce ? { opacity: 1 } : { transform: 'translateX(0%)' }}
+          exit={reduce ? { opacity: 0, transition: { duration: 0.15 } } : { transform: 'translateX(100%)', transition: { duration: 0.22, ease: [0.32, 0.72, 0, 1] } }}
+          transition={{ duration: 0.32, ease: [0.32, 0.72, 0, 1] }}
+        >
+          <header className="grid shrink-0 grid-cols-[48px_1fr_48px] items-center border-b border-white/[0.06] px-1 pb-2 pt-[max(8px,env(safe-area-inset-top))]">
+            <button onClick={() => !installing && onClose()} aria-label={t('servers.page.detail.close')} className="press flex h-11 w-11 items-center justify-center rounded-full text-[#a29bfe]">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6"><path d="M15 6l-6 6 6 6" /></svg>
+            </button>
+            <h2 className="truncate text-center text-[17px] font-bold text-white">{server.name}</h2>
+            <span />
+          </header>
+
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[max(32px,env(safe-area-inset-bottom))]">
+            <div className="relative h-[150px] overflow-hidden" style={{ background: `linear-gradient(135deg, ${accent}66, ${accent}10)` }}>
+              {server.banner_url && <img src={server.banner_url} alt="" className="h-full w-full object-cover" draggable={false} />}
+              <div className="absolute inset-0 bg-gradient-to-t from-[#09090D] via-[#09090D]/30 to-transparent" />
+            </div>
+            <div className="relative -mt-12 flex flex-col gap-4 px-4">
+              <div className="flex items-end gap-3.5">
+                <div className="h-[80px] w-[80px] shrink-0 overflow-hidden rounded-[20px] border-4 border-[#09090D] bg-surface-3">
+                  {server.icon_url && <img src={server.icon_url} alt="" className="h-full w-full object-cover" draggable={false} />}
+                </div>
+                <div className="flex min-w-0 flex-1 flex-col gap-1 pb-1">
+                  <h3 className="break-words text-[22px] font-black leading-tight text-white">{server.name}</h3>
+                  {modpack && <span className="self-start rounded-lg bg-[#f59e0b]/20 px-2 py-0.5 text-[13px] font-bold text-[#fbbf24]">{t('servers.page.catalog.modded')}</span>}
+                </div>
+              </div>
+
+              <button
+                onClick={() => {
+                  void navigator.clipboard.writeText(server.address)
+                  showNotice(t('servers.page.detail.copied'))
+                }}
+                aria-label={t('servers.page.detail.copy')}
+                className="press flex h-11 items-center justify-between gap-2 rounded-xl bg-white/[0.06] px-3.5 text-left"
+              >
+                <span className="truncate text-[15px] font-semibold text-white/85">{server.address}</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-[18px] w-[18px] shrink-0 text-white/55"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 012-2h10" /></svg>
+              </button>
+
+              <div className="flex flex-col gap-2">
+                {primary}
+                {!installing && (
+                  <button onClick={() => setAddOpen(true)} className="press h-12 rounded-2xl border border-white/[0.1] bg-white/[0.05] text-[15px] font-semibold text-white">
+                    {t('servers.page.detail.addToInstance')}
+                  </button>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <Stat label={t('servers.page.detail.online')} value={server.ping ? compact(server.ping.players_online) : '—'} live={!!server.ping} />
+                <Stat label={t('servers.page.detail.plays')} value={server.plays_2w != null ? compact(server.plays_2w) : '—'} />
+                <Stat label={modpack ? t('servers.page.detail.modpack') : t('servers.page.detail.version')} value={modpack ? modpack.name ?? server.name : version ?? '—'} />
+                <Stat label={t('servers.page.detail.region')} value={server.region ? regionLabel(server.region) : '—'} />
+              </div>
+
+              <div className="mt-2">
+                <KitSegmented value={tab} onChange={setTab} options={tabs.map((tb) => ({ value: tb.key, label: tb.label }))} />
+              </div>
+
+              {tab === 'description' ? (
+                <div className="flex flex-col gap-6 pt-1">
+                  {detail ? (
+                    detail.description.trim() ? <RichDescription source={detail.description} /> : <p className="text-[15px] text-white/70">{server.summary}</p>
+                  ) : detailFailed ? (
+                    <p className="text-[15px] text-white/70">{server.summary}</p>
+                  ) : (
+                    <Loading />
+                  )}
+                  {gallery.length > 0 && (
+                    <section className="flex flex-col gap-3 border-t border-white/[0.07] pt-5">
+                      <h4 className="px-1 text-[13px] font-semibold uppercase tracking-[0.06em] text-white/55">{t('servers.page.detail.tabs.gallery')}</h4>
+                      {gallery.map((g) => (
+                        <button key={g} onClick={() => setZoomed(g)} className="press overflow-hidden rounded-xl border border-white/[0.07]">
+                          <img src={g} alt="" loading="lazy" draggable={false} className="aspect-video w-full object-cover" />
+                        </button>
+                      ))}
+                    </section>
+                  )}
+                </div>
+              ) : (
+                <div className="flex flex-col gap-6 pt-1">
+                  <MobileInfo title={t('servers.page.detail.versionList')}>
+                    {server.game_versions.length > 0
+                      ? pills([...server.game_versions].sort(compareVersions).map((v) => ({ key: v, label: v, strong: v === server.recommended_version })))
+                      : <p className="text-[15px] text-white/55">{modpack ? t('servers.page.detail.versionsFromPack') : '—'}</p>}
+                  </MobileInfo>
+                  {server.author && (
+                    <MobileInfo title={t('servers.page.detail.owner')}>
+                      <p className="text-[15px] font-semibold text-white">{server.author}</p>
+                    </MobileInfo>
+                  )}
+                  <MobileInfo title={t('servers.page.detail.languages')}>
+                    {server.languages.length > 0 ? pills(server.languages.map((l) => ({ key: l, label: languageName(l) }))) : <p className="text-[15px] text-white/55">—</p>}
+                  </MobileInfo>
+                  {server.categories.length > 0 && (
+                    <MobileInfo title={t('servers.page.detail.categories')}>
+                      {pills(server.categories.map((c) => ({ key: c, label: categoryLabel(c) })))}
+                    </MobileInfo>
+                  )}
+                  <MobileInfo title={t('servers.page.detail.links')}>
+                    <div className="flex flex-col divide-y divide-white/[0.06] overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.04]">
+                      {links.map((l) => (
+                        <button key={l.key} onClick={() => void openUrl(l.url)} className="flex min-h-[52px] items-center justify-between gap-3 px-4 text-left active:bg-white/[0.04]">
+                          <span className="truncate text-[15px] font-semibold capitalize text-white">{l.label}</span>
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-4 w-4 shrink-0 text-white/45"><path d="M7 17L17 7M9 7h8v8" /></svg>
+                        </button>
+                      ))}
+                    </div>
+                  </MobileInfo>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Image agrandie, sur tout l'écran ; un toucher la referme. */}
+          <AnimatePresence>
+            {zoomed && (
+              <motion.button
+                className="absolute inset-0 z-10 flex items-center justify-center bg-black/90 p-4"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18 }}
+                onClick={() => setZoomed(null)}
+                aria-label={t('servers.page.detail.close')}
+              >
+                <img src={zoomed} alt="" className="max-h-full max-w-full rounded-xl object-contain" draggable={false} />
+              </motion.button>
+            )}
+          </AnimatePresence>
+        </motion.div>
+
+        <Sheet
+          open={addOpen && !installing}
+          onClose={() => setAddOpen(false)}
+          label={t('servers.page.detail.addToInstance')}
+          header={<SheetTitle>{t('servers.page.detail.addTo')}</SheetTitle>}
+          footer={instances.length > 0 && (
+            <button onClick={() => void addTo()} disabled={adding || !target} className="press flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#4B3FCF] text-[16px] font-semibold text-white disabled:opacity-50">
+              {adding && <ButtonSpinner />}
+              {t('servers.page.detail.addButton')}
+            </button>
+          )}
+          bodyClassName="flex flex-col gap-1 px-2"
+        >
+          {instances.length === 0 ? (
+            <p className="px-3 py-4 text-[15px] text-white/60">{t('servers.page.mine.noInstance')}</p>
+          ) : (
+            instances.map((i) => (
+              <CheckRow key={i.id} label={i.name} sub={`${i.loader} · ${i.mc_version}`} checked={target === i.id} onClick={() => setTarget(i.id)} />
+            ))
+          )}
+        </Sheet>
+
+        {joinRequest && (
+          <JoinServerModal
+            request={joinRequest}
+            onClose={() => {
+              setJoinRequest(null)
+              onAdded()
+            }}
+          />
+        )}
+      </>
+    )
+  }
 
   return (
     <>
@@ -490,11 +700,21 @@ function Loading() {
   )
 }
 
+/** Une liste d'informations sur téléphone : son titre, puis tout son contenu. */
+function MobileInfo({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="flex flex-col gap-2.5">
+      <h4 className="px-1 text-[13px] font-semibold uppercase tracking-[0.06em] text-white/55">{title}</h4>
+      {children}
+    </section>
+  )
+}
+
 function Stat({ label, value, live }: { label: string; value: string; live?: boolean }) {
   return (
     <div className="flex min-w-0 flex-col gap-1 rounded-2xl border border-white/[0.07] bg-white/[0.03] px-4 py-3.5" title={value}>
-      <span className="text-[11.5px] font-semibold text-txt-muted">{label}</span>
-      <span className="flex min-w-0 items-center gap-2 text-[21px] font-black leading-tight text-white">
+      <span className="text-[11.5px] font-semibold text-txt-muted max-sm:text-[13px]">{label}</span>
+      <span className="flex min-w-0 items-center gap-2 text-[21px] font-black leading-tight text-white max-sm:text-[19px]">
         {live && <span className="h-2.5 w-2.5 flex-shrink-0 rounded-full bg-[#4ade80] shadow-[0_0_8px_#4ade80]" />}
         <span className="truncate">{value}</span>
       </span>

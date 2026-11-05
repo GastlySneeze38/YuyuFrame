@@ -12,6 +12,9 @@ import { SERVERS_TINT } from '@/components/servers/page/bits'
 import { useStore } from '@/stores/useStore'
 import { SNAP } from '@/lib/motion'
 import { useT } from '@/i18n'
+import { useIsMobile } from '@/mobile/useIsMobile'
+import { ScreenHeader } from '@/mobile/ui/ScreenHeader'
+import { Segmented } from '@/mobile/ui/kit'
 
 /**
  * Écran Serveurs, ouvert depuis la rangée de serveurs de l'accueil.
@@ -38,6 +41,7 @@ export default function Servers() {
   const [tab, setTab] = useState<Tab>(asked && TABS.includes(asked) ? asked : 'mine')
   const [visited, setVisited] = useState<Set<Tab>>(() => new Set([tab]))
   const selectedInstanceId = useStore((s) => s.selectedInstanceId)
+  const mobile = useIsMobile()
 
   const [data, setData] = useState<InstanceServers[] | null>(null)
   const [loading, setLoading] = useState(true)
@@ -57,6 +61,58 @@ export default function Servers() {
     setTab(next)
     setVisited((v) => (v.has(next) ? v : new Set(v).add(next)))
     setParams(next === 'mine' ? {} : { tab: next }, { replace: true })
+  }
+
+  const views = (
+    <>
+      {visited.has('mine') && (
+        <div className={tab === 'mine' ? 'flex min-h-0 min-w-0 flex-1' : 'hidden'}>
+          <MyServersView
+            data={data}
+            loading={loading}
+            instanceId={instanceId}
+            onPick={setInstanceId}
+            onReload={reload}
+            onAdd={() => go('add')}
+            onCatalog={() => go('catalog')}
+          />
+        </div>
+      )}
+      {visited.has('catalog') && (
+        <div className={tab === 'catalog' ? 'flex min-h-0 min-w-0 flex-1' : 'hidden'}>
+          <CatalogView onAdded={reload} />
+        </div>
+      )}
+      {visited.has('add') && (
+        <div className={tab === 'add' ? 'flex min-h-0 min-w-0 flex-1' : 'hidden'}>
+          <AddServerView
+            instanceId={instanceId}
+            onCancel={() => go('mine')}
+            onAdded={(id) => {
+              setInstanceId(id)
+              reload()
+              go('mine')
+            }}
+          />
+        </div>
+      )}
+    </>
+  )
+
+  // Téléphone : écran poussé (retour à gauche), les trois onglets en
+  // commutateur sous l'en-tête, et chaque onglet en colonne qui défile — voir
+  // la branche téléphone de chacun. Pas de fond topographique animé : il
+  // tournerait en boucle derrière une liste qu'on fait défiler.
+  if (mobile) {
+    return (
+      <div className="relative flex h-full flex-col overflow-hidden bg-[#09090D] text-txt-primary">
+        <ScreenHeader title={t('servers.page.title')} subtitle={t('servers.page.subtitle')} fallback="/home" />
+        <div className="shrink-0 px-4 pb-3 pt-3">
+          <Segmented value={tab} onChange={go} options={TABS.map((v) => ({ value: v, label: t(`servers.page.tabs.${v}`) }))} />
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col">{views}</div>
+      </div>
+    )
   }
 
   return (
@@ -96,39 +152,7 @@ export default function Servers() {
 
         {/* L'écran ne défile pas : ce sont les listes qui défilent dans leur cadre. */}
         <div className="min-h-0 flex-1 overflow-hidden">
-          <div className="mx-auto flex h-full w-full min-w-0 max-w-7xl flex-col px-6 py-5">
-            {visited.has('mine') && (
-              <div className={tab === 'mine' ? 'flex min-h-0 min-w-0 flex-1' : 'hidden'}>
-                <MyServersView
-                  data={data}
-                  loading={loading}
-                  instanceId={instanceId}
-                  onPick={setInstanceId}
-                  onReload={reload}
-                  onAdd={() => go('add')}
-                  onCatalog={() => go('catalog')}
-                />
-              </div>
-            )}
-            {visited.has('catalog') && (
-              <div className={tab === 'catalog' ? 'flex min-h-0 min-w-0 flex-1' : 'hidden'}>
-                <CatalogView onAdded={reload} />
-              </div>
-            )}
-            {visited.has('add') && (
-              <div className={tab === 'add' ? 'flex min-h-0 min-w-0 flex-1' : 'hidden'}>
-                <AddServerView
-                  instanceId={instanceId}
-                  onCancel={() => go('mine')}
-                  onAdded={(id) => {
-                    setInstanceId(id)
-                    reload()
-                    go('mine')
-                  }}
-                />
-              </div>
-            )}
-          </div>
+          <div className="mx-auto flex h-full w-full min-w-0 max-w-7xl flex-col px-6 py-5">{views}</div>
         </div>
       </div>
     </div>

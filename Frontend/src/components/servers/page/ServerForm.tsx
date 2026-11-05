@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/Button'
 import { useServerPing } from '@/lib/serverPing'
 import { useT } from '@/i18n'
 import { ServerRow } from './ServerRow'
+import { useIsMobile } from '@/mobile/useIsMobile'
 
 export interface ServerFormValues {
   name: string
@@ -41,6 +42,7 @@ export function ServerForm({
   onCancel?: () => void
 }) {
   const t = useT()
+  const mobile = useIsMobile()
   const [name, setName] = useState(initial?.name ?? '')
   const [address, setAddress] = useState(initial?.address ?? '')
   const [packs, setPacks] = useState<ResourcePacks>(initial?.resourcePacks ?? 'prompt')
@@ -65,7 +67,7 @@ export function ServerForm({
       }}
       className="flex w-full flex-col gap-4"
     >
-      <h2 className="text-center text-[16px] font-black text-white">{title}</h2>
+      <h2 className="text-center text-[16px] font-black text-white max-sm:text-[17px]">{title}</h2>
 
       <Labelled label={t('servers.page.form.name')}>
         <input
@@ -82,7 +84,11 @@ export function ServerForm({
           onChange={(e) => setAddress(e.target.value)}
           placeholder={t('servers.page.form.addressPlaceholder')}
           spellCheck={false}
-          autoFocus={!initial?.address}
+          autoCapitalize="none"
+          autoCorrect="off"
+          inputMode="url"
+          // Pas sur téléphone : le clavier couvrirait la moitié de l'écran dès l'ouverture de l'onglet.
+          autoFocus={!initial?.address && !mobile}
           className={INPUT}
         />
       </Labelled>
@@ -91,25 +97,25 @@ export function ServerForm({
         type="button"
         onClick={() => setPacks(PACK_ORDER[(PACK_ORDER.indexOf(packs) + 1) % PACK_ORDER.length])}
         title={t('servers.page.form.packsHint')}
-        className="h-10 rounded-lg border border-white/[0.12] bg-white/[0.05] text-[12.5px] font-semibold text-white transition-colors hover:border-white/30 hover:bg-white/[0.09]"
+        className="h-10 rounded-lg border border-white/[0.12] bg-white/[0.05] text-[12.5px] font-semibold text-white transition-colors hover:border-white/30 hover:bg-white/[0.09] max-sm:h-12 max-sm:rounded-xl max-sm:text-[15px]"
       >
         {t('servers.page.form.packs', { value: t(`servers.page.form.packs_${packs}`) })}
       </button>
 
       <div className="flex flex-col gap-1.5">
-        <span className="text-[10.5px] font-bold uppercase tracking-[0.06em] text-txt-muted">{t('servers.page.form.preview')}</span>
+        <span className="text-[10.5px] font-bold uppercase tracking-[0.06em] text-txt-muted max-sm:text-[13px] max-sm:font-semibold">{t('servers.page.form.preview')}</span>
         {pinged ? (
           <div className="rounded-xl border border-white/[0.06] bg-black/30">
             <ServerRow name={name.trim() || pinged} address={pinged} state={state} />
           </div>
         ) : (
-          <div className="flex h-[86px] items-center justify-center rounded-xl border border-dashed border-white/[0.08] text-[12px] text-txt-muted">
+          <div className="flex h-[86px] items-center justify-center rounded-xl border border-dashed border-white/[0.08] px-4 text-center text-[12px] text-txt-muted max-sm:text-[13px]">
             {t('servers.page.form.previewEmpty')}
           </div>
         )}
       </div>
 
-      <div className="flex flex-col gap-2 pt-1">
+      <div className="flex flex-col gap-2 pt-1 max-sm:[&>button]:h-12 max-sm:[&>button]:text-[15px]">
         <Button type="submit" variant="primary" loading={busy} disabled={!canSubmit} fullWidth>
           {submitLabel}
         </Button>
@@ -123,13 +129,14 @@ export function ServerForm({
   )
 }
 
+// Sur téléphone : 48 px de haut et 16 px de texte (en dessous, iOS agrandit la page à la saisie).
 const INPUT =
-  'h-10 w-full rounded-lg border border-white/[0.14] bg-black/50 px-3 text-[13px] text-white outline-none transition-colors placeholder:text-white/25 focus:border-white/60'
+  'h-10 w-full rounded-lg border border-white/[0.14] bg-black/50 px-3 text-[13px] text-white outline-none transition-colors placeholder:text-white/25 focus:border-white/60 max-sm:h-12 max-sm:rounded-xl max-sm:text-[16px] max-sm:placeholder:text-white/35'
 
 function Labelled({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="flex flex-col gap-1.5">
-      <span className="text-[12px] text-[#a0a0a0]">{label}</span>
+      <span className="text-[12px] text-[#a0a0a0] max-sm:text-[13px]">{label}</span>
       {children}
     </label>
   )

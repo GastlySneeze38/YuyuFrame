@@ -1,5 +1,6 @@
 import type { PingState } from '@/lib/serverPing'
 import { useT } from '@/i18n'
+import { useIsMobile } from '@/mobile/useIsMobile'
 import { Motd, ServerFavicon, Signal } from './bits'
 
 /**
@@ -29,6 +30,7 @@ export function ServerRow({
   showAddress?: boolean
 }) {
   const t = useT()
+  const mobile = useIsMobile()
   const info = state.status === 'ok' ? state.info : null
   return (
     <div
@@ -38,10 +40,10 @@ export function ServerRow({
         selected ? 'border-white/40 bg-white/[0.07]' : 'border-transparent hover:bg-white/[0.035]'
       }`}
     >
-      <ServerFavicon ping={info} size={64} />
+      <ServerFavicon ping={info} size={mobile ? 48 : 64} />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="flex items-center gap-2">
-          <span className="truncate text-[14px] font-bold text-white">{name || t('servers.defaultName')}</span>
+          <span className="truncate text-[14px] font-bold text-white max-sm:text-[15px]">{name || t('servers.defaultName')}</span>
           {badge && <span className="flex-shrink-0 rounded-md bg-accent/30 px-1.5 py-px text-[9.5px] font-bold text-white">{badge}</span>}
           {showAddress && <span className="truncate text-[11px] text-txt-muted">{address}</span>}
         </div>
@@ -64,7 +66,7 @@ export function ServerRow({
           )}
           <Signal state={state} />
         </div>
-        {info?.version_name && <span className="max-w-[160px] truncate text-[10.5px] text-txt-muted">{info.version_name}</span>}
+        {info?.version_name && <span className="max-w-[160px] truncate text-[10.5px] text-txt-muted max-sm:max-w-[90px] max-sm:text-[13px]">{info.version_name}</span>}
       </div>
     </div>
   )

@@ -155,26 +155,27 @@ export function JoinServerModal({ request, onClose }: { request: JoinRequest; on
   const loaderLabel = request.anyLoader ? 'vanilla' : request.loader
   return (
     <ModalShell title={request.inviter ? t('friends.join.titleFrom', { name: request.inviter }) : t('friends.join.title')} onClose={onClose} maxWidth="max-w-lg">
-      <p className="-mt-2 text-[12px] text-[rgba(255,255,255,0.4)]">
+      <p className="-mt-2 text-[12px] text-[rgba(255,255,255,0.4)] max-sm:mt-0 max-sm:text-[13px] max-sm:text-white/55">
         {t('friends.join.target', { version: request.mcVersion, loader: loaderLabel, server: request.ip })}
       </p>
 
       {compatible.length === 0 ? (
         <div className="mt-4 flex flex-col items-center gap-3 rounded-2xl border border-line bg-surface-1 px-5 py-6 text-center">
           <p className="text-[14px] font-bold text-white">{t('friends.join.none')}</p>
-          <p className="max-w-sm text-[12px] leading-relaxed text-txt-muted">{t('friends.join.noneHint', { version: request.mcVersion, loader: loaderLabel })}</p>
+          <p className="max-w-sm text-[12px] leading-relaxed text-txt-muted max-sm:text-[15px]">{t('friends.join.noneHint', { version: request.mcVersion, loader: loaderLabel })}</p>
           <button
             disabled={creating || launchingId !== null}
             onClick={() => void handleCreate()}
-            className="mt-1 rounded-xl bg-[#4B3FCF] px-4 py-2 text-[12.5px] font-bold text-white transition-colors hover:bg-[#6155e8] disabled:opacity-50"
+            className="mt-1 rounded-xl bg-[#4B3FCF] px-4 py-2 text-[12.5px] font-bold text-white transition-colors hover:bg-[#6155e8] disabled:opacity-50 max-sm:h-12 max-sm:w-full max-sm:text-[15px]"
           >
             {creating ? t('friends.join.creating') : launchingId ? t('friends.join.launching') : t('friends.join.create')}
           </button>
         </div>
       ) : (
         <>
-          <p className="mb-2 mt-3 text-[12px] text-txt-muted">{t('friends.join.pick')}</p>
-          <div className="flex max-h-[50vh] flex-col gap-2 overflow-y-auto pr-1">
+          <p className="mb-2 mt-3 text-[12px] text-txt-muted max-sm:text-[13px]">{t('friends.join.pick')}</p>
+          {/* Sur téléphone : lignes de 64 px, texte 15/13 ; la feuille défile d'elle-même. */}
+          <div className="flex max-h-[50vh] flex-col gap-2 overflow-y-auto pr-1 max-sm:max-h-none max-sm:overflow-visible max-sm:pr-0 max-sm:[&_p]:text-[15px] max-sm:[&_span]:text-[13px] max-sm:[&>button]:min-h-[64px]">
             {compatible.map((inst) => (
               <button
                 key={inst.id}

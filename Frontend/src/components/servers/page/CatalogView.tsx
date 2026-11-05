@@ -7,6 +7,10 @@ import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { errorMessage } from '@/lib/apiError'
 import { useT } from '@/i18n'
 import { CatalogDetail } from './CatalogDetail'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useIsMobile } from '@/mobile/useIsMobile'
+import { Sheet, SheetTitle } from '@/mobile/ui/Sheet'
+import { CheckRow, Note, Segmented } from '@/mobile/ui/kit'
 import { LANGUAGES, PANEL, REGIONS, Select, categoryLabel, compact, languageName, regionLabel } from './bits'
 
 /**
@@ -91,6 +95,34 @@ export function CatalogView({ onAdded }: { onAdded: () => void }) {
   const generation = useRef(0)
   const gridRef = useRef<HTMLDivElement>(null)
 
+  // Téléphone : une liste qui défile, donc pas de grille à mesurer — une page
+  // de taille fixe. La fiche ouverte vit dans l'adresse (`?server=`), pour que
+  // le retour d'Android la referme comme un écran.
+  const mobile = useIsMobile()
+  const [filtering, setFiltering] = useState(false)
+  const listRef = useRef<HTMLDivElement>(null)
+  const navigate = useNavigate()
+  const [params, setParams] = useSearchParams()
+  const pushedServer = useRef(false)
+  useEffect(() => {
+    if (mobile) setQuery((q) => (q.pageSize ? q : { ...q, pageSize: MOBILE_PAGE }))
+  }, [mobile])
+  const openMobile = (s: CatalogServer) => {
+    setOpen(s)
+    pushedServer.current = true
+    const next = new URLSearchParams(params)
+    next.set('server', s.id)
+    setParams(next)
+  }
+  const closeMobile = () => {
+    if (pushedServer.current) { pushedServer.current = false; navigate(-1) }
+    else setOpen(null)
+  }
+  const askedServer = params.get('server')
+  useEffect(() => {
+    if (mobile && !askedServer) setOpen(null)
+  }, [mobile, askedServer])
+
   // Le texte part après une courte pause de frappe, et ramène à la page 1.
   useEffect(() => {
     const id = setTimeout(() => setQuery((q) => (q.query === text ? q : { ...q, query: text, page: 1 })), 350)
@@ -166,6 +198,114 @@ export function CatalogView({ onAdded }: { onAdded: () => void }) {
     names: categories.filter((c) => c.header === header).map((c) => c.name).sort((a, b) => categoryLabel(a).localeCompare(categoryLabel(b))),
   })).filter((g) => g.names.length > 0)
   const extraCount = query.categories.filter((c) => !MAIN_CATEGORIES.includes(c)).length
+
+  // ── Téléphone ────────────────────────────────────────────────────────────
+  // La recherche et le commutateur Tous / Vanilla / Moddés restent visibles ;
+  // tri, région, langue et catégories passent dans une feuille « Filtres ».
+  // Les résultats sont une liste qui défile, une carte par serveur, et les
+  // pages en bas. La fiche s'ouvre en écran poussé, inscrit dans l'adresse
+  // (`?server=`) : le retour d'Android la referme.
+  if (mobile) {
+    const activeFilters = query.categories.length + (query.region ? 1 : 0) + (query.language ? 1 : 0) + (query.sort !== 'relevance' ? 1 : 0)
+    return (
+      <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col">
+        <div className="flex shrink-0 flex-col gap-3 px-4 pb-3">
+          <div className="flex gap-2">
+            <input
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder={t('servers.page.catalog.search')}
+              enterKeyHint="search"
+              className="h-11 min-w-0 flex-1 rounded-xl border border-white/[0.1] bg-white/[0.04] px-3.5 text-[16px] text-white outline-none placeholder:text-white/35 focus:border-accent/50"
+            />
+            <button
+              onClick={() => setFiltering(true)}
+              aria-label={t('stats.mobile.filters')}
+              className={`press relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border ${activeFilters ? 'border-accent/45 bg-accent/[0.12] text-white' : 'border-white/[0.1] bg-white/[0.04] text-white/75'}`}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" className="h-5 w-5"><path d="M4 6h16M7 12h10M10 18h4" /></svg>
+              {activeFilters > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1 text-[12px] font-bold text-white">{activeFilters}</span>}
+            </button>
+          </div>
+          <Segmented size="sm" value={kind} onChange={(k) => set({ kind: k === 'all' ? null : k })} options={(['all', 'vanilla', 'modpack'] as Kind[]).map((k) => ({ value: k, label: t(`servers.page.catalog.kind.${k}`) }))} />
+        </div>
+
+        <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[max(32px,env(safe-area-inset-bottom))]">
+          {error ? (
+            <div className="flex flex-col items-center gap-3 py-12 text-center">
+              <p className="text-[16px] font-semibold text-white">{t('servers.page.catalog.error')}</p>
+              <p className="text-[13px] text-white/55">{error}</p>
+              <button onClick={run} className="press h-12 rounded-2xl bg-[#4B3FCF] px-6 text-[15px] font-semibold text-white">{t('servers.page.catalog.retry')}</button>
+            </div>
+          ) : !result ? (
+            <div className="flex justify-center py-16"><ButtonSpinner size={28} color="#818cf8" trackColor="rgba(255,255,255,0.08)" /></div>
+          ) : result.servers.length === 0 ? (
+            <Note>{t('servers.page.catalog.empty')}</Note>
+          ) : (
+            <div className={`flex flex-col gap-3 transition-opacity duration-150 ${loading ? 'opacity-50' : ''}`}>
+              <p className="px-1 text-[13px] text-white/55">{t('servers.page.catalog.results', { count: result.total })} · {t('servers.page.catalog.source')}</p>
+              {result.servers.map((s) => <MobileCatalogCard key={s.id} server={s} onOpen={() => openMobile(s)} />)}
+              <div className="flex justify-center pt-2">
+                <Pagination
+                  page={query.page}
+                  pageCount={pageCountFor(result.total, query.pageSize || MOBILE_PAGE)}
+                  onChange={(page) => { set({ page }); listRef.current?.scrollTo({ top: 0 }) }}
+                  disabled={loading}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        <Sheet
+          open={filtering}
+          onClose={() => setFiltering(false)}
+          label={t('stats.mobile.filters')}
+          full
+          header={
+            <SheetTitle action={filtered || query.sort !== 'relevance' ? (
+              <button onClick={() => setQuery({ ...EMPTY, query: query.query, pageSize: query.pageSize })} className="press h-11 shrink-0 px-2 text-[15px] font-semibold text-[#a29bfe]">{t('servers.page.catalog.clear')}</button>
+            ) : undefined}>{t('stats.mobile.filters')}</SheetTitle>
+          }
+          bodyClassName="flex flex-col gap-6 px-2 pb-4"
+        >
+          <FilterBlock title={t('servers.page.catalog.sortTitle')}>
+            {(['relevance', 'follows', 'newest', 'updated'] as const).map((s) => (
+              <CheckRow key={s} label={t(`servers.page.catalog.sort.${s}`)} checked={query.sort === s} onClick={() => set({ sort: s })} />
+            ))}
+          </FilterBlock>
+          <FilterBlock title={t('servers.page.detail.region')}>
+            <CheckRow label={t('servers.page.catalog.anyRegion')} checked={!query.region} onClick={() => set({ region: null })} />
+            {REGIONS.map((r) => <CheckRow key={r} label={regionLabel(r)} checked={query.region === r} onClick={() => set({ region: r })} />)}
+          </FilterBlock>
+          <FilterBlock title={t('servers.page.detail.languages')}>
+            <CheckRow label={t('servers.page.catalog.anyLanguage')} checked={!query.language} onClick={() => set({ language: null })} />
+            {LANGUAGES.map((l) => <CheckRow key={l} label={languageName(l)} checked={query.language === l} onClick={() => set({ language: l })} />)}
+          </FilterBlock>
+          {(groups.length > 0 ? groups : [{ header: '', names: MAIN_CATEGORIES }]).map((g) => (
+            <FilterBlock key={g.header || 'main'} title={g.header ? t(`servers.page.filters.groups.${g.header}`) : t('servers.page.detail.categories')}>
+              <div className="flex flex-wrap gap-2 px-3">
+                {g.names.map((name) => (
+                  <button
+                    key={name}
+                    onClick={() => toggleCategory(name)}
+                    aria-pressed={query.categories.includes(name)}
+                    className={`press h-10 rounded-full border px-3.5 text-[14px] font-semibold ${query.categories.includes(name) ? 'border-accent bg-accent/30 text-white' : 'border-white/[0.1] text-white/70'}`}
+                  >
+                    {categoryLabel(name)}
+                  </button>
+                ))}
+              </div>
+            </FilterBlock>
+          ))}
+        </Sheet>
+
+        <AnimatePresence>
+          {open && <CatalogDetail key={open.id} server={open} onClose={closeMobile} onAdded={onAdded} />}
+        </AnimatePresence>
+      </div>
+    )
+  }
 
   return (
     <div className="relative flex min-h-0 w-full min-w-0 flex-1 flex-col gap-3">
@@ -312,6 +452,67 @@ export function CatalogView({ onAdded }: { onAdded: () => void }) {
 
       <AnimatePresence>{open && <CatalogDetail key={open.id} server={open} onClose={() => setOpen(null)} onAdded={onAdded} />}</AnimatePresence>
     </div>
+  )
+}
+
+/** Taille d'une page de résultats sur téléphone, où la liste défile. */
+const MOBILE_PAGE = 20
+
+function FilterBlock({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <p className="px-3 pb-1 text-[13px] font-semibold uppercase tracking-[0.06em] text-white/55">{title}</p>
+      {children}
+    </div>
+  )
+}
+
+/** Un serveur du catalogue, sur téléphone : l'image, l'icône et le nom, le
+ *  résumé, puis ses étiquettes sur deux lignes au plus. Toute la carte ouvre
+ *  la fiche. */
+function MobileCatalogCard({ server, onOpen }: { server: CatalogServer; onOpen: () => void }) {
+  const t = useT()
+  const accent = server.color ?? '#4b3fcf'
+  const tags = [
+    ...(server.content.kind === 'modpack' ? [{ key: 'modded', label: t('servers.page.catalog.modded'), warm: true }] : []),
+    ...(server.recommended_version ? [{ key: 'version', label: server.recommended_version }] : []),
+    ...(server.region ? [{ key: 'region', label: regionLabel(server.region) }] : []),
+    ...server.categories.slice(0, 3).map((c) => ({ key: c, label: categoryLabel(c) })),
+  ] as { key: string; label: string; warm?: boolean }[]
+  return (
+    <button onClick={onOpen} className="press flex w-full flex-col overflow-hidden rounded-2xl border border-white/[0.07] bg-[#121217] text-left">
+      <div className="relative h-[104px] w-full shrink-0 overflow-hidden" style={{ background: `linear-gradient(135deg, ${accent}55, ${accent}11)` }}>
+        {server.banner_url && <img src={server.banner_url} alt="" loading="lazy" draggable={false} className="h-full w-full object-cover" />}
+        <div className="absolute inset-0 bg-gradient-to-t from-[#121217] via-[#121217]/20 to-transparent" />
+        {server.ping && (
+          <span className="absolute right-2.5 top-2.5 flex items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1 text-[13px] font-bold text-white">
+            <span className="h-2 w-2 rounded-full bg-[#4ade80]" />
+            {compact(server.ping.players_online)}
+          </span>
+        )}
+      </div>
+      <div className="relative -mt-8 flex flex-col gap-2.5 px-3.5 pb-3.5">
+        <div className="flex items-end gap-3">
+          <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl border-2 border-[#121217] bg-surface-3">
+            {server.icon_url && <img src={server.icon_url} alt="" loading="lazy" draggable={false} className="h-full w-full object-cover" />}
+          </div>
+          <div className="flex min-w-0 flex-1 flex-col pb-0.5">
+            <span className="truncate text-[16px] font-bold text-white">{server.name}</span>
+            <span className="truncate text-[13px] text-white/55">{server.address}</span>
+          </div>
+        </div>
+        {server.summary && <p className="line-clamp-2 text-[14px] leading-snug text-white/70">{server.summary}</p>}
+        {tags.length > 0 && (
+          <div className="flex max-h-[60px] flex-wrap gap-1.5 overflow-hidden">
+            {tags.map((tag) => (
+              <span key={tag.key} className={`rounded-lg px-2 py-0.5 text-[13px] font-semibold ${tag.warm ? 'bg-[#f59e0b]/20 text-[#fbbf24]' : 'bg-white/[0.06] text-white/65'}`}>
+                {tag.label}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    </button>
   )
 }
 

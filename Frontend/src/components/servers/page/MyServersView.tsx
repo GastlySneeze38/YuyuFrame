@@ -10,8 +10,12 @@ import { showError, showNotice } from '@/stores/useErrorToast'
 import { loaderColor } from '@/lib/loader'
 import { useServerPings, type PingState } from '@/lib/serverPing'
 import { useT } from '@/i18n'
-import { Motd, PANEL, ServerFavicon, Signal, useJoinServer } from './bits'
+import { Motd, NoInstance, PANEL, ServerFavicon, Signal, useJoinServer } from './bits'
 import { ServerForm, type ServerFormValues } from './ServerForm'
+import { useIsMobile } from '@/mobile/useIsMobile'
+import { Sheet, SheetTitle } from '@/mobile/ui/Sheet'
+import { ActionSheet, SHEET_ICONS } from '@/mobile/ui/ActionSheet'
+import { CARD, Note, Section } from '@/mobile/ui/kit'
 
 /**
  * « Mes serveurs » : la liste multijoueur de chaque instance (`servers.dat`,
@@ -74,6 +78,8 @@ export function MyServersView({
   const [page, setPage] = useState(1)
   const [layout, setLayout] = useState({ cols: 1, rows: 1, tileH: TILE_H })
   const gridRef = useRef<HTMLDivElement>(null)
+  const mobile = useIsMobile()
+  const [picking, setPicking] = useState(false)
 
   const current = data?.find((d) => d.instance_id === instanceId) ?? data?.[0] ?? null
   const servers = current?.servers ?? []
@@ -136,7 +142,11 @@ export function MyServersView({
     )
   }
   if (!data || !current) {
-    return <div className="flex flex-1 items-center justify-center text-[15px] font-bold text-white">{t('servers.page.mine.noInstance')}</div>
+    return (
+      <div className="w-full px-4 pt-1 sm:px-0">
+        <NoInstance />
+      </div>
+    )
   }
 
   const saveEdit = async (v: ServerFormValues) => {
@@ -160,6 +170,105 @@ export function MyServersView({
   }
 
   const onlineCount = servers.filter((s) => stateOf(s.ip).status === 'ok').length
+
+  // Téléphone : l'instance en une ligne (la liste s'ouvre dans une feuille),
+  // puis ses serveurs en liste qui défile, sans pages — au doigt, faire
+  // défiler est le geste naturel. Modifier un serveur ouvre le formulaire du
+  // jeu dans une feuille.
+  if (mobile) {
+    const inst = instances.find((i) => i.id === current.instance_id)
+    return (
+      <div className="flex min-h-0 w-full flex-1 flex-col">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[max(32px,env(safe-area-inset-bottom))] pt-1">
+          <div className="flex flex-col gap-6">
+            <button onClick={() => setPicking(true)} className={`press flex min-h-[64px] items-center gap-3 px-3.5 py-2.5 text-left ${CARD}`}>
+              {inst && <InstanceIcon instance={inst} size={44} />}
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate text-[15px] font-semibold text-white">{current.instance_name}</span>
+                <span className="truncate text-[13px] text-white/55">
+                  <span style={{ color: loaderColor(current.loader) }}>{current.loader}</span> · {current.mc_version} · {t('servers.page.mine.sameAsGame')}
+                </span>
+              </span>
+              {data.length > 1 && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0 text-white/50"><path d="M6 9l6 6 6-6" /></svg>}
+            </button>
+
+            {current.error ? (
+              <Note>{t('servers.page.mine.unreadable')}</Note>
+            ) : servers.length === 0 ? (
+              <div className={`${CARD} flex flex-col gap-1.5 px-5 py-8 text-center`}>
+                <p className="text-[16px] font-semibold text-white">{t('servers.page.mine.empty')}</p>
+                <p className="text-[15px] leading-relaxed text-white/60">{t('servers.page.mine.emptyHint')}</p>
+              </div>
+            ) : (
+              <Section
+                title={`${t('servers.page.list.count', { count: servers.length })} · ${t('servers.page.list.onlineCount', { count: onlineCount })}`}
+                aside={<button onClick={() => refresh()} className="press -my-3 h-11 shrink-0 px-1 text-[15px] font-semibold text-[#a29bfe]">{t('servers.page.list.refresh')}</button>}
+              >
+                <div className="flex flex-col gap-3">
+                  {sorted.map((s) => (
+                    <MobileServerCard
+                      key={`${current.instance_id}:${s.slot}:${s.ip}`}
+                      instanceId={current.instance_id}
+                      server={s}
+                      state={stateOf(s.ip)}
+                      onHome={onHome(s.ip)}
+                      onRefresh={() => refresh(s.ip)}
+                      onChanged={onReload}
+                      onEdit={() => setEditing(s)}
+                    />
+                  ))}
+                </div>
+              </Section>
+            )}
+
+            <div className="flex gap-2">
+              <button onClick={onCatalog} className="press h-12 flex-1 rounded-2xl border border-white/[0.1] bg-white/[0.05] text-[15px] font-semibold text-white">
+                {t('servers.page.mine.browse')}
+              </button>
+              <button onClick={onAdd} className="press h-12 flex-1 rounded-2xl bg-[#4B3FCF] text-[15px] font-semibold text-white">
+                {t('servers.page.mine.add')}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <Sheet open={picking} onClose={() => setPicking(false)} label={t('servers.page.mine.instances')} header={<SheetTitle>{t('servers.page.mine.instances')}</SheetTitle>} bodyClassName="flex flex-col gap-1 px-2 pb-3">
+          {data.map((d) => {
+            const i = instances.find((x) => x.id === d.instance_id)
+            const active = d.instance_id === current.instance_id
+            return (
+              <button
+                key={d.instance_id}
+                onClick={() => { onPick(d.instance_id); setPicking(false) }}
+                aria-pressed={active}
+                className={`press flex min-h-[64px] items-center gap-3 rounded-2xl px-3 text-left ${active ? 'bg-accent/[0.14]' : 'active:bg-white/[0.04]'}`}
+              >
+                {i && <InstanceIcon instance={i} size={40} />}
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-[15px] font-semibold text-white">{d.instance_name}</span>
+                  <span className="truncate text-[13px] text-white/55"><span style={{ color: loaderColor(d.loader) }}>{d.loader}</span> · {d.mc_version}</span>
+                </span>
+                <span className="shrink-0 rounded-lg bg-white/[0.07] px-2 py-0.5 text-[13px] font-bold tabular-nums text-white/70">{d.servers.length}</span>
+              </button>
+            )
+          })}
+        </Sheet>
+
+        <Sheet open={editing !== null} onClose={() => setEditing(null)} label={t('servers.page.form.editTitle')} full bodyClassName="px-5 pb-5 pt-1">
+          {editing && (
+            <ServerForm
+              title={t('servers.page.form.editTitle')}
+              initial={{ name: editing.name, address: editing.ip, resourcePacks: editing.resource_packs ?? 'prompt' }}
+              submitLabel={t('servers.page.form.done')}
+              busy={saving}
+              onSubmit={(v) => void saveEdit(v)}
+              onCancel={() => setEditing(null)}
+            />
+          )}
+        </Sheet>
+      </div>
+    )
+  }
 
   return (
     <div className="flex min-h-0 w-full min-w-0 flex-1 gap-4">
@@ -410,6 +519,129 @@ function ServerTile({
           )}
         </button>
       </div>
+    </div>
+  )
+}
+
+/**
+ * Un serveur, sur téléphone : son icône, son nom et son adresse, le signal,
+ * le MOTD en couleurs, puis « Rejoindre » sur toute la largeur et un « … »
+ * qui porte le reste (épingler, modifier, actualiser, retirer). Sur PC ces
+ * gestes sont des boutons de 32 px côte à côte.
+ */
+function MobileServerCard({ instanceId, server, state, onHome, onRefresh, onChanged, onEdit }: {
+  instanceId: string
+  server: SavedServer
+  state: PingState
+  onHome: boolean
+  onRefresh: () => void
+  onChanged: () => void
+  onEdit: () => void
+}) {
+  const t = useT()
+  const join = useJoinServer()
+  const pinned = useStore((s) => s.favoriteServers[instanceId]?.includes(server.ip) ?? false)
+  const toggleFavorite = useStore((s) => s.toggleFavoriteServer)
+  const [busy, setBusy] = useState(false)
+  const [menu, setMenu] = useState(false)
+  const info = state.status === 'ok' ? state.info : null
+  const offline = state.status === 'offline'
+  const name = server.name || t('servers.defaultName')
+
+  const doJoin = async () => {
+    setBusy(true)
+    try {
+      await join(instanceId, server.ip)
+    } catch (e) {
+      showError(e)
+      setBusy(false)
+    }
+  }
+
+  const remove = async () => {
+    try {
+      await api.servers.remove(instanceId, server.ip)
+      if (pinned) toggleFavorite(instanceId, server.ip)
+      onChanged()
+    } catch (e) {
+      showError(e)
+    }
+  }
+
+  return (
+    <div className={`flex flex-col gap-3 rounded-2xl border p-3.5 ${onHome ? 'border-accent/45 bg-[#17152a]' : 'border-white/[0.07] bg-white/[0.04]'}`}>
+      <div className="flex items-start gap-3">
+        <div className={offline ? 'opacity-50 grayscale' : ''}>
+          <ServerFavicon ping={info} size={48} />
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="flex min-w-0 items-center gap-2">
+            <span className={`truncate text-[15px] font-semibold ${offline ? 'text-white/65' : 'text-white'}`}>{name}</span>
+            {onHome && <span className="shrink-0 rounded-md bg-accent/30 px-1.5 py-0.5 text-[12px] font-bold text-white">{t('servers.page.mine.pinned')}</span>}
+          </span>
+          <span className="truncate text-[13px] text-white/55">{server.ip}</span>
+        </div>
+        {offline ? (
+          <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-white/[0.06] px-2 py-0.5 text-[13px] font-semibold text-white/55">
+            <span className="h-1.5 w-1.5 rounded-full bg-white/30" />
+            {t('servers.page.list.offlineBadge')}
+          </span>
+        ) : (
+          <span className="shrink-0 pt-1"><Signal state={state} /></span>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-1 rounded-xl bg-black/35 px-3 py-2.5">
+        {info ? (
+          <>
+            <Motd info={info} />
+            <span className="truncate text-[13px] text-white/50">
+              {t('servers.page.players', { online: info.players_online, max: info.players_max })} · {info.version_name}
+            </span>
+          </>
+        ) : (
+          <span className="text-[13px] text-white/50">{offline ? t('servers.page.list.offlineHint') : t('servers.page.list.pinging')}</span>
+        )}
+      </div>
+
+      <div className="flex gap-2">
+        <button
+          onClick={() => void doJoin()}
+          disabled={busy}
+          className={`press flex h-11 flex-1 items-center justify-center gap-2 rounded-xl text-[15px] font-semibold disabled:opacity-60 ${offline ? 'border border-white/[0.1] bg-white/[0.05] text-white/80' : 'bg-[#4B3FCF] text-white'}`}
+        >
+          {busy && <ButtonSpinner />}
+          {t('servers.page.mine.join')}
+        </button>
+        <button onClick={() => setMenu(true)} aria-label={name} className="press flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/[0.1] text-white/70">
+          <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5"><circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" /></svg>
+        </button>
+      </div>
+
+      <ActionSheet
+        open={menu}
+        onClose={() => setMenu(false)}
+        header={
+          <>
+            <ServerFavicon ping={info} size={36} />
+            <span className="flex min-w-0 flex-col">
+              <span className="truncate text-[16px] font-bold text-white">{name}</span>
+              <span className="truncate text-[13px] text-white/55">{server.ip}</span>
+            </span>
+          </>
+        }
+        actions={[
+          {
+            id: 'pin',
+            label: pinned ? t('servers.removeFromHome') : t('servers.page.list.pin'),
+            icon: <path d="M16 3l5 5-3 1-4 4 1 5-2 2-4-4-5 5-1-1 5-5-4-4 2-2 5 1 4-4z" />,
+            onSelect: () => { if (!toggleFavorite(instanceId, server.ip)) showNotice(t('home.maxPinnedServers')) },
+          },
+          { id: 'edit', label: t('servers.page.mine.edit'), icon: SHEET_ICONS.settings, onSelect: onEdit },
+          { id: 'refresh', label: t('servers.refreshPing'), icon: SHEET_ICONS.versions, onSelect: onRefresh },
+          { id: 'remove', label: t('servers.page.mine.remove'), icon: SHEET_ICONS.delete, danger: true, confirm: t('servers.page.mine.removeQuestion', { name }), onSelect: () => void remove() },
+        ]}
+      />
     </div>
   )
 }

@@ -347,3 +347,13 @@ body {
 .rich-text center, .rich-text [align="center"] { display: block; text-align: center; }
 .rich-text details { margin: 0.7em 0; padding: 0.5em 0.8em; border-radius: 10px; background: rgb(255 255 255 / 0.03); }
 .rich-text summary { cursor: pointer; color: #fff; font-weight: 700; }
+/* Téléphone : le texte courant à 15 px, les titres au-dessus, le code et les
+ * tableaux à 13 px — le plancher de lecture. */
+@media (max-width: 640px) {
+  .rich-text { font-size: 15px; line-height: 1.6; }
+  .rich-text h1 { font-size: 21px; }
+  .rich-text h2 { font-size: 18px; }
+  .rich-text h3 { font-size: 16px; }
+  .rich-text h4, .rich-text h5, .rich-text h6 { font-size: 15px; }
+  .rich-text code, .rich-text table { font-size: 13px; }
+}

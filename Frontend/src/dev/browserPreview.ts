@@ -198,6 +198,17 @@ const LIST_LIKE = /(^list_|_list$|_list_|_history$|^servers_all$|_categories$|^l
 
 const reported = new Set<string>()
 
+/** Catalogue de serveurs de l'aperçu : quelques fiches, sans image (pas de réseau). */
+const DEMO_CATALOG = Array.from({ length: 8 }, (_, i) => ({
+  id: `preview-srv-${i}`, slug: `serveur-${i}`, name: ['Mineland', 'Crystal PvP', 'Skyblock Reborn', 'Cobblemon World'][i % 4] + (i > 3 ? ` ${i}` : ''),
+  summary: 'Un serveur communautaire avec des modes PvP, de la survie et des mini-jeux tous les soirs.',
+  author: 'Équipe', icon_url: null, banner_url: null, color: ['#4b3fcf', '#16a34a', '#ea580c', '#0ea5e9'][i % 4],
+  categories: ['pvp', 'survival-mode', 'minigames'], address: `play.serveur${i}.net`, region: 'europe', languages: ['fr', 'en'],
+  game_versions: ['1.21.11', '1.21.4', '1.20.1'], recommended_version: '1.21.11',
+  content: i % 4 === 3 ? { kind: 'modpack' as const, project_id: 'p', version_id: 'v', name: 'Cobblemon Pack', icon_url: null } : { kind: 'vanilla' as const },
+  ping: { players_online: 1200 - i * 90, players_max: 5000, version_name: '1.21.11', at: null }, plays_2w: 34000 - i * 2000, follows: 1200,
+}))
+
 /** Configurations JVM de l'aperçu : une vide, une remplie. */
 const JVM_BLANK = {
   id: '', name: '', ram_mb: null as number | null, jvm_vendor: 'auto', jvm_custom_path: null as string | null, gc_policy: 'auto',
@@ -279,6 +290,20 @@ function answer(cmd: string, payload: unknown): unknown {
     return ANSWERS[key]
   }
   if (cmd === 'stats_get') return demoStats()
+  // Écran Serveurs : la liste multijoueur de chaque instance, et un catalogue fictif.
+  if (cmd === 'servers_all') {
+    return INSTANCES.map((i, n) => ({
+      instance_id: i.id, instance_name: i.name, mc_version: i.mc_version, loader: i.loader, error: null,
+      servers: n === 0 ? [...SERVERS, { name: 'Minemen Club', ip: 'eu.minemen.club' }] : n === 1 ? SERVERS.slice(0, 1) : [],
+    }))
+  }
+  if (cmd === 'server_catalog_search') return { servers: DEMO_CATALOG, total: 64, page: 1, page_size: 20 }
+  if (cmd === 'server_catalog_get') {
+    const id = (payload as { id?: string } | undefined)?.id
+    const s = DEMO_CATALOG.find((x) => x.id === id) ?? DEMO_CATALOG[0]
+    return { ...s, description: `## ${s.name}\n\n${s.summary} Rejoins des milliers de joueurs sur des modes **PvP**, survie et mini-jeux.\n\n- Événements chaque semaine\n- Classements par saison\n- Équipe de modération active`, gallery: [], links: [{ platform: 'discord', url: 'https://discord.gg/exemple' }] }
+  }
+  if (cmd === 'server_catalog_categories') return [{ name: 'pvp', header: 'minecraft_server_gameplay' }, { name: 'survival-mode', header: 'minecraft_server_gameplay' }, { name: 'minigames', header: 'minecraft_server_gameplay' }, { name: 'economy', header: 'minecraft_server_features' }]
   // Catalogue de skins : deux pages de skins fictifs, sans aperçu (pas de réseau).
   if (cmd === 'skin_catalog_browse') {
     const page = (payload as { page?: number } | undefined)?.page ?? 1
