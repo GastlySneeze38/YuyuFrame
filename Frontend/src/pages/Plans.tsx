@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { open } from '@tauri-apps/plugin-shell'
 import { AnimatePresence, animate, motion, useInView, useMotionValue, useScroll, useSpring, useTransform } from 'framer-motion'
 import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
-import type { YuyuPlan } from '@/stores/useStore'
 import { getPlans } from '@/data/plans'
+import { usePlanCheckout } from '@/components/plans/usePlanCheckout'
 import type { PlanMeta } from '@/data/plans'
 import { PlanIcon } from '@/components/plans/PlanIcon'
 import { UpgradeModal } from '@/components/plans/UpgradeModal'
@@ -13,8 +12,6 @@ import { HeaderFriendsShortcut } from '@/components/ui/HeaderFriendsShortcut'
 import { BackArrowIcon } from '@/components/ui/icons/BackArrowIcon'
 import { PageGlow } from '@/components/PageGlow'
 import { Reveal } from '@/components/Reveal'
-import { showApiError } from '@/stores/useErrorToast'
-import { errorMessage, isNetworkError } from '@/lib/apiError'
 import { listItemVariants, listVariants, transition } from '@/lib/motion'
 import { useT } from '@/i18n'
 
@@ -34,67 +31,20 @@ import { useT } from '@/i18n'
 export default function Plans() {
   const navigate = useNavigate()
   const t = useT()
-  const { yuyuPlanExpiresAt, isPremium, isUltimate, setYuyuPlan, language } = useStore()
+  const { yuyuPlanExpiresAt, isPremium, isUltimate, language } = useStore()
 
   const PLANS = getPlans(t)
   const effectivePlan = isUltimate() ? 'ultimate' : isPremium() ? 'premium' : 'free'
   const comparisonRef = useRef<HTMLDivElement>(null)
 
-  const [refreshing, setRefreshing] = useState(false)
-  const [upgradeTarget, setUpgradeTarget] = useState<string | null>(null)
-  const [checkoutState, setCheckoutState] = useState<'idle' | 'loading' | 'waiting' | 'success' | 'timeout' | 'error'>('idle')
-  const [checkoutError, setCheckoutError] = useState<string | null>(null)
+  const {
+    refreshing, upgradeTarget, setUpgradeTarget, checkoutState, setCheckoutState, checkoutError,
+    handleRefresh, handleCheckout, closeUpgrade,
+  } = usePlanCheckout()
 
   useEffect(() => {
     api.analytics.track('plans_page_viewed')
   }, [])
-
-  /** Utilisé par UpgradeModal après un délai d'attente de paiement dépassé. */
-  const handleRefresh = async () => {
-    setRefreshing(true)
-    try {
-      const resp = await api.yuyu.refreshPlan()
-      setYuyuPlan(resp.plan as YuyuPlan, resp.plan_expires_at)
-    } catch (e) {
-      showApiError(e, t('common.serverUnreachable'))
-    } finally {
-      setRefreshing(false)
-    }
-  }
-
-  const handleCheckout = async (planId: string) => {
-    setCheckoutState('loading')
-    setCheckoutError(null)
-    try {
-      const { checkout_url } = await api.yuyu.createCheckout(planId)
-      // Défense en profondeur : n'ouvrir que des URLs https — au cas où la
-      // réponse serait un jour corrompue/interceptée (API compromise,
-      // YUYU_API_URL pointé vers un serveur non fiable), on n'ouvre jamais
-      // aveuglément un schéma arbitraire (file://, javascript:, etc.).
-      if (!checkout_url.startsWith('https://')) {
-        throw t('plans.invalidCheckoutUrl')
-      }
-      await open(checkout_url)
-      api.analytics.track('checkout_redirected', { plan: planId })
-      setCheckoutState('waiting')
-      // Le webhook de paiement arrive sur le serveur : ici on ne peut
-      // qu'observer le résultat. Sondage toutes les 3 s, 60 s au plus.
-      for (let i = 0; i < 20; i++) {
-        await new Promise<void>((r) => setTimeout(r, 3000))
-        const resp = await api.yuyu.refreshPlan()
-        if (resp.plan !== 'free') {
-          setYuyuPlan(resp.plan as YuyuPlan, resp.plan_expires_at)
-          setCheckoutState('success')
-          setTimeout(() => { setUpgradeTarget(null); setCheckoutState('idle') }, 2500)
-          return
-        }
-      }
-      setCheckoutState('timeout')
-    } catch (e) {
-      setCheckoutError(isNetworkError(e) ? t('common.serverUnreachable') : errorMessage(e))
-      setCheckoutState('error')
-    }
-  }
 
   // Animations liées au défilement : barre de progression, dérive des
   // lueurs de fond, envol de l'accroche. `container` : c'est cette div qui
@@ -331,7 +281,7 @@ export default function Plans() {
           plan={upgradeTarget}
           checkoutState={checkoutState}
           checkoutError={checkoutError}
-          onClose={() => { setUpgradeTarget(null); setCheckoutState('idle'); setCheckoutError(null) }}
+          onClose={closeUpgrade}
           onCheckout={() => handleCheckout(upgradeTarget)}
           onRefresh={async () => {
             await handleRefresh()
@@ -433,7 +383,7 @@ function FeaturedOffer({
  * Prix qui s'incrémente à l'arrivée à l'écran. Les deux décimales restent
  * lisibles pendant tout le compte : on anime la valeur, pas le texte.
  */
-function AnimatedPrice({ value, className }: { value: number; className?: string }) {
+export function AnimatedPrice({ value, className }: { value: number; className?: string }) {
   const ref = useRef<HTMLSpanElement>(null)
   const inView = useInView(ref, { margin: '0px 0px -10% 0px' })
   const count = useMotionValue(0)
@@ -618,7 +568,7 @@ function Check() {
 }
 
 /** Arguments de vente — tracés d'icônes en ligne, pas de dépendance en plus. */
-const ARGUMENTS = [
+export const ARGUMENTS = [
   { key: 'sync', path: 'M7 18a5 5 0 01-.5-9.97A6 6 0 0118 8.5 4.5 4.5 0 0117.5 18H7z' },
   { key: 'restore', path: 'M3 12a9 9 0 109-9 9 9 0 00-7 3.3M3 4v4h4' },
   { key: 'badge', path: 'M12 3l2.6 5.5 6 .8-4.4 4.2 1.1 6-5.3-2.9-5.3 2.9 1.1-6L3.4 9.3l6-.8L12 3z' },

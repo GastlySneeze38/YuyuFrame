@@ -3,6 +3,8 @@ import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { CloseButton } from '@/components/ui/CloseButton'
 import { PlanIcon } from './PlanIcon'
 import { useT } from '@/i18n'
+import { useIsMobile } from '@/mobile/useIsMobile'
+import { Sheet } from '@/mobile/ui/Sheet'
 
 export type CheckoutState = 'idle' | 'loading' | 'waiting' | 'success' | 'timeout' | 'error'
 
@@ -24,35 +26,14 @@ export function UpgradeModal({
   refreshing: boolean
 }) {
   const t = useT()
+  const mobile = useIsMobile()
   const planMeta = getPlans(t).find((p) => p.id === plan)!
   const busy = checkoutState === 'loading' || checkoutState === 'waiting'
   const accentColor = planMeta.color === '#818cf8' ? '#4B3FCF' : 'rgba(245,158,11,0.9)'
   const accentText = planMeta.color === '#818cf8' ? 'white' : '#09090D'
 
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.7)] backdrop-blur-[6px]"
-      onClick={busy ? undefined : onClose}
-    >
-      <div
-        className="flex flex-col gap-6 rounded-2xl p-8 w-full max-w-sm relative bg-[#111118]"
-        style={{
-          border: `1px solid ${planMeta.borderColor}`,
-          boxShadow: `0 0 60px ${planMeta.glowColor}, 0 24px 48px rgba(0,0,0,0.6)`,
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Close */}
-        {!busy && (
-          <CloseButton
-            onClick={onClose}
-            className="absolute right-4 top-4"
-            idleColor="rgba(255,255,255,0.25)"
-            idleBg="rgba(255,255,255,0.04)"
-            hoverBg="rgba(255,255,255,0.08)"
-          />
-        )}
-
+  const content = (
+      <>
         {/* Icon + title */}
         <div className="flex flex-col items-center gap-3 text-center">
           <div
@@ -87,11 +68,11 @@ export function UpgradeModal({
               <svg viewBox="0 0 24 24" fill={planMeta.color} width={14} height={14} className="shrink-0">
                 <path d="M20 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z" />
               </svg>
-              <span className="text-[12px] font-bold text-[rgba(255,255,255,0.7)]">
+              <span className="text-[12px] font-bold text-[rgba(255,255,255,0.7)] max-sm:text-[15px]">
                 {t('plans.upgradeModal.securePayment')}
               </span>
             </div>
-            <p className="text-[11px] text-[rgba(255,255,255,0.4)] leading-[1.6]">
+            <p className="text-[11px] text-[rgba(255,255,255,0.4)] leading-[1.6] max-sm:text-[14px] max-sm:text-white/60">
               {t('plans.upgradeModal.redirectNotice')} <span className="text-[rgba(255,255,255,0.65)] font-semibold">{t('plans.upgradeModal.automatically')}</span> {t('plans.upgradeModal.afterConfirmation')}
             </p>
           </div>
@@ -100,7 +81,7 @@ export function UpgradeModal({
         {(checkoutState === 'waiting' || checkoutState === 'loading') && (
           <div className="flex flex-col items-center gap-3 rounded-xl p-5 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.07)]">
             <ButtonSpinner size={32} color={planMeta.color} trackColor="rgba(255,255,255,0.08)" />
-            <p className="text-[12px] text-[rgba(255,255,255,0.5)] text-center leading-[1.6]">
+            <p className="text-[12px] text-[rgba(255,255,255,0.5)] text-center leading-[1.6] max-sm:text-[15px] max-sm:text-white/60">
               {checkoutState === 'loading' ? t('plans.upgradeModal.creatingSession') : t('plans.upgradeModal.waitingConfirmation')}
             </p>
           </div>
@@ -108,7 +89,7 @@ export function UpgradeModal({
 
         {checkoutState === 'success' && (
           <div className="flex flex-col items-center gap-2 rounded-xl p-4 bg-[rgba(74,222,128,0.05)] border border-[rgba(74,222,128,0.2)]">
-            <p className="text-[12px] text-[rgba(255,255,255,0.55)] text-center leading-[1.6]">
+            <p className="text-[12px] text-[rgba(255,255,255,0.55)] text-center leading-[1.6] max-sm:text-[15px] max-sm:text-white/60">
               {t('plans.upgradeModal.subscriptionActivePrefix')} <span className="font-bold" style={{ color: planMeta.color }}>{planMeta.name}</span> {t('plans.upgradeModal.subscriptionActiveSuffix')}
             </p>
           </div>
@@ -120,9 +101,9 @@ export function UpgradeModal({
               <svg viewBox="0 0 24 24" fill="#f59e0b" width={14} height={14} className="shrink-0">
                 <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" />
               </svg>
-              <span className="text-[12px] font-bold text-[rgba(255,255,255,0.7)]">{t('plans.upgradeModal.paymentNotDetected')}</span>
+              <span className="text-[12px] font-bold text-[rgba(255,255,255,0.7)] max-sm:text-[15px]">{t('plans.upgradeModal.paymentNotDetected')}</span>
             </div>
-            <p className="text-[11px] text-[rgba(255,255,255,0.4)] leading-[1.6]">
+            <p className="text-[11px] text-[rgba(255,255,255,0.4)] leading-[1.6] max-sm:text-[14px] max-sm:text-white/60">
               {t('plans.upgradeModal.timeoutHintPrefix')} <span className="text-[rgba(255,255,255,0.65)] font-semibold">{t('plans.upgradeModal.refreshMyPlan')}</span> {t('plans.upgradeModal.timeoutHintSuffix')}
             </p>
           </div>
@@ -130,8 +111,8 @@ export function UpgradeModal({
 
         {checkoutState === 'error' && (
           <div className="flex flex-col gap-2 rounded-xl p-4 bg-[rgba(200,50,50,0.08)] border border-[rgba(200,50,50,0.2)]">
-            <span className="text-[12px] font-bold text-[rgb(248,113,113)]">{t('plans.upgradeModal.error')}</span>
-            <p className="text-[11px] text-[rgba(255,255,255,0.4)] leading-[1.6] break-words">
+            <span className="text-[12px] font-bold text-[rgb(248,113,113)] max-sm:text-[15px]">{t('plans.upgradeModal.error')}</span>
+            <p className="text-[11px] text-[rgba(255,255,255,0.4)] leading-[1.6] break-words max-sm:text-[14px] max-sm:text-white/60">
               {checkoutError ?? t('plans.upgradeModal.unexpectedError')}
             </p>
           </div>
@@ -141,7 +122,7 @@ export function UpgradeModal({
         {checkoutState === 'idle' && (
           <button
             onClick={onCheckout}
-            className="flex items-center justify-center gap-2 w-full rounded-xl font-bold transition-all duration-150 active:scale-95 h-11 text-[13px] hover:brightness-110"
+            className="flex items-center justify-center gap-2 w-full rounded-xl font-bold transition-all duration-150 active:scale-95 h-11 text-[13px] hover:brightness-110 max-sm:h-12 max-sm:rounded-2xl max-sm:text-[16px]"
             style={{ background: accentColor, color: accentText, boxShadow: `0 4px 20px ${planMeta.glowColor}` }}
           >
             <svg viewBox="0 0 24 24" fill="currentColor" width={14} height={14}>
@@ -156,7 +137,7 @@ export function UpgradeModal({
             <button
               onClick={onRefresh}
               disabled={refreshing}
-              className={`flex items-center justify-center gap-2 w-full rounded-xl font-bold transition-all duration-150 active:scale-95 h-10 text-[12px] ${refreshing ? 'bg-[rgba(40,38,65,0.7)] text-[rgba(255,255,255,0.3)] cursor-not-allowed' : 'cursor-pointer'}`}
+              className={`flex items-center justify-center gap-2 w-full rounded-xl font-bold transition-all duration-150 active:scale-95 h-10 text-[12px] max-sm:h-12 max-sm:rounded-2xl max-sm:text-[15px] ${refreshing ? 'bg-[rgba(40,38,65,0.7)] text-[rgba(255,255,255,0.3)] cursor-not-allowed' : 'cursor-pointer'}`}
               style={refreshing ? undefined : { background: accentColor, color: accentText }}
             >
               {refreshing
@@ -168,13 +149,57 @@ export function UpgradeModal({
             {checkoutState === 'error' && (
               <button
                 onClick={onCheckout}
-                className="flex items-center justify-center gap-2 w-full rounded-xl font-semibold transition-all duration-150 h-9 text-[12px] text-[rgba(255,255,255,0.4)] bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)]"
+                className="flex items-center justify-center gap-2 w-full rounded-xl font-semibold transition-all duration-150 h-9 text-[12px] text-[rgba(255,255,255,0.4)] bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)] max-sm:h-11 max-sm:rounded-2xl max-sm:text-[15px] max-sm:text-white/65"
               >
                 {t('plans.upgradeModal.retry')}
               </button>
             )}
           </div>
         )}
+      </>
+  )
+
+  // Téléphone : une feuille du bas, comme toutes les fenêtres — poignée,
+  // glissé pour fermer, pas de croix. Pendant un paiement elle ne se ferme
+  // pas (même règle que le PC, où la croix disparaît alors).
+  if (mobile) {
+    return (
+      <Sheet
+        open
+        onClose={onClose}
+        dismissible={!busy}
+        label={t('plans.upgradeModal.planName', { name: planMeta.name })}
+        bodyClassName="flex flex-col gap-5 px-5 pb-5"
+      >
+        {content}
+      </Sheet>
+    )
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.7)] backdrop-blur-[6px]"
+      onClick={busy ? undefined : onClose}
+    >
+      <div
+        className="flex flex-col gap-6 rounded-2xl p-8 w-full max-w-sm relative bg-[#111118]"
+        style={{
+          border: `1px solid ${planMeta.borderColor}`,
+          boxShadow: `0 0 60px ${planMeta.glowColor}, 0 24px 48px rgba(0,0,0,0.6)`,
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Close */}
+        {!busy && (
+          <CloseButton
+            onClick={onClose}
+            className="absolute right-4 top-4"
+            idleColor="rgba(255,255,255,0.25)"
+            idleBg="rgba(255,255,255,0.04)"
+            hoverBg="rgba(255,255,255,0.08)"
+          />
+        )}
+        {content}
       </div>
     </div>
   )

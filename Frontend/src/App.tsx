@@ -114,6 +114,7 @@ const SkinEditor = lazy(() => import('@/pages/SkinEditor'))
 const MobileHome = lazy(() => import('@/mobile/MobileHome'))
 const MobileInstances = lazy(() => import('@/mobile/MobileInstances'))
 const MobileYuyuAccount = lazy(() => import('@/mobile/MobileYuyuAccount'))
+const MobilePlans = lazy(() => import('@/mobile/MobilePlans'))
 // Atelier des modales. Le `import()` est DANS la branche de développement,
 // pas seulement la route : écrit dehors, Vite voyait un module importable et
 // en sortait un morceau de JS livré à tout le monde — mort, mais livré.
@@ -754,7 +755,7 @@ export default function App() {
                 repasse par /skins avec son résultat en candidat. */}
             <Route path="/skins/editor" element={<SkinEditor />} />
             <Route path="/support" element={<Support />} />
-            <Route path="/plans" element={<Plans />} />
+            <Route path="/plans" element={mobile ? <MobilePlans /> : <Plans />} />
             <Route path="/stats" element={<Stats />} />
             {/* Les sauvegardes sont payantes, au même titre que la sync : le
                 Rust le déclarait déjà (`plan_guard`, clé « backup ») mais
