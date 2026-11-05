@@ -42,7 +42,8 @@ export function Pagination({ page, pageCount, onChange, disabled }: {
   const t = useT()
   if (pageCount <= 1) return null
 
-  const cell = 'flex h-8 min-w-8 items-center justify-center rounded-lg border px-2 text-[12px] font-semibold transition-colors duration-150'
+  // Sur téléphone, des cases de 44 px : 32 px se ratent au doigt.
+  const cell = 'flex h-8 min-w-8 items-center justify-center rounded-lg border px-2 text-[12px] font-semibold transition-colors duration-150 max-sm:h-11 max-sm:min-w-11 max-sm:rounded-xl max-sm:text-[15px]'
   const idle = 'border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] text-[rgba(255,255,255,0.55)] hover:border-[rgba(75,63,207,0.5)] hover:text-white disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:border-[rgba(255,255,255,0.08)]'
   const current = 'border-[rgba(75,63,207,0.7)] bg-[rgba(75,63,207,0.35)] text-white'
 

@@ -89,6 +89,42 @@ const ANSWERS: Record<string, unknown> = {
     { name: 'iris-fabric-1.8.1+mc1.21.1.jar', size: 2_310_000, enabled: false, sha1: 'preview-iris' },
   ] satisfies Mod[],
   mods_check_conflicts: [],
+  curseforge_local_fingerprints: [],
+  // Quelques réglages, pour voir l'écran Options rempli (vue lisible et avancée).
+  mc_options_read: [
+    { key: 'renderDistance', value: '12' },
+    { key: 'simulationDistance', value: '10' },
+    { key: 'fov', value: '70' },
+    { key: 'maxFps', value: '120' },
+    { key: 'graphicsMode', value: '1' },
+    { key: 'particles', value: '0' },
+    { key: 'enableVsync', value: 'true' },
+    { key: 'fullscreen', value: 'false' },
+    { key: 'gamma', value: '0.5' },
+    { key: 'soundCategory_master', value: '1.0' },
+    { key: 'soundCategory_music', value: '0.4' },
+    { key: 'soundCategory_ambient', value: '1.0' },
+    { key: 'lang', value: 'fr_fr' },
+    { key: 'autoJump', value: 'false' },
+    { key: 'toggleCrouch', value: 'false' },
+    { key: 'guiScale', value: '0' },
+    { key: 'key_key.forward', value: 'key.keyboard.z' },
+    { key: 'key_key.left', value: 'key.keyboard.q' },
+    { key: 'mouseSensitivity', value: '0.5' },
+  ],
+  agent_options_read: [
+    { key: 'ui-settings.setting.themeMode', value: '0' },
+    { key: 'zoom.setting.level', value: '4' },
+  ],
+  // Résultats de recherche des packs (et des mods) : trois projets factices.
+  mods_search_advanced: {
+    hits: [
+      { project_id: 'p-faithful', slug: 'faithful-32x', title: 'Faithful 32x', description: 'La texture vanilla, deux fois plus fine.', icon_url: null, downloads: 1_200_000, follows: 8000, categories: ['32x'], author: 'Faithful' },
+      { project_id: 'p-bsl', slug: 'bsl-shaders', title: 'BSL Shaders', description: 'Lumière douce, eau réaliste, ombres nettes.', icon_url: null, downloads: 900_000, follows: 6000, categories: ['iris'], author: 'capttatsu' },
+      { project_id: 'p-fresh', slug: 'fresh-animations', title: 'Fresh Animations', description: 'Des créatures qui bougent enfin comme des créatures.', icon_url: null, downloads: 700_000, follows: 5000, categories: ['themed'], author: 'FreshLX' },
+    ],
+    total_hits: 3,
+  },
   launcher_agent_status: { available: true, block: null, min_java: 21 } satisfies AgentStatus,
   system_memory_info: { total_mb: 16384, available_mb: 9216, suggested_mb: 4096 } satisfies SystemMemoryInfo,
   fleet_config: FLEET,
@@ -131,6 +167,21 @@ function answer(cmd: string, payload: unknown): unknown {
     const instance_id = (payload as { instanceId?: string } | undefined)?.instanceId ?? ''
     window.setTimeout(() => void emit('game_state', { running: false, instance_id }), FAKE_GAME_MS)
     return null
+  }
+  if (cmd === 'packs_list') {
+    const kind = (payload as { kind?: string } | undefined)?.kind
+    return kind === 'shader'
+      ? [{ name: 'BSL_v8.2.09.zip', size: 412_000, kind: 'shader', sha1: 'preview-bsl' }]
+      : [{ name: 'Faithful 32x - 1.21.zip', size: 8_600_000, kind: 'resourcepack', sha1: 'preview-faithful' }]
+  }
+  // Écriture des réglages : fusionne et rend le fichier, comme le Rust.
+  if (cmd === 'mc_options_write' || cmd === 'agent_options_write') {
+    const key = cmd === 'mc_options_write' ? 'mc_options_read' : 'agent_options_read'
+    const changes = (payload as { changes?: Array<{ key: string; value: string }> } | undefined)?.changes ?? []
+    const merged = new Map((ANSWERS[key] as Array<{ key: string; value: string }>).map((e) => [e.key, e.value]))
+    for (const c of changes) merged.set(c.key, c.value)
+    ANSWERS[key] = [...merged].map(([k, value]) => ({ key: k, value }))
+    return ANSWERS[key]
   }
   if (cmd in ANSWERS) return ANSWERS[cmd]
   // Fenêtre, événements du système… : rien à rendre.

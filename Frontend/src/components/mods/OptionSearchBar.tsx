@@ -80,20 +80,20 @@ export function OptionSearchBar({ candidates, onPick }: {
       key={result.key}
       onMouseEnter={() => setCursor(index)}
       onClick={() => choose(result)}
-      className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left transition-colors duration-100 ${
+      className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left transition-colors duration-100 max-sm:min-h-[52px] max-sm:rounded-xl max-sm:px-3 ${
         cursor === index ? 'bg-[rgba(75,63,207,0.3)]' : 'hover:bg-[rgba(255,255,255,0.05)]'
       }`}
     >
       <div className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate text-[12px] font-medium text-[rgba(255,255,255,0.85)]">
+        <span className="truncate text-[12px] font-medium text-[rgba(255,255,255,0.85)] max-sm:text-[15px]">
           {result.label ?? result.key}
         </span>
         {result.label && (
-          <span className="truncate font-mono text-[10px] text-[rgba(255,255,255,0.28)]">{result.key}</span>
+          <span className="truncate font-mono text-[10px] text-[rgba(255,255,255,0.28)] max-sm:text-[13px] max-sm:text-white/55">{result.key}</span>
         )}
       </div>
       {result.group && (
-        <span className="flex-shrink-0 rounded-md bg-[rgba(255,255,255,0.05)] px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-[0.06em] text-[rgba(255,255,255,0.32)]">
+        <span className="flex-shrink-0 rounded-md bg-[rgba(255,255,255,0.05)] px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-[0.06em] text-[rgba(255,255,255,0.32)] max-sm:text-[11px] max-sm:text-white/55">
           {result.group}
         </span>
       )}
@@ -102,7 +102,7 @@ export function OptionSearchBar({ candidates, onPick }: {
 
   return (
     <div ref={rootRef} className="relative flex-1">
-      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2">
+      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 max-sm:left-4">
         <SearchIcon size={14} color="rgba(255,255,255,0.3)" />
       </span>
       <input
@@ -111,7 +111,8 @@ export function OptionSearchBar({ candidates, onPick }: {
         onFocus={() => setOpen(true)}
         onKeyDown={onKeyDown}
         placeholder={t('options.searchPlaceholder')}
-        className="h-8 w-full rounded-lg border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] pl-9 pr-3 text-[12px] text-white outline-none transition-colors duration-150 focus:border-[rgba(75,63,207,0.5)]"
+        enterKeyHint="search"
+        className="h-8 w-full rounded-lg border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] pl-9 pr-3 text-[12px] text-white outline-none transition-colors duration-150 focus:border-[rgba(75,63,207,0.5)] max-sm:h-11 max-sm:rounded-xl max-sm:pl-11 max-sm:text-[15px]"
       />
 
       <AnimatePresence>
@@ -124,7 +125,7 @@ export function OptionSearchBar({ candidates, onPick }: {
             className="absolute left-0 right-0 top-[calc(100%+4px)] z-20 flex max-h-[320px] flex-col gap-0.5 overflow-y-auto rounded-xl border border-[rgba(255,255,255,0.09)] bg-[rgba(18,17,27,0.98)] p-1 shadow-[0_12px_38px_rgba(0,0,0,0.55)]"
           >
             {ordered.length === 0 ? (
-              <p className="px-2.5 py-2 text-[11.5px] text-[rgba(255,255,255,0.3)]">
+              <p className="px-2.5 py-2 text-[11.5px] text-[rgba(255,255,255,0.3)] max-sm:px-3 max-sm:py-3 max-sm:text-[15px] max-sm:text-white/55">
                 {t('options.searchNothing')}
               </p>
             ) : (
@@ -149,9 +150,9 @@ export function OptionSearchBar({ candidates, onPick }: {
                       <button
                         key={c.key}
                         onClick={() => choose(c)}
-                        className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left transition-colors duration-100 hover:bg-[rgba(255,255,255,0.05)]"
+                        className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left transition-colors duration-100 hover:bg-[rgba(255,255,255,0.05)] max-sm:min-h-[48px] max-sm:px-3"
                       >
-                        <span className="truncate text-[11.5px] text-[rgba(255,255,255,0.55)]">
+                        <span className="truncate text-[11.5px] text-[rgba(255,255,255,0.55)] max-sm:text-[15px]">
                           {c.label ?? c.key}
                         </span>
                       </button>

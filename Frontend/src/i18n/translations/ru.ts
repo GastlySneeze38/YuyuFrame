@@ -882,6 +882,7 @@ export const ru: TranslationSchema = {
     installing: '…',
     installedCount: 'паков уже в этой сборке: {{count}}',
     noFile: 'Для «{{name}}» нет архива для скачивания',
+    confirmDelete: 'Удалить этот пакет?',
   },
 
   options: {
@@ -893,6 +894,7 @@ export const ru: TranslationSchema = {
     searchNear: 'Возможно, вы имели в виду',
     searchRelated: 'Связанные настройки',
     pending: 'несохранённых изменений: {{count}}',
+    pendingShort: 'изменений: {{count}}',
     save: 'Сохранить',
     saving: 'Сохранение…',
     noFileYet: 'Minecraft ещё не создал options.txt для этой сборки. Запустите игру один раз или сохраните здесь, чтобы создать файл.',

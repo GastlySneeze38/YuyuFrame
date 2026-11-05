@@ -125,16 +125,39 @@ export function MobileModsToolbar({ tab, onTab, isPlugin, hasModpack, modCount, 
  * famille ouvert et la longueur de la liste. Posé par `ModsContent`, dont le
  * contenu garde en bas la place de le laisser passer sans rien cacher.
  */
-export function MobileImportFab({ uploading, onImport }: { uploading: boolean; onImport: () => void }) {
+/**
+ * « Importer », bouton flottant du téléphone. Pendant qu'on fait défiler, il
+ * se replie en un rond de 56 px avec son seul « + » (`collapsed`) — il cache
+ * moins la liste — puis reprend son libellé un peu après l'arrêt, comme le
+ * bouton flottant étendu de Material.
+ *
+ * Seul le libellé bouge : sa largeur maximale, sa marge et son opacité. Le
+ * repli part vite (150 ms) parce qu'il suit le doigt ; le retour prend
+ * 240 ms, il arrive quand plus rien ne bouge et n'a pas à surprendre.
+ */
+export function MobileImportFab({ uploading, collapsed = false, onImport }: {
+  uploading: boolean
+  collapsed?: boolean
+  onImport: () => void
+}) {
   const t = useT()
+  const label = uploading ? t('mods.importing') : t('mods.import')
   return (
     <button
       onClick={onImport}
       disabled={uploading}
-      className="press absolute bottom-[max(16px,env(safe-area-inset-bottom))] right-4 z-10 flex h-14 items-center gap-2 rounded-full bg-[#4B3FCF] pl-5 pr-6 text-[16px] font-semibold text-white shadow-[0_8px_28px_rgba(75,63,207,0.5),0_2px_8px_rgba(0,0,0,0.4)] disabled:opacity-60"
+      aria-label={label}
+      className="press absolute bottom-[max(16px,env(safe-area-inset-bottom))] right-4 z-10 flex h-14 items-center rounded-full bg-[#4B3FCF] px-4 text-[16px] font-semibold text-white shadow-[0_8px_28px_rgba(75,63,207,0.5),0_2px_8px_rgba(0,0,0,0.4)] disabled:opacity-60"
     >
-      <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" /></svg>
-      {uploading ? t('mods.importing') : t('mods.import')}
+      <svg viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6 shrink-0"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" /></svg>
+      <span
+        aria-hidden
+        className={`overflow-hidden whitespace-nowrap transition-[max-width,margin,opacity] ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none ${
+          collapsed ? 'ml-0 max-w-0 opacity-0 duration-150' : 'ml-2 mr-2 max-w-[160px] opacity-100 duration-[240ms]'
+        }`}
+      >
+        {label}
+      </span>
     </button>
   )
 }

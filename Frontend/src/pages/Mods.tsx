@@ -123,6 +123,18 @@ export function ModsContent({ instance }: { instance: Instance }) {
   const [updatingAll, setUpdatingAll] = useState(false)
   const [importNotice, setImportNotice] = useState('')
   const [showImportChoice, setShowImportChoice] = useState(false)
+  // Bouton « Importer » du téléphone : réduit à son « + » pendant qu'on fait
+  // défiler (il cache moins la liste), rendu entier un peu après l'arrêt.
+  // L'état ne change qu'aux deux bascules, pas à chaque événement de défilement.
+  const [fabCollapsed, setFabCollapsed] = useState(false)
+  const fabTimer = useRef<number | undefined>(undefined)
+  const onContentScroll = () => {
+    if (!mobile) return
+    setFabCollapsed(true)
+    window.clearTimeout(fabTimer.current)
+    fabTimer.current = window.setTimeout(() => setFabCollapsed(false), 700)
+  }
+  useEffect(() => () => window.clearTimeout(fabTimer.current), [])
   const [showImportFolder, setShowImportFolder] = useState(false)
   /** Nombre de packs installés, remonté par `PacksTab` pour le compteur du
    *  menu. Gardé ici et non dans l'onglet : le menu doit l'afficher même
@@ -1193,7 +1205,11 @@ export function ModsContent({ instance }: { instance: Instance }) {
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
-      {mobile && <MobileImportFab uploading={uploading} onImport={() => setShowImportChoice(true)} />}
+      {/* Pas sur l'écran Options : il a sa propre barre d'enregistrement en
+          bas, et deux boutons au même endroit se gêneraient. */}
+      {mobile && tab !== 'options' && (
+        <MobileImportFab uploading={uploading} collapsed={fabCollapsed} onImport={() => setShowImportChoice(true)} />
+      )}
       {mobile ? (
         <MobileModsToolbar
           tab={tab}
@@ -1416,7 +1432,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
       {/* Content */}
       {/* Sur téléphone, 96 px gardés en bas : le dernier élément de la liste
           remonte au-dessus du bouton flottant au lieu de rester dessous. */}
-      <div className={`flex-1 overflow-y-auto ${mobile ? 'overscroll-contain px-4 pb-24 pt-3' : 'px-6 py-3'}`}>
+      <div onScroll={onContentScroll} className={`flex-1 overflow-y-auto ${mobile ? 'overscroll-contain px-4 pb-24 pt-3' : 'px-6 py-3'}`}>
         {modpackMeta && (
           <ModpackBanner
             meta={modpackMeta}

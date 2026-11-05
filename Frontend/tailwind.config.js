@@ -20,9 +20,10 @@ module.exports = {
       // Volontairement bas : au-dessus, tout tient déjà en rétrécissant, et
       // faire disparaître un bloc alors qu'il reste de la place se voit comme
       // un saut. Ce palier n'est franchi que là où la place manque vraiment.
-      screens: {
-        short: { raw: '(max-height: 600px)' },
-      },
+      // Il est déclaré comme variant (plugin en bas de fichier) et non dans
+      // `screens` : un palier `raw` dans `screens` fait désactiver par
+      // Tailwind tous les variants `max-sm:`, `max-md:`… — les retouches
+      // « téléphone » écrites ainsi étaient ignorées sans erreur.
       // Toutes les couleurs viennent des jetons de src/index.css : aucun
       // `rgba(...)` en dur dans les écrans (voir l'audit des interfaces).
       colors: {
@@ -116,6 +117,8 @@ module.exports = {
       addVariant('cw-lg', '@container (min-width: 680px)')
       addVariant('ch-md', '@container (min-height: 260px)')
       addVariant('ch-lg', '@container (min-height: 340px)')
+      // Fenêtre basse (voir le commentaire de `theme.extend`).
+      addVariant('short', '@media (max-height: 600px)')
     }),
   ],
 }

@@ -881,6 +881,7 @@ export const fr = {
     installing: '…',
     installedCount: '{{count}} pack(s) déjà dans cette instance',
     noFile: 'Aucune archive téléchargeable pour « {{name}} »',
+    confirmDelete: 'Supprimer ce pack ?',
   },
 
   options: {
@@ -892,6 +893,7 @@ export const fr = {
     searchNear: 'Peut-être cherchais-tu',
     searchRelated: 'Réglages voisins',
     pending: '{{count}} modification(s) non enregistrée(s)',
+    pendingShort: '{{count}} modification(s)',
     save: 'Enregistrer',
     saving: 'Enregistrement…',
     noFileYet: 'Minecraft n’a pas encore créé options.txt pour cette instance. Lance le jeu une fois, ou enregistre ci-dessous pour créer le fichier.',

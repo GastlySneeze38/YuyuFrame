@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { motion } from 'framer-motion'
-import { press } from '@/lib/motion'
+import { createPortal } from 'react-dom'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { EASE_OUT, press } from '@/lib/motion'
+import { Sheet, SheetTitle } from '@/mobile/ui/Sheet'
+import { Toggle } from '@/components/ui/Toggle'
+import { useIsMobile } from '@/mobile/useIsMobile'
 import { api } from '@/api/client'
 import { showError } from '@/stores/useErrorToast'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -192,6 +196,8 @@ function agentSliderText(raw: string): string {
 
 export function OptionsTab({ instance }: { instance: Instance }) {
   const t = useT()
+  const mobile = useIsMobile()
+  const reduceMotion = useReducedMotion()
   const [advanced, setAdvanced] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -368,11 +374,55 @@ export function OptionsTab({ instance }: { instance: Instance }) {
     : []
 
   const pending = dirty.length + agentDirty.length
+  const discard = () => { setDraft({}); setAgentDraft({}) }
+
+  // Ligne d'un réglage connu : celle du téléphone (pleine largeur, 56 px,
+  // contrôles au doigt) ou celle du PC. Mêmes données, même écriture.
+  const Row = mobile ? MobileOptionRow : OptionRow
+  // Titres de groupe : sur téléphone, ceux des listes de réglages du système
+  // (13 px, lisibles) au lieu des 10,5 px du PC.
+  const groupTitle = mobile
+    ? 'px-1 text-[13px] font-semibold uppercase tracking-[0.06em] text-white/55'
+    : 'text-[10.5px] font-bold uppercase tracking-[0.1em] text-[rgba(255,255,255,0.3)]'
+  // Les lignes d'un groupe : une carte à séparateurs sur téléphone, comme une
+  // liste groupée d'iOS ou une carte de réglages Android.
+  const groupBody = mobile
+    ? 'flex flex-col divide-y divide-white/[0.06] overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.04]'
+    : 'flex flex-col gap-1'
+  const moreLink = mobile
+    ? 'press flex h-12 w-full items-center justify-between rounded-2xl bg-white/[0.04] px-4 text-left text-[15px] font-semibold text-[#a99bff]'
+    : 'self-start text-[11px] font-semibold text-[rgba(75,63,207,0.85)] transition-colors duration-150 hover:text-[#8b7ff0]'
+  const chevron = mobile && (
+    <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 shrink-0 opacity-60"><path d="M9.3 6.7 10.7 5.3l6.7 6.7-6.7 6.7-1.4-1.4 5.3-5.3z" /></svg>
+  )
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className={`flex flex-col ${mobile ? 'gap-6' : 'gap-4'}`}>
 
-      {/* Barre : bascule de vue + enregistrement */}
+      {/* Téléphone : la bascule de vue en commutateur pleine largeur, la
+          recherche dessous. L'enregistrement descend en bas de l'écran (voir
+          la barre en fin de page) : c'est là que le pouce se trouve, et il
+          n'apparaît que lorsqu'il y a quelque chose à enregistrer. */}
+      {mobile ? (
+        <div className="flex flex-col gap-3">
+          <div className="flex rounded-2xl bg-white/[0.04] p-1">
+            {([false, true] as const).map((mode) => (
+              <button
+                key={String(mode)}
+                onClick={() => setAdvanced(mode)}
+                aria-pressed={advanced === mode}
+                className={`h-10 min-w-0 flex-1 rounded-xl text-[14px] font-semibold transition-colors duration-150 ${
+                  advanced === mode ? 'bg-[rgba(75,63,207,0.35)] text-white' : 'text-white/55'
+                }`}
+              >
+                {t(mode ? 'options.viewAdvanced' : 'options.viewReadable')}
+              </button>
+            ))}
+          </div>
+          <OptionSearchBar candidates={candidates} onPick={goToOption} />
+        </div>
+      ) : (
+      /* Barre : bascule de vue + enregistrement */
       <div className="flex items-center gap-2">
         <div className="flex gap-1 rounded-lg bg-[rgba(255,255,255,0.03)] p-0.5">
           {([false, true] as const).map((mode) => (
@@ -412,9 +462,10 @@ export function OptionsTab({ instance }: { instance: Instance }) {
           </motion.button>
         </div>
       </div>
+      )}
 
       {!fileExists && (
-        <div className="rounded-xl border border-[rgba(250,204,21,0.25)] bg-[rgba(250,204,21,0.08)] px-3.5 py-2.5 text-[11.5px] leading-relaxed text-[rgba(250,204,21,0.85)]">
+        <div className="rounded-xl border border-[rgba(250,204,21,0.25)] bg-[rgba(250,204,21,0.08)] px-3.5 py-2.5 text-[11.5px] leading-relaxed text-[rgba(250,204,21,0.85)] max-sm:rounded-2xl max-sm:px-4 max-sm:py-3 max-sm:text-[13px]">
           {t('options.noFileYet')}
         </div>
       )}
@@ -427,6 +478,43 @@ export function OptionsTab({ instance }: { instance: Instance }) {
             title={t('options.emptyAdvanced')}
           />
         ) : (
+          mobile ? (
+            // Téléphone : la clé au-dessus de son champ, sur toute la largeur.
+            // Côte à côte, 42 % de 343 px tronquaient presque toutes les clés.
+            <div className="flex flex-col gap-6">
+              <div className={groupBody}>
+                {rows.map((key) => (
+                  <MobileRawRow
+                    key={key}
+                    name={key}
+                    value={value(key)}
+                    changed={key in draft && draft[key] !== saved[key]}
+                    highlighted={highlight === key}
+                    rowRef={(el) => { rowRefs.current[key] = el }}
+                    onChange={(v) => set(key, v)}
+                  />
+                ))}
+              </div>
+              {!agentBlocked && agentRows.length > 0 && (
+                <section className="flex flex-col gap-3">
+                  <h3 className={groupTitle}>{t('options.groupAgent')}</h3>
+                  <div className={groupBody}>
+                    {agentRows.map((key) => (
+                      <MobileRawRow
+                        key={key}
+                        name={key}
+                        value={agentValue(key)}
+                        changed={key in agentDraft && agentDraft[key] !== agentSaved[key]}
+                        highlighted={false}
+                        rowRef={() => {}}
+                        onChange={(v) => setAgent(key, v)}
+                      />
+                    ))}
+                  </div>
+                </section>
+              )}
+            </div>
+          ) : (
           <div className="flex flex-col gap-1">
             {rows.map((key) => (
               <div
@@ -485,18 +573,19 @@ export function OptionsTab({ instance }: { instance: Instance }) {
               </>
             )}
           </div>
+          )
         )
       ) : (
         /* ── Vue lisible ────────────────────────────────────────────────── */
-        <div className="flex flex-col gap-5">
+        <div className={`flex flex-col ${mobile ? 'gap-6' : 'gap-5'}`}>
           {KNOWN.map((group) => (
-            <section key={group.groupKey} className="flex flex-col gap-2">
-              <h3 className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-[rgba(255,255,255,0.3)]">
+            <section key={group.groupKey} className={`flex flex-col ${mobile ? 'gap-3' : 'gap-2'}`}>
+              <h3 className={groupTitle}>
                 {t(group.groupKey)}
               </h3>
-              <div className="flex flex-col gap-1">
+              <div className={groupBody}>
                 {group.options.map((opt) => (
-                  <OptionRow
+                  <Row
                     key={opt.key}
                     option={opt}
                     value={value(opt.key, opt.fallback)}
@@ -515,9 +604,10 @@ export function OptionsTab({ instance }: { instance: Instance }) {
               se résume à ce qui précède. */}
           <button
             onClick={() => setAdvanced(true)}
-            className="self-start text-[11px] font-semibold text-[rgba(75,63,207,0.85)] transition-colors duration-150 hover:text-[#8b7ff0]"
+            className={moreLink}
           >
             {t('options.othersCount', { count: Object.keys(saved).filter((k) => !KNOWN_KEYS.has(k)).length })}
+            {chevron}
           </button>
 
           {/* ── Réglages du client intégré ──────────────────────────────── */}
@@ -525,11 +615,11 @@ export function OptionsTab({ instance }: { instance: Instance }) {
               Horizon) : des interrupteurs qui ne changeraient rien au jeu
               n'ont pas à être affichés. */}
           {!agentBlocked && (<>
-          <div className="flex flex-col gap-2 border-t border-[rgba(255,255,255,0.06)] pt-4">
-            <h3 className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-[rgba(255,255,255,0.3)]">
+          <div className={`flex flex-col gap-2 border-t border-[rgba(255,255,255,0.06)] ${mobile ? 'pt-6' : 'pt-4'}`}>
+            <h3 className={mobile ? 'px-1 text-[17px] font-bold text-white' : groupTitle}>
               {t('options.groupAgent')}
             </h3>
-            <p className="text-[11px] leading-relaxed text-[rgba(255,255,255,0.4)]">
+            <p className="text-[11px] leading-relaxed text-[rgba(255,255,255,0.4)] max-sm:px-1 max-sm:text-[13px] max-sm:text-white/55">
               {t('options.agentIntro')}
             </p>
           </div>
@@ -540,14 +630,14 @@ export function OptionsTab({ instance }: { instance: Instance }) {
           {AGENT_KNOWN.map((group) => (
             <section
               key={group.groupKey}
-              className="flex flex-col gap-2"
+              className={`flex flex-col ${mobile ? 'gap-3' : 'gap-2'}`}
             >
-              <h4 className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-[rgba(255,255,255,0.3)]">
+              <h4 className={groupTitle}>
                 {t(group.groupKey)}
               </h4>
-              <div className="flex flex-col gap-1">
+              <div className={groupBody}>
                 {group.options.map((opt) => (
-                  <OptionRow
+                  <Row
                     key={opt.key}
                     option={opt}
                     value={opt.control.type === 'slider'
@@ -567,21 +657,246 @@ export function OptionsTab({ instance }: { instance: Instance }) {
               (couleurs, seuils, placement des HUD) existe et se voit, on dit
               simplement où. */}
           {agentRows.length === 0 && Object.keys(agentSaved).length === 0 ? (
-            <p className="text-[11px] leading-relaxed text-[rgba(255,255,255,0.35)]">
+            <p className="text-[11px] leading-relaxed text-[rgba(255,255,255,0.35)] max-sm:px-1 max-sm:text-[13px] max-sm:text-white/55">
               {t('options.agentNoFileYet')}
             </p>
           ) : (
             <button
               onClick={() => setAdvanced(true)}
-              className="self-start text-[11px] font-semibold text-[rgba(75,63,207,0.85)] transition-colors duration-150 hover:text-[#8b7ff0]"
+              className={moreLink}
             >
               {t('options.agentOthersCount', {
                 count: Object.keys(agentSaved).filter((k) => !(k in AGENT_DEFAULTS)).length,
               })}
+              {chevron}
             </button>
           )}
           </>)}
         </div>
+      )}
+
+      {/* Téléphone : l'enregistrement en bas de l'écran, et seulement quand il
+          y a des modifications (le bouton « Importer » n'est pas affiché sur
+          cet écran). Rendu dans `document.body` : collé (`sticky`) dans la
+          page, il remontait avec la fin du contenu une fois tout en bas. */}
+      {mobile && createPortal(
+        <AnimatePresence>
+          {pending > 0 && (
+            <motion.div
+              initial={reduceMotion ? { opacity: 0 } : { opacity: 0, transform: 'translateY(24px)' }}
+              animate={reduceMotion ? { opacity: 1 } : { opacity: 1, transform: 'translateY(0px)' }}
+              exit={reduceMotion
+                ? { opacity: 0, transition: { duration: 0.16 } }
+                : { opacity: 0, transform: 'translateY(24px)', transition: { duration: 0.16, ease: EASE_OUT } }}
+              transition={{ duration: 0.24, ease: EASE_OUT }}
+              className="fixed inset-x-4 bottom-[max(12px,env(safe-area-inset-bottom))] z-40 flex items-center gap-2 rounded-2xl border border-white/[0.08] bg-bg-secondary p-2 pl-4 shadow-[0_10px_32px_rgba(0,0,0,0.55)]"
+            >
+              <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-[#c4b9ff]">
+                {t('options.pendingShort', { count: pending })}
+              </span>
+              <button
+                onClick={discard}
+                disabled={saving}
+                className="press h-11 shrink-0 rounded-xl px-3.5 text-[15px] font-semibold text-white/70 disabled:opacity-40"
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                onClick={save}
+                disabled={saving}
+                className="press flex h-11 shrink-0 items-center gap-2 rounded-xl bg-[#4B3FCF] px-5 text-[15px] font-bold text-white disabled:opacity-70"
+              >
+                {saving && <ButtonSpinner size={14} trackColor="rgba(255,255,255,0.2)" />}
+                {saving ? t('options.saving') : t('options.save')}
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body,
+      )}
+    </div>
+  )
+}
+
+/** Une clé brute du fichier, sur téléphone : nom au-dessus, champ dessous. */
+function MobileRawRow({ name, value, changed, highlighted, rowRef, onChange }: {
+  name: string
+  value: string
+  changed: boolean
+  highlighted: boolean
+  rowRef: (el: HTMLDivElement | null) => void
+  onChange: (v: string) => void
+}) {
+  return (
+    <div
+      ref={rowRef}
+      className={`flex flex-col gap-2 px-4 py-3 transition-colors duration-300 ${
+        highlighted ? 'bg-[rgba(75,63,207,0.28)]' : changed ? 'bg-[rgba(75,63,207,0.1)]' : ''
+      }`}
+    >
+      <span className="selectable break-all font-mono text-[13px] text-white/55">{name}</span>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
+        enterKeyHint="done"
+        className={`h-11 w-full rounded-xl border bg-black/30 px-3 font-mono text-[15px] text-white outline-none focus:border-[rgba(120,100,255,0.6)] ${
+          changed ? 'border-[rgba(139,92,246,0.55)]' : 'border-white/[0.08]'
+        }`}
+      />
+    </div>
+  )
+}
+
+/**
+ * Un réglage connu, sur téléphone. Chaque contrôle prend la forme qu'il a
+ * dans les réglages du système :
+ * - curseur : nom et valeur sur une ligne, piste pleine largeur dessous,
+ *   pastille de 24 px (classe `touch-range`) ;
+ * - interrupteur : toute la ligne est touchable ;
+ * - choix : la ligne montre la valeur et ouvre une feuille du bas avec les
+ *   choix, au lieu d'une liste déroulante de 28 px ;
+ * - langue : même ligne, la feuille des langues existante.
+ */
+function MobileOptionRow({ option, value, changed, highlighted, rowRef, onChange }: {
+  option: KnownOption
+  value: string
+  changed: boolean
+  highlighted: boolean
+  rowRef: (el: HTMLDivElement | null) => void
+  onChange: (v: string) => void
+}) {
+  const t = useT()
+  const { control } = option
+  const [picking, setPicking] = useState(false)
+  const label = t(option.labelKey)
+  const tint = highlighted ? 'bg-[rgba(75,63,207,0.28)]' : changed ? 'bg-[rgba(75,63,207,0.1)]' : ''
+  const rowChevron = (
+    <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 shrink-0 text-white/35"><path d="M9.3 6.7 10.7 5.3l6.7 6.7-6.7 6.7-1.4-1.4 5.3-5.3z" /></svg>
+  )
+
+  if (control.type === 'slider') {
+    const n = Number(value)
+    const current = Number.isFinite(n) ? n : control.min
+    const fill = ((current - control.min) / (control.max - control.min)) * 100
+    return (
+      <div ref={rowRef} className={`flex flex-col px-4 pt-3 transition-colors duration-300 ${tint}`}>
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="min-w-0 truncate text-[15px] text-white/90">{label}</span>
+          <span className="shrink-0 font-mono text-[15px] tabular-nums text-white/70">{value}{control.suffix ?? ''}</span>
+        </div>
+        <input
+          type="range"
+          min={control.min}
+          max={control.max}
+          step={control.step ?? 1}
+          value={current}
+          onChange={(e) => onChange(e.target.value)}
+          aria-label={label}
+          style={{ '--fill': `${Math.max(0, Math.min(100, fill))}%` } as React.CSSProperties}
+          className="touch-range w-full"
+        />
+      </div>
+    )
+  }
+
+  if (control.type === 'bool') {
+    return (
+      <div ref={rowRef} className={`transition-colors duration-300 ${tint}`}>
+        <label className="flex min-h-[56px] cursor-pointer items-center justify-between gap-3 px-4">
+          <span className="min-w-0 text-[15px] text-white/90">{label}</span>
+          <Toggle checked={value === 'true'} onChange={() => onChange(value === 'true' ? 'false' : 'true')} />
+        </label>
+      </div>
+    )
+  }
+
+  if (control.type === 'choice') {
+    const chosen = control.choices.find((c) => c.value === value)
+    return (
+      <div ref={rowRef} className={`transition-colors duration-300 ${tint}`}>
+        <button
+          onClick={() => setPicking(true)}
+          aria-haspopup="dialog"
+          className="flex min-h-[56px] w-full items-center gap-3 px-4 text-left active:bg-white/[0.04]"
+        >
+          <span className="min-w-0 flex-1 text-[15px] text-white/90">{label}</span>
+          <span className="max-w-[45%] truncate text-[15px] text-white/55">{chosen ? t(chosen.labelKey) : value || '—'}</span>
+          {rowChevron}
+        </button>
+        <Sheet
+          open={picking}
+          onClose={() => setPicking(false)}
+          label={label}
+          header={<SheetTitle>{label}</SheetTitle>}
+          bodyClassName="flex flex-col gap-1 px-3 pb-3"
+        >
+          {control.choices.map((c) => {
+            const active = c.value === value
+            return (
+              <button
+                key={c.value}
+                onClick={() => { onChange(c.value); setPicking(false) }}
+                aria-pressed={active}
+                className={`press flex h-14 w-full items-center gap-3 rounded-2xl px-3 text-left text-[16px] ${
+                  active ? 'bg-[rgba(75,63,207,0.2)] font-semibold text-white' : 'text-white/85 active:bg-white/[0.06]'
+                }`}
+              >
+                <span className="min-w-0 flex-1 truncate">{t(c.labelKey)}</span>
+                {active && (
+                  <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 shrink-0 text-[#a99bff]"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" /></svg>
+                )}
+              </button>
+            )
+          })}
+        </Sheet>
+      </div>
+    )
+  }
+
+  if (control.type === 'language') {
+    const language = LANGUAGE_BY_CODE.get(value)
+    return (
+      <div ref={rowRef} className={`transition-colors duration-300 ${tint}`}>
+        <button
+          onClick={() => setPicking(true)}
+          aria-haspopup="dialog"
+          className="flex min-h-[56px] w-full items-center gap-3 px-4 text-left active:bg-white/[0.04]"
+        >
+          <span className="min-w-0 flex-1 text-[15px] text-white/90">{label}</span>
+          {language ? (
+            <span className="flex min-w-0 items-center gap-2 text-[15px] text-white/55">
+              <Flag spec={language.flag} size={18} />
+              <span className="truncate">{language.native}</span>
+            </span>
+          ) : (
+            <span className="font-mono text-[15px] text-white/55">{value || '—'}</span>
+          )}
+          {rowChevron}
+        </button>
+        {picking && (
+          <LanguagePickerModal current={value} onPick={onChange} onClose={() => setPicking(false)} />
+        )}
+      </div>
+    )
+  }
+
+  // Touche du menu et texte libre : le nom, puis le contrôle sur sa ligne.
+  return (
+    <div ref={rowRef} className={`flex flex-col gap-2 px-4 py-3 transition-colors duration-300 ${tint}`}>
+      <span className="text-[15px] text-white/90">{label}</span>
+      {control.type === 'keybind' ? (
+        <KeybindButton value={value} onChange={onChange} />
+      ) : (
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          autoCapitalize="none"
+          autoCorrect="off"
+          className="h-11 w-full rounded-xl border border-white/[0.1] bg-black/30 px-3 font-mono text-[15px] text-white outline-none focus:border-[rgba(120,100,255,0.6)]"
+        />
       )}
     </div>
   )
@@ -786,11 +1101,11 @@ function KeybindButton({ value, onChange }: { value: string; onChange: (v: strin
   }, [capturing, onChange])
 
   return (
-    <div className="ml-auto flex items-center gap-1.5">
+    <div className="ml-auto flex items-center gap-1.5 max-sm:ml-0 max-sm:w-full max-sm:gap-2">
       <button
         onClick={() => setCapturing((c) => !c)}
         onBlur={() => setCapturing(false)}
-        className={`h-7 min-w-[120px] rounded-md border px-2.5 font-mono text-[11.5px] outline-none transition-colors duration-150 ${
+        className={`h-7 min-w-[120px] rounded-md border px-2.5 font-mono text-[11.5px] outline-none transition-colors duration-150 max-sm:h-11 max-sm:flex-1 max-sm:rounded-xl max-sm:text-[15px] ${
           capturing
             ? 'border-[rgba(139,92,246,0.7)] bg-[rgba(75,63,207,0.25)] text-white'
             : 'border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] text-white hover:border-[rgba(75,63,207,0.5)]'
@@ -806,9 +1121,9 @@ function KeybindButton({ value, onChange }: { value: string; onChange: (v: strin
         onClick={() => { setCapturing(false); onChange('NONE') }}
         title={t('options.keybindClear')}
         aria-label={t('options.keybindClear')}
-        className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] text-[rgba(255,255,255,0.4)] transition-colors duration-150 hover:text-[rgba(255,255,255,0.8)]"
+        className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] text-[rgba(255,255,255,0.4)] transition-colors duration-150 hover:text-[rgba(255,255,255,0.8)] max-sm:h-11 max-sm:w-11 max-sm:rounded-xl"
       >
-        <svg viewBox="0 0 24 24" fill="currentColor" width={11} height={11}>
+        <svg viewBox="0 0 24 24" fill="currentColor" width={11} height={11} className="max-sm:h-4 max-sm:w-4">
           <path d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.88 18.3 9.17 12 2.88 5.71 4.3 4.29l6.29 6.3 6.3-6.3z" />
         </svg>
       </button>

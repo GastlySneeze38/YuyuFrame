@@ -882,6 +882,7 @@ export const it: TranslationSchema = {
     installing: '…',
     installedCount: '{{count}} pacchetto/i già in questa istanza',
     noFile: 'Nessun archivio scaricabile per “{{name}}”',
+    confirmDelete: 'Eliminare questo pack?',
   },
 
   options: {
@@ -893,6 +894,7 @@ export const it: TranslationSchema = {
     searchNear: 'Forse cercavi',
     searchRelated: 'Impostazioni collegate',
     pending: '{{count}} modifica/che non salvata/e',
+    pendingShort: '{{count}} modifica/che',
     save: 'Salva',
     saving: 'Salvataggio…',
     noFileYet: 'Minecraft non ha ancora creato options.txt per questa istanza. Avvia il gioco una volta, o salva qui sotto per creare il file.',

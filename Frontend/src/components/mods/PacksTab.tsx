@@ -12,6 +12,7 @@ import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { useT } from '@/i18n'
 import { useIsMobile } from '@/mobile/useIsMobile'
 import { MobileFiltersButton, MobileSearchFilters } from './MobileSearchFilters'
+import { ActionSheet, SHEET_ICONS } from '@/mobile/ui/ActionSheet'
 import { fetchVersionsByHash, type ModrinthHit } from './modUtils'
 import type { ModInstallProgress, PackInfo, PackKind } from '@/types'
 
@@ -273,6 +274,30 @@ export function PacksTab({
         />
       )
     }
+    // Téléphone : les deux familles sous leur titre, comme les sections d'une
+    // liste iOS. Mêlées, un shader et un pack de ressources de même taille
+    // ne se distinguaient qu'à une icône de 15 px.
+    if (mobile) {
+      const groups = (['shader', 'resourcepack'] as const)
+        .map((k) => ({ kind: k, packs: installed.filter((p) => p.kind === k) }))
+        .filter((g) => g.packs.length > 0)
+      return (
+        <div className="flex flex-col gap-6">
+          {groups.map((g) => (
+            <section key={g.kind} className="flex flex-col gap-3">
+              <h3 className="px-1 text-[13px] font-semibold uppercase tracking-[0.06em] text-white/55">
+                {t(g.kind === 'shader' ? 'mods.mobile.shaders' : 'mods.mobile.resourcepacks')}
+              </h3>
+              <div className="flex flex-col gap-2">
+                {g.packs.map((pack) => (
+                  <MobilePackRow key={pack.name} pack={pack} onDelete={() => handleDelete(pack)} />
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+      )
+    }
     return (
       <motion.div variants={listVariants} initial="initial" animate="animate" className="flex flex-col gap-1.5">
         {installed.map((pack) => (
@@ -370,6 +395,54 @@ export function PacksTab({
             {results.map((hit) => {
               const busy = installing === hit.project_id
               const isInstalled = !busy && installedProjects.has(hit.project_id)
+              // Téléphone : une carte par ligne, nom et description lisibles,
+              // et un bouton de 44 px à droite — la colonne de 250 px du PC
+              // tombait déjà à une carte par ligne, mais avec un bouton de
+              // 28 px et une description en 10,5 px.
+              if (mobile) {
+                return (
+                  <motion.div
+                    key={hit.project_id}
+                    variants={listItemVariants}
+                    className="flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.04] p-3"
+                  >
+                    {hit.icon_url ? (
+                      <img src={hit.icon_url} alt="" className="h-12 w-12 shrink-0 rounded-xl object-cover" />
+                    ) : (
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[rgba(75,63,207,0.2)]">
+                        <svg viewBox="0 0 24 24" fill="rgba(255,255,255,0.45)" className="h-[22px] w-[22px]"><path d={KIND_ICON[kind]} /></svg>
+                      </div>
+                    )}
+                    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span className="truncate text-[15px] font-semibold text-white">{hit.title}</span>
+                      <span className="line-clamp-2 text-[13px] leading-[1.35] text-white/55">{hit.description}</span>
+                    </div>
+                    <button
+                      onClick={() => handleInstall(hit)}
+                      disabled={!!installing || isInstalled}
+                      className={`press flex h-11 min-w-[92px] shrink-0 items-center justify-center gap-1.5 rounded-full px-4 text-[14px] font-semibold ${
+                        busy
+                          ? 'bg-white/[0.06] text-white/70'
+                          : isInstalled
+                            ? 'bg-[rgba(34,197,94,0.14)] text-[rgb(134,239,172)]'
+                            : 'bg-[#4B3FCF] text-white disabled:opacity-40'
+                      }`}
+                    >
+                      {busy ? (
+                        <>
+                          <ButtonSpinner size={14} trackColor="rgba(255,255,255,0.12)" />
+                          {progress && <span className="tabular-nums">{progress.percent}%</span>}
+                        </>
+                      ) : isInstalled ? (
+                        <>
+                          <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" /></svg>
+                          {t('packs.installed')}
+                        </>
+                      ) : t('packs.install')}
+                    </button>
+                  </motion.div>
+                )
+              }
               return (
                 <motion.div
                   key={hit.project_id}
@@ -412,10 +485,61 @@ export function PacksTab({
       <Pagination page={page} pageCount={pageCountFor(total, PAGE_SIZE)} onChange={changePage} disabled={searching} />
 
       {installedNames.size > 0 && (
-        <span className="text-[10.5px] text-[rgba(255,255,255,0.22)]">
+        <span className="text-[10.5px] text-[rgba(255,255,255,0.22)] max-sm:px-1 max-sm:text-[13px] max-sm:text-white/55">
           {t('packs.installedCount', { count: installedNames.size })}
         </span>
       )}
+    </div>
+  )
+}
+
+/**
+ * Un pack installé, sur téléphone : même ligne de 68 px qu'un mod. Pas
+ * d'interrupteur (c'est le jeu qui choisit le pack actif) ; la suppression
+ * passe par la feuille « … » et se confirme dedans, comme pour un mod — une
+ * corbeille posée sur la ligne se toucherait par mégarde en faisant défiler.
+ */
+function MobilePackRow({ pack, onDelete }: { pack: PackInfo; onDelete: () => void }) {
+  const t = useT()
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const icon = (
+    <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 text-[rgba(150,140,230,0.9)]">
+      <path d={KIND_ICON[pack.kind]} />
+    </svg>
+  )
+  return (
+    <div className="flex h-[68px] items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.04] pl-3 pr-1">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[rgba(75,63,207,0.15)]">{icon}</div>
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="truncate text-[15px] font-semibold text-white">{pack.name.replace(/\.zip$/i, '')}</span>
+        <span className="truncate text-[13px] text-white/55">{formatBytes(pack.size)}</span>
+      </div>
+      <button
+        onClick={() => setSheetOpen(true)}
+        aria-label={t('instancesPage.moreActions')}
+        aria-haspopup="dialog"
+        className="press flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/55"
+      >
+        <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5"><circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" /></svg>
+      </button>
+      <ActionSheet
+        open={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        header={
+          <>
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[rgba(75,63,207,0.15)]">{icon}</div>
+            <span className="min-w-0 flex-1 truncate text-[15px] font-bold text-txt-primary">{pack.name.replace(/\.zip$/i, '')}</span>
+          </>
+        }
+        actions={[{
+          id: 'delete',
+          label: t('common.delete'),
+          icon: SHEET_ICONS.delete,
+          danger: true,
+          confirm: t('packs.confirmDelete'),
+          onSelect: onDelete,
+        }]}
+      />
     </div>
   )
 }

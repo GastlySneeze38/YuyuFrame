@@ -108,6 +108,50 @@ option {
   transform: scale(0.97);
 }
 
+/* Curseur réglé au doigt (téléphone) : une piste fine dans une zone de 44 px,
+ * et une pastille de 24 px qu'on attrape sans viser. `pan-y` laisse le
+ * défilement vertical de la page au navigateur : seul un glissé horizontal
+ * déplace la pastille. */
+.touch-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 44px;
+  background: transparent;
+  touch-action: pan-y;
+}
+/* La partie remplie suit `--fill` (pourcentage posé par le composant). */
+.touch-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 9999px;
+  background: linear-gradient(to right, #4b3fcf var(--fill, 0%), rgba(255, 255, 255, 0.12) var(--fill, 0%));
+}
+.touch-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 24px;
+  height: 24px;
+  margin-top: -10px;
+  border-radius: 9999px;
+  background: #fff;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.45);
+}
+.touch-range::-moz-range-track {
+  height: 4px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.12);
+}
+.touch-range::-moz-range-progress {
+  height: 4px;
+  border-radius: 9999px;
+  background: #4b3fcf;
+}
+.touch-range::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 9999px;
+  background: #fff;
+}
+
 /* Respect du réglage système « animations réduites » : plus aucun mouvement,
  * mais l'interface reste utilisable (Framer Motion a son propre garde-fou,
  * voir lib/motion.ts). */
