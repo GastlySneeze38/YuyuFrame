@@ -1,12 +1,10 @@
 import type { ReactNode } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
-import { useT } from '@/i18n'
 
 /**
  * Les icônes de la barre de l'accueil du PC (`NavLink`, pages/Home.tsx),
  * reprises telles quelles : passer d'un appareil à l'autre ne doit rien
- * changer à la façon de reconnaître une entrée. Celles qui ne sont pas dans
- * la barre du téléphone servent aux liens de la page (`MobileHome`).
+ * changer à la façon de reconnaître une entrée. Servent au menu latéral du
+ * téléphone (`ui/NavDrawer`) et aux tuiles de l'accueil (`MobileHome`).
  */
 export const NAV_ICONS = {
   home: <path d="M12 3.2l-9 7.6V21h6.5v-6h5v6H21V10.8z" />,
@@ -19,69 +17,6 @@ export const NAV_ICONS = {
   competitive: <path d="M19 4h-2V3a1 1 0 00-1-1H8a1 1 0 00-1 1v1H5a2 2 0 00-2 2v1a5 5 0 004.6 4.98A5.01 5.01 0 0011 15.9V18H8a1 1 0 00-1 1v2h10v-2a1 1 0 00-1-1h-3v-2.1a5.01 5.01 0 003.4-3.92A5 5 0 0021 7V6a2 2 0 00-2-2zM5 7V6h2v3.82A3 3 0 015 7zm14 0a3 3 0 01-2 2.82V6h2v1z" />,
 } satisfies Record<string, ReactNode>
 
-/** Les écrans racines des onglets : passer de l'un à l'autre est instantané
- *  (pas de transition de page, `PageTransition`) et ne s'empile pas dans
- *  l'historique. */
+/** Les cinq destinations principales du téléphone (ex-barre d'onglets, désormais
+ *  en tête du menu latéral `ui/NavDrawer`). */
 export const MOBILE_TABS = ['/home', '/instances', '/plans', '/settings', '/login']
-
-interface Entry {
-  path: string
-  label: string
-  icon: ReactNode
-  /** Plans garde la couleur de l'offre, même quand il n'est pas l'onglet ouvert. */
-  accent?: boolean
-}
-
-/**
- * La barre d'onglets du bas, sur téléphone — telle que l'attendent iOS et
- * Android : cinq onglets de même largeur et de même taille, l'onglet de
- * l'écran ouvert marqué (pastille derrière l'icône, texte blanc), les autres
- * en retrait. Une barre d'onglets sert à savoir où l'on est : elle n'a pas
- * de hiérarchie entre ses entrées. Plans se distingue seulement par sa
- * couleur. Outils, Support et Compétitif sont des tuiles de l'accueil.
- */
-export function MobileNav() {
-  const t = useT()
-  const navigate = useNavigate()
-  const { pathname } = useLocation()
-
-  const entries: Entry[] = [
-    { path: '/home', label: t('home.nav.home'), icon: NAV_ICONS.home },
-    { path: '/instances', label: t('home.nav.instances'), icon: NAV_ICONS.instances },
-    { path: '/plans', label: t('home.nav.plans'), icon: NAV_ICONS.plans, accent: true },
-    { path: '/settings', label: t('home.nav.settings'), icon: NAV_ICONS.settings },
-    { path: '/login', label: t('home.nav.account'), icon: NAV_ICONS.account },
-  ]
-
-  return (
-    <nav className="shrink-0 border-t border-white/[0.06] bg-[#09090D] pb-[env(safe-area-inset-bottom)]">
-      <ul className="flex h-14 items-stretch">
-        {entries.map((e) => {
-          const active = pathname === e.path || pathname.startsWith(`${e.path}/`)
-          const tone = active ? 'text-white' : e.accent ? 'text-[#a78bfa]' : 'text-white/55'
-          return (
-            <li key={e.path} className="flex min-w-0 flex-1">
-              <button
-                // `replace` : le bouton retour d'Android ramène à l'écran
-                // d'avant les onglets, il ne repasse pas par chaque onglet
-                // touché. Depuis un onglet, il ramène à l'accueil.
-                onClick={() => {
-                  if (active) return
-                  const fromTab = MOBILE_TABS.includes(pathname)
-                  navigate(e.path, { replace: fromTab && pathname !== '/home' })
-                }}
-                aria-current={active ? 'page' : undefined}
-                className={`press flex w-full min-w-0 flex-col items-center justify-center gap-1 ${tone}`}
-              >
-                <span className={`flex h-7 w-14 items-center justify-center rounded-full transition-colors duration-150 ${active ? (e.accent ? 'bg-[rgba(120,100,255,0.28)]' : 'bg-white/[0.12]') : ''}`}>
-                  <svg viewBox="0 0 24 24" fill="currentColor" className="h-[22px] w-[22px]">{e.icon}</svg>
-                </span>
-                <span className={`max-w-full truncate px-0.5 text-[11px] leading-tight ${active ? 'font-semibold' : 'font-medium'}`}>{e.label}</span>
-              </button>
-            </li>
-          )
-        })}
-      </ul>
-    </nav>
-  )
-}

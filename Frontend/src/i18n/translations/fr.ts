@@ -843,6 +843,7 @@ export const fr = {
       switchInstance: "Changer d'instance",
       manageInstances: 'Gérer les instances',
       play: 'Jouer',
+      menu: 'Menu',
     },
     nav: {
       home: 'Accueil',

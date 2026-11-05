@@ -844,6 +844,7 @@ export const ru: TranslationSchema = {
       switchInstance: 'Сменить сборку',
       manageInstances: 'Управление сборками',
       play: 'Играть',
+      menu: 'Меню',
     },
     nav: {
       home: 'Главная',

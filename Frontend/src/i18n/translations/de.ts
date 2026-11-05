@@ -844,6 +844,7 @@ export const de: TranslationSchema = {
       switchInstance: 'Instanz wechseln',
       manageInstances: 'Instanzen verwalten',
       play: 'Spielen',
+      menu: 'Menü',
     },
     nav: {
       home: 'Start',

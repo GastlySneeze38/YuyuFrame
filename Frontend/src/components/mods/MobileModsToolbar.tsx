@@ -131,7 +131,7 @@ export function MobileImportFab({ uploading, onImport }: { uploading: boolean; o
     <button
       onClick={onImport}
       disabled={uploading}
-      className="press absolute bottom-4 right-4 z-10 flex h-14 items-center gap-2 rounded-full bg-[#4B3FCF] pl-5 pr-6 text-[16px] font-semibold text-white shadow-[0_8px_28px_rgba(75,63,207,0.5),0_2px_8px_rgba(0,0,0,0.4)] disabled:opacity-60"
+      className="press absolute bottom-[max(16px,env(safe-area-inset-bottom))] right-4 z-10 flex h-14 items-center gap-2 rounded-full bg-[#4B3FCF] pl-5 pr-6 text-[16px] font-semibold text-white shadow-[0_8px_28px_rgba(75,63,207,0.5),0_2px_8px_rgba(0,0,0,0.4)] disabled:opacity-60"
     >
       <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" /></svg>
       {uploading ? t('mods.importing') : t('mods.import')}

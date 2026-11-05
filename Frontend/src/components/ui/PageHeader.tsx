@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { useIsMobile } from '@/mobile/useIsMobile'
+import { DRAWER_ROOTS, MenuButton } from '@/mobile/ui/NavDrawer'
 import { BackArrowIcon } from './icons/BackArrowIcon'
 import { HeaderFriendsShortcut } from './HeaderFriendsShortcut'
 
@@ -28,11 +30,17 @@ export function PageHeaderSeparator() {
  * le bouton (séparateur, titre, badges...) varie trop d'une page à l'autre
  * pour être figé dans l'API ; il est passé en children. */
 export function PageHeader({ px = 6, backTo, children }: { px?: number; backTo?: string | number; children: ReactNode }) {
+  // Téléphone : un écran racine du menu (Réglages, Support…) ouvre le menu
+  // latéral par ☰ au lieu de revenir à l'accueil ; un écran poussé garde son
+  // retour.
+  const mobile = useIsMobile()
+  const { pathname } = useLocation()
+  const root = mobile && DRAWER_ROOTS.includes(pathname)
   return (
     <div
-      className={`flex flex-shrink-0 items-center gap-3 py-3 border-b border-[rgba(255,255,255,0.06)] ${px === 5 ? 'px-5' : 'px-6'}`}
+      className={`flex flex-shrink-0 items-center gap-3 py-3 border-b border-[rgba(255,255,255,0.06)] ${mobile ? 'px-2 pt-[max(12px,env(safe-area-inset-top))]' : px === 5 ? 'px-5' : 'px-6'}`}
     >
-      <PageBackButton to={backTo} />
+      {root ? <MenuButton /> : <PageBackButton to={backTo} />}
       {children}
       <HeaderFriendsShortcut />
     </div>

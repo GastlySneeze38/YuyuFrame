@@ -34,7 +34,7 @@ import { useTauriEvent } from '@/hooks/useTauriEvent'
 import { parseFriendUrl, parseInviteUrl, parseJoinUrl } from '@/lib/joinLink'
 import { inTauri } from '@/lib/platform'
 import { useIsMobile } from '@/mobile/useIsMobile'
-import { MobileNav, MOBILE_TABS } from '@/mobile/MobileNav'
+import { DRAWER_ROOTS, NavDrawer } from '@/mobile/ui/NavDrawer'
 
 // Chargées à la demande — évite de tout regrouper dans un seul chunk JS au
 // premier chargement (pages secondaires comme Legal/Information/Stats
@@ -721,7 +721,7 @@ export default function App() {
             toujours, et plus rien ne s'affichait jusqu'au rechargement.
             C'est le bug de la page blanche quand on enchaîne vite les
             écrans. */}
-        <PageTransition instantBetween={mobile ? MOBILE_TABS : undefined}>
+        <PageTransition instantBetween={mobile ? DRAWER_ROOTS : undefined}>
           <ErrorBoundary resetKey={location.pathname}>
           <Suspense fallback={RouteFallback}>
           <Routes>
@@ -775,10 +775,10 @@ export default function App() {
           </ErrorBoundary>
         </PageTransition>
       </div>
-      {/* La barre d'onglets du téléphone vit ici, hors de la transition de
-          page : elle ne bouge ni ne se recharge quand on change d'écran,
-          comme dans une appli native. Absente de l'écran de connexion. */}
-      {mobile && location.pathname !== '/yuyu' && <MobileNav />}
+      {/* Le menu latéral du téléphone (remplace la barre d'onglets du bas) :
+          posé une fois ici, hors de la transition de page, et ouvert par le
+          bouton ☰ des en-têtes. */}
+      {mobile && <NavDrawer />}
     </div>
   )
 }

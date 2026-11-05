@@ -844,6 +844,7 @@ export const it: TranslationSchema = {
       switchInstance: 'Cambia istanza',
       manageInstances: 'Gestisci istanze',
       play: 'Gioca',
+      menu: 'Menu',
     },
     nav: {
       home: 'Home',

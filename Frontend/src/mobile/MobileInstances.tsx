@@ -15,6 +15,7 @@ import { useT } from '@/i18n'
 import { InstanceRow } from './instances/InstanceRow'
 import { InstanceActionSheet } from './instances/InstanceActionSheet'
 import { loaderName } from './home/InstanceSheet'
+import { MenuButton } from './ui/NavDrawer'
 
 /** Courbe des tiroirs d'iOS : l'écran poussé arrive comme sur un téléphone. */
 const PUSH_EASE = [0.32, 0.72, 0, 1] as const
@@ -146,11 +147,12 @@ export default function MobileInstances() {
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-bg-primary text-white">
       {/* ── En-tête : titre en grand, configurations JVM à droite ── */}
-      <header className="flex shrink-0 items-end justify-between gap-3 px-4 pb-3 pt-[max(16px,env(safe-area-inset-top))]">
-        <h1 className="text-[28px] font-black leading-none tracking-[-0.015em] text-white">{t('instancesPage.title')}</h1>
+      <header className="flex shrink-0 items-center gap-1 pb-3 pl-1.5 pr-4 pt-[max(12px,env(safe-area-inset-top))]">
+        <MenuButton />
+        <h1 className="min-w-0 flex-1 truncate text-[28px] font-black leading-none tracking-[-0.015em] text-white">{t('instancesPage.title')}</h1>
         <button
           onClick={() => navigate('/jvm')}
-          className="press -mb-2 flex h-11 items-center rounded-full border border-white/[0.1] bg-white/[0.05] px-4 text-[14px] font-semibold text-white/80"
+          className="press flex h-11 shrink-0 items-center rounded-full border border-white/[0.1] bg-white/[0.05] px-4 text-[14px] font-semibold text-white/80"
         >
           {t('settings.lancement.jvmLabel')}
         </button>
@@ -213,7 +215,7 @@ export default function MobileInstances() {
       </main>
 
       {/* ── Les deux actions principales, sous le pouce ── */}
-      <div className="flex shrink-0 gap-2 border-t border-white/[0.06] bg-bg-primary px-4 py-3">
+      <div className="flex shrink-0 gap-2 border-t border-white/[0.06] bg-bg-primary px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3">
         <button
           onClick={() => setShowCreate(true)}
           className="press flex h-[52px] min-w-0 flex-1 items-center justify-center gap-2 rounded-2xl bg-[#4B3FCF] text-[16px] font-bold text-white shadow-[0_6px_24px_rgba(75,63,207,0.35)]"

@@ -20,6 +20,7 @@ import { ServerConfirmModal } from '@/components/servers/ServerConfirmModal'
 import { JoinServerModal, type JoinRequest } from '@/components/servers/JoinServerModal'
 import { useT } from '@/i18n'
 import { NAV_ICONS } from './MobileNav'
+import { MenuButton } from './ui/NavDrawer'
 import { InstanceSheet, loaderName } from './home/InstanceSheet'
 import { MobileProCard, MobileServerCard } from './home/HomeCards'
 import { useMobileLaunch } from './home/useMobileLaunch'
@@ -276,8 +277,11 @@ export default function MobileHome() {
           {/* Titre et information, en haut à gauche comme sur PC. À
               l'entrée : fondu seul, au départ du salut — un décor, pas
               une pièce qui bouge. */}
-          <motion.div {...enter(0.32, 0, 0.4)} className="absolute left-4 right-2 top-2 z-10 flex items-center justify-between">
-            <h1 className="select-none text-[28px] font-black leading-none tracking-[-0.015em] text-white [text-shadow:0_0_24px_rgba(75,63,207,0.6)]">
+          {/* Le menu (☰) en haut à gauche, puis le titre ; l'information à
+              droite. */}
+          <motion.div {...enter(0.32, 0, 0.4)} className="absolute left-1.5 right-2 top-2 z-10 flex items-center gap-1">
+            <MenuButton />
+            <h1 className="min-w-0 flex-1 select-none truncate text-[28px] font-black leading-none tracking-[-0.015em] text-white [text-shadow:0_0_24px_rgba(75,63,207,0.6)]">
               YuyuFrame
             </h1>
             <button
@@ -472,7 +476,7 @@ export default function MobileHome() {
 
         {/* ── 5. Mentions légales — iront dans Réglages › À propos quand
             l'écran Réglages du téléphone existera. ── */}
-        <footer className="mt-8 flex shrink-0 flex-col items-center gap-1 pb-6">
+        <footer className="mt-8 flex shrink-0 flex-col items-center gap-1 pb-[max(24px,env(safe-area-inset-bottom))]">
           <div className="flex items-center">
             {([
               ['licence', t('home.legal.licence')],
