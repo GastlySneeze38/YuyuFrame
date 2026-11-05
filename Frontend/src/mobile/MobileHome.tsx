@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AnimatePresence, motion } from 'framer-motion'
-import { fastTransition } from '@/lib/motion'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { EASE_OUT, fastTransition } from '@/lib/motion'
 import { api, type CatalogServer, type SavedServer } from '@/api/client'
 import { useStore } from '@/stores/useStore'
 import { showError } from '@/stores/useErrorToast'
@@ -87,6 +87,26 @@ export default function MobileHome() {
     () => (username ? homeGreeting(language, username) : { phrase: '', playIntro: false }),
     [language, username],
   )
+
+  // ── L'entrée de l'écran, pendant la séquence d'accueil ──
+  // Jouée une fois par ouverture du launcher, avec le salut qui descend au
+  // centre de la bannière (`WelcomeSequence`, départ à 320 ms). Le salut est
+  // la pièce maîtresse ; le reste de l'écran monte en vague pendant sa
+  // descente, pour que tout soit utilisable vers 1 s — et non après son
+  // rangement à 2,35 s, ce qui cacherait « Jouer » trop longtemps.
+  // Écarts décroissants (70, 60, 50 ms) et courses décroissantes (16, 12,
+  // 8 px) : le plus important part le premier et vient du plus loin.
+  // Hors séquence, rien ne bouge. Animations réduites : tout ensemble, en
+  // fondu seul.
+  const reduceMotion = useReducedMotion()
+  const enter = (delay: number, rise: number, duration = 0.5) =>
+    welcome.playIntro
+      ? {
+          initial: { opacity: 0, transform: `translateY(${reduceMotion ? 0 : rise}px)` },
+          animate: { opacity: 1, transform: 'translateY(0px)', transitionEnd: { transform: 'none' } },
+          transition: { duration: reduceMotion ? 0.2 : duration, ease: EASE_OUT, delay: reduceMotion ? 0 : delay },
+        }
+      : {}
   const banner = useHomeBanner()
   const festive = banner?.theme === 'festive'
   const halloween = banner?.theme === 'halloween'
@@ -253,8 +273,10 @@ export default function MobileHome() {
           </div>
           <Skyline />
 
-          {/* Titre et information, en haut à gauche comme sur PC. */}
-          <div className="absolute left-4 right-2 top-2 z-10 flex items-center justify-between">
+          {/* Titre et information, en haut à gauche comme sur PC. À
+              l'entrée : fondu seul, au départ du salut — un décor, pas
+              une pièce qui bouge. */}
+          <motion.div {...enter(0.32, 0, 0.4)} className="absolute left-4 right-2 top-2 z-10 flex items-center justify-between">
             <h1 className="select-none text-[28px] font-black leading-none tracking-[-0.015em] text-white [text-shadow:0_0_24px_rgba(75,63,207,0.6)]">
               YuyuFrame
             </h1>
@@ -265,7 +287,7 @@ export default function MobileHome() {
             >
               <svg viewBox="0 0 24 24" fill="currentColor" className="h-[22px] w-[22px]"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" /></svg>
             </button>
-          </div>
+          </motion.div>
 
           {/* L'annonce de la flotte (Halloween…), sous le titre. */}
           <div className="absolute left-4 top-[54px] z-10 max-w-[calc(100%-32px)]">
@@ -300,7 +322,9 @@ export default function MobileHome() {
               : 'border-transparent bg-transparent'
           }`}
         >
-          <div ref={launchRef} className="pointer-events-auto px-4 py-3">
+          {/* À l'entrée, c'est le contenu qui monte et non le bloc collé :
+              envelopper celui-ci le décollerait du défilement. */}
+          <motion.div ref={launchRef} {...enter(0.48, 16)} className="pointer-events-auto px-4 py-3">
             <SectionHeader
               title={t('home.instance')}
               action={{ label: t('home.manage'), onClick: () => navigate('/instances') }}
@@ -393,22 +417,22 @@ export default function MobileHome() {
                 </motion.div>
               </AnimatePresence>
             </div>
-          </div>
+          </motion.div>
         </div>
 
         {/* Les raccourcis Missions / Amis / Passe / Saison, sous le lancement. */}
-        <div className="mt-3">
+        <motion.div {...enter(0.55, 12, 0.45)} className="mt-3">
           <HomeShortcuts width="w-full" tall />
-        </div>
+        </motion.div>
 
         {/* ── 3. Les entrées de la barre du PC absentes de celle du
             téléphone. Le premier écran s'arrête juste sous elles (la
             bannière prend la hauteur qui reste, voir `bannerH`). ── */}
-        <div ref={tilesRef} className="mt-3 grid grid-cols-3 gap-3">
+        <motion.div ref={tilesRef} {...enter(0.6, 8, 0.4)} className="mt-3 grid grid-cols-3 gap-3">
           <PageTile label={t('home.nav.features')} icon={NAV_ICONS.features} onClick={() => navigate('/features')} />
           <PageTile label={t('home.nav.support')} icon={NAV_ICONS.support} badge={supportUnread + crashUpdates} onClick={() => navigate('/support')} />
           <PageTile label={t('home.nav.competitive')} icon={NAV_ICONS.competitive} onClick={() => navigate('/competitive')} />
-        </div>
+        </motion.div>
 
         {/* ── 4. Un serveur (ou les fonctionnalités, selon le réglage
             « serveurs sur l'accueil »), puis l'offre Pro ── */}
