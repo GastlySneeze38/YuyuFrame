@@ -1,12 +1,10 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { EASE_OUT, fastTransition } from '@/lib/motion'
 import { api, type CatalogServer, type SavedServer } from '@/api/client'
 import { useStore } from '@/stores/useStore'
 import { showError } from '@/stores/useErrorToast'
-import { useSupportWatch } from '@/stores/useSupportWatch'
-import { useCrashWatch } from '@/stores/useCrashWatch'
 import { skinPreview } from '@/lib/skinCache'
 import { homeGreeting } from '@/lib/greeting'
 import { acceptsVersion, homeSuggestions } from '@/lib/homeSuggestions'
@@ -37,21 +35,25 @@ const STARS = Array.from({ length: 40 }, (_, i) => ({
  * L'accueil sur téléphone : celui du PC, en réduit, aux normes d'une appli
  * mobile (iOS et Material).
  *
- *   1. la bannière (titre, information, annonce, personnage, pseudo) ;
+ *   1. la bannière (menu ☰, titre, information, annonce, personnage, pseudo
+ *      et salut) — sa hauteur s'ajuste pour que le premier écran s'arrête
+ *      sous le serveur ;
  *   2. le bloc de lancement (instance, client intégré, Jouer), qui défile
  *      puis reste collé en haut de l'écran une fois atteint, et sous lui les
  *      raccourcis Missions / Amis / Passe / Saison ;
- *   3. Outils, Support et Compétitif, absents de la barre du bas — le
- *      premier écran s'arrête juste sous eux ;
- *   4. un serveur (ou les fonctionnalités, selon le même réglage que sur
- *      PC), puis l'offre Pro en dernier ;
- *   5. les mentions légales, en attendant l'écran Réglages du téléphone ;
- *   6. la barre d'onglets.
+ *   3. un serveur (ou les fonctionnalités, selon le même réglage que sur
+ *      PC) — fin du premier écran ;
+ *   4. l'offre Pro, en dernier.
+ *
+ * Outils, Support, Compétitif et les mentions légales ne sont plus ici : les
+ * trois premiers sont dans le menu latéral, les mentions dans Réglages ›
+ * À propos.
  *
  * Règles tenues partout : texte principal à 15 px et plus, secondaire à 13 px
- * minimum et jamais sous 55 % d'opacité, cibles de 44 px au moins, un seul
- * rythme d'espacement (12 px dans une section, 24 px entre deux), un retour
- * à l'appui sur tout ce qui se touche, rien qui ne s'anime en boucle.
+ * minimum et jamais sous 55 % d'opacité, cibles de 44 px au moins, deux
+ * espacements seulement (12 px dans une section, 32 px entre deux : assez
+ * d'air pour que chaque bloc se lise seul), un retour à l'appui sur tout ce qui se
+ * touche, rien qui ne s'anime en boucle.
  */
 export default function MobileHome() {
   const t = useT()
@@ -69,8 +71,6 @@ export default function MobileHome() {
   const favoriteServers = useStore((s) => s.favoriteServers)
   const isAgentEnabled = useStore((s) => s.isAgentEnabled)
   const setAgentEnabled = useStore((s) => s.setAgentEnabled)
-  const supportUnread = useSupportWatch((s) => s.unread)
-  const crashUpdates = useCrashWatch((s) => s.updates)
   const instance = instances.find((i) => i.id === selectedId) ?? null
 
   const { steps, cancelling, launch, cancel } = useMobileLaunch()
@@ -132,32 +132,36 @@ export default function MobileHome() {
   }, [])
 
   // ── Un premier écran qui tombe juste ──
-  // La bannière prend toute la hauteur que laissent le lancement, les
-  // raccourcis et les tuiles : le premier écran s'arrête net 24 px sous les
-  // tuiles, quelle que soit la taille du téléphone, au lieu de couper une
-  // carte en deux. Bornée : jamais sous 150 px (en dessous le personnage ne
-  // tient plus ; un iPhone SE tombe juste au-dessus), jamais au-delà de 420 (grands écrans, le personnage n'a pas à
-  // devenir géant). Mesures par `offsetTop`/`offsetHeight`, qui ignorent la
-  // mise à l'échelle de l'entrée de la bannière ; ce qui suit la bannière ne
-  // dépend pas de sa hauteur, donc pas de va-et-vient.
+  // La bannière prend la hauteur que laissent le lancement, les raccourcis
+  // et le serveur : le premier écran s'arrête 24 px sous la carte du
+  // serveur, quelle que soit la taille du téléphone, au lieu de la couper en
+  // deux. Bornée : jamais sous 150 px (en dessous le personnage ne tient
+  // plus — un iPhone SE tombe pile dessus, carte du serveur entière), jamais
+  // au-delà de 340 (sur un grand écran, l'air va entre les
+  // sections plutôt que dans une bannière géante). Mesures par
+  // `offsetTop`/`offsetHeight`, qui ignorent la mise à l'échelle de l'entrée ;
+  // ce qui suit la bannière ne dépend pas de sa hauteur, donc pas de
+  // va-et-vient. La section du serveur change de hauteur selon ce qu'elle
+  // montre (carte, suggestion, appel à en ajouter) : elle est observée aussi.
   const bannerRef = useRef<HTMLDivElement>(null)
-  const tilesRef = useRef<HTMLDivElement>(null)
+  const fitRef = useRef<HTMLElement>(null)
   const launchRef = useRef<HTMLDivElement>(null)
   const [bannerH, setBannerH] = useState<number | null>(null)
   useLayoutEffect(() => {
     const main = scrollRef.current
     const banner = bannerRef.current
-    const tiles = tilesRef.current
-    if (!main || !banner || !tiles) return
+    const end = fitRef.current
+    if (!main || !banner || !end) return
     const fit = () => {
       const bannerBottom = banner.offsetTop + banner.offsetHeight
-      const rest = tiles.offsetTop + tiles.offsetHeight - bannerBottom
+      const rest = end.offsetTop + end.offsetHeight - bannerBottom
       const room = main.clientHeight - banner.offsetTop - rest - 24
-      setBannerH(Math.round(Math.max(150, Math.min(420, room))))
+      setBannerH(Math.round(Math.max(150, Math.min(340, room))))
     }
     fit()
     const ro = new ResizeObserver(fit)
     ro.observe(main)
+    ro.observe(end)
     if (launchRef.current) ro.observe(launchRef.current)
     return () => ro.disconnect()
   }, [])
@@ -279,9 +283,12 @@ export default function MobileHome() {
               une pièce qui bouge. */}
           {/* Le menu (☰) en haut à gauche, puis le titre ; l'information à
               droite. */}
-          <motion.div {...enter(0.32, 0, 0.4)} className="absolute left-1.5 right-2 top-2 z-10 flex items-center gap-1">
+          {/* Titre à 22 px et sans halo : avec la bannière plus basse, un
+              titre à 28 px lumineux disputait la place au salut, qui est la
+              vraie pièce de la bannière. */}
+          <motion.div {...enter(0.32, 0, 0.4)} className="absolute left-1.5 right-2 top-2 z-10 flex items-center gap-0.5">
             <MenuButton />
-            <h1 className="min-w-0 flex-1 select-none truncate text-[28px] font-black leading-none tracking-[-0.015em] text-white [text-shadow:0_0_24px_rgba(75,63,207,0.6)]">
+            <h1 className="min-w-0 flex-1 select-none truncate text-[22px] font-extrabold leading-none tracking-[-0.01em] text-white">
               YuyuFrame
             </h1>
             <button
@@ -305,6 +312,7 @@ export default function MobileHome() {
             greeting={username && welcome.phrase ? welcome.phrase : t('home.welcomeNew')}
             playIntro={welcome.playIntro}
             onAvatarClick={() => navigate('/login')}
+            restFontPx={13}
           />
           {halloween && <HalloweenGround />}
         </div>
@@ -313,7 +321,9 @@ export default function MobileHome() {
             reste collé en haut ── */}
         {/* Le repère est remonté de la hauteur de l'encoche, comme le bloc :
             il reste aligné sur son bord haut. */}
-        <div ref={markerRef} aria-hidden className="relative top-[calc(env(safe-area-inset-top,0px)*-1)] mt-1 h-px shrink-0" />
+        {/* `mt-4` + le rembourrage du bloc : 28 px entre la bannière et le
+            lancement, pour que les deux ne se lisent pas comme un seul bloc. */}
+        <div ref={markerRef} aria-hidden className="relative top-[calc(env(safe-area-inset-top,0px)*-1)] mt-4 h-px shrink-0" />
         {/* Collé, le bloc passerait sous l'encoche : il porte une bande de la
             hauteur de l'encoche au-dessus de son contenu (padding), retirée de
             sa place dans la page (marge négative). Cette bande laisse passer
@@ -429,18 +439,12 @@ export default function MobileHome() {
           <HomeShortcuts width="w-full" tall />
         </motion.div>
 
-        {/* ── 3. Les entrées de la barre du PC absentes de celle du
-            téléphone. Le premier écran s'arrête juste sous elles (la
-            bannière prend la hauteur qui reste, voir `bannerH`). ── */}
-        <motion.div ref={tilesRef} {...enter(0.6, 8, 0.4)} className="mt-3 grid grid-cols-3 gap-3">
-          <PageTile label={t('home.nav.features')} icon={NAV_ICONS.features} onClick={() => navigate('/features')} />
-          <PageTile label={t('home.nav.support')} icon={NAV_ICONS.support} badge={supportUnread + crashUpdates} onClick={() => navigate('/support')} />
-          <PageTile label={t('home.nav.competitive')} icon={NAV_ICONS.competitive} onClick={() => navigate('/competitive')} />
-        </motion.div>
-
-        {/* ── 4. Un serveur (ou les fonctionnalités, selon le réglage
-            « serveurs sur l'accueil »), puis l'offre Pro ── */}
-        <section className="mt-6">
+        {/* ── 3. Un serveur (ou les fonctionnalités, selon le réglage
+            « serveurs sur l'accueil ») : la fin du premier écran — la
+            bannière prend la hauteur qui reste au-dessus (voir `bannerH`).
+            Outils, Support et Compétitif ne sont plus ici : ils sont dans le
+            menu latéral. ── */}
+        <motion.section ref={fitRef} {...enter(0.6, 8, 0.4)} className="mt-8">
           {showHomeServers ? (
             <>
               <SectionHeader
@@ -467,32 +471,15 @@ export default function MobileHome() {
           ) : (
             <FeatureList />
           )}
-        </section>
+        </motion.section>
 
-        {/* L'offre, en dernier. */}
-        <div className="mt-6">
+        {/* ── 4. L'offre, en dernier, sous le premier écran. ── */}
+        {/* Les mentions légales ne sont plus en bas de l'accueil : elles sont
+            dans Réglages › À propos. */}
+        <div className="mt-8 shrink-0 pb-[max(32px,env(safe-area-inset-bottom))]">
           <MobileProCard onOpen={() => navigate('/plans')} />
         </div>
-
-        {/* ── 5. Mentions légales — iront dans Réglages › À propos quand
-            l'écran Réglages du téléphone existera. ── */}
-        <footer className="mt-8 flex shrink-0 flex-col items-center gap-1 pb-[max(24px,env(safe-area-inset-bottom))]">
-          <div className="flex items-center">
-            {([
-              ['licence', t('home.legal.licence')],
-              ['confidentialite', t('home.legal.confidentialite')],
-              ['conditions', t('home.legal.conditions')],
-            ] as const).map(([tab, label]) => (
-              <button key={tab} onClick={() => navigate(`/legal?tab=${tab}`)} className="h-11 px-2.5 text-[13px] font-medium text-white/55 active:text-white/80">
-                {label}
-              </button>
-            ))}
-          </div>
-          <span className="text-[12px] text-white/40">{t('home.copyright')}</span>
-        </footer>
       </main>
-
-      {/* ── 6. La barre d'onglets : posée par la coquille (`App.tsx`). ── */}
 
       <InstanceSheet
         open={sheetOpen}
@@ -613,34 +600,6 @@ function LaunchButton({ hasAccount, hasInstance, running, step, cancelling, hall
       <span className="truncate">
         {!hasAccount ? t('home.connect') : !hasInstance ? t('home.noInstance') : t('home.mobile.play')}
       </span>
-    </button>
-  )
-}
-
-// ── Les liens de la page ───────────────────────────────────────────────────
-
-/** Une entrée de la barre du PC posée dans la page : icône au-dessus du
- *  libellé, comme une tuile d'appli — trois de front tiennent sans tronquer. */
-function PageTile({ label, icon, badge = 0, onClick }: {
-  label: string
-  icon: ReactNode
-  badge?: number
-  onClick: () => void
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="press flex h-[76px] min-w-0 flex-col items-center justify-center gap-2 rounded-2xl border border-white/[0.08] bg-white/[0.04] px-2 text-white/90"
-    >
-      <span className="relative flex h-6 w-6 shrink-0">
-        <svg viewBox="0 0 24 24" fill="currentColor" className="h-full w-full">{icon}</svg>
-        {badge > 0 && (
-          <span className="absolute -right-2.5 -top-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-danger px-1 text-[11px] font-bold leading-none tabular-nums text-white shadow-[0_0_0_2px_#09090D]">
-            {badge > 9 ? '9+' : badge}
-          </span>
-        )}
-      </span>
-      <span className="max-w-full truncate text-[13px] font-semibold">{label}</span>
     </button>
   )
 }

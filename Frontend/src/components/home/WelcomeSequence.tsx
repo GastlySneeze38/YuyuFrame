@@ -45,6 +45,7 @@ export function WelcomeSequence({
   greeting,
   playIntro,
   onAvatarClick,
+  restFontPx = REST_FONT_PX,
 }: {
   username: string | null
   /** UUID du compte actif. `null` = aucun compte connecté. */
@@ -54,6 +55,9 @@ export function WelcomeSequence({
   greeting: string
   playIntro: boolean
   onAvatarClick: () => void
+  /** Taille du salut une fois rangé. 12 px sur PC ; le téléphone passe 13,
+   *  le plancher de lecture du texte secondaire. */
+  restFontPx?: number
 }) {
   const t = useT()
   const [phase, setPhase] = useState(playIntro ? 0 : 3)
@@ -165,7 +169,7 @@ export function WelcomeSequence({
         {/* Le salut voyage hors du flux, au-dessus d'une doublure invisible
             qui garde sa place. Sans elle, sortir le texte du flux ferait
             s'effondrer la colonne. */}
-        <div ref={slotRef} className="relative whitespace-nowrap text-[12px] font-medium leading-[15px]">
+        <div ref={slotRef} className="relative whitespace-nowrap font-medium leading-[1.25]" style={{ fontSize: restFontPx }}>
           <span className="invisible">{greeting}</span>
           <motion.div
             // Un seul élément du début à la fin : c'est lui qui voyage.
@@ -182,7 +186,7 @@ export function WelcomeSequence({
             animate={{
               x: big ? f.dx : 0,
               y: big ? f.dy : phase === 0 ? f.dy - 340 : 0,
-              fontSize: big ? `${(REST_FONT_PX * f.scale).toFixed(1)}px` : `${REST_FONT_PX}px`,
+              fontSize: big ? `${(restFontPx * f.scale).toFixed(1)}px` : `${restFontPx}px`,
               opacity: phase === 0 ? 0 : 1,
               color: parked ? 'rgba(233,231,245,0.6)' : 'rgb(255,255,255)',
               fontWeight: parked ? 500 : 800,
