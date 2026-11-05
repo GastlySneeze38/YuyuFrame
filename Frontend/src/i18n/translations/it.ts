@@ -30,6 +30,7 @@ export const it: TranslationSchema = {
       modpack: 'Modpack',
       shaders: 'Shader',
       resourcepacks: 'Pacchetti di risorse',
+      resourcepacksShort: 'Risorse',
       confirmDelete: 'Eliminare questa mod?',
       showResults: 'Mostra risultati',
     },
@@ -2095,6 +2096,12 @@ export const it: TranslationSchema = {
       patchNotes: 'Note di versione',
       videos: 'Video',
     },
+    tabShort: {
+      requests: 'Richieste',
+      crashes: 'Crash',
+      patchNotes: 'Versioni',
+      videos: 'Video',
+    },
     videos: {
       badge: 'In arrivo',
       title: 'I tutorial video arriveranno presto',
@@ -2113,6 +2120,7 @@ export const it: TranslationSchema = {
     send: 'Invia',
     remove: 'Elimina',
     confirmRemove: 'Conferma',
+    confirmRemoveQuestion: 'Rimuovere questa richiesta dalla tua lista?',
     category: 'Categoria',
     subject: 'Oggetto',
     subjectPlaceholder: 'Es.: crash all’avvio di un’istanza Forge',

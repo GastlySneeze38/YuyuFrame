@@ -91,6 +91,43 @@ const ANSWERS: Record<string, unknown> = {
   ] satisfies Mod[],
   mods_check_conflicts: [],
   curseforge_local_fingerprints: [],
+  // Support : deux demandes, une conversation, un rapport de plantage local,
+  // deux notes de version.
+  support_categories: [
+    { code: 'technical', label: 'Technique', description: '' },
+    { code: 'bug', label: 'Bug', description: '' },
+    { code: 'account', label: 'Compte', description: '' },
+    { code: 'billing', label: 'Paiement', description: '' },
+    { code: 'other', label: 'Autre', description: '' },
+  ],
+  support_list: [
+    { id: 't1', public_id: 'YF-4F2A', subject: 'Le jeu se ferme au lancement', category: 'technical', status: 'answered', created_at: '2026-11-03T10:00:00Z', updated_at: '2026-11-04T09:00:00Z', has_unread: true },
+    { id: 't2', public_id: 'YF-19C0', subject: 'Question sur la synchronisation', category: 'other', status: 'closed', created_at: '2026-10-20T10:00:00Z', updated_at: '2026-10-21T09:00:00Z', has_unread: false },
+  ],
+  support_get: {
+    id: 't1', public_id: 'YF-4F2A', subject: 'Le jeu se ferme au lancement', category: 'technical', status: 'answered',
+    created_at: '2026-11-03T10:00:00Z', updated_at: '2026-11-04T09:00:00Z', has_unread: false,
+    messages: [
+      { id: 'm1', author_kind: 'user', author_name: 'Steve', body: 'Bonjour, depuis la mise à jour mon instance Fabric se ferme dès le lancement.', created_at: '2026-11-03T10:00:00Z' },
+      { id: 'm2', author_kind: 'staff', author_name: 'Équipe', body: 'Bonjour ! Peux-tu envoyer le rapport de plantage depuis l’onglet Plantages ? On regarde ça tout de suite.', created_at: '2026-11-04T09:00:00Z' },
+    ],
+  },
+  crash_list: [
+    { id: 'c1', instance_id: 'preview-fabric', instance_name: 'Fabric 1.21.11', title: 'java.lang.NoSuchMethodError: sodium', kind: 'exit', signature: 'abc', mc_version: '1.21.11', loader: 'fabric', occurred_at: '2026-11-04T08:30:00Z', sent_id: null, sent_public_id: null, mods_count: 3 },
+  ],
+  crash_remote_list: [],
+  crash_get: {
+    id: 'c1', instance_id: 'preview-fabric', instance_name: 'Fabric 1.21.11', title: 'java.lang.NoSuchMethodError: sodium', kind: 'exit', signature: 'abc',
+    mc_version: '1.21.11', loader: 'fabric', occurred_at: '2026-11-04T08:30:00Z', sent_id: null, sent_public_id: null, mods_count: 3,
+    exit_code: 1, launcher_version: '0.1.5', os: 'Android', os_version: '15', arch: 'aarch64', cpu: 'Snapdragon 8 Gen 3', gpu: 'Adreno 750',
+    ram_total_mb: 12288, java_version: '21.0.4', java_path: null, ram_alloc_mb: 4096, jvm_args: ['-Xmx4G', '-XX:+UseG1GC'],
+    mods: [{ name: 'sodium.jar', enabled: true, size: 1 }, { name: 'iris.jar', enabled: false, size: 1 }], uptime_ms: 8200,
+    stack_trace: 'java.lang.NoSuchMethodError: sodium\n\tat net.minecraft.client.Main.main(Main.java:1)', log_tail: '[main/INFO] Loading Minecraft…', sent_at: null,
+  },
+  patch_notes_list: [
+    { id: 'p2', version: '0.1.5', title: 'Le launcher arrive sur téléphone', body: '## Nouveautés\n- Une interface pensée pour le doigt\n- Un menu latéral\n\nMerci à tous pour vos retours !', published_at: '2026-11-05T10:00:00Z' },
+    { id: 'p1', version: '0.1.4', title: 'Connexion renforcée', body: 'Double authentification pour tous les comptes.', published_at: '2026-10-04T10:00:00Z' },
+  ],
   // Connexion Microsoft : un code factice, et une attente qui ne finit jamais.
   auth_start_device: { user_code: 'AB12CD34', verification_uri: 'https://www.microsoft.com/link' },
   auth_poll: { status: 'pending' },

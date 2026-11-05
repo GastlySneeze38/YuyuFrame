@@ -56,7 +56,7 @@ export function MobileModsToolbar({ tab, onTab, isPlugin, hasModpack, modCount, 
         ? [
             { id: 'packs-installed', label: t('mods.mobile.installed'), badge: packCount },
             { id: 'packs-shader', label: t('mods.mobile.shaders') },
-            { id: 'packs-resourcepack', label: t('mods.mobile.resourcepacks') },
+            { id: 'packs-resourcepack', label: t('mods.mobile.resourcepacksShort') },
           ]
         : []
 
@@ -82,25 +82,28 @@ export function MobileModsToolbar({ tab, onTab, isPlugin, hasModpack, modCount, 
 
       {/* Les écrans de la famille, puis Importer et les mises à jour. */}
       <div className="flex items-center gap-2">
-        <div className="-mx-4 flex min-w-0 flex-1 gap-2 overflow-x-auto overscroll-x-contain px-4">
+        {/* Les pastilles se partagent la largeur au lieu de défiler : un
+            écran caché hors du bord ne se devine pas. */}
+        <div className="flex min-w-0 flex-1 gap-2">
           {screens.map((s) => (
             <button
               key={s.id}
               onClick={() => onTab(s.id)}
               aria-pressed={tab === s.id}
-              className={`press flex h-10 shrink-0 items-center gap-1.5 rounded-full border px-4 text-[14px] font-semibold transition-colors duration-150 ${
+              className={`press relative flex h-10 min-w-0 flex-1 items-center justify-center rounded-full border px-2 text-[14px] font-semibold transition-colors duration-150 [&>span:first-child]:truncate ${
                 tab === s.id
                   ? 'border-[rgba(120,100,255,0.5)] bg-[rgba(75,63,207,0.2)] text-white'
                   : 'border-white/[0.08] bg-white/[0.03] text-white/65'
               }`}
             >
-              {s.label}
+              <span>{s.label}</span>
+              {/* Le nombre en coin : dans la pastille, il prenait la place
+                  du libellé, coupé dans les langues aux mots longs. */}
               {s.badge !== undefined && s.badge > 0 && (
-                <span className="rounded-full bg-white/[0.1] px-1.5 text-[12px] tabular-nums text-white/75">{s.badge}</span>
+                <span className="absolute -right-1 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full border border-[#09090D] bg-[#3a3550] px-1.5 text-[11px] font-bold tabular-nums text-white">{s.badge}</span>
               )}
             </button>
           ))}
-          {notice && <span className="flex shrink-0 items-center text-[13px] text-[rgba(179,163,255,0.9)]">{notice}</span>}
         </div>
 
         {updatesCount > 0 && family === 'mods' && (
@@ -115,6 +118,10 @@ export function MobileModsToolbar({ tab, onTab, isPlugin, hasModpack, modCount, 
           </button>
         )}
       </div>
+
+      {/* Le message d'import, sous les pastilles plutôt qu'à côté : il ne
+          leur prend pas de place pendant qu'il s'affiche. */}
+      {notice && <p className="px-1 text-[13px] text-[rgba(179,163,255,0.9)]">{notice}</p>}
     </div>
   )
 }

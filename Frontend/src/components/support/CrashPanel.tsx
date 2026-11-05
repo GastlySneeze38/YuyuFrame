@@ -9,6 +9,8 @@ import { errorMessage } from '@/lib/apiError'
 import { showError } from '@/stores/useErrorToast'
 import { SNAP, listItemVariants, listVariants, press } from '@/lib/motion'
 import { useT } from '@/i18n'
+import { useIsMobile } from '@/mobile/useIsMobile'
+import { PushedScreen } from '@/mobile/ui/PushedScreen'
 import type { CrashEntry, CrashStatus, LocalCrashReport, LocalCrashSummary, RemoteCrashSummary } from '@/types/crash'
 
 /**
@@ -113,6 +115,10 @@ export function CrashPanel({ signedIn }: { signedIn: boolean }) {
   }, [reload, known])
 
   const open = useMemo(() => entries?.find((e) => e.key === openKey) ?? null, [entries, openKey])
+  const mobile = useIsMobile()
+  // Garde le dernier rapport le temps que l'écran poussé reparte.
+  const lastOpen = useRef<CrashEntry | null>(null)
+  if (open) lastOpen.current = open
 
   if (entries === null) {
     return (
@@ -125,9 +131,66 @@ export function CrashPanel({ signedIn }: { signedIn: boolean }) {
   if (entries.length === 0) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-2 px-10 text-center">
-        <p className="text-[13px] font-semibold">{t('crash.emptyTitle')}</p>
-        <p className="max-w-md text-[11px] leading-relaxed text-txt-secondary">{t('crash.emptyText')}</p>
+        <p className="text-[13px] font-semibold max-sm:text-[17px]">{t('crash.emptyTitle')}</p>
+        <p className="max-w-md text-[11px] leading-relaxed text-txt-secondary max-sm:text-[15px]">{t('crash.emptyText')}</p>
       </div>
+    )
+  }
+
+  // ── Téléphone ── la liste sur toute la largeur, le rapport en écran poussé.
+  if (mobile) {
+    const shown = open ?? lastOpen.current
+    return (
+      <>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[max(24px,env(safe-area-inset-bottom))] pt-3">
+          <section className="flex flex-col gap-2">
+            <h2 className="px-1 text-[13px] font-semibold uppercase tracking-[0.06em] text-white/55">{t('crash.listTitle')}</h2>
+            <div className="flex flex-col divide-y divide-white/[0.06] overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.04]">
+              {entries.map((e) => {
+                const title = e.local?.title ?? e.remote?.title ?? ''
+                const status = e.remote?.status ?? null
+                return (
+                  <button
+                    key={e.key}
+                    onClick={() => openEntry(e)}
+                    className="flex min-h-[68px] w-full items-center gap-3 px-4 py-3 text-left active:bg-white/[0.04]"
+                  >
+                    <span className="flex min-w-0 flex-1 flex-col gap-1">
+                      <span className="flex items-center gap-2">
+                        <span className="truncate font-mono text-[14px] font-semibold text-white">{title}</span>
+                        {e.remote && crashUnseen(acknowledged, e.remote) && <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-danger" />}
+                      </span>
+                      <span className="flex items-center gap-2">
+                        {status ? (
+                          <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide ${STATUS_STYLES[status]}`}>
+                            {t(`crash.status.${status}`)}
+                          </span>
+                        ) : (
+                          <span className="shrink-0 rounded-md bg-warning/15 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-warning">
+                            {t('crash.notSent')}
+                          </span>
+                        )}
+                        <span className="truncate text-[13px] text-white/55">{e.local?.instance_name ?? e.remote?.mc_version ?? ''}</span>
+                      </span>
+                    </span>
+                    <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 shrink-0 text-white/35"><path d="M9.3 6.7 10.7 5.3l6.7 6.7-6.7 6.7-1.4-1.4 5.3-5.3z" /></svg>
+                  </button>
+                )
+              })}
+            </div>
+          </section>
+        </div>
+        <PushedScreen
+          open={!!open}
+          onBack={() => setOpenKey(null)}
+          backLabel={t('crash.listTitle')}
+          title={shown?.local?.instance_name ?? shown?.remote?.mc_version ?? t('crash.listTitle')}
+          subtitle={shown ? when(shown.local?.occurred_at ?? shown.remote?.occurred_at) : undefined}
+          bodyClassName=""
+        >
+          {shown && <CrashDetail key={shown.key} entry={shown} signedIn={signedIn} onChanged={reload} onGone={() => setOpenKey(null)} />}
+        </PushedScreen>
+      </>
     )
   }
 
@@ -202,9 +265,11 @@ export function CrashPanel({ signedIn }: { signedIn: boolean }) {
 function Row({ label, value }: { label: string; value: string | number | null | undefined }) {
   if (value === null || value === undefined || value === '') return null
   return (
-    <div className="flex gap-3 text-[11.5px]">
-      <span className="w-36 shrink-0 text-txt-muted">{label}</span>
-      <span className="min-w-0 break-words text-txt-secondary">{value}</span>
+    // Téléphone : le libellé au-dessus de sa valeur — une colonne de 144 px
+    // ne laissait presque rien à la valeur.
+    <div className="flex gap-3 text-[11.5px] max-sm:flex-col max-sm:gap-0.5">
+      <span className="w-36 shrink-0 text-txt-muted max-sm:w-auto max-sm:text-[13px] max-sm:text-white/55">{label}</span>
+      <span className="selectable min-w-0 break-words text-txt-secondary max-sm:text-[15px] max-sm:text-white/85">{value}</span>
     </div>
   )
 }
@@ -218,13 +283,13 @@ function Fold({ title, count, children }: { title: string; count?: number; child
       <motion.button
         {...press}
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left"
+        className="flex w-full items-center gap-2 px-3 py-2 text-left max-sm:min-h-[52px] max-sm:gap-3 max-sm:px-4"
       >
-        <motion.svg viewBox="0 0 24 24" fill="currentColor" width={9} height={9} animate={{ rotate: open ? 90 : 0 }} transition={SNAP} className="text-txt-muted">
+        <motion.svg viewBox="0 0 24 24" fill="currentColor" width={9} height={9} animate={{ rotate: open ? 90 : 0 }} transition={SNAP} className="text-txt-muted max-sm:h-3 max-sm:w-3">
           <path d="M8 5v14l11-7z" />
         </motion.svg>
-        <span className="flex-1 text-[12px] font-semibold">{title}</span>
-        {count !== undefined && <span className="text-[10px] text-txt-muted">{count}</span>}
+        <span className="flex-1 text-[12px] font-semibold max-sm:text-[15px]">{title}</span>
+        {count !== undefined && <span className="text-[10px] text-txt-muted max-sm:text-[13px]">{count}</span>}
       </motion.button>
       <AnimatePresence initial={false}>
         {open && (
@@ -245,7 +310,7 @@ function Fold({ title, count, children }: { title: string; count?: number; child
 
 function Raw({ text }: { text: string }) {
   return (
-    <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-surface-1 p-2.5 font-mono text-[10.5px] leading-relaxed text-txt-secondary">
+    <pre className="selectable max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-surface-1 p-2.5 font-mono text-[10.5px] leading-relaxed text-txt-secondary max-sm:text-[12px]">
       {text}
     </pre>
   )
@@ -323,11 +388,11 @@ function CrashDetail({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0 }}
       transition={SNAP}
-      className="flex min-h-0 flex-col gap-3 overflow-y-auto px-6 py-4"
+      className="flex min-h-0 flex-col gap-3 overflow-y-auto px-6 py-4 max-sm:gap-4 max-sm:overflow-visible max-sm:px-4 max-sm:pb-[max(24px,env(safe-area-inset-bottom))]"
     >
       <div className="flex flex-col gap-1">
-        <p className="font-mono text-[12.5px] leading-snug text-txt-primary">{title}</p>
-        <p className="text-[10.5px] text-txt-muted">
+        <p className="selectable break-words font-mono text-[12.5px] leading-snug text-txt-primary max-sm:text-[14px]">{title}</p>
+        <p className="text-[10.5px] text-txt-muted max-sm:text-[13px] max-sm:text-white/55">
           {t(`crash.kind.${entry.local?.kind ?? remote?.kind ?? 'exit'}`)} · {when(entry.local?.occurred_at ?? remote?.occurred_at)}
           {remote?.public_id ? ` · ${remote.public_id}` : ''}
         </p>
@@ -338,28 +403,28 @@ function CrashDetail({
       {remote ? (
         <div className="flex flex-col gap-2 rounded-xl border border-line bg-surface-1 px-3.5 py-3">
           <div className="flex items-center gap-2">
-            <span className={`rounded-md px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide ${STATUS_STYLES[remote.status]}`}>
+            <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide max-sm:text-[11px] ${STATUS_STYLES[remote.status]}`}>
               {t(`crash.status.${remote.status}`)}
             </span>
-            <span className="text-[10.5px] text-txt-muted">{t(`crash.statusHint.${remote.status}`)}</span>
+            <span className="text-[10.5px] text-txt-muted max-sm:text-[13px] max-sm:text-white/55">{t(`crash.statusHint.${remote.status}`)}</span>
           </div>
-          {remote.status_note && <p className="text-[12px] leading-relaxed text-txt-secondary">{remote.status_note}</p>}
+          {remote.status_note && <p className="text-[12px] leading-relaxed text-txt-secondary max-sm:text-[15px]">{remote.status_note}</p>}
         </div>
       ) : (
-        <div className="flex flex-col gap-2.5 rounded-xl border border-accent/30 bg-accent/[0.07] px-3.5 py-3">
-          <p className="text-[11.5px] leading-relaxed text-txt-secondary">{t('crash.sendIntro')}</p>
-          <div>
+        <div className="flex flex-col gap-2.5 rounded-xl border border-accent/30 bg-accent/[0.07] px-3.5 py-3 max-sm:gap-3 max-sm:rounded-2xl max-sm:p-4">
+          <p className="text-[11.5px] leading-relaxed text-txt-secondary max-sm:text-[15px]">{t('crash.sendIntro')}</p>
+          <div className="max-sm:[&>*]:h-12 max-sm:[&>*]:w-full max-sm:[&>*]:text-[16px]">
             <Button size="sm" variant="primary" onClick={send} loading={busy} disabled={!signedIn || busy || !localId}>
               {t('crash.send')}
             </Button>
           </div>
-          {!signedIn && <p className="text-[10.5px] text-txt-muted">{t('crash.signInFirst')}</p>}
+          {!signedIn && <p className="text-[10.5px] text-txt-muted max-sm:text-[13px] max-sm:text-white/55">{t('crash.signInFirst')}</p>}
         </div>
       )}
 
       {report ? (
         <>
-          <div className="flex flex-col gap-1 rounded-xl border border-line px-3.5 py-3">
+          <div className="flex flex-col gap-1 rounded-xl border border-line px-3.5 py-3 max-sm:gap-3 max-sm:rounded-2xl max-sm:p-4">
             <Row label={t('crash.field.instance')} value={`${report.instance_name} — Minecraft ${report.mc_version} · ${report.loader}`} />
             <Row label={t('crash.field.uptime')} value={t('crash.uptimeValue', { seconds: Math.round(report.uptime_ms / 1000) })} />
             <Row label={t('crash.field.exitCode')} value={report.exit_code} />
@@ -380,7 +445,7 @@ function CrashDetail({
             <Raw text={report.log_tail || '—'} />
           </Fold>
           <Fold title={t('crash.fold.mods')} count={report.mods.length}>
-            <ul className="max-h-72 overflow-auto font-mono text-[10.5px]">
+            <ul className="max-h-72 overflow-auto font-mono text-[10.5px] max-sm:text-[12px]">
               {report.mods.map((m) => (
                 <li key={m.name} className={m.enabled ? 'text-txt-secondary' : 'text-txt-muted line-through'}>
                   {m.name}
@@ -393,7 +458,7 @@ function CrashDetail({
             <Raw text={report.jvm_args.join('\n')} />
           </Fold>
 
-          <div className="flex items-center gap-2 pb-2">
+          <div className="flex items-center gap-2 pb-2 max-sm:[&>*]:h-12 max-sm:[&>*]:flex-1 max-sm:[&>*]:text-[15px]">
             <Button size="sm" variant="secondary" onClick={copy}>
               {copied ? t('crash.copied') : t('crash.copy')}
             </Button>
@@ -410,7 +475,7 @@ function CrashDetail({
       ) : (
         // Rapport envoyé depuis un autre PC : le serveur garde le contenu,
         // mais il n'y a rien à relire ici.
-        <p className="text-[11.5px] leading-relaxed text-txt-muted">{t('crash.otherDevice')}</p>
+        <p className="text-[11.5px] leading-relaxed text-txt-muted max-sm:text-[15px] max-sm:text-white/60">{t('crash.otherDevice')}</p>
       )}
     </motion.div>
   )

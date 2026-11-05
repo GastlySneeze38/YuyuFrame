@@ -28,6 +28,8 @@ export const fr = {
       modpack: 'Modpack',
       shaders: 'Shaders',
       resourcepacks: 'Packs de ressources',
+      /** Libellé court du commutateur, qui doit tenir dans un tiers de l'écran. */
+      resourcepacksShort: 'Ressources',
       confirmDelete: 'Supprimer ce mod ?',
       showResults: 'Voir les résultats',
     },
@@ -2101,6 +2103,13 @@ export const fr = {
       patchNotes: 'Notes de version',
       videos: 'Vidéos',
     },
+    /** Libellés courts du commutateur d'onglets, sur téléphone. */
+    tabShort: {
+      requests: 'Demandes',
+      crashes: 'Plantages',
+      patchNotes: 'Versions',
+      videos: 'Vidéos',
+    },
     videos: {
       badge: 'Bientôt',
       title: 'Les tutoriels vidéo arrivent bientôt',
@@ -2119,6 +2128,7 @@ export const fr = {
     send: 'Envoyer',
     remove: 'Supprimer',
     confirmRemove: 'Confirmer',
+    confirmRemoveQuestion: 'Supprimer cette demande de ta liste ?',
     category: 'Catégorie',
     subject: 'Sujet',
     subjectPlaceholder: 'Ex : crash au lancement d’une instance Forge',

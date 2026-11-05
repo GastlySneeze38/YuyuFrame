@@ -18,17 +18,19 @@ export function Field({
 } & InputHTMLAttributes<HTMLInputElement>) {
   return (
     <label className={`flex flex-col gap-1.5 ${className}`}>
-      {label && <span className="text-[12px] font-medium text-txt-secondary">{label}</span>}
+      {label && <span className="text-[12px] font-medium text-txt-secondary max-sm:text-[13px]">{label}</span>}
+      {/* Téléphone : 48 px de haut et 16 px de texte (sous 16 px, iOS
+          zoome la page à la saisie). */}
       <input
         {...input}
-        className={`h-10 rounded-xl border bg-surface-2 px-3 text-[13px] text-txt-primary outline-none transition-colors duration-150 ease-out placeholder:text-txt-muted focus:border-accent/60 disabled:opacity-50 ${
+        className={`h-10 rounded-xl border bg-surface-2 px-3 text-[13px] text-txt-primary outline-none transition-colors duration-150 ease-out placeholder:text-txt-muted focus:border-accent/60 disabled:opacity-50 max-sm:h-12 max-sm:px-4 max-sm:text-[16px] ${
           error ? 'border-danger/60' : 'border-line'
         }`}
       />
       {error ? (
-        <span className="text-[11px] text-danger">{error}</span>
+        <span className="text-[11px] text-danger max-sm:text-[13px]">{error}</span>
       ) : (
-        hint && <span className="text-[11px] text-txt-muted">{hint}</span>
+        hint && <span className="text-[11px] text-txt-muted max-sm:text-[13px] max-sm:text-white/55">{hint}</span>
       )}
     </label>
   )

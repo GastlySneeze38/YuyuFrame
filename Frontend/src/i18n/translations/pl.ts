@@ -30,6 +30,7 @@ export const pl: TranslationSchema = {
       modpack: 'Modpack',
       shaders: 'Shadery',
       resourcepacks: 'Paczki zasobów',
+      resourcepacksShort: 'Zasoby',
       confirmDelete: 'Usunąć tego moda?',
       showResults: 'Pokaż wyniki',
     },
@@ -2095,6 +2096,12 @@ export const pl: TranslationSchema = {
       patchNotes: 'Informacje o wersji',
       videos: 'Filmy',
     },
+    tabShort: {
+      requests: 'Zgłoszenia',
+      crashes: 'Awarie',
+      patchNotes: 'Wersje',
+      videos: 'Filmy',
+    },
     videos: {
       badge: 'Wkrótce',
       title: 'Poradniki wideo już wkrótce',
@@ -2113,6 +2120,7 @@ export const pl: TranslationSchema = {
     send: 'Wyślij',
     remove: 'Usuń',
     confirmRemove: 'Potwierdź',
+    confirmRemoveQuestion: 'Usunąć to zgłoszenie z listy?',
     category: 'Kategoria',
     subject: 'Temat',
     subjectPlaceholder: 'Np.: awaria przy starcie instancji Forge',

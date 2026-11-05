@@ -5,6 +5,8 @@ import type { PatchNote } from '@/api/client'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import Markdown, { LAUNCHER_THEME } from '@/components/ui/Markdown'
 import { useT } from '@/i18n'
+import { useIsMobile } from '@/mobile/useIsMobile'
+import { Sheet, SheetTitle } from '@/mobile/ui/Sheet'
 
 /**
  * Notes de version, dans l'onglet Support.
@@ -64,7 +66,7 @@ export function PatchNotesPanel() {
      * colonne fait coïncider les deux, et centrer évite de laisser tout le
      * vide du même côté.
      */
-    <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+    <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 max-sm:overscroll-contain max-sm:px-4 max-sm:pb-[max(24px,env(safe-area-inset-bottom))] max-sm:pt-3">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
         {/* Le menu n'apparaît qu'à partir de deux versions : seul, il ne
             proposerait que ce qui est déjà à l'écran. */}
@@ -75,21 +77,21 @@ export function PatchNotesPanel() {
           // l'apparition, sinon le changement peut passer inaperçu quand deux
           // notes se ressemblent.
           key={note.id}
-          className="rounded-2xl border border-line bg-surface-1 p-5"
+          className="rounded-2xl border border-line bg-surface-1 p-5 max-sm:p-4"
         >
           <div className="flex flex-wrap items-center gap-2.5">
-            <span className="rounded-full border border-accent/40 bg-accent/15 px-3 py-1 text-[12px] font-semibold text-accent-hover">
+            <span className="rounded-full border border-accent/40 bg-accent/15 px-3 py-1 text-[12px] font-semibold text-accent-hover max-sm:text-[13px]">
               {note.version}
             </span>
             {isLatest && (
-              <span className="rounded-full border border-line bg-surface-2 px-3 py-1 text-[12px] font-medium text-txt-secondary">
+              <span className="rounded-full border border-line bg-surface-2 px-3 py-1 text-[12px] font-medium text-txt-secondary max-sm:text-[13px]">
                 {t('patchNotes.latest')}
               </span>
             )}
-            <span className="text-[12px] text-txt-muted">{formatDate(note.published_at)}</span>
+            <span className="text-[12px] text-txt-muted max-sm:text-[13px] max-sm:text-white/55">{formatDate(note.published_at)}</span>
           </div>
 
-          <h2 className="mt-3 text-[16px] font-bold leading-snug text-txt-primary">{note.title}</h2>
+          <h2 className="mt-3 text-[16px] font-bold leading-snug text-txt-primary max-sm:text-[20px]">{note.title}</h2>
 
           <div className="mt-2">
             <Markdown text={note.body} theme={LAUNCHER_THEME} />
@@ -124,13 +126,14 @@ function VersionPicker({
   onPick: (id: string) => void
 }) {
   const t = useT()
+  const mobile = useIsMobile()
   const [open, setOpen] = useState(false)
   const boxRef = useRef<HTMLDivElement>(null)
 
   // Un clic à côté et Échap referment : les deux sorties qu'on essaie devant
-  // un menu ouvert.
+  // un menu ouvert. (Sur téléphone, la feuille gère elle-même sa fermeture.)
   useEffect(() => {
-    if (!open) return
+    if (!open || mobile) return
     const onDown = (e: MouseEvent) => {
       if (!boxRef.current?.contains(e.target as Node)) setOpen(false)
     }
@@ -143,7 +146,57 @@ function VersionPicker({
       document.removeEventListener('mousedown', onDown)
       window.removeEventListener('keydown', onKey, true)
     }
-  }, [open])
+  }, [open, mobile])
+
+  // Téléphone : le bouton ouvre une feuille du bas avec toutes les versions,
+  // comme les autres choix de l'appli, plutôt qu'un menu qui pend sous lui.
+  if (mobile) {
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-haspopup="dialog"
+          className="press flex min-h-[60px] w-full items-center justify-between gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.04] px-4 text-left"
+        >
+          <span className="flex min-w-0 flex-col">
+            <span className="text-[15px] font-semibold text-white">{current.version}</span>
+            <span className="truncate text-[13px] text-white/55">{formatDate(current.published_at)}</span>
+          </span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0 text-white/55">
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </button>
+        <Sheet
+          open={open}
+          onClose={() => setOpen(false)}
+          label={t('support.tab.patchNotes')}
+          header={<SheetTitle>{t('support.tab.patchNotes')}</SheetTitle>}
+          bodyClassName="flex flex-col gap-1 px-3 pb-3"
+        >
+          {notes.map((n, i) => {
+            const active = n.id === current.id
+            return (
+              <button
+                key={n.id}
+                type="button"
+                onClick={() => { onPick(n.id); setOpen(false) }}
+                aria-pressed={active}
+                className={`press flex min-h-[60px] w-full flex-col justify-center rounded-2xl px-3 py-2 text-left ${active ? 'bg-[rgba(75,63,207,0.2)]' : 'active:bg-white/[0.06]'}`}
+              >
+                <span className="flex items-center gap-2">
+                  <span className="text-[16px] font-semibold text-white">{n.version}</span>
+                  {i === 0 && <span className="text-[12px] font-semibold uppercase tracking-wide text-accent-hover">{t('patchNotes.latestShort')}</span>}
+                  <span className="ml-auto text-[13px] text-white/55">{formatDate(n.published_at)}</span>
+                </span>
+                <span className="mt-0.5 block truncate text-[13px] text-white/65">{n.title}</span>
+              </button>
+            )
+          })}
+        </Sheet>
+      </>
+    )
+  }
 
   return (
     <div ref={boxRef} className="relative w-full self-start sm:w-80">

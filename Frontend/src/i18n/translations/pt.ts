@@ -31,6 +31,7 @@ export const pt: TranslationSchema = {
       modpack: 'Modpack',
       shaders: 'Shaders',
       resourcepacks: 'Pacotes de recursos',
+      resourcepacksShort: 'Recursos',
       confirmDelete: 'Excluir este mod?',
       showResults: 'Ver resultados',
     },
@@ -2096,6 +2097,12 @@ export const pt: TranslationSchema = {
       patchNotes: 'Notas da versão',
       videos: 'Vídeos',
     },
+    tabShort: {
+      requests: 'Pedidos',
+      crashes: 'Falhas',
+      patchNotes: 'Versões',
+      videos: 'Vídeos',
+    },
     videos: {
       badge: 'Em breve',
       title: 'Os tutoriais em vídeo chegam em breve',
@@ -2114,6 +2121,7 @@ export const pt: TranslationSchema = {
     send: 'Enviar',
     remove: 'Excluir',
     confirmRemove: 'Confirmar',
+    confirmRemoveQuestion: 'Remover esta solicitação da sua lista?',
     category: 'Categoria',
     subject: 'Assunto',
     subjectPlaceholder: 'Ex.: crash ao iniciar uma instância Forge',

@@ -30,6 +30,7 @@ export const es: TranslationSchema = {
       modpack: 'Modpack',
       shaders: 'Shaders',
       resourcepacks: 'Paquetes de recursos',
+      resourcepacksShort: 'Recursos',
       confirmDelete: '¿Eliminar este mod?',
       showResults: 'Ver resultados',
     },
@@ -2095,6 +2096,12 @@ export const es: TranslationSchema = {
       patchNotes: 'Notas de la versión',
       videos: 'Vídeos',
     },
+    tabShort: {
+      requests: 'Solicitudes',
+      crashes: 'Errores',
+      patchNotes: 'Versiones',
+      videos: 'Vídeos',
+    },
     videos: {
       badge: 'Próximamente',
       title: 'Los tutoriales en vídeo llegarán pronto',
@@ -2113,6 +2120,7 @@ export const es: TranslationSchema = {
     send: 'Enviar',
     remove: 'Eliminar',
     confirmRemove: 'Confirmar',
+    confirmRemoveQuestion: '¿Quitar esta solicitud de tu lista?',
     category: 'Categoría',
     subject: 'Asunto',
     subjectPlaceholder: 'Ej.: cierre al iniciar una instancia de Forge',

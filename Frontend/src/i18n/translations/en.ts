@@ -30,6 +30,7 @@ export const en: TranslationSchema = {
       modpack: 'Modpack',
       shaders: 'Shaders',
       resourcepacks: 'Resource packs',
+      resourcepacksShort: 'Resources',
       confirmDelete: 'Delete this mod?',
       showResults: 'Show results',
     },
@@ -2095,6 +2096,12 @@ export const en: TranslationSchema = {
       patchNotes: 'Release notes',
       videos: 'Videos',
     },
+    tabShort: {
+      requests: 'Requests',
+      crashes: 'Crashes',
+      patchNotes: 'Updates',
+      videos: 'Videos',
+    },
     videos: {
       badge: 'Coming soon',
       title: 'Video tutorials are coming soon',
@@ -2113,6 +2120,7 @@ export const en: TranslationSchema = {
     send: 'Send',
     remove: 'Delete',
     confirmRemove: 'Confirm',
+    confirmRemoveQuestion: 'Remove this request from your list?',
     category: 'Category',
     subject: 'Subject',
     subjectPlaceholder: 'E.g.: crash when launching a Forge instance',

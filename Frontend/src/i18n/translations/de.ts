@@ -30,6 +30,7 @@ export const de: TranslationSchema = {
       modpack: 'Modpack',
       shaders: 'Shader',
       resourcepacks: 'Ressourcenpakete',
+      resourcepacksShort: 'Ressourcen',
       confirmDelete: 'Diese Mod löschen?',
       showResults: 'Ergebnisse anzeigen',
     },
@@ -2095,6 +2096,12 @@ export const de: TranslationSchema = {
       patchNotes: 'Versionshinweise',
       videos: 'Videos',
     },
+    tabShort: {
+      requests: 'Anfragen',
+      crashes: 'Abstürze',
+      patchNotes: 'Versionen',
+      videos: 'Videos',
+    },
     videos: {
       badge: 'Demnächst',
       title: 'Video-Tutorials kommen bald',
@@ -2113,6 +2120,7 @@ export const de: TranslationSchema = {
     send: 'Senden',
     remove: 'Löschen',
     confirmRemove: 'Bestätigen',
+    confirmRemoveQuestion: 'Diese Anfrage aus deiner Liste entfernen?',
     category: 'Kategorie',
     subject: 'Betreff',
     subjectPlaceholder: 'z. B.: Absturz beim Start einer Forge-Instanz',

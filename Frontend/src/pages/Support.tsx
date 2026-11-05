@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
@@ -19,6 +19,10 @@ import { CrashPanel } from '@/components/support/CrashPanel'
 import { PatchNotesPanel } from '@/components/support/PatchNotesPanel'
 import { SNAP, listItemVariants, listVariants } from '@/lib/motion'
 import { useT } from '@/i18n'
+import { useIsMobile } from '@/mobile/useIsMobile'
+import { MenuButton } from '@/mobile/ui/NavDrawer'
+import { PushedMoreButton, PushedScreen } from '@/mobile/ui/PushedScreen'
+import { ActionSheet, SHEET_ICONS } from '@/mobile/ui/ActionSheet'
 import type { SupportCategory, TicketDetail, TicketStatus, TicketSummary } from '@/types/support'
 
 /**
@@ -69,6 +73,7 @@ const STATUS_STYLES: Record<TicketStatus, string> = {
 export default function Support() {
   const t = useT()
   const navigate = useNavigate()
+  const mobile = useIsMobile()
   const signedIn = useStore((s) => s.yuyuSignedIn)
 
   // La liste est celle de la veille du support : même source que les
@@ -165,6 +170,112 @@ export default function Support() {
     }
   }
 
+  // ── Téléphone ──
+  // Pas de place pour la liste et la conversation côte à côte : la liste
+  // occupe l'écran, une demande s'ouvre en écran poussé. Elle est dans
+  // l'adresse (`?ticket=<id>`, déjà lue plus haut) pour que le bouton retour
+  // d'Android la referme. Une demande qui vient d'être créée s'ouvre sans
+  // adresse : la refermer se fait alors sur place.
+  const [, setParams] = useSearchParams()
+  const pushedTicket = useRef(false)
+  useEffect(() => {
+    if (mobile && !requestedTicket) setOpenTicket(null)
+  }, [mobile, requestedTicket])
+  const openMobile = (id: string) => { pushedTicket.current = true; setParams({ ticket: id }) }
+  const closeMobile = () => {
+    if (!requestedTicket) setOpenTicket(null)
+    else if (pushedTicket.current) { pushedTicket.current = false; navigate(-1) }
+    else setParams({}, { replace: true })
+  }
+
+  if (mobile) {
+    return (
+      <div className="relative flex h-full flex-col overflow-hidden bg-[#09090D] text-txt-primary">
+        <header className="flex shrink-0 items-center gap-1 pb-2 pl-1.5 pr-4 pt-[max(12px,env(safe-area-inset-top))]">
+          <MenuButton />
+          <h1 className="min-w-0 flex-1 truncate text-[28px] font-bold tracking-tight text-white">{t('support.title')}</h1>
+        </header>
+        <TabBar tab={tab} onPick={setTab} />
+
+        {tab === 'videos' ? (
+          <VideosSoon />
+        ) : tab === 'patchNotes' ? (
+          <PatchNotesPanel />
+        ) : tab === 'crashes' ? (
+          <CrashPanel signedIn={signedIn} />
+        ) : !signedIn ? (
+          <SignInFirst onSignIn={() => navigate('/yuyu')} />
+        ) : (
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[max(24px,env(safe-area-inset-bottom))] pt-3">
+            <div className="flex flex-col gap-6">
+              <KindBar onPick={setComposing} />
+              <section className="flex flex-col gap-2">
+                <h2 className="px-1 text-[13px] font-semibold uppercase tracking-[0.06em] text-white/55">{t('support.myRequests')}</h2>
+                {tickets === null ? (
+                  <div className="flex justify-center py-8">
+                    <ButtonSpinner size={24} color="#818cf8" trackColor="rgba(255,255,255,0.08)" />
+                  </div>
+                ) : tickets.length === 0 ? (
+                  <div className="flex flex-col gap-1 rounded-2xl border border-white/[0.06] bg-white/[0.04] px-4 py-5 text-center">
+                    <p className="text-[15px] font-semibold">{t('support.emptyTitle')}</p>
+                    <p className="text-[13px] leading-relaxed text-white/55">{t('support.emptyText')}</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col divide-y divide-white/[0.06] overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.04]">
+                    {tickets.map((ticket) => (
+                      <button
+                        key={ticket.id}
+                        onClick={() => openMobile(ticket.id)}
+                        className="flex min-h-[68px] w-full items-center gap-3 px-4 py-3 text-left active:bg-white/[0.04]"
+                      >
+                        <span className="flex min-w-0 flex-1 flex-col gap-1">
+                          <span className="flex items-center gap-2">
+                            <span className="truncate text-[15px] font-semibold text-white">{ticket.subject}</span>
+                            {/* Point fixe : pas de pulsation en boucle sur téléphone. */}
+                            {ticket.has_unread && <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-danger" />}
+                          </span>
+                          <span className="flex items-center gap-2">
+                            <StatusPill status={ticket.status} />
+                            <span className="truncate text-[13px] text-white/55">{ticket.public_id} · {labelOf(ticket.category)}</span>
+                          </span>
+                        </span>
+                        <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 shrink-0 text-white/35"><path d="M9.3 6.7 10.7 5.3l6.7 6.7-6.7 6.7-1.4-1.4 5.3-5.3z" /></svg>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <p className="px-1 text-[13px] leading-relaxed text-white/55">{t('support.discordNote')}</p>
+              </section>
+            </div>
+          </div>
+        )}
+
+        <MobileConversation
+          ticket={openTicket}
+          loading={loadingDetail}
+          labelOf={labelOf}
+          onReplied={absorb}
+          onBack={closeMobile}
+          onDelete={(id) => { closeMobile(); void hide(id) }}
+        />
+
+        <AnimatePresence>
+          {composing && (
+            <RequestModal
+              kind={composing}
+              categories={categories}
+              onClose={() => setComposing(null)}
+              onCreated={(detail) => {
+                setComposing(null)
+                absorb(detail)
+              }}
+            />
+          )}
+        </AnimatePresence>
+      </div>
+    )
+  }
+
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-bg-primary text-txt-primary">
       <PageGlow />
@@ -251,6 +362,37 @@ function TabBar({ tab, onPick }: { tab: Tab; onPick: (tab: Tab) => void }) {
     requests: useSupportWatch((s) => s.unread),
     crashes: useCrashWatch((s) => s.updates),
   }
+  const mobile = useIsMobile()
+  // Téléphone : un commutateur à quatre cases égales qui tient dans la
+  // largeur — tous les onglets visibles d'un coup, sans rien à faire défiler
+  // pour découvrir le dernier. Libellés courts (`tabShort`) pour que chacun
+  // tienne sur une ligne ; le nombre de nouveautés se pose en coin.
+  if (mobile) {
+    return (
+      <div className="shrink-0 px-4 pb-3">
+        <div className="grid grid-cols-4 gap-1 rounded-2xl bg-white/[0.04] p-1">
+          {(['requests', 'crashes', 'patchNotes', 'videos'] as Tab[]).map((key) => (
+            <button
+              key={key}
+              onClick={() => onPick(key)}
+              aria-pressed={tab === key}
+              aria-label={t(`support.tab.${key}`)}
+              className={`relative h-10 min-w-0 rounded-xl px-1 text-[13px] font-semibold transition-colors duration-150 ${
+                tab === key ? 'bg-[rgba(75,63,207,0.35)] text-white' : 'text-white/60'
+              }`}
+            >
+              <span className="block truncate">{t(`support.tabShort.${key}`)}</span>
+              {(unread[key] ?? 0) > 0 && (
+                <span className="absolute -right-0.5 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-danger px-1 text-[11px] font-bold tabular-nums text-white">
+                  {unread[key]}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+    )
+  }
   return (
     <div className="flex shrink-0 gap-1 border-b border-line-soft px-6">
       {(['requests', 'crashes', 'patchNotes', 'videos'] as Tab[]).map((key) => (
@@ -280,6 +422,29 @@ function TabBar({ tab, onPick }: { tab: Tab; onPick: (tab: Tab) => void }) {
 
 function KindBar({ onPick }: { onPick: (kind: Kind) => void }) {
   const t = useT()
+  const mobile = useIsMobile()
+  // Téléphone : deux par ligne, titre lisible et phrase courte en dessous.
+  if (mobile) {
+    return (
+      <div className="grid grid-cols-2 gap-2">
+        {KINDS.map((k) => (
+          <button
+            key={k.kind}
+            onClick={() => onPick(k.kind)}
+            className="press flex min-h-[112px] flex-col items-start gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.04] p-3.5 text-left"
+          >
+            <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${k.danger ? 'bg-danger/12 text-danger' : 'bg-accent/15 text-accent-hover'}`}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+                <path d={k.icon} />
+              </svg>
+            </span>
+            <span className="text-[15px] font-semibold leading-tight">{t(`support.kind.${k.kind}Title`)}</span>
+            <span className="line-clamp-2 text-[13px] leading-snug text-white/55">{t(`support.kind.${k.kind}Text`)}</span>
+          </button>
+        ))}
+      </div>
+    )
+  }
   return (
     <motion.div
       variants={listVariants}
@@ -425,7 +590,7 @@ function TicketList({
 function StatusPill({ status }: { status: TicketStatus }) {
   const t = useT()
   return (
-    <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${STATUS_STYLES[status] ?? STATUS_STYLES.open}`}>
+    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider max-sm:text-[11px] max-sm:tracking-wide ${STATUS_STYLES[status] ?? STATUS_STYLES.open}`}>
       {t(`support.status.${status}`)}
     </span>
   )
@@ -538,6 +703,128 @@ function Conversation({
   )
 }
 
+/**
+ * Une demande, sur téléphone : écran poussé, messages en bulles (l'équipe à
+ * gauche, soi à droite), champ de réponse collé en bas avec un bouton
+ * d'envoi rond de 44 px. Supprimer une demande close passe par « … » et se
+ * confirme dans la feuille — pas de corbeille qui apparaît au survol.
+ */
+function MobileConversation({ ticket, loading, labelOf, onReplied, onBack, onDelete }: {
+  ticket: TicketDetail | null
+  loading: boolean
+  labelOf: (code: string) => string
+  onReplied: (detail: TicketDetail) => void
+  onBack: () => void
+  onDelete: (id: string) => void
+}) {
+  const t = useT()
+  const [message, setMessage] = useState('')
+  const [sending, setSending] = useState(false)
+  const [menu, setMenu] = useState(false)
+  // Garde la dernière demande le temps que l'écran reparte vers la droite.
+  const last = useRef<TicketDetail | null>(null)
+  if (ticket) last.current = ticket
+  const shown = ticket ?? last.current
+
+  useEffect(() => setMessage(''), [ticket?.id])
+
+  async function send() {
+    const body = message.trim()
+    if (!body || !ticket) return
+    setSending(true)
+    try {
+      onReplied(await api.support.reply(ticket.id, body))
+      setMessage('')
+    } catch (e) {
+      showError(errorMessage(e))
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <>
+      <PushedScreen
+        open={!!ticket || loading}
+        onBack={onBack}
+        backLabel={t('support.myRequests')}
+        title={shown?.subject ?? '…'}
+        subtitle={shown ? `${shown.public_id} · ${labelOf(shown.category)}` : undefined}
+        right={shown?.status === 'closed' ? <PushedMoreButton label={t('support.remove')} onClick={() => setMenu(true)} /> : undefined}
+        bodyClassName="px-4 py-4"
+        footer={shown && (
+          <div className="shrink-0 border-t border-white/[0.06] bg-[#09090D] px-3 pb-[max(10px,env(safe-area-inset-bottom))] pt-2.5">
+            <div className="flex items-end gap-2">
+              <textarea
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder={shown.status === 'closed' ? t('support.reopenPlaceholder') : t('support.replyPlaceholder')}
+                maxLength={4000}
+                rows={1}
+                // La hauteur suit le texte jusqu'à cinq lignes, comme un
+                // champ de messagerie.
+                onInput={(e) => {
+                  const el = e.currentTarget
+                  el.style.height = 'auto'
+                  el.style.height = `${Math.min(el.scrollHeight, 132)}px`
+                }}
+                className="max-h-[132px] min-h-[44px] flex-1 resize-none rounded-2xl border border-white/[0.1] bg-white/[0.05] px-4 py-2.5 text-[16px] leading-snug text-white outline-none placeholder:text-white/40 focus:border-[rgba(120,100,255,0.6)]"
+              />
+              <button
+                onClick={send}
+                disabled={!message.trim() || sending}
+                aria-label={t('support.send')}
+                className="press flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#4B3FCF] text-white disabled:opacity-40"
+              >
+                {sending
+                  ? <ButtonSpinner size={16} trackColor="rgba(255,255,255,0.2)" />
+                  : <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5"><path d="M3.4 20.4l17.45-7.48a1 1 0 000-1.84L3.4 3.6a1 1 0 00-1.39 1.17L4.2 12l-2.19 7.23a1 1 0 001.39 1.17z" /></svg>}
+              </button>
+            </div>
+          </div>
+        )}
+      >
+        {loading && !ticket ? (
+          <div className="flex justify-center py-10">
+            <ButtonSpinner size={24} color="#818cf8" trackColor="rgba(255,255,255,0.08)" />
+          </div>
+        ) : shown && (
+          <div className="flex flex-col gap-3">
+            <div className="flex justify-center"><StatusPill status={shown.status} /></div>
+            {shown.messages.map((m) => (
+              <div
+                key={m.id}
+                className={`max-w-[85%] rounded-2xl border px-4 py-3 ${
+                  m.author_kind === 'staff' ? 'self-start rounded-bl-md border-accent/25 bg-accent/10' : 'self-end rounded-br-md border-white/[0.08] bg-white/[0.06]'
+                }`}
+              >
+                <p className="mb-1 text-[12px] font-semibold uppercase tracking-wide text-white/50">
+                  {m.author_kind === 'staff' ? t('support.team') : m.author_name}
+                </p>
+                <p className="selectable whitespace-pre-wrap text-[15px] leading-relaxed text-white">{m.body}</p>
+              </div>
+            ))}
+            <p className="pt-1 text-center text-[13px] leading-relaxed text-white/45">{t('support.attachmentsNote')}</p>
+          </div>
+        )}
+      </PushedScreen>
+      <ActionSheet
+        open={menu}
+        onClose={() => setMenu(false)}
+        header={<span className="min-w-0 flex-1 truncate text-[15px] font-bold text-txt-primary">{shown?.subject}</span>}
+        actions={shown ? [{
+          id: 'delete',
+          label: t('support.remove'),
+          icon: SHEET_ICONS.delete,
+          danger: true,
+          confirm: t('support.confirmRemoveQuestion'),
+          onSelect: () => onDelete(shown.id),
+        }] : []}
+      />
+    </>
+  )
+}
+
 // ── Formulaire commun aux quatre entrées ─────────────────────────────────────
 
 function RequestModal({
@@ -611,20 +898,22 @@ function RequestModal({
 
   return (
     <ModalShell title={t(`support.kind.${kind}Title`)} onClose={onClose} maxWidth="max-w-lg">
-      <div className="flex max-h-[62vh] flex-col gap-4 overflow-y-auto pr-1">
-        <p className="text-[12px] leading-relaxed text-txt-secondary">{t(`support.kind.${kind}Intro`)}</p>
+      {/* Sur téléphone la feuille défile déjà : pas de seconde zone de
+          défilement dans la première. */}
+      <div className="flex max-h-[62vh] flex-col gap-4 overflow-y-auto pr-1 max-sm:max-h-none max-sm:overflow-visible max-sm:pr-0">
+        <p className="text-[12px] leading-relaxed text-txt-secondary max-sm:text-[15px]">{t(`support.kind.${kind}Intro`)}</p>
 
         {isDeletion && (
           <div className="rounded-xl border border-danger/35 bg-danger/8 p-3">
-            <p className="text-[12px] font-semibold text-danger">{t('support.deletionWarnTitle')}</p>
-            <p className="mt-1 text-[11px] leading-relaxed text-txt-secondary">{t('support.deletionWarnText')}</p>
+            <p className="text-[12px] font-semibold text-danger max-sm:text-[15px]">{t('support.deletionWarnTitle')}</p>
+            <p className="mt-1 text-[11px] leading-relaxed text-txt-secondary max-sm:text-[14px]">{t('support.deletionWarnText')}</p>
           </div>
         )}
 
         {isQuestion && (
           <>
             <div className="flex flex-col gap-1.5">
-              <span className="text-[12px] font-medium text-txt-secondary">{t('support.category')}</span>
+              <span className="text-[12px] font-medium text-txt-secondary max-sm:text-[13px]">{t('support.category')}</span>
               <div className="grid grid-cols-2 gap-2">
                 {categories
                   .filter((c) => QUESTION_CATEGORIES.includes(c.code))
@@ -634,7 +923,7 @@ function RequestModal({
                       whileTap={{ scale: 0.98 }}
                       onClick={() => setCategory(c.code)}
                       title={c.description}
-                      className={`rounded-xl border px-3 py-2 text-left text-[12px] transition-colors duration-150 ${
+                      className={`rounded-xl border px-3 py-2 text-left text-[12px] transition-colors duration-150 max-sm:min-h-[44px] max-sm:text-[15px] ${
                         category === c.code
                           ? 'border-accent/50 bg-accent/12 text-txt-primary'
                           : 'border-line bg-surface-2 text-txt-secondary hover:bg-surface-3'
@@ -668,14 +957,14 @@ function RequestModal({
         )}
 
         <label className="flex flex-col gap-1.5">
-          <span className="text-[12px] font-medium text-txt-secondary">{t('support.message')}</span>
+          <span className="text-[12px] font-medium text-txt-secondary max-sm:text-[13px]">{t('support.message')}</span>
           <textarea
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             rows={5}
             maxLength={4000}
             placeholder={t(`support.kind.${kind}Placeholder`)}
-            className="resize-none rounded-xl border border-line bg-surface-2 px-3 py-2 text-[13px] text-txt-primary outline-none transition-colors duration-150 placeholder:text-txt-muted focus:border-accent/60"
+            className="resize-none rounded-xl border border-line bg-surface-2 px-3 py-2 text-[13px] text-txt-primary outline-none transition-colors duration-150 placeholder:text-txt-muted focus:border-accent/60 max-sm:px-4 max-sm:py-3 max-sm:text-[16px]"
           />
         </label>
 
@@ -689,15 +978,15 @@ function RequestModal({
                 className="mt-0.5 h-4 w-4 accent-[#818cf8]"
               />
               <span className="flex flex-col gap-0.5">
-                <span className="text-[12px] font-medium">{t('support.attachDiagnostic')}</span>
-                <span className="text-[11px] leading-relaxed text-txt-muted">{t('support.diagnosticNote')}</span>
+                <span className="text-[12px] font-medium max-sm:text-[15px]">{t('support.attachDiagnostic')}</span>
+                <span className="text-[11px] leading-relaxed text-txt-muted max-sm:text-[13px] max-sm:text-white/55">{t('support.diagnosticNote')}</span>
               </span>
             </label>
             {attach && diagnostic && (
               <>
                 <button
                   onClick={() => setShowReport((v) => !v)}
-                  className="mt-2 text-[11px] font-semibold text-accent-hover hover:underline"
+                  className="mt-2 text-[11px] font-semibold text-accent-hover hover:underline max-sm:min-h-[44px] max-sm:text-[15px]"
                 >
                   {showReport ? t('support.hideReport') : t('support.showReport')}
                 </button>
@@ -726,14 +1015,14 @@ function RequestModal({
               onChange={(e) => setAgreed(e.target.checked)}
               className="mt-0.5 h-4 w-4 accent-[#ef4444]"
             />
-            <span className="text-[12px] leading-relaxed text-txt-secondary">{t('support.deletionConsent')}</span>
+            <span className="text-[12px] leading-relaxed text-txt-secondary max-sm:text-[15px]">{t('support.deletionConsent')}</span>
           </label>
         )}
 
-        <p className="text-[11px] leading-relaxed text-txt-muted">{t('support.attachmentsNote')}</p>
+        <p className="text-[11px] leading-relaxed text-txt-muted max-sm:text-[13px] max-sm:text-white/55">{t('support.attachmentsNote')}</p>
       </div>
 
-      <div className="flex justify-end gap-2">
+      <div className="flex justify-end gap-2 max-sm:[&>*]:h-12 max-sm:[&>*]:flex-1 max-sm:[&>*]:text-[15px]">
         <Button variant="ghost" onClick={onClose}>
           {t('common.cancel')}
         </Button>
@@ -763,11 +1052,11 @@ function VideosSoon() {
           <path d="M10 9.5v5l4.5-2.5z" />
         </svg>
       </div>
-      <span className="rounded-full bg-accent/15 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-accent-hover">
+      <span className="rounded-full bg-accent/15 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-accent-hover max-sm:text-[12px]">
         {t('support.videos.badge')}
       </span>
-      <p className="text-[15px] font-semibold">{t('support.videos.title')}</p>
-      <p className="max-w-sm text-[12px] leading-relaxed text-txt-secondary">{t('support.videos.text')}</p>
+      <p className="text-[15px] font-semibold max-sm:text-[17px]">{t('support.videos.title')}</p>
+      <p className="max-w-sm text-[12px] leading-relaxed text-txt-secondary max-sm:text-[15px]">{t('support.videos.text')}</p>
     </motion.div>
   )
 }
@@ -788,8 +1077,8 @@ function SignInFirst({ onSignIn }: { onSignIn: () => void }) {
           <path d="M12 2a9 9 0 00-9 9v5a3 3 0 003 3h1a1 1 0 001-1v-5a1 1 0 00-1-1H5v-1a7 7 0 1114 0v1h-2a1 1 0 00-1 1v5a1 1 0 001 1h1a3 3 0 003-3v-5a9 9 0 00-9-9z" />
         </svg>
       </div>
-      <p className="text-[15px] font-semibold">{t('support.signInTitle')}</p>
-      <p className="max-w-sm text-[12px] leading-relaxed text-txt-secondary">{t('support.signInText')}</p>
+      <p className="text-[15px] font-semibold max-sm:text-[17px]">{t('support.signInTitle')}</p>
+      <p className="max-w-sm text-[12px] leading-relaxed text-txt-secondary max-sm:text-[15px]">{t('support.signInText')}</p>
       <Button variant="primary" onClick={onSignIn}>
         {t('support.signIn')}
       </Button>

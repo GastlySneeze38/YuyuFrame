@@ -25,11 +25,12 @@ export const ru: TranslationSchema = {
 
   mods: {
     mobile: {
-      installed: 'Установленные',
+      installed: 'Мои',
       browse: 'Обзор',
       modpack: 'Модпак',
       shaders: 'Шейдеры',
       resourcepacks: 'Ресурспаки',
+      resourcepacksShort: 'Ресурсы',
       confirmDelete: 'Удалить этот мод?',
       showResults: 'Показать результаты',
     },
@@ -2095,6 +2096,12 @@ export const ru: TranslationSchema = {
       patchNotes: 'Что нового',
       videos: 'Видео',
     },
+    tabShort: {
+      requests: 'Запросы',
+      crashes: 'Сбои',
+      patchNotes: 'Версии',
+      videos: 'Видео',
+    },
     videos: {
       badge: 'Скоро',
       title: 'Видеоуроки скоро появятся',
@@ -2113,6 +2120,7 @@ export const ru: TranslationSchema = {
     send: 'Отправить',
     remove: 'Удалить',
     confirmRemove: 'Подтвердить',
+    confirmRemoveQuestion: 'Убрать это обращение из списка?',
     category: 'Категория',
     subject: 'Тема',
     subjectPlaceholder: 'Напр.: вылет при запуске сборки Forge',

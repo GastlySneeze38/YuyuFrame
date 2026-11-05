@@ -160,15 +160,17 @@ export default function Markdown({ text, theme }: { text: string; theme: Markdow
  * assis ; une modale s'ouvre au démarrage, devant quelqu'un qui voulait juste
  * lancer une partie.
  */
+// Les `max-sm:` donnent les tailles du téléphone (texte à 15 px au moins),
+// sans toucher au PC. Propres au launcher : le site a son propre thème.
 export const LAUNCHER_THEME: MarkdownTheme = {
-  h1: 'text-[15px] font-bold text-txt-primary mt-4 mb-1 first:mt-0',
-  h2: 'text-[14px] font-bold text-txt-primary mt-4 mb-1 first:mt-0',
-  h3: 'text-[13px] font-bold text-txt-primary mt-3 mb-1 first:mt-0',
-  subtext: 'text-[11.5px] text-txt-muted',
-  p: 'text-[13px] text-txt-secondary leading-relaxed',
-  ul: 'list-disc pl-5 text-[13px] text-txt-secondary flex flex-col gap-1',
+  h1: 'text-[15px] font-bold text-txt-primary mt-4 mb-1 first:mt-0 max-sm:text-[19px]',
+  h2: 'text-[14px] font-bold text-txt-primary mt-4 mb-1 first:mt-0 max-sm:text-[17px]',
+  h3: 'text-[13px] font-bold text-txt-primary mt-3 mb-1 first:mt-0 max-sm:text-[16px]',
+  subtext: 'text-[11.5px] text-txt-muted max-sm:text-[13px]',
+  p: 'text-[13px] text-txt-secondary leading-relaxed max-sm:text-[15px]',
+  ul: 'list-disc pl-5 text-[13px] text-txt-secondary flex flex-col gap-1 max-sm:text-[15px]',
   li: 'leading-relaxed marker:text-accent-hover',
-  quote: 'border-l-2 border-accent/50 pl-3 text-[13px] text-txt-secondary',
+  quote: 'border-l-2 border-accent/50 pl-3 text-[13px] text-txt-secondary max-sm:text-[15px]',
   pre: 'rounded-lg bg-bg-primary/60 border border-line p-3 text-[12px] my-2 overflow-x-auto',
   code: 'rounded bg-bg-primary/60 px-1 py-0.5 text-[0.9em] text-txt-primary',
   link: 'text-accent-hover hover:underline',
