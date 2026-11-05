@@ -113,6 +113,7 @@ const SkinEditor = lazy(() => import('@/pages/SkinEditor'))
 // Instances pour l'instant ; les autres routes gardent l'écran du PC.
 const MobileHome = lazy(() => import('@/mobile/MobileHome'))
 const MobileInstances = lazy(() => import('@/mobile/MobileInstances'))
+const MobileYuyuAccount = lazy(() => import('@/mobile/MobileYuyuAccount'))
 // Atelier des modales. Le `import()` est DANS la branche de développement,
 // pas seulement la route : écrit dehors, Vite voyait un module importable et
 // en sortait un morceau de JS livré à tout le monde — mort, mais livré.
@@ -729,6 +730,8 @@ export default function App() {
             <Route path="/" element={<Navigate to="/home" replace />} />
             <Route path="/home" element={mobile ? <MobileHome /> : <Home />} />
             <Route path="/login" element={<Login />} />
+            {/* Compte YuyuFrame seul, pour le téléphone ; sur PC il est dans Compte. */}
+            <Route path="/yuyu-account" element={mobile ? <MobileYuyuAccount /> : <Navigate to="/login" replace />} />
             <Route path="/instances" element={mobile ? <MobileInstances /> : <Instances />} />
             <Route path="/mods" element={<Mods />} />
             <Route path="/settings" element={<Settings />} />

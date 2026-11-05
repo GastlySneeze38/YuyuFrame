@@ -19,6 +19,10 @@ const CLOSE_VELOCITY = 500
  *  au lieu d'un retour, et passer de l'un à l'autre est instantané. */
 export const DRAWER_ROOTS = [...MOBILE_TABS, '/features', '/support', '/competitive']
 
+/** Noms des offres payantes : des noms propres, non traduits (comme le
+ *  badge du PC). L'offre gratuite, elle, se traduit. */
+const PLAN_NAMES: Record<string, string> = { premium: 'Premium', ultimate: 'Ultimate' }
+
 /** Courbe des tiroirs d'iOS (Ionic). */
 const DRAWER_EASE = [0.32, 0.72, 0, 1] as const
 
@@ -56,6 +60,9 @@ export function NavDrawer() {
   const setOpen = useNavDrawer((s) => s.setOpen)
   const username = useStore((s) => s.username)
   const uuid = useStore((s) => s.uuid)
+  const yuyuSignedIn = useStore((s) => s.yuyuSignedIn)
+  const yuyuUsername = useStore((s) => s.yuyuUsername)
+  const yuyuPlan = useStore((s) => s.yuyuPlan)
   const supportUnread = useSupportWatch((s) => s.unread)
   const crashUpdates = useCrashWatch((s) => s.updates)
 
@@ -169,6 +176,49 @@ export function NavDrawer() {
               <div className="flex flex-col gap-1">{main.map(row)}</div>
               <div className="mx-3.5 my-3 h-px bg-white/[0.08]" />
               <div className="flex flex-col gap-1">{more.map(row)}</div>
+            </div>
+
+            {/* Le compte YuyuFrame, posé en bas du menu (hors de la partie qui
+                défile) : là où les applis rangent le profil et la connexion.
+                Connecté : qui, avec quelle offre, et un appui ouvre sa
+                gestion. Pas connecté : se connecter ou créer un compte,
+                directement. */}
+            <div className="mx-3 mt-2 shrink-0 border-t border-white/[0.08] pt-3">
+              {yuyuSignedIn ? (
+                <button
+                  onClick={() => go('/yuyu-account')}
+                  className="press flex h-14 w-full items-center gap-3 rounded-2xl px-2.5 text-left active:bg-white/[0.06]"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent/25 text-[16px] font-black text-white">
+                    {(yuyuUsername ?? '?')[0].toUpperCase()}
+                  </span>
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="truncate text-[15px] font-semibold text-white">{yuyuUsername}</span>
+                    <span className={`truncate text-[13px] ${yuyuPlan === 'free' ? 'text-white/55' : 'font-semibold text-[#c4b5fd]'}`}>
+                      {t('account.yuyuAccount')} · {PLAN_NAMES[yuyuPlan] ?? t('account.freePlan')}
+                    </span>
+                  </span>
+                  <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 shrink-0 text-white/35"><path d="M9.3 6.7 10.7 5.3l6.7 6.7-6.7 6.7-1.4-1.4 5.3-5.3z" /></svg>
+                </button>
+              ) : (
+                <div className="flex flex-col gap-2.5 px-1">
+                  <span className="px-1 text-[13px] text-white/55">{t('account.signedOutTitle')}</span>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => go('/yuyu?mode=login')}
+                      className="press h-11 min-w-0 flex-1 rounded-xl bg-[#4B3FCF] px-3 text-[15px] font-bold text-white"
+                    >
+                      {t('account.signIn')}
+                    </button>
+                    <button
+                      onClick={() => go('/yuyu?mode=register')}
+                      className="press h-11 min-w-0 flex-1 rounded-xl bg-white/[0.07] px-3 text-[15px] font-semibold text-white/85"
+                    >
+                      {t('yuyuLogin.createAccount')}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </motion.nav>
         </div>
