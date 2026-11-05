@@ -7,7 +7,7 @@ import { TIER_COLORS, tierOf, type LeaderboardRow } from '@/lib/competitive'
 import { RankTile, useRankName } from './RankCard'
 
 /** Couleur des trois premières places. */
-const PODIUM = ['255 206 72', '210 214 222', '214 150 96']
+export const PODIUM = ['255 206 72', '210 214 222', '214 150 96']
 /** Les 15 premiers seulement : la liste tient sans défilement (entre amis, la
  *  ligne du joueur est épinglée en bas s'il est plus loin). */
 const TOP = 15

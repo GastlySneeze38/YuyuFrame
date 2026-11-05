@@ -18,6 +18,8 @@ import { useStore } from '@/stores/useStore'
 import { useDemo } from '@/stores/useDevFlags'
 import { SNAP } from '@/lib/motion'
 import { useT } from '@/i18n'
+import { useIsMobile } from '@/mobile/useIsMobile'
+import { MobileCompetitive } from '@/mobile/competitive/MobileCompetitive'
 import {
   MODES,
   bestMode,
@@ -203,6 +205,36 @@ export default function Competitive() {
     [modeDuels, activeServer],
   )
 
+  const mobile = useIsMobile()
+  const title = friendId ? t('friends.profile.competitiveTitle', { name: friendName ?? '…' }) : t('competitive.title')
+  const statusCard = (
+    <StatusCard status={status} friendName={friendName ?? '…'} onRetry={load} onSignIn={() => navigate('/yuyu?mode=login')} onAccounts={() => navigate('/login')} />
+  )
+
+  // Téléphone : mêmes écrans et mêmes données, une mise en page à part.
+  if (mobile) {
+    return (
+      <MobileCompetitive
+        title={title}
+        friend={!!friendId}
+        loading={status.kind === 'loading'}
+        data={data}
+        empty={statusCard}
+        view={view}
+        onView={setView}
+        mode={shown}
+        onMode={setMode}
+        standing={standing}
+        modeDuels={modeDuels}
+        duels={duels}
+        servers={servers}
+        activeServer={activeServer}
+        onServer={setServer}
+        friendName={friendName}
+      />
+    )
+  }
+
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-bg-primary text-txt-primary">
       <PageGlow />
@@ -212,7 +244,7 @@ export default function Competitive() {
       <PageHeader>
         <PageHeaderSeparator />
         <h1 className="shrink-0 text-[16px] font-black leading-[1.2] tracking-[-0.01em]">
-          {friendId ? t('friends.profile.competitiveTitle', { name: friendName ?? '…' }) : t('competitive.title')}
+          {title}
         </h1>
         {/* Centré tant qu'il y a la place ; sinon calé à gauche, jamais
             par-dessus le titre (`safe`). */}
@@ -251,7 +283,7 @@ export default function Competitive() {
               <ButtonSpinner size={32} color="#818cf8" trackColor="rgba(255,255,255,0.08)" />
             </div>
           ) : !data ? (
-            <StatusCard status={status} friendName={friendName ?? '…'} onRetry={load} onSignIn={() => navigate('/yuyu?mode=login')} onAccounts={() => navigate('/login')} />
+            statusCard
           ) : (
             <>
               <motion.div
@@ -430,8 +462,9 @@ function StatusCard({
                 ? status.message
                 : ''
   return (
-    <div className="mx-auto flex max-w-md flex-col items-center gap-4 rounded-2xl border border-line bg-surface-1 px-6 py-10 text-center">
-      <p className="text-[13px] leading-relaxed text-txt-secondary">{text}</p>
+    // Sur téléphone : texte de 15 px et bouton de toute la largeur, 48 px.
+    <div className="mx-auto flex max-w-md flex-col items-center gap-4 rounded-2xl border border-line bg-surface-1 px-6 py-10 text-center max-sm:px-5 max-sm:py-8 max-sm:[&_button]:h-12 max-sm:[&_button]:w-full max-sm:[&_button]:text-[15px]">
+      <p className="text-[13px] leading-relaxed text-txt-secondary max-sm:text-[15px]">{text}</p>
       {status.kind === 'signedOut' && (
         <Button size="sm" variant="primary" onClick={onSignIn}>
           {t('competitive.status.signIn')}

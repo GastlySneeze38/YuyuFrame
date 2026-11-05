@@ -61,14 +61,19 @@ function field(x: number, y: number, t: number): number {
 
 // ── Le composant ─────────────────────────────────────────────────────────
 
-export function TopoBackdrop({ color, className = '' }: { color: string; className?: string }) {
+export function TopoBackdrop({ color, className = '', still: stillProp = false }: {
+  color: string
+  className?: string
+  /** Une seule image, immobile : le téléphone n'a pas d'animation en boucle. */
+  still?: boolean
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
     const canvas = canvasRef.current
     const ctx = canvas?.getContext('2d')
     if (!canvas || !ctx) return
-    const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const still = stillProp || window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
     let width = 0
     let height = 0
@@ -164,7 +169,7 @@ export function TopoBackdrop({ color, className = '' }: { color: string; classNa
       cancelAnimationFrame(frame)
       observer.disconnect()
     }
-  }, [color])
+  }, [color, stillProp])
 
   return <canvas ref={canvasRef} aria-hidden="true" className={`pointer-events-none absolute inset-0 h-full w-full ${className}`} />
 }

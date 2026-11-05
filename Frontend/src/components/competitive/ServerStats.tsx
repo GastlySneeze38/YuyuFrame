@@ -19,7 +19,7 @@ const SHOWN = 3
  */
 const icons = new Map<string, Promise<string | null>>()
 
-function useServerIcon(address: string): string | null {
+export function useServerIcon(address: string): string | null {
   const [icon, setIcon] = useState<string | null>(null)
   useEffect(() => {
     let alive = true

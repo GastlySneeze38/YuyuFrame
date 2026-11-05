@@ -31,7 +31,7 @@ const CELLS = SEASON_GRID * SEASON_GRID
  * l'enregistre aussitôt. `null` : on ne sait pas (pas de compte, pas de
  * route) — l'interrupteur se grise.
  */
-function useSeasonOnProfile(mode: ModeKey) {
+export function useSeasonOnProfile(mode: ModeKey) {
   const t = useT()
   const [on, setOn] = useState<boolean | null>(null)
   const [busy, setBusy] = useState(false)
@@ -243,7 +243,7 @@ export function SeasonRankView({
  * victoires des autres rangs s'estompent, et une bulle dit le rang et combien
  * de victoires la grille en compte.
  */
-function SeasonGrid({ wins, instant = false }: { wins: number[]; instant?: boolean }) {
+export function SeasonGrid({ wins, instant = false }: { wins: number[]; instant?: boolean }) {
   const t = useT()
   const rankName = useRankName()
   const [hover, setHover] = useState<number | null>(null)
@@ -275,7 +275,16 @@ function SeasonGrid({ wins, instant = false }: { wins: number[]; instant?: boole
                 setHover(i)
                 setTouched(true)
               }}
-              initial={{ scale: 0, opacity: 0 }}
+              // Au doigt, pas de survol : toucher une case la montre, la
+              // toucher encore la relâche. (Le navigateur simule ensuite un
+              // survol sur la même case, qui ne change rien.)
+              onPointerDown={(e) => {
+                if (e.pointerType === 'mouse') return
+                setHover(isHover ? null : i)
+                setTouched(true)
+              }}
+              // Jamais depuis rien : une case qui part de zéro semble sortir de nulle part.
+              initial={{ scale: 0.4, opacity: 0 }}
               animate={{ scale: isHover ? 1.28 : 1, opacity: 1 }}
               // L'apparition a son délai ; le survol, non : il doit répondre tout de suite.
               transition={
@@ -476,14 +485,15 @@ export function SeasonFrame({
 // ── Le maximum ───────────────────────────────────────────────────────────
 
 /** Ce qu'on peut obtenir au mieux dans une saison. */
-function MaxModal({ onClose }: { onClose: () => void }) {
+export function MaxModal({ onClose }: { onClose: () => void }) {
   const t = useT()
   const rankName = useRankName()
   const champion = TIER_COLORS.champion
   return (
     <ModalShell onClose={onClose} title={t('competitive.season.maxTitle')} maxWidth="max-w-[540px]">
       <div className="flex flex-col items-center gap-5">
-        <SeasonFrame level={BORDER_LEVELS} accent={champion} size="340px">
+        {/* Bornée par la largeur : sur téléphone, la fenêtre est une feuille de toute la largeur. */}
+        <SeasonFrame level={BORDER_LEVELS} accent={champion} size="min(340px, calc(100vw - 72px))">
           <SeasonGrid wins={Array<number>(CELLS).fill(CHAMPION)} instant />
         </SeasonFrame>
         <div className="text-center">

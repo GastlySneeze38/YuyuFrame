@@ -7,18 +7,18 @@ import { formatLength } from './DuelHistory'
 import { TopoBackdrop } from './TopoBackdrop'
 
 /** Duels montrés par le graphique des notes. */
-const CHART_DUELS = 30
+export const CHART_DUELS = 30
 /** Résultats montrés par la bande « forme ». */
-const FORM_DUELS = 10
+export const FORM_DUELS = 10
 /** En dessous, un serveur n'a pas assez de duels pour être « le meilleur ». */
 const MIN_SERVER_DUELS = 3
 
-const WIN = '74 222 128'
-const LOSS = '239 68 68'
-const DRAW = '160 150 190'
+export const WIN = '74 222 128'
+export const LOSS = '239 68 68'
+export const DRAW = '160 150 190'
 
 /** Tout ce que l'écran montre, calculé depuis l'historique d'un mode. */
-function summarize(duels: DuelRow[]) {
+export function summarize(duels: DuelRow[]) {
   const wins = duels.filter((d) => d.result === 'win')
   const losses = duels.filter((d) => d.result === 'loss').length
   const draws = duels.length - wins.length - losses
