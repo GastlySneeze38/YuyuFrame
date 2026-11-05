@@ -222,7 +222,7 @@ export function GridSummary({ draft, instanceRam, onOpen }: {
   return (
     <button
       onClick={onOpen}
-      className="flex w-full items-center gap-2 rounded-xl border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.025)] px-3.5 py-2 text-left transition-colors hover:border-[rgba(255,255,255,0.16)]"
+      className="flex w-full items-center gap-2 rounded-xl border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.025)] px-3.5 py-2 text-left transition-colors hover:border-[rgba(255,255,255,0.16)] max-sm:flex-wrap max-sm:gap-y-1 max-sm:py-3"
     >
       <span className="text-[11px] font-semibold text-[rgba(255,255,255,0.6)]">{vendor}</span>
       <Dot /><span className="text-[11px] text-[rgba(255,255,255,0.45)]">{gc}</span>

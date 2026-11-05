@@ -108,6 +108,26 @@ option {
   transform: scale(0.97);
 }
 
+/* Configurations JVM sur téléphone. Leur éditeur et ses quatre fenêtres
+ * (réglages, jeux de drapeaux, catalogue, import) sont écrits pour le PC, en
+ * 9 à 12 px avec des boutons de 22 à 32 px. Sur téléphone, un seul endroit les
+ * remonte au plancher : 13 px pour le texte, 44 px pour ce qu'on touche, 16 px
+ * dans les champs (en dessous, iOS agrandit la page à la saisie). */
+@media (max-width: 640px) {
+  .jvm-touch :is(.text-\[9px\], .text-\[9\.5px\], .text-\[10px\], .text-\[10\.5px\], .text-\[11px\], .text-\[11\.5px\], .text-\[12px\]) {
+    font-size: 13px;
+  }
+  .jvm-touch button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .jvm-touch input,
+  .jvm-touch textarea {
+    min-height: 44px;
+    font-size: 16px;
+  }
+}
+
 /* Curseur réglé au doigt (téléphone) : une piste fine dans une zone de 44 px,
  * et une pastille de 24 px qu'on attrape sans viser. `pan-y` laisse le
  * défilement vertical de la page au navigateur : seul un glissé horizontal

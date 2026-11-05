@@ -25,7 +25,7 @@ export const PASS_COLOR = '129 120 255'
 export const FREE_COLOR = '52 211 153'
 
 /** L'heure, rafraîchie chaque seconde : pour les comptes à rebours. */
-function useNow(): number {
+export function useNow(): number {
   const [now, setNow] = useState(Date.now())
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000)
@@ -35,7 +35,7 @@ function useNow(): number {
 }
 
 /** « 15:34:29 » sous un jour, « 3:16:49:05 » (jours en tête) au-delà. */
-function countdown(ms: number): string {
+export function countdown(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000))
   const d = Math.floor(total / 86400)
   const pad = (n: number) => String(n).padStart(2, '0')
@@ -74,13 +74,13 @@ export function ChallengesView({
 }
 
 /** Prochain minuit UTC : l'heure du tirage des missions du jour. */
-function nextUtcMidnight(now: number): number {
+export function nextUtcMidnight(now: number): number {
   const d = new Date(now)
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1)
 }
 
 /** La couleur et le nombre de crans d'une difficulté. */
-const DIFFICULTY: Record<ChallengeDifficulty, { pips: number; color: string }> = {
+export const DIFFICULTY: Record<ChallengeDifficulty, { pips: number; color: string }> = {
   easy: { pips: 1, color: '94 214 140' },
   medium: { pips: 2, color: '120 170 255' },
   hard: { pips: 3, color: '255 170 80' },

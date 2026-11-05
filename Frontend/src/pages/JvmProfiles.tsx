@@ -9,6 +9,24 @@ import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import type { Instance, JvmProfile } from '@/types'
 import { jvmLinkBlock } from '@/lib/loader'
+import { useIsMobile } from '@/mobile/useIsMobile'
+import { ScreenHeader } from '@/mobile/ui/ScreenHeader'
+import { PushedMoreButton } from '@/mobile/ui/PushedScreen'
+import { ActionSheet, SHEET_ICONS } from '@/mobile/ui/ActionSheet'
+import { Sheet, SheetTitle } from '@/mobile/ui/Sheet'
+import { CARD, CheckRow, Note } from '@/mobile/ui/kit'
+
+/** Une case des caractéristiques d'une configuration, sur téléphone. */
+function MobileSpec({ label, value, accent, note }: { label: string; value: string; accent?: boolean; note?: string }) {
+  return (
+    <span className={`flex min-w-0 flex-col rounded-xl border px-3 py-2 ${accent ? 'border-[rgba(75,63,207,0.45)] bg-[rgba(75,63,207,0.16)]' : 'border-white/[0.07] bg-black/25'}`}>
+      <span className="truncate text-[13px] text-white/55">{label}</span>
+      {/* Sur deux lignes s'il le faut (« Celle de l'instance ») : une demi-largeur est étroite. */}
+      <span className={`break-words text-[15px] font-semibold leading-snug ${accent ? 'text-[rgba(190,183,255,0.95)]' : 'text-white/90'}`}>{value}</span>
+      {note && <span className="truncate text-[13px] text-white/55">{note}</span>}
+    </span>
+  )
+}
 
 const VENDOR_LABELS: Record<string, string> = {
   auto: 'Auto',
@@ -133,6 +151,10 @@ export default function JvmProfiles() {
   const [linkFilter, setLinkFilter] = useState<LinkFilter>('all')
   const [familyFilter, setFamilyFilter] = useState<JvmFamily | 'all'>('all')
   const [gcFilter, setGcFilter] = useState<string>('all')
+  // Téléphone : la feuille des filtres et celle des actions d'une carte.
+  const mobile = useIsMobile()
+  const [filtering, setFiltering] = useState(false)
+  const [menuId, setMenuId] = useState<string | null>(null)
 
   useEffect(() => {
     api.jvmProfiles.list().then(setProfiles).catch((e) => { setProfiles([]); showError(e) })
@@ -237,6 +259,207 @@ export default function JvmProfiles() {
   }
 
   const linkedCount = javaInstances.length - unlinkedInstances.length
+
+  if (mobile) {
+    const activeFilters = (linkFilter !== 'all' ? 1 : 0) + (familyFilter !== 'all' ? 1 : 0) + (gcFilter !== 'all' ? 1 : 0)
+    const menuProfile = described.find((d) => d.profile.id === menuId) ?? null
+    const linkProfile = profiles?.find((p) => p.id === linkingId) ?? null
+    return (
+      <div className="relative flex h-full flex-col overflow-hidden bg-[#09090D]">
+        <ScreenHeader
+          title="Configurations JVM"
+          subtitle={`${linkedCount}/${javaInstances.length} instance${javaInstances.length > 1 ? 's' : ''} reliée${linkedCount > 1 ? 's' : ''}`}
+          fallback="/features"
+        />
+        <div className="flex shrink-0 gap-2 px-4 pb-3 pt-3">
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Nom ou drapeau"
+            className="h-11 min-w-0 flex-1 rounded-xl border border-white/[0.1] bg-white/[0.04] px-3.5 text-[16px] text-white outline-none placeholder:text-white/35 focus:border-[rgba(75,63,207,0.6)]"
+          />
+          <button
+            onClick={() => setFiltering(true)}
+            aria-label="Filtres"
+            className={`press relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border ${activeFilters ? 'border-accent/45 bg-accent/[0.12] text-white' : 'border-white/[0.1] bg-white/[0.04] text-white/75'}`}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" className="h-5 w-5"><path d="M4 6h16M7 12h10M10 18h4" /></svg>
+            {activeFilters > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1 text-[12px] font-bold text-white">{activeFilters}</span>}
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-28 pt-1">
+          <div className="flex flex-col gap-3">
+            {profiles === null && <div className="flex justify-center py-12"><ButtonSpinner size={24} /></div>}
+            {profiles?.length === 0 && (
+              <div className={`${CARD} flex flex-col gap-2 px-5 py-8 text-center`}>
+                <p className="text-[16px] font-semibold text-white/85">Aucune configuration</p>
+                <p className="text-[15px] leading-relaxed text-white/55">
+                  Sans configuration, chaque instance utilise les drapeaux générés par le launcher selon sa RAM. Créez-en une pour tester autre chose.
+                </p>
+              </div>
+            )}
+            {profiles !== null && profiles.length > 0 && visible.length === 0 && <Note>Aucune configuration ne correspond à ces filtres.</Note>}
+
+            {visible.map(({ profile: p, info, linked }) => (
+              <div key={p.id} className={`flex flex-col overflow-hidden rounded-2xl border bg-white/[0.04] ${linked.length > 0 ? 'border-[rgba(75,63,207,0.4)]' : 'border-white/[0.06]'}`}>
+                <div className="flex items-start gap-1 pl-4 pr-1 pt-2">
+                  <button onClick={() => navigate(`/jvm/${p.id}`)} className="flex min-w-0 flex-1 flex-col gap-1.5 py-1.5 text-left">
+                    <span className="truncate text-[16px] font-bold text-white">{p.name}</span>
+                    <span className="flex flex-wrap items-center gap-1.5 text-[13px]">
+                      <span className="text-white/60">Moteur {info.counts.jvm} · GC {info.counts.gc} · JIT {info.counts.jit}</span>
+                      {p.args_mode === 'replace' && <span className="rounded-md bg-[rgba(240,180,90,0.14)] px-1.5 py-0.5 font-semibold text-[rgba(240,180,90,0.9)]">Remplace la base</span>}
+                    </span>
+                  </button>
+                  <PushedMoreButton label={`Actions pour ${p.name}`} onClick={() => setMenuId(p.id)} />
+                </div>
+                <button onClick={() => navigate(`/jvm/${p.id}`)} className="grid grid-cols-2 gap-2 px-4 pb-3 pt-2 text-left">
+                  <MobileSpec label="JVM" value={info.vendor} />
+                  <MobileSpec label="Ramasse-miettes" value={info.gc.label} note={info.gc.fromFlags ? 'depuis les drapeaux' : undefined} accent={info.gc.fromFlags} />
+                  <MobileSpec label="Mémoire" value={info.ram} />
+                  <MobileSpec label="Drapeaux" value={`${info.total} au total`} />
+                </button>
+                <div className={`flex flex-col gap-2.5 border-t px-4 py-3 ${linked.length > 0 ? 'border-[rgba(75,63,207,0.3)] bg-[rgba(75,63,207,0.08)]' : 'border-white/[0.06]'}`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className={`text-[13px] font-semibold ${linked.length > 0 ? 'text-[rgba(190,183,255,0.95)]' : 'text-white/55'}`}>
+                      {linked.length > 0 ? `Appliquée à ${linked.length} instance${linked.length > 1 ? 's' : ''}` : 'Appliquée à aucune instance'}
+                    </span>
+                    <button onClick={() => setLinkingId(p.id)} className="press h-11 shrink-0 px-1 text-[15px] font-semibold text-[#a29bfe]">
+                      {linked.length > 0 ? 'Modifier' : 'Relier'}
+                    </button>
+                  </div>
+                  {linked.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {linked.map((i) => (
+                        <span key={i.id} className="rounded-lg border border-[rgba(75,63,207,0.5)] bg-[rgba(75,63,207,0.22)] px-2 py-1 text-[13px] font-semibold text-white">
+                          {i.name} <span className="font-normal text-white/55">{i.mc_version}</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            {profiles !== null && profiles.length > 0 && unlinkedInstances.length > 0 && (
+              <div className="mt-5 flex flex-col gap-2 px-1">
+                <p className="text-[13px] font-semibold uppercase tracking-[0.06em] text-white/55">
+                  {unlinkedInstances.length} instance{unlinkedInstances.length > 1 ? 's' : ''} sans configuration
+                </p>
+                <p className="text-[13px] leading-relaxed text-white/55">Elles utilisent les drapeaux générés par le launcher selon leur RAM.</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {unlinkedInstances.map((i) => (
+                    <span key={i.id} className="rounded-lg border border-white/[0.1] bg-white/[0.04] px-2 py-1 text-[13px] font-semibold text-white/70">{i.name}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Créer : l'action principale, en bouton flottant sous le pouce. */}
+        <button
+          onClick={() => setCreating(true)}
+          className="press absolute bottom-[max(16px,env(safe-area-inset-bottom))] right-4 z-10 flex h-14 items-center gap-2 rounded-full bg-[#4B3FCF] pl-4 pr-5 text-[16px] font-semibold text-white shadow-[0_8px_28px_rgba(75,63,207,0.5),0_2px_8px_rgba(0,0,0,0.4)]"
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" /></svg>
+          Nouvelle
+        </button>
+
+        <Sheet
+          open={creating}
+          onClose={() => { setCreating(false); setNewName('') }}
+          label="Nouvelle configuration"
+          header={<SheetTitle>Nouvelle configuration</SheetTitle>}
+          footer={
+            <button onClick={() => handleCreate()} disabled={busy} className="press flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#4B3FCF] text-[16px] font-semibold text-white disabled:opacity-50">
+              {busy && <ButtonSpinner />}
+              Créer
+            </button>
+          }
+        >
+          <input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleCreate() }}
+            placeholder="Nom (ex : Shenandoah + JIT débridé)"
+            className="h-12 w-full rounded-xl border border-white/[0.1] bg-white/[0.04] px-3.5 text-[16px] text-white outline-none placeholder:text-white/35 focus:border-[rgba(75,63,207,0.6)]"
+          />
+        </Sheet>
+
+        <ActionSheet
+          open={menuProfile !== null}
+          onClose={() => setMenuId(null)}
+          header={<span className="truncate text-[17px] font-bold text-white">{menuProfile?.profile.name}</span>}
+          actions={menuProfile ? [
+            { id: 'edit', label: 'Modifier', icon: SHEET_ICONS.settings, onSelect: () => navigate(`/jvm/${menuProfile.profile.id}`) },
+            { id: 'link', label: 'Relier des instances', icon: <path d="M3.9 12a3.1 3.1 0 013.1-3.1h4V7H7a5 5 0 000 10h4v-1.9H7A3.1 3.1 0 013.9 12zM8 13h8v-2H8v2zm9-6h-4v1.9h4a3.1 3.1 0 010 6.2h-4V17h4a5 5 0 000-10z" />, onSelect: () => setLinkingId(menuProfile.profile.id) },
+            { id: 'duplicate', label: 'Dupliquer', icon: SHEET_ICONS.duplicate, disabled: busy, onSelect: () => void handleDuplicate(menuProfile.profile) },
+            { id: 'delete', label: 'Supprimer', icon: SHEET_ICONS.delete, danger: true, confirm: `Supprimer « ${menuProfile.profile.name} » ? Les instances reliées reviennent aux drapeaux par défaut.`, onSelect: () => void handleDelete(menuProfile.profile.id) },
+          ] : []}
+        />
+
+        <Sheet
+          open={linkProfile !== null}
+          onClose={() => setLinkingId(null)}
+          label="Relier des instances"
+          header={
+            <div className="flex flex-col gap-1 px-5 pb-3">
+              <h2 className="truncate text-[17px] font-bold text-white">{linkProfile?.name}</h2>
+              <p className="text-[13px] leading-relaxed text-white/55">Une instance n'utilise qu'une configuration : en choisir une déjà reliée ailleurs la fait basculer ici.</p>
+            </div>
+          }
+          bodyClassName="flex flex-col gap-1 px-2 pb-3"
+        >
+          {instances.length === 0 && <p className="px-3 py-4 text-[15px] text-white/55">Aucune instance.</p>}
+          {linkProfile && instances.map((i) => {
+            const blocked = jvmLinkBlock(i)
+            if (blocked) {
+              return (
+                <div key={i.id} className="flex min-h-[52px] flex-col justify-center px-3 opacity-50">
+                  <span className="truncate text-[15px] text-white">{i.name}</span>
+                  <span className="truncate text-[13px] text-white/60">{blocked}</span>
+                </div>
+              )
+            }
+            const elsewhere = !!i.jvm_profile_id && i.jvm_profile_id !== linkProfile.id
+            return (
+              <CheckRow
+                key={i.id}
+                label={i.name}
+                sub={elsewhere ? `${i.mc_version} · déjà reliée à une autre configuration` : i.mc_version}
+                checked={i.jvm_profile_id === linkProfile.id}
+                onClick={() => void toggleLink(i, linkProfile.id)}
+              />
+            )
+          })}
+        </Sheet>
+
+        <Sheet open={filtering} onClose={() => setFiltering(false)} label="Filtres" header={<SheetTitle>Filtres</SheetTitle>} bodyClassName="flex flex-col gap-6 px-2 pb-3">
+          <div className="flex flex-col gap-1">
+            <p className="px-3 pb-1 text-[13px] font-semibold uppercase tracking-[0.06em] text-white/55">Instances</p>
+            {([['all', 'Toutes'], ['linked', 'Reliées'], ['unlinked', 'Non reliées']] as [LinkFilter, string][]).map(([id, label]) => (
+              <CheckRow key={id} label={label} checked={linkFilter === id} onClick={() => setLinkFilter(id)} />
+            ))}
+          </div>
+          <div className="flex flex-col gap-1">
+            <p className="px-3 pb-1 text-[13px] font-semibold uppercase tracking-[0.06em] text-white/55">JVM</p>
+            <CheckRow label="Toute JVM" checked={familyFilter === 'all'} onClick={() => setFamilyFilter('all')} />
+            {(['hotspot', 'openj9', 'graal'] as JvmFamily[]).filter((f) => described.some((d) => d.info.family === f)).map((f) => (
+              <CheckRow key={f} label={FAMILY_LABEL[f]} checked={familyFilter === f} onClick={() => setFamilyFilter(f)} />
+            ))}
+          </div>
+          {gcValues.length > 1 && (
+            <div className="flex flex-col gap-1">
+              <p className="px-3 pb-1 text-[13px] font-semibold uppercase tracking-[0.06em] text-white/55">Ramasse-miettes</p>
+              <CheckRow label="Tout GC" checked={gcFilter === 'all'} onClick={() => setGcFilter('all')} />
+              {gcValues.map((g) => <CheckRow key={g} label={g} checked={gcFilter === g} onClick={() => setGcFilter(g)} />)}
+            </div>
+          )}
+        </Sheet>
+      </div>
+    )
+  }
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-[#09090D]">

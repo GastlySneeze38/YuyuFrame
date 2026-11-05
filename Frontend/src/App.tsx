@@ -115,6 +115,8 @@ const MobileHome = lazy(() => import('@/mobile/MobileHome'))
 const MobileInstances = lazy(() => import('@/mobile/MobileInstances'))
 const MobileYuyuAccount = lazy(() => import('@/mobile/MobileYuyuAccount'))
 const MobilePlans = lazy(() => import('@/mobile/MobilePlans'))
+const MobileMissions = lazy(() => import('@/mobile/tools/MobileMissions').then((m) => ({ default: m.MobileMissions })))
+const MobileSeasonPass = lazy(() => import('@/mobile/tools/MobileMissions').then((m) => ({ default: m.MobileSeasonPass })))
 // Atelier des modales. Le `import()` est DANS la branche de développement,
 // pas seulement la route : écrit dehors, Vite voyait un module importable et
 // en sortait un morceau de JS livré à tout le monde — mort, mais livré.
@@ -767,9 +769,9 @@ export default function App() {
                 bord du P2P, abandonné) dans la barre de l'accueil. */}
             <Route path="/competitive" element={<Competitive />} />
             {/* Missions et passe de saison, ouverts depuis Outils. */}
-            <Route path="/missions" element={<Missions />} />
+            <Route path="/missions" element={mobile ? <MobileMissions /> : <Missions />} />
             <Route path="/servers" element={<Servers />} />
-            <Route path="/missions/pass" element={<SeasonPass />} />
+            <Route path="/missions/pass" element={mobile ? <MobileSeasonPass /> : <SeasonPass />} />
             <Route path="/jvm" element={<JvmProfiles />} />
             <Route path="/jvm/:profileId" element={<JvmProfileEditor />} />
             {/* Atelier des modales, uniquement en développement (Ctrl+Maj+M). */}

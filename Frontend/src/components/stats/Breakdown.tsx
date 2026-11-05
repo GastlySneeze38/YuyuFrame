@@ -14,7 +14,7 @@ import type { StatBucket } from '@/types/stats'
  */
 
 /** Palette des versions — le loader a déjà sa couleur (`loaderColor`). */
-const VERSION_COLORS = ['#818cf8', '#f59e0b', '#34d399', '#f472b6', '#60a5fa', '#a78bfa']
+export const VERSION_COLORS = ['#818cf8', '#f59e0b', '#34d399', '#f472b6', '#60a5fa', '#a78bfa']
 
 function Bar({ buckets, colorOf, label }: { buckets: StatBucket[]; colorOf: (key: string, i: number) => string; label: string }) {
   const t = useT()

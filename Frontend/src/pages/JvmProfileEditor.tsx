@@ -17,6 +17,9 @@ import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import type { JvmConfigPreview, JvmFlagCategory, JvmProfile } from '@/types'
 import { jvmLinkBlock } from '@/lib/loader'
+import { useIsMobile } from '@/mobile/useIsMobile'
+import { ScreenHeader } from '@/mobile/ui/ScreenHeader'
+import { Segmented as MobileSegmented } from '@/mobile/ui/kit'
 
 const CATEGORIES: JvmFlagCategory[] = ['jvm', 'gc', 'jit']
 
@@ -72,6 +75,7 @@ export default function JvmProfileEditor() {
   const [previewing, setPreviewing] = useState(false)
   const [preview, setPreview] = useState<JvmConfigPreview | null>(null)
   const [copied, setCopied] = useState(false)
+  const mobile = useIsMobile()
 
   useEffect(() => {
     api.jvmProfiles.list()
@@ -253,6 +257,179 @@ export default function JvmProfileEditor() {
 
   const editableTab: JvmFlagCategory = tab === 'preview' ? 'gc' : tab
 
+  // Piège classique dans `missingUnlock`, et le message de la JVM ne dit pas
+  // quoi faire : un drapeau expérimental sans son déverrouillage empêche le
+  // démarrage. En mode « Compléter », le déverrouillage vient déjà de la base
+  // générée — l'avertissement ne vaut qu'en « Remplacer ».
+  const warnings = (
+    <>
+      {lint.duplicates.length > 0 && (
+        <Warn>
+          Défini deux fois (toutes catégories confondues) :{' '}
+          <span className="font-mono">{lint.duplicates.join(', ')}</span> — le dernier gagne.
+        </Warn>
+      )}
+      {lint.gcSelectors.length > 1 && (
+        <Warn>
+          Deux collecteurs sélectionnés (<span className="font-mono">{lint.gcSelectors.join(', ')}</span>) — la JVM
+          refusera de démarrer.
+        </Warn>
+      )}
+      {missingUnlock.length > 0 && (
+        <Warn>
+          <span className="font-mono">{missingUnlock.join(', ')}</span>{' '}
+          {missingUnlock.length > 1 ? 'sont expérimentaux' : 'est expérimental'} : sans{' '}
+          <span className="font-mono">-XX:+UnlockExperimentalVMOptions</span>, la JVM refusera de démarrer.{' '}
+          <button
+            onClick={() => addFlag('-XX:+UnlockExperimentalVMOptions')}
+            className="font-semibold text-[rgba(150,140,240,0.95)] underline underline-offset-2 hover:text-[rgba(190,183,255,1)]"
+          >
+            Ajouter le drapeau
+          </button>
+        </Warn>
+      )}
+    </>
+  )
+
+  const modals = (
+    <>
+      {gridOpen && (
+        <GridModal
+          draft={draft}
+          onChange={set}
+          instanceRam={previewInstance?.ram_mb ?? 4096}
+          linked={linkedInstances}
+          onManageLinks={() => navigate('/jvm')}
+          onClose={() => setGridOpen(false)}
+        />
+      )}
+      {baseOpen && (
+        <BaseModal
+          category={editableTab}
+          family={family}
+          value={draft[ARGS_KEY[editableTab]]}
+          baseId={bases[editableTab] ?? null}
+          onChange={(v) => set(ARGS_KEY[editableTab], v)}
+          onBaseChange={(id) => setBase(editableTab, id)}
+          onImport={() => setImportOpen(true)}
+          onClose={() => setBaseOpen(false)}
+        />
+      )}
+      {importOpen && <ImportModal onImport={importFlags} onClose={() => setImportOpen(false)} />}
+      {pickerOpen && (
+        <FlagPicker family={family} category={editableTab} present={presentFlags} onAdd={addFlag} onClose={() => setPickerOpen(false)} />
+      )}
+    </>
+  )
+
+  // Téléphone : une colonne qui défile, les quatre onglets en commutateur, et
+  // une barre « Annuler / Enregistrer » qui n'apparaît que s'il y a quelque
+  // chose à enregistrer — comme les options du jeu. `jvm-touch` remonte les
+  // tailles des pièces partagées avec le PC (index.css).
+  if (mobile) {
+    return (
+      <div className="relative flex h-full flex-col overflow-hidden bg-[#09090D]">
+        <ScreenHeader title={draft.name || 'Configuration JVM'} subtitle="Configuration JVM" fallback="/jvm" />
+        <div className="jvm-touch min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-8 pt-4">
+          <div className="flex flex-col gap-5">
+            <label className="flex flex-col gap-1.5">
+              <span className="px-1 text-[13px] font-semibold uppercase tracking-[0.06em] text-white/55">Nom</span>
+              <input
+                value={draft.name}
+                onChange={(e) => set('name', e.target.value)}
+                className="h-12 w-full rounded-xl border border-white/[0.1] bg-white/[0.04] px-3.5 text-[16px] font-semibold text-white outline-none focus:border-[rgba(75,63,207,0.6)]"
+              />
+            </label>
+            <GridSummary draft={draft} instanceRam={previewInstance?.ram_mb ?? 4096} onOpen={() => setGridOpen(true)} />
+            <MobileSegmented
+              size="sm"
+              value={tab}
+              onChange={setTab}
+              options={[
+                ...CATEGORIES.map((cat) => ({
+                  value: cat as EditorTab,
+                  label: cat === 'jvm' ? 'Moteur' : cat === 'gc' ? 'GC' : 'JIT',
+                  badge: parseJvmArgs(draft[ARGS_KEY[cat]]).length,
+                })),
+                { value: 'preview' as EditorTab, label: 'Commande' },
+              ]}
+            />
+            {warnings}
+            {tab !== 'preview' ? (
+              <CategoryPane
+                category={tab}
+                value={draft[ARGS_KEY[tab]]}
+                basePreset={presetsFor(tab, family).find((p) => p.id === bases[tab]) ?? null}
+                onChange={(v) => set(ARGS_KEY[tab], v)}
+                onBrowseBase={() => setBaseOpen(true)}
+                onAddFlag={() => setPickerOpen(true)}
+              />
+            ) : (
+              <div className="flex flex-col gap-3">
+                {instances.length > 1 && (
+                  <label className="flex flex-col gap-1.5">
+                    <span className="px-1 text-[13px] font-semibold uppercase tracking-[0.06em] text-white/55">Instance de référence</span>
+                    <select
+                      value={previewInstanceId ?? ''}
+                      onChange={(e) => setPreviewInstanceId(e.target.value || null)}
+                      className="h-12 rounded-xl border border-white/[0.1] bg-white/[0.04] px-3 text-[16px] text-white outline-none"
+                    >
+                      {instances.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
+                    </select>
+                  </label>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    onClick={handlePreview}
+                    disabled={previewing || !previewInstance}
+                    className="press flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-[#4B3FCF] text-[15px] font-semibold text-white disabled:opacity-40"
+                  >
+                    {previewing && <ButtonSpinner />}
+                    {previewing ? 'Résolution…' : preview ? 'Recalculer' : 'Calculer'}
+                  </button>
+                  {preview && (
+                    <button onClick={handleCopy} className="press h-12 rounded-2xl border border-white/[0.1] bg-white/[0.05] px-5 text-[15px] font-semibold text-white/80">
+                      {copied ? 'Copié' : 'Copier'}
+                    </button>
+                  )}
+                </div>
+                {!preview ? (
+                  <p className="rounded-2xl border border-dashed border-white/[0.1] px-5 py-8 text-center text-[15px] leading-relaxed text-white/55">
+                    Résolue par le backend, exactement comme un lancement. Peut télécharger la JVM si elle manque.
+                  </p>
+                ) : (
+                  <div className="flex flex-col gap-2 rounded-2xl border border-white/[0.08] bg-black/35 p-3.5">
+                    <p className="font-mono text-[13px] leading-relaxed text-white/60">
+                      Java {preview.java_major} — <span className="break-all">{preview.java_path}</span>
+                    </p>
+                    {preview.jvm_args.map((arg, i) => (
+                      <span key={`${arg}-${i}`} className={`break-all font-mono text-[13px] leading-relaxed ${userArgs.has(arg) ? 'text-[rgba(170,160,255,0.95)]' : 'text-white/50'}`}>
+                        {arg}
+                      </span>
+                    ))}
+                    <p className="text-[13px] text-white/55">En <span className="text-[rgba(170,160,255,0.95)]">violet</span>, ce qui vient de cette config.</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+        {dirty && (
+          <div className="flex shrink-0 gap-2 border-t border-white/[0.06] bg-[#0d0c14] px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3">
+            <button onClick={() => setDraft(loaded)} className="press h-12 flex-1 rounded-2xl bg-white/[0.06] text-[15px] font-semibold text-white/75">
+              Annuler
+            </button>
+            <button onClick={handleSave} disabled={saving} className="press flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-[#4B3FCF] text-[15px] font-semibold text-white disabled:opacity-50">
+              {saving && <ButtonSpinner />}
+              Enregistrer
+            </button>
+          </div>
+        )}
+        {modals}
+      </div>
+    )
+  }
+
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-[#09090D]">
       <PageHeader backTo="/jvm">
@@ -322,35 +499,7 @@ export default function JvmProfileEditor() {
 
           <GridSummary draft={draft} instanceRam={previewInstance?.ram_mb ?? 4096} onOpen={() => setGridOpen(true)} />
 
-          {lint.duplicates.length > 0 && (
-            <Warn>
-              Défini deux fois (toutes catégories confondues) :{' '}
-              <span className="font-mono">{lint.duplicates.join(', ')}</span> — le dernier gagne.
-            </Warn>
-          )}
-          {lint.gcSelectors.length > 1 && (
-            <Warn>
-              Deux collecteurs sélectionnés (<span className="font-mono">{lint.gcSelectors.join(', ')}</span>) — la JVM
-              refusera de démarrer.
-            </Warn>
-          )}
-          {/* Piège classique, et le message de la JVM ne dit pas quoi faire : un
-              drapeau expérimental sans son déverrouillage empêche le démarrage.
-              En mode "Compléter", le déverrouillage vient déjà de la base
-              générée — l'avertissement ne vaut qu'en "Remplacer". */}
-          {missingUnlock.length > 0 && (
-            <Warn>
-              <span className="font-mono">{missingUnlock.join(', ')}</span>{' '}
-              {missingUnlock.length > 1 ? 'sont expérimentaux' : 'est expérimental'} : sans{' '}
-              <span className="font-mono">-XX:+UnlockExperimentalVMOptions</span>, la JVM refusera de démarrer.{' '}
-              <button
-                onClick={() => addFlag('-XX:+UnlockExperimentalVMOptions')}
-                className="font-semibold text-[rgba(150,140,240,0.95)] underline underline-offset-2 hover:text-[rgba(190,183,255,1)]"
-              >
-                Ajouter le drapeau
-              </button>
-            </Warn>
-          )}
+          {warnings}
 
           {tab !== 'preview' && (
             <CategoryPane
@@ -427,43 +576,7 @@ export default function JvmProfileEditor() {
         </div>
       </div>
 
-      {gridOpen && (
-        <GridModal
-          draft={draft}
-          onChange={set}
-          instanceRam={previewInstance?.ram_mb ?? 4096}
-          linked={linkedInstances}
-          onManageLinks={() => navigate('/jvm')}
-          onClose={() => setGridOpen(false)}
-        />
-      )}
-
-      {baseOpen && (
-        <BaseModal
-          category={editableTab}
-          family={family}
-          value={draft[ARGS_KEY[editableTab]]}
-          baseId={bases[editableTab] ?? null}
-          onChange={(v) => set(ARGS_KEY[editableTab], v)}
-          onBaseChange={(id) => setBase(editableTab, id)}
-          onImport={() => setImportOpen(true)}
-          onClose={() => setBaseOpen(false)}
-        />
-      )}
-
-      {importOpen && (
-        <ImportModal onImport={importFlags} onClose={() => setImportOpen(false)} />
-      )}
-
-      {pickerOpen && (
-        <FlagPicker
-          family={family}
-          category={editableTab}
-          present={presentFlags}
-          onAdd={addFlag}
-          onClose={() => setPickerOpen(false)}
-        />
-      )}
+      {modals}
     </div>
   )
 }
@@ -550,6 +663,15 @@ function Empty({ title, sub }: { title: string; sub: string }) {
 }
 
 function Shell({ children }: { children: React.ReactNode }) {
+  const mobile = useIsMobile()
+  if (mobile) {
+    return (
+      <div className="flex h-full flex-col overflow-hidden bg-[#09090D]">
+        <ScreenHeader title="Configuration JVM" fallback="/jvm" />
+        {children}
+      </div>
+    )
+  }
   return (
     <div className="flex h-full flex-col overflow-hidden bg-[#09090D]">
       <PageHeader backTo="/jvm">

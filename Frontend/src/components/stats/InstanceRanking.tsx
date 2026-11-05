@@ -21,12 +21,12 @@ import type { InstanceStat } from '@/types/stats'
  * n'apprend rien tant qu'on ne va pas la chercher.
  */
 
-const SORTS: StatsSort[] = ['time', 'sessions', 'recent', 'crashes']
+export const SORTS: StatsSort[] = ['time', 'sessions', 'recent', 'crashes']
 
 /** Rangées montrées avant de demander à voir le reste. */
 const COLLAPSED = 6
 
-function sortBy(list: InstanceStat[], sort: StatsSort): InstanceStat[] {
+export function sortBy(list: InstanceStat[], sort: StatsSort): InstanceStat[] {
   const copy = [...list]
   switch (sort) {
     case 'sessions':

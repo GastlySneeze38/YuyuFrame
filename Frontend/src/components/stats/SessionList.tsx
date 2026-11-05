@@ -30,13 +30,13 @@ import type { SessionEntry } from '@/types/stats'
 const COLLAPSED = 12
 
 /** Clé de jour locale, et son libellé. */
-function dayOf(ts: number) {
+export function dayOf(ts: number) {
   const d = new Date(ts * 1000)
   d.setHours(0, 0, 0, 0)
   return d
 }
 
-function groupByDay(sessions: SessionEntry[]) {
+export function groupByDay(sessions: SessionEntry[]) {
   const groups: { key: number; date: Date; secs: number; items: SessionEntry[] }[] = []
   for (const s of sessions) {
     const date = dayOf(s.started_at)

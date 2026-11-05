@@ -21,14 +21,14 @@ interface Card {
   tone: 'accent' | 'warm' | 'danger' | 'success'
 }
 
-const TONES = {
+export const TONES = {
   accent: { text: 'text-accent-hover', glow: 'from-accent/20' },
   warm: { text: 'text-warning', glow: 'from-warning/20' },
   danger: { text: 'text-danger', glow: 'from-danger/20' },
   success: { text: 'text-success', glow: 'from-success/20' },
 } as const
 
-function build(id: StatCardId, data: StatsData, t: (k: string, v?: Record<string, string | number>) => string): Card {
+export function build(id: StatCardId, data: StatsData, t: (k: string, v?: Record<string, string | number>) => string): Card {
   const { totals } = data
   switch (id) {
     case 'time':

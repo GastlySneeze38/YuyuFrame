@@ -1,4 +1,6 @@
 import { useEffect, type ReactNode } from 'react'
+import { useIsMobile } from '@/mobile/useIsMobile'
+import { Sheet } from '@/mobile/ui/Sheet'
 
 /**
  * Coquille de modale des écrans de configuration JVM.
@@ -24,6 +26,30 @@ export function JvmModal({ title, sub, onClose, width = 640, footer, children }:
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
+
+  // Téléphone : la feuille du bas, comme toute fenêtre — poignée, glissé pour
+  // fermer, pas de croix. `jvm-touch` remonte les tailles du contenu (index.css).
+  const mobile = useIsMobile()
+  if (mobile) {
+    return (
+      <Sheet
+        open
+        full
+        onClose={onClose}
+        label={title}
+        header={
+          <div className="flex flex-col gap-1 px-5 pb-3">
+            <h2 className="text-[17px] font-bold text-white">{title}</h2>
+            {sub && <p className="text-[13px] leading-relaxed text-white/55">{sub}</p>}
+          </div>
+        }
+        footer={footer && <div className="jvm-touch flex gap-2 [&>*]:h-12 [&>*]:flex-1 [&>*]:rounded-2xl [&>*]:text-[15px]">{footer}</div>}
+        bodyClassName="jvm-touch"
+      >
+        {children}
+      </Sheet>
+    )
+  }
 
   return (
     <div

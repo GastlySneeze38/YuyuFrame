@@ -19,7 +19,7 @@ import type { DayStat } from '@/types/stats'
  */
 
 /** Cinq niveaux : rien, puis quatre intensités relatives au meilleur jour. */
-const LEVELS = [
+export const LEVELS = [
   'bg-[rgba(255,255,255,0.04)]',
   'bg-accent/25',
   'bg-accent/45',
@@ -27,7 +27,7 @@ const LEVELS = [
   'bg-accent-hover',
 ]
 
-function levelOf(secs: number, max: number): number {
+export function levelOf(secs: number, max: number): number {
   if (secs <= 0) return 0
   // Échelle sur la racine plutôt que linéaire : sans ça, une seule très
   // grosse journée écrase toutes les autres au niveau 1 et le calendrier
@@ -37,7 +37,7 @@ function levelOf(secs: number, max: number): number {
 }
 
 /** Jour de la semaine, lundi = 0. */
-function weekdayOf(iso: string): number {
+export function weekdayOf(iso: string): number {
   return (new Date(`${iso}T00:00:00`).getDay() + 6) % 7
 }
 

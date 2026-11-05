@@ -7,6 +7,9 @@ import { useFleet } from '@/stores/useFleet'
 import { SYNC_ENABLED, SYNC_FLAG } from '@/config/features'
 import { listItemVariants, listVariants } from '@/lib/motion'
 import { useT } from '@/i18n'
+import { useIsMobile } from '@/mobile/useIsMobile'
+import { MenuButton } from '@/mobile/ui/NavDrawer'
+import { LIST, RowChevron, Section } from '@/mobile/ui/kit'
 
 /**
  * Fonctionnalités — le point d'entrée unique vers tout ce que le launcher
@@ -47,6 +50,7 @@ export default function Features() {
   const t = useT()
   const navigate = useNavigate()
   const syncAllowed = useFleet((s) => s.isEnabled(SYNC_FLAG))
+  const mobile = useIsMobile()
 
   const statusOf = (f: Feature): Status => {
     // La sync suit ses deux interrupteurs : celui du code et celui du
@@ -57,6 +61,59 @@ export default function Features() {
     // suspend ce qui tourne, il n'ajourne pas ce qui n'est pas encore sorti.
     if (f.status === 'ready' && f.key === 'sync' && (!SYNC_ENABLED || !syncAllowed)) return 'unavailable'
     return f.status
+  }
+
+  // Téléphone : une liste groupée, comme les Réglages. Ce qui s'ouvre
+  // d'abord ; ce qui n'est pas encore sorti dans un second groupe, en retrait,
+  // pour ne pas mêler des lignes qu'on touche à des lignes inertes.
+  if (mobile) {
+    const ready = FEATURES.filter((f) => statusOf(f) === 'ready')
+    const later = FEATURES.filter((f) => statusOf(f) !== 'ready')
+    const row = (f: Feature) => {
+      const status = statusOf(f)
+      const open = status === 'ready' && f.path
+      return (
+        <button
+          key={f.key}
+          onClick={open ? () => navigate(f.path!) : undefined}
+          disabled={!open}
+          className="flex min-h-[76px] w-full items-center gap-3.5 px-4 py-3 text-left active:bg-white/[0.04] disabled:active:bg-transparent"
+        >
+          <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${open ? 'bg-accent/15 text-accent-hover' : 'bg-white/[0.05] text-white/40'}`}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-[22px] w-[22px]"><path d={f.icon} /></svg>
+          </span>
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+              <span className={`min-w-0 break-words text-[15px] font-semibold leading-snug ${open ? 'text-white' : 'text-white/60'}`}>{t(`features.${f.key}Title`)}</span>
+              {f.paid && <span className="shrink-0 rounded-full bg-accent/15 px-2 py-0.5 text-[13px] font-semibold text-accent-hover">{t('features.paidBadge')}</span>}
+              {status === 'unavailable' && <span className="shrink-0 rounded-full bg-white/[0.06] px-2 py-0.5 text-[13px] font-semibold text-white/55">{t('features.pausedBadge')}</span>}
+            </span>
+            <span className={`line-clamp-2 text-[13px] leading-snug ${open ? 'text-white/60' : 'text-white/40'}`}>{t(`features.${f.key}Text`)}</span>
+          </span>
+          {open && <RowChevron />}
+        </button>
+      )
+    }
+    return (
+      <div className="flex h-full flex-col overflow-hidden bg-[#09090D] text-txt-primary">
+        <header className="flex shrink-0 items-center gap-1 pb-2 pl-1.5 pr-4 pt-[max(12px,env(safe-area-inset-top))]">
+          <MenuButton />
+          <h1 className="min-w-0 flex-1 truncate text-[28px] font-bold tracking-tight text-white">{t('features.title')}</h1>
+        </header>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[max(32px,env(safe-area-inset-bottom))] pt-2">
+          <div className="flex flex-col gap-8">
+            <p className="px-1 text-[15px] leading-relaxed text-white/60">{t('features.subtitle')}</p>
+            <div className={LIST}>{ready.map(row)}</div>
+            {later.length > 0 && (
+              <Section title={t('features.soonBadge')}>
+                <div className={LIST}>{later.map(row)}</div>
+              </Section>
+            )}
+            <p className="px-1 text-center text-[13px] leading-relaxed text-white/45">{t('features.moreComing')}</p>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (

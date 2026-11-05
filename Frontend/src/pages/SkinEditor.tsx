@@ -38,6 +38,11 @@ import {
 } from '@/lib/skinEditor'
 import type { PartId, Pixel, Rect } from '@/lib/skinEditor'
 import { useT } from '@/i18n'
+import { useIsMobile } from '@/mobile/useIsMobile'
+import { ScreenHeader } from '@/mobile/ui/ScreenHeader'
+import { PushedMoreButton } from '@/mobile/ui/PushedScreen'
+import { ActionSheet, SHEET_ICONS } from '@/mobile/ui/ActionSheet'
+import { Segmented as KitSegmented } from '@/mobile/ui/kit'
 
 /**
  * Éditeur de skin 3D.
@@ -174,7 +179,17 @@ interface Target {
   layer: Layer
 }
 
+/**
+ * L'éditeur, remonté à neuf quand on passe du PC au téléphone : le canevas 3D
+ * et ses gestionnaires sont posés une fois au montage, sur les éléments de la
+ * mise en page du moment. Le dessin, lui, survit (brouillon local).
+ */
 export default function SkinEditor() {
+  const mobile = useIsMobile()
+  return <SkinEditorScreen key={mobile ? 'mobile' : 'desktop'} mobile={mobile} />
+}
+
+function SkinEditorScreen({ mobile }: { mobile: boolean }) {
   const t = useT()
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
@@ -220,6 +235,12 @@ export default function SkinEditor() {
   /** Côté le plus large possible pour la vue 2D : elle doit rester carrée et
    *  tenir dans son cadre, quelle que soit la forme de la fenêtre. */
   const [flatSize, setFlatSize] = useState(320)
+  /** Téléphone : « Déplacer » donne le doigt à la caméra au lieu du pinceau.
+   *  Sans souris, il n'y a ni clic droit ni molette pour tourner et zoomer. */
+  const [navMode, setNavMode] = useState(false)
+  const navRef = useRef(navMode)
+  navRef.current = navMode
+  const [menuOpen, setMenuOpen] = useState(false)
 
   const boxRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -820,6 +841,11 @@ export default function SkinEditor() {
 
     const onDown = (e: PointerEvent) => {
       if (e.button !== 0) return
+      // Au doigt, en mode « Déplacer », un doigt fait tourner : la main va
+      // aux contrôles, qui gèrent aussi le pincement.
+      if (e.pointerType !== 'mouse' && navRef.current) return
+      // Un second doigt posé pendant un trait ne peint pas à côté du premier.
+      if (leftDownRef.current) return
       // Le bouton gauche ne tourne jamais : les contrôles sont coupés dès
       // qu'il s'enfonce, y compris à côté du personnage. Tourner, c'est le
       // clic droit, et seulement lui.
@@ -918,6 +944,9 @@ export default function SkinEditor() {
 
     const onDown = (e: PointerEvent) => {
       if (e.button !== 0) return
+      // Au doigt, « Déplacer » laisse le geste à la caméra 2D (plus bas).
+      if (e.pointerType !== 'mouse' && navRef.current) return
+      if (strokeRef.current.active) return
       e.preventDefault()
       canvas.setPointerCapture(e.pointerId)
       clearPreview()
@@ -1033,7 +1062,59 @@ export default function SkinEditor() {
     let panning = 0
     let last = { x: 0, y: 0 }
 
+    // Au doigt, en mode « Déplacer » : un doigt fait glisser, deux doigts
+    // pincent pour zoomer autour de leur milieu (et glissent en même temps).
+    const fingers = new Map<number, { x: number; y: number }>()
+    const spread = () => {
+      const [a, b] = [...fingers.values()]
+      return { dist: Math.hypot(a.x - b.x, a.y - b.y), mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } }
+    }
+    let pinch: { dist: number; mid: { x: number; y: number } } | null = null
+
+    const onTouchDown = (e: PointerEvent) => {
+      if (!navRef.current || fingers.size >= 2) return
+      e.preventDefault()
+      fingers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+      pinch = fingers.size === 2 ? spread() : null
+      // Après l'état : une capture refusée (doigt déjà levé) ne doit pas
+      // laisser le geste à moitié enregistré.
+      try { box.setPointerCapture(e.pointerId) } catch { /* rien à capturer */ }
+    }
+
+    const onTouchMove = (e: PointerEvent) => {
+      const before = fingers.get(e.pointerId)
+      if (!before) return
+      fingers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+      const view = flatViewRef.current
+      if (fingers.size === 1) {
+        view.x += e.clientX - before.x
+        view.y += e.clientY - before.y
+      } else if (pinch) {
+        const now = spread()
+        const next = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, view.zoom * (now.dist / Math.max(1, pinch.dist))))
+        const bounds = box.getBoundingClientRect()
+        const px = now.mid.x - (bounds.left + bounds.width / 2)
+        const py = now.mid.y - (bounds.top + bounds.height / 2)
+        // Même règle que la molette : le point entre les doigts ne bouge pas,
+        // puis le dessin suit le glissement du milieu.
+        const ratio = next / view.zoom
+        view.x = px - (px - view.x) * ratio + (now.mid.x - pinch.mid.x)
+        view.y = py - (py - view.y) * ratio + (now.mid.y - pinch.mid.y)
+        view.zoom = next
+        pinch = now
+      }
+      clamp()
+      paint()
+    }
+
+    const onTouchUp = (e: PointerEvent) => {
+      if (!fingers.delete(e.pointerId)) return
+      if (box.hasPointerCapture(e.pointerId)) box.releasePointerCapture(e.pointerId)
+      pinch = fingers.size === 2 ? spread() : null
+    }
+
     const onDown = (e: PointerEvent) => {
+      if (e.pointerType !== 'mouse') return onTouchDown(e)
       // Droit, ou molette enfoncée — jamais le gauche, qui peint.
       if (e.button !== 2 && e.button !== 1) return
       e.preventDefault()
@@ -1044,6 +1125,7 @@ export default function SkinEditor() {
     }
 
     const onMove = (e: PointerEvent) => {
+      if (e.pointerType !== 'mouse') return onTouchMove(e)
       if (panning !== e.pointerId) return
       const view = flatViewRef.current
       view.x += e.clientX - last.x
@@ -1054,6 +1136,7 @@ export default function SkinEditor() {
     }
 
     const onUp = (e: PointerEvent) => {
+      if (e.pointerType !== 'mouse') return onTouchUp(e)
       if (panning !== e.pointerId) return
       panning = 0
       if (box.hasPointerCapture(e.pointerId)) box.releasePointerCapture(e.pointerId)
@@ -1339,6 +1422,224 @@ export default function SkinEditor() {
   }, [account, navigate, saving, serialise, variant])
 
   const backTo = account ? `/skins?account=${encodeURIComponent(account)}` : '/skins'
+
+  const modals = (
+    <>
+      <AnimatePresence>
+        {showSteps && (
+          <StepsModal
+            entries={history}
+            at={at}
+            slim={variant === 'slim'}
+            onPick={(index) => {
+              goTo(index)
+              setShowSteps(false)
+            }}
+            onClear={clearHistory}
+            onClose={() => setShowSteps(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {baseLink !== null && ready && (
+          <SkinBaseModal initialLink={baseLink || undefined} onLoad={loadBase} onClose={closeBase} />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showShare && <SkinShareModal make={makeLink} onClose={() => setShowShare(false)} />}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showPoses && (
+          <PosesModal value={pose} onPick={setPose} joints={joints} onJoints={setJoints} onClose={() => setShowPoses(false)} />
+        )}
+      </AnimatePresence>
+    </>
+  )
+
+  // ── Téléphone ────────────────────────────────────────────────────────────
+  // Une colonne : la vue de travail en carré sur toute la largeur, une barre
+  // dessous (l'autre vue en vignette — la toucher échange les deux —,
+  // annuler, rétablir, « Déplacer »), puis outils, taille, couleur, couche et
+  // base. Les actions sur le skin entier (télécharger, partager, base,
+  // catalogue, positions, étapes, repartir) passent dans le « … » de
+  // l'en-tête. Enregistrer reste en bas, hors de ce qui défile.
+  //
+  // Le canevas 3D garde son principe : monté une fois, posé en absolu sur
+  // l'emplacement actif (le grand carré ou la vignette), jamais déplacé dans
+  // le DOM. `touch-none` sur les deux vues : un doigt qui peint ne fait pas
+  // défiler la page.
+  if (mobile) {
+    const stepIcon = (d: string) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-[22px] w-[22px]"><path d={d} /></svg>
+    return (
+      <div className="flex h-full flex-col overflow-hidden bg-[#09090D] text-txt-primary">
+        <ScreenHeader title={t('skinEditor.title')} fallback={backTo} right={<PushedMoreButton label={t('stats.mobile.more')} onClick={() => setMenuOpen(true)} />} />
+
+        <div ref={contentRef} className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-6 pt-3">
+          <div className="flex flex-col gap-5">
+            <div className="flex flex-col gap-2">
+              <div ref={mainSlotRef} className="relative aspect-square w-full rounded-2xl border border-line bg-surface-1">
+                <div className={mode === '2d' ? 'absolute inset-0 p-3' : 'hidden'}>
+                  <div ref={flatBoxRef} className="flex h-full w-full touch-none items-center justify-center overflow-hidden">
+                    <div ref={flatStageRef} className="relative shrink-0 origin-center" style={{ width: flatSize, height: flatSize }}>
+                      <div className="absolute inset-0 rounded-lg" style={checkerForTexture(flatSize)} />
+                      <RegionGrid active={layer} pass="under" />
+                      <canvas ref={flatRef} width={SKIN_SIZE} height={SKIN_SIZE} style={{ imageRendering: 'pixelated' }} className="absolute inset-0 h-full w-full rounded-lg" />
+                      <RegionGrid active={layer} pass="over" />
+                    </div>
+                  </div>
+                </div>
+                {mode === '2d' && <HoverChip hover={hover} />}
+                {!ready && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <ButtonSpinner size={28} color="#818cf8" trackColor="rgba(255,255,255,0.08)" />
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                {/* La vue sur laquelle on ne travaille pas, en vignette : la
+                    toucher échange les deux, comme la carte du PC. */}
+                <button
+                  onClick={() => setMode(mode === '3d' ? '2d' : '3d')}
+                  aria-label={mode === '3d' ? t('skinEditor.editFlat') : t('skinEditor.backTo3d')}
+                  className="press flex min-w-0 flex-1 items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.04] p-1.5 pr-3 text-left"
+                >
+                  <span ref={miniBoxRef} className="relative block h-[52px] w-[52px] shrink-0">
+                    <span ref={miniSlotRef} style={{ width: miniSize, height: miniSize }} className="relative block overflow-hidden rounded-lg border border-line">
+                      <span className="absolute inset-0" style={checkerForTexture(miniSize)} />
+                      <canvas ref={miniRef} width={SKIN_SIZE} height={SKIN_SIZE} style={{ imageRendering: 'pixelated' }} className={`absolute inset-0 h-full w-full ${mode === '2d' ? 'invisible' : ''}`} />
+                    </span>
+                  </span>
+                  {/* Sur deux lignes au besoin : à côté de trois boutons, la place manque en allemand et en russe. */}
+                  <span className="flex min-w-0 flex-col">
+                    <span className="break-words text-[15px] font-semibold leading-tight text-white">{mode === '2d' ? t('skinEditor.modelTitle') : t('skinEditor.flatTitle')}</span>
+                    <span className="break-words text-[13px] leading-tight text-[#a29bfe]">{mode === '2d' ? t('skinEditor.backTo3d') : t('skinEditor.editFlat')}</span>
+                  </span>
+                </button>
+                <button onClick={undo} disabled={at <= 0} aria-label={t('skinEditor.undo')} className="press flex h-12 w-11 shrink-0 items-center justify-center rounded-xl text-white/80 disabled:opacity-30">
+                  {stepIcon('M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 010 11H11')}
+                </button>
+                <button onClick={redo} disabled={at >= history.length - 1} aria-label={t('skinEditor.redo')} className="press flex h-12 w-11 shrink-0 items-center justify-center rounded-xl text-white/80 disabled:opacity-30">
+                  {stepIcon('M15 14l5-5-5-5M20 9H9.5a5.5 5.5 0 000 11H13')}
+                </button>
+                <button
+                  onClick={() => setNavMode(!navMode)}
+                  aria-pressed={navMode}
+                  aria-label={t('skinEditor.move')}
+                  className={`press flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border ${navMode ? 'border-accent/60 bg-accent/25 text-white' : 'border-white/[0.08] bg-white/[0.04] text-white/70'}`}
+                >
+                  {stepIcon('M18 11V6a2 2 0 00-4 0v5M14 10V4a2 2 0 00-4 0v6M10 10.5V6a2 2 0 00-4 0v8l-1.5-1.5a2 2 0 00-2.8 2.8L7 20a5 5 0 003.5 1.5H14a6 6 0 006-6V8a2 2 0 00-4 0')}
+                </button>
+              </div>
+              <p className="px-1 text-[13px] leading-snug text-white/55">
+                {navMode ? (mode === '3d' ? t('skinEditor.moveHint3d') : t('skinEditor.moveHint2d')) : t('skinEditor.paintHint')}
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <div className="grid grid-cols-4 gap-2">
+                {TOOLS.map((entry) => (
+                  <button
+                    key={entry.id}
+                    onClick={() => { setTool(entry.id); setNavMode(false) }}
+                    aria-pressed={tool === entry.id && !navMode}
+                    className={`press h-12 rounded-xl border text-[14px] font-semibold ${tool === entry.id ? 'border-accent/50 bg-accent/20 text-white' : 'border-white/[0.08] bg-white/[0.04] text-white/70'}`}
+                  >
+                    {t(`skinEditor.tool_${entry.id}`)}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-3 px-1">
+                <span className="shrink-0 text-[13px] text-white/55">{t('skinEditor.brush')}</span>
+                <input
+                  type="range"
+                  min={MIN_BRUSH}
+                  max={MAX_BRUSH}
+                  step={1}
+                  value={brush}
+                  aria-label={t('skinEditor.brush')}
+                  onChange={(e) => setBrush(Number(e.target.value))}
+                  className="touch-range min-w-0 flex-1"
+                  style={{ ['--fill' as string]: `${((brush - MIN_BRUSH) / (MAX_BRUSH - MIN_BRUSH)) * 100}%` }}
+                />
+                <span className="w-7 shrink-0 text-right text-[15px] font-semibold tabular-nums text-white">{brush}</span>
+              </div>
+            </div>
+
+            <MobileGroup title={t('skinEditor.color')}>
+              <div className="flex items-center gap-3">
+                <input type="color" value={color} onChange={(e) => setColor(e.target.value)} aria-label={t('skinEditor.color')} className="h-11 w-14 shrink-0 cursor-pointer rounded-xl border border-line bg-transparent" />
+                <span className="font-mono text-[15px] uppercase text-white/75">{color}</span>
+              </div>
+              <div className="grid grid-cols-8 gap-1.5">
+                {PALETTE.map((swatch) => (
+                  <button
+                    key={swatch}
+                    onClick={() => setColor(swatch)}
+                    aria-label={swatch}
+                    style={{ backgroundColor: swatch }}
+                    className={`press aspect-square rounded-lg border-2 ${color.toLowerCase() === swatch ? 'border-white' : 'border-black/40'}`}
+                  />
+                ))}
+              </div>
+            </MobileGroup>
+
+            <MobileGroup title={t('skinEditor.layer')}>
+              <KitSegmented value={layer} onChange={setLayer} options={[{ value: 'inner' as Layer, label: t('skinEditor.layerInner') }, { value: 'outer' as Layer, label: t('skinEditor.layerOuter') }]} />
+              <div className="flex gap-2 [&>button]:h-11 [&>button]:rounded-xl [&>button]:text-[14px]">
+                <EyeButton label={t('skinEditor.layerInner')} shown={showInner} disabled={layer === 'inner'} onClick={() => setShowInner(!showInner)} />
+                <EyeButton label={t('skinEditor.layerOuter')} shown={showOuter} disabled={layer === 'outer'} onClick={() => setShowOuter(!showOuter)} />
+              </div>
+            </MobileGroup>
+
+            <MobileGroup title={t('skinEditor.base')}>
+              <KitSegmented value={variant} onChange={setVariant} options={[{ value: 'classic' as SkinVariant, label: t('skinEditor.modelClassic') }, { value: 'slim' as SkinVariant, label: t('skinEditor.modelSlim') }]} />
+            </MobileGroup>
+          </div>
+
+          {/* Le personnage, posé sur l'emplacement actif (voir plus haut). */}
+          <div
+            ref={boxRef}
+            onClick={() => { if (mode === '2d') setMode('3d') }}
+            style={{ ...frame, ...checkerStyle(28) }}
+            className={`absolute overflow-hidden ${mode === '2d' ? 'pointer-events-none rounded-lg' : 'rounded-2xl'}`}
+          >
+            <canvas ref={canvasRef} className="h-full w-full touch-none" />
+            {mode === '3d' && <HoverChip hover={hover} />}
+          </div>
+        </div>
+
+        <div className="flex shrink-0 flex-col gap-1.5 border-t border-white/[0.06] bg-[#0d0c14] px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3">
+          <button onClick={() => void save()} disabled={!ready || saving} className="press flex h-12 items-center justify-center gap-2 rounded-2xl bg-[#4B3FCF] text-[16px] font-semibold text-white disabled:opacity-50">
+            {saving && <ButtonSpinner />}
+            {t('skinEditor.save')}
+          </button>
+          <p className="text-center text-[13px] leading-snug text-white/55">{dirty ? t('skinEditor.savedLocally') : t('skinEditor.saveHint')}</p>
+        </div>
+
+        <ActionSheet
+          open={menuOpen}
+          onClose={() => setMenuOpen(false)}
+          header={<span className="truncate text-[17px] font-bold text-white">{t('skinEditor.title')}</span>}
+          actions={[
+            { id: 'steps', label: `${t('skinEditor.viewSteps')}${history.length > 0 ? ` · ${at + 1}/${history.length}` : ''}`, icon: SHEET_ICONS.versions, disabled: history.length === 0, onSelect: () => setShowSteps(true) },
+            { id: 'poses', label: t('skins.poses'), icon: <path d="M12 2a2 2 0 110 4 2 2 0 010-4zm-1 5h2l4 2-.6 1.8L13 9.6V14l2.5 7-1.9.7L12 17l-1.6 4.7-1.9-.7L11 14V9.6l-3.4 1.2L7 9z" />, disabled: !ready, onSelect: () => setShowPoses(true) },
+            { id: 'base', label: t('skinEditor.fromBase'), icon: SHEET_ICONS.update, disabled: !ready, onSelect: () => setBaseLink('') },
+            { id: 'catalog', label: t('skinEditor.fromCatalog'), icon: <path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" />, onSelect: openCatalog },
+            { id: 'share', label: t('skinEditor.shareLink'), icon: <path d="M3.9 12a3.1 3.1 0 013.1-3.1h4V7H7a5 5 0 000 10h4v-1.9H7A3.1 3.1 0 013.9 12zM8 13h8v-2H8v2zm9-6h-4v1.9h4a3.1 3.1 0 010 6.2h-4V17h4a5 5 0 000-10z" />, disabled: !ready, onSelect: () => setShowShare(true) },
+            { id: 'download', label: t('skinEditor.download'), icon: <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />, disabled: !ready, onSelect: () => void download() },
+            { id: 'account', label: t('skinEditor.resetAccount'), icon: SHEET_ICONS.duplicate, disabled: !account || !ready, onSelect: () => void reset('account') },
+            { id: 'blank', label: t('skinEditor.resetBlank'), icon: SHEET_ICONS.delete, danger: true, disabled: !ready, confirm: t('skinEditor.resetBlankConfirm'), onSelect: () => void reset('blank') },
+          ]}
+        />
+
+        {modals}
+      </div>
+    )
+  }
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-bg-primary text-txt-primary">
@@ -1685,44 +1986,18 @@ export default function SkinEditor() {
         </div>
       </div>
 
-      <AnimatePresence>
-        {showSteps && (
-          <StepsModal
-            entries={history}
-            at={at}
-            slim={variant === 'slim'}
-            onPick={(index) => {
-              goTo(index)
-              setShowSteps(false)
-            }}
-            onClear={clearHistory}
-            onClose={() => setShowSteps(false)}
-          />
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {baseLink !== null && ready && (
-          <SkinBaseModal initialLink={baseLink || undefined} onLoad={loadBase} onClose={closeBase} />
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {showShare && <SkinShareModal make={makeLink} onClose={() => setShowShare(false)} />}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {showPoses && (
-          <PosesModal
-            value={pose}
-            onPick={setPose}
-            joints={joints}
-            onJoints={setJoints}
-            onClose={() => setShowPoses(false)}
-          />
-        )}
-      </AnimatePresence>
+      {modals}
     </div>
+  )
+}
+
+/** Un groupe de réglages du téléphone : son titre en petites capitales, puis le contenu. */
+function MobileGroup({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="flex flex-col gap-3">
+      <h2 className="px-1 text-[13px] font-semibold uppercase tracking-[0.06em] text-white/55">{title}</h2>
+      {children}
+    </section>
   )
 }
 
@@ -2137,7 +2412,7 @@ function PosesModal({
             <button
               key={pose}
               onClick={() => onPick(pose)}
-              className={`h-10 rounded-lg border text-[12.5px] transition-colors ${
+              className={`h-10 rounded-lg border text-[12.5px] transition-colors max-sm:h-12 max-sm:rounded-xl max-sm:text-[15px] ${
                 value === pose
                   ? 'border-accent/50 bg-accent/20 text-txt-primary'
                   : 'border-line bg-surface-2 text-txt-secondary hover:border-line-strong hover:text-txt-primary'
@@ -2150,13 +2425,13 @@ function PosesModal({
 
         <div className="flex flex-col gap-2.5 border-t border-line-soft pt-3.5">
           <div className="flex items-baseline justify-between gap-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-txt-muted">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-txt-muted max-sm:text-[13px]">
               {t('skinEditor.joints')}
             </p>
             <button
               onClick={() => onJoints(NEUTRAL_JOINTS)}
               disabled={!touched}
-              className="text-[11.5px] text-accent-text transition-opacity hover:underline disabled:cursor-not-allowed disabled:opacity-35 disabled:no-underline"
+              className="text-[11.5px] text-accent-text transition-opacity hover:underline disabled:cursor-not-allowed disabled:opacity-35 disabled:no-underline max-sm:min-h-[44px] max-sm:text-[15px]"
             >
               {t('skinEditor.jointsReset')}
             </button>
@@ -2197,9 +2472,12 @@ function JointSlider({
   onChange: (radians: number) => void
 }) {
   const degrees = Math.round((value * 180) / Math.PI)
+  // Téléphone : le libellé et la valeur sur une ligne, le curseur dessous sur
+  // toute la largeur, en piste de 44 px qu'on attrape au doigt.
+  const mobile = useIsMobile()
   return (
-    <div className="flex items-center gap-3">
-      <span className="w-[108px] shrink-0 text-[12px] text-txt-secondary">{label}</span>
+    <div className="flex items-center gap-3 max-sm:flex-wrap max-sm:gap-y-0">
+      <span className="w-[108px] shrink-0 text-[12px] text-txt-secondary max-sm:w-auto max-sm:flex-1 max-sm:text-[15px]">{label}</span>
       <input
         type="range"
         min={-range}
@@ -2207,9 +2485,10 @@ function JointSlider({
         step={1}
         value={degrees}
         onChange={(e) => onChange((Number(e.target.value) * Math.PI) / 180)}
-        className="h-1 min-w-0 flex-1 cursor-pointer appearance-none rounded-full bg-[rgba(255,255,255,0.1)] accent-[#4B3FCF]"
+        className={mobile ? 'touch-range order-last basis-full' : 'h-1 min-w-0 flex-1 cursor-pointer appearance-none rounded-full bg-[rgba(255,255,255,0.1)] accent-[#4B3FCF]'}
+        style={mobile ? { ['--fill' as string]: `${((degrees + range) / (2 * range)) * 100}%` } : undefined}
       />
-      <span className="w-10 shrink-0 text-right font-mono text-[11px] tabular-nums text-txt-muted">
+      <span className="w-10 shrink-0 text-right font-mono text-[11px] tabular-nums text-txt-muted max-sm:text-[13px]">
         {degrees}°
       </span>
     </div>

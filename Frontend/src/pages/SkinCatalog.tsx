@@ -12,6 +12,11 @@ import { showError } from '@/stores/useErrorToast'
 import { BAKE_HEIGHT, BAKE_VIEW, BAKE_WIDTH, bakeSkin } from '@/lib/skinBake'
 import { fadeVariants, fastTransition } from '@/lib/motion'
 import { useT } from '@/i18n'
+import { Toggle } from '@/components/ui/Toggle'
+import { useIsMobile } from '@/mobile/useIsMobile'
+import { ScreenHeader } from '@/mobile/ui/ScreenHeader'
+import { Sheet, SheetTitle } from '@/mobile/ui/Sheet'
+import { CheckRow, Segmented } from '@/mobile/ui/kit'
 
 /**
  * Catalogue de skins — l'écran d'avant.
@@ -148,6 +153,8 @@ export default function SkinCatalog() {
   const [kind, setKind] = useState<SkinKindFilter | null>(null)
 
   const [showSensitive, setShowSensitive] = useState(false)
+  const mobile = useIsMobile()
+  const [filtersOpen, setFiltersOpen] = useState(false)
 
   /**
    * Tout ce qui a été chargé, à plat et dans l'ordre.
@@ -403,6 +410,138 @@ export default function SkinCatalog() {
   const home = fromEditor ? '/skins/editor' : '/skins'
   const backTo = account ? `${home}?account=${encodeURIComponent(account)}` : home
 
+  const grid = (
+    // Filet de sécurité : quitter la grille éteint le survol, même si la case
+    // concernée n'a pas reçu son propre `mouseleave`. Au doigt, toucher une
+    // case vaut survol : elle passe en 3D et montre « Essayer ».
+    <div ref={gridRef} onMouseLeave={() => setHovered(null)} className="relative min-h-0 flex-1">
+      <AnimatePresence mode="wait">
+        {visible.length === 0 && loading ? (
+          <Layer key="loading">
+            <ButtonSpinner size={28} color="#818cf8" trackColor="rgba(255,255,255,0.08)" />
+          </Layer>
+        ) : visible.length === 0 ? (
+          <Layer key="empty">
+            <div className="flex flex-col items-center gap-2 text-center">
+              <p className="text-[14px] font-semibold max-sm:text-[16px]">{t('skinCatalog.empty')}</p>
+              <p className="max-w-sm text-[12.5px] leading-relaxed text-txt-secondary max-sm:text-[15px]">{t('skinCatalog.emptyHint')}</p>
+            </div>
+          </Layer>
+        ) : (
+          <motion.div
+            key={anchor}
+            variants={fadeVariants}
+            initial="hidden"
+            animate="visible"
+            exit="hidden"
+            transition={fastTransition}
+            className="absolute inset-0 grid content-start"
+            style={{ gridTemplateColumns: `repeat(${tiling.columns}, minmax(0, 1fr))`, gap: `${GRID_GAP}px` }}
+          >
+            {visible.map((skin) => (
+              <Tile
+                key={skin.id}
+                skin={skin}
+                height={tiling.tileHeight}
+                image={baked[skin.url] ?? null}
+                source={previews[skin.url] ?? null}
+                pending={!(skin.url in previews)}
+                hovered={hovered === skin.id}
+                onHover={setHovered}
+                onTry={() => trySkin(skin)}
+              />
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+
+  const pager = (
+    <div className="flex items-center justify-center gap-4">
+      <Arrow direction="prev" disabled={!canPrev} onClick={goPrev} label={t('skinCatalog.prev')} />
+      {/* Pas de total : le filtre de YuyuFrame écarte des entrées, donc le
+          nombre de pages réel n'est connu qu'une fois le catalogue parcouru.
+          Mieux vaut ne rien annoncer qu'annoncer à côté. */}
+      <p className="min-w-[110px] text-center text-[12.5px] tabular-nums text-txt-secondary max-sm:text-[15px]">
+        {t('skinCatalog.page', { page: pageNumber })}
+      </p>
+      <Arrow direction="next" disabled={!canNext} onClick={goNext} label={t('skinCatalog.next')} />
+    </div>
+  )
+
+  // Téléphone : la recherche par étiquette reste en haut ; modèle, catégories
+  // et contenu sensible passent dans une feuille « Filtres » — deux rangées de
+  // pastilles passeraient à la ligne sur cinq lignes et mangeraient la grille.
+  if (mobile) {
+    const activeFilters = (model !== 'any' ? 1 : 0) + (kind ? 1 : 0) + (showSensitive ? 1 : 0)
+    return (
+      <div className="flex h-full flex-col overflow-hidden bg-[#09090D] text-txt-primary">
+        <ScreenHeader title={t('skinCatalog.title')} subtitle={t('skinCatalog.subtitle')} fallback={backTo} />
+        <div className="flex shrink-0 flex-col gap-2 px-4 pt-3">
+          <div className="flex gap-2">
+            <input
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') addTag() }}
+              placeholder={t('skinCatalog.tagPlaceholder')}
+              maxLength={32}
+              autoCapitalize="none"
+              enterKeyHint="search"
+              className="h-11 min-w-0 flex-1 rounded-xl border border-white/[0.1] bg-white/[0.04] px-3.5 text-[16px] text-white outline-none placeholder:text-white/35 focus:border-accent/50"
+            />
+            <button
+              onClick={() => setFiltersOpen(true)}
+              aria-label={t('stats.mobile.filters')}
+              className={`press relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border ${activeFilters ? 'border-accent/45 bg-accent/[0.12] text-white' : 'border-white/[0.1] bg-white/[0.04] text-white/75'}`}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" className="h-5 w-5"><path d="M4 6h16M7 12h10M10 18h4" /></svg>
+              {activeFilters > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1 text-[12px] font-bold text-white">{activeFilters}</span>}
+            </button>
+          </div>
+          {tags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {tags.map((tag) => (
+                <button
+                  key={tag}
+                  onClick={() => resetFilters({ tags: tags.filter((x) => x !== tag) })}
+                  aria-label={`${t('skinCatalog.removeTag')} : ${tag}`}
+                  className="press flex h-9 items-center gap-1.5 rounded-full border border-accent/40 bg-accent/15 pl-3 pr-2.5 text-[14px] text-white"
+                >
+                  {tag}
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" className="h-3.5 w-3.5"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col gap-3 px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3">
+          {grid}
+          {pager}
+        </div>
+
+        <Sheet open={filtersOpen} onClose={() => setFiltersOpen(false)} label={t('stats.mobile.filters')} header={<SheetTitle>{t('stats.mobile.filters')}</SheetTitle>} bodyClassName="flex flex-col gap-6 px-2 pb-3">
+          <div className="px-3">
+            <Segmented value={model} onChange={(next) => resetFilters({ model: next })} options={MODELS.map((m) => ({ value: m.id, label: t(m.label) }))} />
+          </div>
+          <div className="flex flex-col gap-1">
+            <CheckRow label={t('skinCatalog.allKinds')} checked={kind === null} onClick={() => kind && resetFilters({ kind: null })} />
+            {KINDS.map((entry) => (
+              <CheckRow key={entry} label={t(kindKey(entry))} checked={kind === entry} onClick={() => resetFilters({ kind: kind === entry ? null : entry })} />
+            ))}
+          </div>
+          <label className={`mx-3 flex min-h-[60px] items-center justify-between gap-4 rounded-2xl px-4 py-3 ${showSensitive ? 'border border-warning/40 bg-warning/10' : 'border border-white/[0.06] bg-white/[0.04]'}`}>
+            <span className="flex min-w-0 flex-col">
+              <span className="text-[15px] text-white">{t('skinCatalog.sensitive')}</span>
+              <span className="text-[13px] leading-snug text-white/55">{t('skinCatalog.sensitiveHint')}</span>
+            </span>
+            <Toggle checked={showSensitive} onChange={() => resetFilters({ showSensitive: !showSensitive })} />
+          </label>
+        </Sheet>
+      </div>
+    )
+  }
+
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-bg-primary text-txt-primary">
       <PageGlow />
@@ -433,69 +572,8 @@ export default function SkinCatalog() {
             onToggleSensitive={() => resetFilters({ showSensitive: !showSensitive })}
           />
 
-          {/* Filet de sécurité : quitter la grille éteint le survol, même si
-              la case concernée n'a pas reçu son propre `mouseleave`. */}
-          <div
-            ref={gridRef}
-            onMouseLeave={() => setHovered(null)}
-            className="relative min-h-0 flex-1"
-          >
-            <AnimatePresence mode="wait">
-              {visible.length === 0 && loading ? (
-                <Layer key="loading">
-                  <ButtonSpinner size={28} color="#818cf8" trackColor="rgba(255,255,255,0.08)" />
-                </Layer>
-              ) : visible.length === 0 ? (
-                <Layer key="empty">
-                  <div className="flex flex-col items-center gap-2 text-center">
-                    <p className="text-[14px] font-semibold">{t('skinCatalog.empty')}</p>
-                    <p className="max-w-sm text-[12.5px] leading-relaxed text-txt-secondary">
-                      {t('skinCatalog.emptyHint')}
-                    </p>
-                  </div>
-                </Layer>
-              ) : (
-                <motion.div
-                  key={anchor}
-                  variants={fadeVariants}
-                  initial="hidden"
-                  animate="visible"
-                  exit="hidden"
-                  transition={fastTransition}
-                  className="absolute inset-0 grid content-start"
-                  style={{
-                    gridTemplateColumns: `repeat(${tiling.columns}, minmax(0, 1fr))`,
-                    gap: `${GRID_GAP}px`,
-                  }}
-                >
-                  {visible.map((skin) => (
-                    <Tile
-                      key={skin.id}
-                      skin={skin}
-                      height={tiling.tileHeight}
-                      image={baked[skin.url] ?? null}
-                      source={previews[skin.url] ?? null}
-                      pending={!(skin.url in previews)}
-                      hovered={hovered === skin.id}
-                      onHover={setHovered}
-                      onTry={() => trySkin(skin)}
-                    />
-                  ))}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
-          <div className="flex items-center justify-center gap-4">
-            <Arrow direction="prev" disabled={!canPrev} onClick={goPrev} label={t('skinCatalog.prev')} />
-            {/* Pas de total : le filtre de YuyuFrame écarte des entrées, donc
-                le nombre de pages réel n'est connu qu'une fois le catalogue
-                parcouru. Mieux vaut ne rien annoncer qu'annoncer à côté. */}
-            <p className="min-w-[110px] text-center text-[12.5px] tabular-nums text-txt-secondary">
-              {t('skinCatalog.page', { page: pageNumber })}
-            </p>
-            <Arrow direction="next" disabled={!canNext} onClick={goNext} label={t('skinCatalog.next')} />
-          </div>
+          {grid}
+          {pager}
         </div>
       </div>
     </div>
@@ -793,7 +871,7 @@ function Tile({
             {pending ? (
               <ButtonSpinner size={18} color="#818cf8" trackColor="rgba(255,255,255,0.08)" />
             ) : (
-              <span className="text-[11px] text-txt-muted">{t('skinCatalog.noPreview')}</span>
+              <span className="text-[11px] text-txt-muted max-sm:text-[13px]">{t('skinCatalog.noPreview')}</span>
             )}
           </div>
         )}
@@ -821,7 +899,7 @@ function Tile({
       {/* `border-line-soft` et jamais `border-line/60` : ces jetons portent
           déjà leur alpha, un suffixe d'opacité donne une couleur invalide et
           le navigateur retombe sur un trait blanc. */}
-      <div className="flex h-6 shrink-0 items-center justify-center gap-1 border-t border-line-soft px-2 text-[10.5px] tabular-nums text-txt-muted">
+      <div className="flex h-6 shrink-0 items-center justify-center gap-1 border-t border-line-soft px-2 text-[10.5px] tabular-nums text-txt-muted max-sm:h-7 max-sm:text-[13px]">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3">
           <path d="M17 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
           <circle cx="9.5" cy="7" r="4" />
@@ -839,7 +917,7 @@ function Tile({
             animate="visible"
             exit="hidden"
             transition={fastTransition}
-            className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent p-1.5 pt-5"
+            className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent p-1.5 pt-5 max-sm:[&_button]:h-11 max-sm:[&_button]:text-[15px]"
           >
             <Button size="sm" onClick={onTry} fullWidth>{t('skinCatalog.try')}</Button>
           </motion.div>
@@ -951,7 +1029,7 @@ function Arrow({
       disabled={disabled}
       title={label}
       aria-label={label}
-      className="flex h-10 w-10 items-center justify-center rounded-xl border border-line bg-surface-2 text-txt-primary transition-colors hover:border-accent/40 hover:bg-surface-3 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:border-line disabled:hover:bg-surface-2"
+      className="flex h-10 w-10 items-center justify-center rounded-xl border border-line bg-surface-2 text-txt-primary transition-colors hover:border-accent/40 hover:bg-surface-3 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:border-line disabled:hover:bg-surface-2 max-sm:h-11 max-sm:w-11"
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
         {direction === 'prev' ? <path d="M15 18 9 12l6-6" /> : <path d="m9 18 6-6-6-6" />}

@@ -19,6 +19,8 @@ import { useStore, DEFAULT_STAT_CARDS, type StatCardId } from '@/stores/useStore
 import { SNAP, press } from '@/lib/motion'
 import { useT } from '@/i18n'
 import type { StatsData } from '@/types/stats'
+import { useIsMobile } from '@/mobile/useIsMobile'
+import { MobileStats } from '@/mobile/tools/MobileStats'
 
 /**
  * Statistiques de jeu.
@@ -53,6 +55,7 @@ export default function Stats() {
   const [filters, setFilters] = useState<StatsFilters>(EMPTY_FILTERS)
   const [customizing, setCustomizing] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
+  const mobile = useIsMobile()
   const load = useCallback(
     async (silent = false) => {
       if (!silent) setLoading(true)
@@ -102,6 +105,25 @@ export default function Stats() {
   }
 
   const empty = data !== null && data.totals.sessions === 0 && data.known_instances.length === 0
+
+  // Téléphone : mêmes réglages et mêmes données, une mise en page à part.
+  if (mobile) {
+    return (
+      <MobileStats
+        data={data}
+        loading={loading}
+        rangeDays={rangeDays}
+        onRange={setRangeDays}
+        filters={filters}
+        onFilters={setFilters}
+        cards={cards}
+        onToggleCard={toggleCard}
+        sort={sort}
+        onSort={setSort}
+        onClear={() => void clearHistory()}
+      />
+    )
+  }
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-bg-primary text-txt-primary">

@@ -83,7 +83,9 @@ export function ArgsEditor({ value, onChange }: {
             return (
               <Row key={e.id} onRemove={() => remove(e.id)} warn={duplicated}>
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <div className="flex items-center gap-2">
+                  {/* Sur téléphone la ligne passe à la ligne : le nom d'abord,
+                      puis la valeur sur toute la largeur. */}
+                  <div className="flex items-center gap-2 max-sm:flex-wrap max-sm:gap-y-1.5">
                     {e.kind === 'boolean' && (
                       <div className="flex flex-shrink-0 overflow-hidden rounded-md border border-[rgba(255,255,255,0.12)]">
                         {(['+', '-'] as const).map((sign) => (
@@ -106,7 +108,7 @@ export function ArgsEditor({ value, onChange }: {
                     )}
 
                     <span
-                      className={`min-w-0 truncate font-mono text-[12px] ${
+                      className={`min-w-0 truncate font-mono text-[12px] max-sm:order-first max-sm:basis-full ${
                         off ? 'text-[rgba(255,255,255,0.35)] line-through' : 'text-[rgba(255,255,255,0.85)]'
                       }`}
                       title={e.name}
@@ -123,7 +125,7 @@ export function ArgsEditor({ value, onChange }: {
                           value={e.value}
                           onChange={(ev) => update(e.id, { value: ev.target.value })}
                           spellCheck={false}
-                          className="h-[24px] w-[130px] flex-shrink-0 rounded-lg border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] px-2 font-mono text-[11px] text-[rgba(190,183,255,0.95)] outline-none focus:border-[rgba(75,63,207,0.7)]"
+                          className="h-[24px] w-[130px] flex-shrink-0 max-sm:order-last max-sm:basis-full rounded-lg border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] px-2 font-mono text-[11px] text-[rgba(190,183,255,0.95)] outline-none focus:border-[rgba(75,63,207,0.7)]"
                         />
                         {doc && (
                           <span className="flex-shrink-0 text-[10px] text-[rgba(255,255,255,0.28)]">
@@ -150,7 +152,7 @@ export function ArgsEditor({ value, onChange }: {
                     )}
                   </div>
 
-                  <p className="truncate text-[10px] leading-relaxed text-[rgba(255,255,255,0.32)]" title={doc?.hint}>
+                  <p className="truncate text-[10px] leading-relaxed text-[rgba(255,255,255,0.32)] max-sm:whitespace-normal max-sm:text-white/55" title={doc?.hint}>
                     {doc?.hint ?? 'Drapeau saisi à la main — pas dans le catalogue, non documenté ici.'}
                   </p>
                 </div>

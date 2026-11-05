@@ -21,6 +21,12 @@ import { POSES, applyPose } from '@/lib/skinPoses'
 import type { PoseId } from '@/lib/skinPoses'
 import { fadeVariants, fastTransition } from '@/lib/motion'
 import { useT } from '@/i18n'
+import { useIsMobile } from '@/mobile/useIsMobile'
+import { ScreenHeader } from '@/mobile/ui/ScreenHeader'
+import { PushedMoreButton } from '@/mobile/ui/PushedScreen'
+import { ActionSheet, SHEET_ICONS } from '@/mobile/ui/ActionSheet'
+import { Sheet, SheetTitle } from '@/mobile/ui/Sheet'
+import { CARD, LIST, Note, RowChevron, Section, Segmented } from '@/mobile/ui/kit'
 
 /**
  * Skins — l'écran unique, pour les comptes Microsoft comme pour les comptes
@@ -138,6 +144,10 @@ export default function Skins() {
   const [showPoses, setShowPoses] = useState(false)
   /** Aperçu du skin de chaque compte, pour les avatars du sélecteur. */
   const [faces, setFaces] = useState<Record<string, string | null>>({})
+  // Téléphone : la feuille des comptes, et la ligne d'historique dont le « … » est ouvert.
+  const mobile = useIsMobile()
+  const [accountsOpen, setAccountsOpen] = useState(false)
+  const [historyMenu, setHistoryMenu] = useState<number | null>(null)
 
   // La carte des positions est la seule élastique de sa colonne : elle occupe
   // ce que les trois cartes fixes laissent. Quand ce reste ne suffit plus à
@@ -476,6 +486,312 @@ export default function Skins() {
     }
   }
 
+  const restore = (e: SkinHistoryEntry) => {
+    setCandidate({ kind: e.kind, source: e.source, variant: e.variant, dataUri: e.data_uri!, origin: e.origin, fromHistory: true })
+    setJustApplied(false)
+  }
+
+  const previewLabel = candidate
+    ? candidate.fromHistory
+      ? t('skins.previewFromHistory')
+      : candidate.fromCatalog
+        ? t('skins.previewFromCatalog')
+        : candidate.fromEditor
+          ? t('skins.previewFromEditor')
+          : candidate.fromPlayer
+            ? t('skins.previewFromPlayer', { name: candidate.fromPlayer })
+            : t('skins.previewPending')
+    : current
+      ? t('skins.previewCurrent')
+      : t('skins.previewNone')
+  const previewOnline: 'yes' | 'no' | 'busy' | null =
+    !account?.is_offline || candidate || !current ? null : current.hosted ? 'yes' : hosting === 'busy' ? 'busy' : 'no'
+  const previewFooter =
+    !candidate && current ? (
+      <div className="flex w-full min-w-0 flex-col items-center gap-1.5">
+        {/* Compte hors ligne : dire si les autres joueurs peuvent voir ce skin,
+            et offrir de le mettre en ligne quand ce n'est pas fait (appliqué
+            hors connexion, envoi raté). */}
+        {account?.is_offline && (
+          <HostingLine hosted={current.hosted ?? null} slim={current.variant === 'slim'} hosting={hosting} onHost={() => void host(account.mc_uuid)} />
+        )}
+        <button
+          onClick={() => setPending({ type: 'default' })}
+          disabled={busy}
+          className="text-[11.5px] font-medium text-txt-muted underline decoration-txt-muted/40 underline-offset-2 transition-colors hover:text-txt-primary disabled:opacity-40 max-sm:min-h-[44px] max-sm:text-[15px]"
+        >
+          {t('skins.defaultSkin')}
+        </button>
+      </div>
+    ) : null
+
+  // Fenêtres communes aux deux mises en page (des feuilles du bas sur téléphone, par `ModalShell`).
+  const overlays = (
+    <>
+      <AnimatePresence>
+        {showHosting && <HostingModal onClose={() => setShowHosting(false)} />}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showPoses && (
+          <PosesModal value={pose} onChange={setPose} spin={spin} onSpin={setSpin} onClose={() => setShowPoses(false)} />
+        )}
+      </AnimatePresence>
+
+      {/* En popup plutôt qu'en ligne verte sous l'aperçu : le délai de
+          propagation chez Mojang est une vraie information — sans elle on
+          relance le jeu, on ne voit rien changer, et on croit que ça a raté.
+          Une ligne discrète à côté du personnage se lisait après coup, ou pas
+          du tout. */}
+      <AnimatePresence>
+        {justApplied && account && (
+          <AppliedModal
+            offline={account.is_offline}
+            hosted={current?.hosted ?? null}
+            slim={current?.variant === 'slim'}
+            hosting={hosting}
+            onHost={() => void host(account.mc_uuid)}
+            onClose={() => setJustApplied(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {pending && account && (
+          <ConfirmModal
+            pending={pending}
+            offline={account.is_offline}
+            onClose={() => setPending(null)}
+            onConfirm={() => {
+              if (pending.type === 'apply') void apply()
+              else if (pending.type === 'default') void useDefault()
+              else void forget(pending.entry)
+            }}
+          />
+        )}
+      </AnimatePresence>
+    </>
+  )
+
+  // ── Téléphone ────────────────────────────────────────────────────────────
+  // Une colonne, dans l'ordre où on s'en sert : le compte, ce qu'il porte (et
+  // la validation d'un skin en attente, juste dessous), de quoi en changer,
+  // puis ce qu'il a porté. Le PC tient tout côte à côte en trois colonnes ;
+  // à 375 px, trois colonnes ne montreraient plus rien. Les positions passent
+  // par le bouton posé sur l'aperçu ; l'historique est une liste, et
+  // « oublier », caché au survol sur PC, part dans le « … » de chaque ligne.
+  if (mobile) {
+    const menuEntry = history.find((e) => e.id === historyMenu) ?? null
+    return (
+      <div className="relative flex h-full flex-col overflow-hidden bg-[#09090D] text-txt-primary">
+        <ScreenHeader
+          title={t('skins.title')}
+          fallback="/features"
+          right={
+            <button onClick={() => setShowHosting(true)} aria-label={t('skins.hostingButton')} className="press flex h-11 w-11 items-center justify-center rounded-full text-white/70">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" className="h-[22px] w-[22px]"><circle cx="12" cy="12" r="9" /><path d="M12 16v-4M12 8h.01" /></svg>
+            </button>
+          }
+        />
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[max(32px,env(safe-area-inset-bottom))] pt-4">
+          {accounts === null ? (
+            <div className="flex justify-center py-16"><ButtonSpinner size={28} color="#818cf8" trackColor="rgba(255,255,255,0.08)" /></div>
+          ) : accounts.length === 0 ? (
+            <div className={`${CARD} flex flex-col gap-1.5 px-5 py-8 text-center`}>
+              <p className="text-[16px] font-semibold text-white">{t('skins.noAccount')}</p>
+              <p className="text-[15px] leading-relaxed text-white/60">{t('skins.noAccountHint')}</p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-8">
+              <div className="flex flex-col gap-3">
+                {/* Le compte : une ligne, qui ouvre la liste dans une feuille. */}
+                {account && (
+                  <button onClick={() => setAccountsOpen(true)} className={`press flex min-h-[60px] items-center gap-3 px-3.5 py-2.5 text-left ${CARD}`}>
+                    <AccountAvatar account={account} face={faces[account.mc_uuid]} size={40} checked={false} />
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span className="truncate text-[15px] font-semibold text-white">{account.mc_username}</span>
+                      <span className="truncate text-[13px] text-white/55">{account.is_offline ? t('skins.offlineBadge') : t('skins.mojangBadge')}</span>
+                    </span>
+                    {accounts.length > 1 && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0 text-white/50"><path d="M6 9l6 6 6-6" /></svg>}
+                  </button>
+                )}
+
+                {/* L'aperçu à hauteur fixe : sur PC il prend ce que les colonnes laissent. */}
+                <div className="flex h-[400px] flex-col [&>div]:h-full">
+                  <SkinPreview
+                    dataUri={shown?.dataUri ?? null}
+                    fallbackUrl={account && currentKnown ? defaultSkinUrl(account.mc_uuid) : null}
+                    variant={shown?.variant ?? 'classic'}
+                    pose={pose}
+                    spin={spin}
+                    onPoses={() => setShowPoses(true)}
+                    online={previewOnline}
+                    label={previewLabel}
+                    note={candidate ? null : current ? originLabel(current.origin, t) : t('skins.defaultHint')}
+                    pending={!!candidate}
+                    footer={previewFooter}
+                  />
+                </div>
+
+                {candidate && (
+                  <div className="flex flex-col gap-4 rounded-2xl border border-accent/30 bg-accent/5 p-4">
+                    <VariantPicker value={candidate.variant} onChange={(variant) => setCandidate({ ...candidate, variant })} />
+                    {candidate.kind === 'local' && account?.is_offline && (
+                      <p className="rounded-xl border border-warning/35 bg-warning/10 p-3.5 text-[15px] leading-relaxed text-white/80">{t('skins.localWarning')}</p>
+                    )}
+                    <p className="text-[15px] leading-relaxed text-white/70">
+                      {account?.is_offline ? t('skins.offlineNotice') : candidate.kind === 'local' ? t('skins.fileToMojangNotice') : t('skins.mojangNotice')}
+                    </p>
+                    <div className="flex gap-2">
+                      <button onClick={() => setCandidate(null)} disabled={busy} className="press h-12 flex-1 rounded-2xl bg-white/[0.06] text-[15px] font-semibold text-white/75 disabled:opacity-40">
+                        {t('skins.cancel')}
+                      </button>
+                      <button onClick={askApply} disabled={busy} className="press flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-[#4B3FCF] text-[15px] font-semibold text-white disabled:opacity-50">
+                        {busy && <ButtonSpinner />}
+                        {t('skins.apply')}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* De quoi changer : les trois sources en commutateur, puis le catalogue et l'éditeur. */}
+              <Section title={t('skins.changeTitle')}>
+                <Segmented
+                  value={tab}
+                  onChange={setTab}
+                  options={(['player', 'url', 'file'] as const).map((m) => ({ value: m, label: t(`skins.source${m[0].toUpperCase()}${m.slice(1)}Short`) }))}
+                />
+                <p className="px-1 text-[13px] leading-relaxed text-white/55">{t(`skins.source${tab[0].toUpperCase()}${tab.slice(1)}Hint`)}</p>
+                {tab === 'file' ? (
+                  <button onClick={pickFile} disabled={searching} className="press flex h-12 items-center justify-center gap-2 rounded-2xl bg-[#4B3FCF] text-[15px] font-semibold text-white disabled:opacity-50">
+                    {searching && <ButtonSpinner />}
+                    {t('skins.chooseFile')}
+                  </button>
+                ) : (
+                  <div className="flex gap-2">
+                    <input
+                      value={tab === 'player' ? playerName : url}
+                      onChange={(e) => (tab === 'player' ? setPlayerName(e.target.value) : setUrl(e.target.value))}
+                      onKeyDown={(e) => { if (e.key === 'Enter') tab === 'player' ? searchPlayer() : checkUrl() }}
+                      placeholder={tab === 'player' ? t('skins.playerPlaceholder') : 'https://.../skin.png'}
+                      maxLength={tab === 'player' ? 16 : undefined}
+                      inputMode={tab === 'url' ? 'url' : 'text'}
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      enterKeyHint="search"
+                      className="h-12 min-w-0 flex-1 rounded-xl border border-white/[0.1] bg-white/[0.04] px-3.5 text-[16px] text-white outline-none placeholder:text-white/35 focus:border-accent/50"
+                    />
+                    <button
+                      onClick={tab === 'player' ? searchPlayer : checkUrl}
+                      disabled={searching || !(tab === 'player' ? playerName.trim() : url.trim())}
+                      className="press flex h-12 shrink-0 items-center gap-2 rounded-xl bg-[#4B3FCF] px-4 text-[15px] font-semibold text-white disabled:opacity-40"
+                    >
+                      {searching && <ButtonSpinner />}
+                      {tab === 'player' ? t('skins.search') : t('skins.check')}
+                    </button>
+                  </div>
+                )}
+                <div className={`${LIST} mt-2`}>
+                  {[
+                    { to: '/skins/catalog', title: t('skinCatalog.openButton'), hint: t('skinCatalog.openHint'), icon: <><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></> },
+                    { to: '/skins/editor', title: t('skinEditor.openButton'), hint: t('skinEditor.openHint'), icon: <><path d="M12 19l7-7 3 3-7 7-3-3z" /><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" /><path d="M2 2l7.586 7.586" /><circle cx="11" cy="11" r="2" /></> },
+                  ].map((row) => (
+                    <button
+                      key={row.to}
+                      onClick={() => navigate(account ? `${row.to}?account=${encodeURIComponent(account.mc_uuid)}` : row.to)}
+                      className="flex min-h-[72px] w-full items-center gap-3.5 px-4 py-3 text-left active:bg-white/[0.04]"
+                    >
+                      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-accent-text">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">{row.icon}</svg>
+                      </span>
+                      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                        <span className="truncate text-[15px] font-semibold text-white">{row.title}</span>
+                        <span className="line-clamp-2 text-[13px] leading-snug text-white/55">{row.hint}</span>
+                      </span>
+                      <RowChevron />
+                    </button>
+                  ))}
+                </div>
+              </Section>
+
+              {/* Ce qu'il a porté : toucher une ligne la remet en candidat. */}
+              <Section title={t('skins.historyTitle')}>
+                {history.length === 0 ? (
+                  <Note>{t('skins.historyEmpty')}</Note>
+                ) : (
+                  <div className={LIST}>
+                    {history.map((e) => {
+                      const worn = isWorn(e, current?.source ?? null, current?.variant ?? null)
+                      return (
+                        <div key={e.id} className={`flex min-h-[68px] items-center gap-3 pl-4 pr-1 ${worn ? 'bg-accent/[0.1]' : ''}`}>
+                          <button
+                            onClick={() => restore(e)}
+                            disabled={worn || !e.data_uri}
+                            className="flex min-w-0 flex-1 items-center gap-3 py-2.5 text-left disabled:cursor-default"
+                          >
+                            <Head entry={e} size={SIZES.small} />
+                            <span className="flex min-w-0 flex-col">
+                              <span className="truncate text-[15px] font-semibold text-white">{t(`skins.${e.variant}`)}</span>
+                              <span className="truncate text-[13px] text-white/55">{originLabel(e.origin, t)}</span>
+                            </span>
+                          </button>
+                          <span className={`shrink-0 text-[13px] font-semibold ${worn ? 'text-accent-hover' : 'text-[#a29bfe]'}`}>
+                            {worn ? t('skins.worn') : e.data_uri ? t('skins.restore') : ''}
+                          </span>
+                          <PushedMoreButton label={t('skins.forget')} onClick={() => setHistoryMenu(e.id)} />
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </Section>
+            </div>
+          )}
+        </div>
+
+        {accounts && (
+          <Sheet open={accountsOpen} onClose={() => setAccountsOpen(false)} label={t('skins.allAccountsTitle')} header={<SheetTitle>{t('skins.allAccountsTitle')}</SheetTitle>} bodyClassName="flex flex-col gap-1 px-2 pb-3">
+            {accounts.map((a) => (
+              <button
+                key={a.mc_uuid}
+                onClick={() => { pickAccount(a.mc_uuid); setAccountsOpen(false) }}
+                aria-pressed={a.mc_uuid === selected}
+                className={`press flex min-h-[60px] items-center gap-3 rounded-2xl px-3 text-left ${a.mc_uuid === selected ? 'bg-accent/[0.14]' : 'active:bg-white/[0.04]'}`}
+              >
+                <AccountAvatar account={a} face={faces[a.mc_uuid]} size={40} checked={a.mc_uuid === selected} />
+                <span className="flex min-w-0 flex-col">
+                  <span className="truncate text-[15px] font-semibold text-white">{a.mc_username}</span>
+                  <span className="text-[13px] text-white/55">{a.is_offline ? t('skins.offlineBadge') : t('skins.mojangBadge')}</span>
+                </span>
+              </button>
+            ))}
+          </Sheet>
+        )}
+
+        <ActionSheet
+          open={menuEntry !== null}
+          onClose={() => setHistoryMenu(null)}
+          header={menuEntry && (
+            <>
+              <Head entry={menuEntry} size={SIZES.small} />
+              <span className="truncate text-[17px] font-bold text-white">{t(`skins.${menuEntry.variant}`)}</span>
+            </>
+          )}
+          actions={menuEntry ? [
+            ...(menuEntry.data_uri && !isWorn(menuEntry, current?.source ?? null, current?.variant ?? null)
+              ? [{ id: 'restore', label: t('skins.restore'), icon: SHEET_ICONS.versions, onSelect: () => restore(menuEntry) }]
+              : []),
+            // La confirmation reste celle du PC (`ConfirmModal`), qui dit ce qu'oublier efface.
+            { id: 'forget', label: t('skins.forget'), icon: SHEET_ICONS.delete, danger: true, onSelect: () => setPending({ type: 'forget', entry: menuEntry }) },
+          ] : []}
+        />
+
+        {overlays}
+      </div>
+    )
+  }
+
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-bg-primary text-txt-primary">
       <PageGlow />
@@ -636,58 +952,13 @@ export default function Skins() {
                 pose={pose}
                 spin={spin}
                 onPoses={posesFit ? null : () => setShowPoses(true)}
-                online={
-                  !account?.is_offline || candidate || !current
-                    ? null
-                    : current.hosted
-                      ? 'yes'
-                      : hosting === 'busy'
-                        ? 'busy'
-                        : 'no'
-                }
-                label={
-                  candidate
-                    ? candidate.fromHistory
-                      ? t('skins.previewFromHistory')
-                      : candidate.fromCatalog
-                        ? t('skins.previewFromCatalog')
-                        : candidate.fromEditor
-                          ? t('skins.previewFromEditor')
-                          : candidate.fromPlayer
-                            ? t('skins.previewFromPlayer', { name: candidate.fromPlayer })
-                            : t('skins.previewPending')
-                    : current
-                      ? t('skins.previewCurrent')
-                      : t('skins.previewNone')
-                }
+                online={previewOnline}
+                label={previewLabel}
                 note={candidate ? null : current ? originLabel(current.origin, t) : t('skins.defaultHint')}
                 pending={!!candidate}
                 // Discret et en bas : presque personne ne s'en sert, mais ceux
                 // qui le cherchent le cherchent là.
-                footer={
-                  !candidate && current ? (
-                    <div className="flex w-full min-w-0 flex-col items-center gap-1.5">
-                      {/* Compte hors ligne : dire si les autres joueurs peuvent
-                          voir ce skin, et offrir de le mettre en ligne quand ce
-                          n'est pas fait (appliqué hors connexion, envoi raté). */}
-                      {account?.is_offline && (
-                        <HostingLine
-                          hosted={current.hosted ?? null}
-                          slim={current.variant === 'slim'}
-                          hosting={hosting}
-                          onHost={() => void host(account.mc_uuid)}
-                        />
-                      )}
-                      <button
-                        onClick={() => setPending({ type: 'default' })}
-                        disabled={busy}
-                        className="text-[11.5px] font-medium text-txt-muted underline decoration-txt-muted/40 underline-offset-2 transition-colors hover:text-txt-primary disabled:opacity-40"
-                      >
-                        {t('skins.defaultSkin')}
-                      </button>
-                    </div>
-                  ) : null
-                }
+                footer={previewFooter}
               />
 
               {/* Colonne du milieu : l'historique, ou la validation quand un
@@ -756,17 +1027,7 @@ export default function Skins() {
                       entries={history}
                       currentSource={current?.source ?? null}
                       currentVariant={current?.variant ?? null}
-                      onRestore={(e) => {
-                        setCandidate({
-                          kind: e.kind,
-                          source: e.source,
-                          variant: e.variant,
-                          dataUri: e.data_uri!,
-                          origin: e.origin,
-                          fromHistory: true,
-                        })
-                        setJustApplied(false)
-                      }}
+                      onRestore={restore}
                       onForget={(entry) => setPending({ type: 'forget', entry })}
                     />
                   </motion.div>
@@ -778,54 +1039,7 @@ export default function Skins() {
         )}
       </div>
 
-      <AnimatePresence>
-        {showHosting && <HostingModal onClose={() => setShowHosting(false)} />}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {showPoses && (
-          <PosesModal
-            value={pose}
-            onChange={setPose}
-            spin={spin}
-            onSpin={setSpin}
-            onClose={() => setShowPoses(false)}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* En popup plutôt qu'en ligne verte sous l'aperçu : le délai de
-          propagation chez Mojang est une vraie information — sans elle on
-          relance le jeu, on ne voit rien changer, et on croit que ça a raté.
-          Une ligne discrète à côté du personnage se lisait après coup, ou pas
-          du tout. */}
-      <AnimatePresence>
-        {justApplied && account && (
-          <AppliedModal
-            offline={account.is_offline}
-            hosted={current?.hosted ?? null}
-            slim={current?.variant === 'slim'}
-            hosting={hosting}
-            onHost={() => void host(account.mc_uuid)}
-            onClose={() => setJustApplied(false)}
-          />
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {pending && account && (
-          <ConfirmModal
-            pending={pending}
-            offline={account.is_offline}
-            onClose={() => setPending(null)}
-            onConfirm={() => {
-              if (pending.type === 'apply') void apply()
-              else if (pending.type === 'default') void useDefault()
-              else void forget(pending.entry)
-            }}
-          />
-        )}
-      </AnimatePresence>
+      {overlays}
     </div>
   )
 }
@@ -906,7 +1120,7 @@ function PoseGrid({
         <button
           key={pose}
           onClick={() => onChange(pose)}
-          className={`flex h-9 items-center justify-center rounded-lg border px-2 text-[12.5px] font-medium transition-colors ${
+          className={`flex h-9 items-center justify-center rounded-lg border px-2 text-[12.5px] font-medium transition-colors max-sm:h-12 max-sm:rounded-xl max-sm:text-[15px] ${
             value === pose
               ? 'border-accent/50 bg-accent/20 text-txt-primary'
               : 'border-line bg-surface-2 text-txt-secondary hover:border-line-strong hover:text-txt-primary'
@@ -932,7 +1146,7 @@ function SpinToggle({ spin, onSpin }: { spin: boolean; onSpin: (spin: boolean) =
       title={t('skins.spin')}
       aria-label={t('skins.spin')}
       aria-pressed={spin}
-      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition-colors ${
+      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition-colors max-sm:h-11 max-sm:w-11 max-sm:rounded-xl ${
         spin
           ? 'border-accent/50 bg-accent/20 text-txt-primary'
           : 'border-line bg-surface-2 text-txt-muted hover:border-line-strong hover:text-txt-primary'
@@ -1178,7 +1392,7 @@ function SkinCommand({ url, slim }: { url: string; slim: boolean }) {
       whileHover={{ scale: 1.01 }}
       whileTap={{ scale: 0.96 }}
       transition={fastTransition}
-      className={`flex w-full min-w-0 items-center gap-2 rounded-lg border px-2 py-1.5 transition-colors ${
+      className={`flex w-full min-w-0 items-center gap-2 rounded-lg border px-2 py-1.5 transition-colors max-sm:min-h-[44px] max-sm:rounded-xl max-sm:px-3 max-sm:[&_*]:text-[13px] ${
         copied ? 'border-success/50 bg-success/10' : 'border-line bg-surface-2 hover:border-accent/45'
       }`}
     >
@@ -1216,7 +1430,7 @@ function HostingLine({ hosted, slim, hosting, onHost, detailed = false }: {
   detailed?: boolean
 }) {
   const t = useT()
-  const size = detailed ? 'text-[13px]' : 'text-[11.5px]'
+  const size = detailed ? 'text-[13px]' : 'text-[11.5px] max-sm:text-[13px]'
   if (hosted) {
     return (
       <div className={`flex w-full min-w-0 flex-col gap-1.5 ${detailed ? 'items-start' : 'items-center'}`}>
@@ -1897,7 +2111,7 @@ function VariantPicker({
   const t = useT()
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-txt-secondary">{t('skins.variant')}</p>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-txt-secondary max-sm:px-1 max-sm:text-[13px] max-sm:tracking-[0.06em]">{t('skins.variant')}</p>
       {/* Empilés plutôt que côte à côte : deux cartes dans une demi-largeur
           donnaient un titre de deux mots sur une ligne et son explication sur
           deux, en corps 11. Sur toute la largeur, chaque option tient en une
@@ -1908,7 +2122,7 @@ function VariantPicker({
           <button
             key={v}
             onClick={() => onChange(v)}
-            className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${
+            className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors max-sm:min-h-[60px] max-sm:[&_span:last-child>span:last-child]:text-[13px] ${
               value === v ? 'border-accent/50 bg-accent/15' : 'border-line bg-surface-1 hover:border-line-strong'
             }`}
           >
@@ -2091,7 +2305,7 @@ function SkinPreview({
             onClick={onPoses}
             title={t('skins.poses')}
             aria-label={t('skins.poses')}
-            className="absolute right-0 top-0 flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-surface-2/90 text-txt-secondary backdrop-blur transition-colors hover:border-accent/45 hover:text-txt-primary"
+            className="absolute right-0 top-0 flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-surface-2/90 text-txt-secondary backdrop-blur transition-colors hover:border-accent/45 hover:text-txt-primary max-sm:h-11 max-sm:w-11 max-sm:rounded-xl max-sm:backdrop-blur-none"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
               <circle cx="12" cy="4.5" r="2.2" />
@@ -2105,8 +2319,8 @@ function SkinPreview({
           contenu, et une ligne longue (la commande du skin) sortait de la carte
           au lieu d'être tronquée. */}
       <div className="flex w-full min-w-0 flex-col items-center gap-1 text-center">
-        <p className="text-[13px] font-semibold text-txt-primary">{label}</p>
-        {note && <p className="text-[11.5px] leading-relaxed text-txt-secondary">{note}</p>}
+        <p className="text-[13px] font-semibold text-txt-primary max-sm:text-[15px]">{label}</p>
+        {note && <p className="text-[11.5px] leading-relaxed text-txt-secondary max-sm:text-[13px]">{note}</p>}
         {footer}
       </div>
     </div>

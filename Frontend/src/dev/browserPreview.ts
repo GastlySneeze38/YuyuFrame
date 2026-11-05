@@ -198,6 +198,60 @@ const LIST_LIKE = /(^list_|_list$|_list_|_history$|^servers_all$|_categories$|^l
 
 const reported = new Set<string>()
 
+/** Configurations JVM de l'aperçu : une vide, une remplie. */
+const JVM_BLANK = {
+  id: '', name: '', ram_mb: null as number | null, jvm_vendor: 'auto', jvm_custom_path: null as string | null, gc_policy: 'auto',
+  args_mode: 'append', args_jvm: '', args_gc: '', args_jit: '', base_presets: '',
+}
+let jvmProfiles = [
+  { ...JVM_BLANK, id: 'preview-jvm-1', name: 'Shenandoah + JIT débridé', gc_policy: 'shenandoah', args_gc: '-XX:+UseShenandoahGC\n-XX:ShenandoahGCMode=generational', args_jit: '-XX:ReservedCodeCacheSize=400M\n-XX:MaxNodeLimit=240000' },
+  { ...JVM_BLANK, id: 'preview-jvm-2', name: 'G1 classique', ram_mb: 6144, gc_policy: 'g1', args_jvm: '-XX:+AlwaysPreTouch' },
+]
+
+/** Statistiques de jeu de l'aperçu : trois mois de parties tirées au hasard, mais toujours les mêmes. */
+function demoStats() {
+  const day = 86_400
+  const now = Math.floor(Date.now() / 1000)
+  const start = now - 90 * day
+  let seed = 7
+  const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
+  const daily = Array.from({ length: 91 }, (_, i) => {
+    const d = new Date((start + i * day) * 1000)
+    const secs = rand() < 0.45 ? 0 : Math.round(rand() * 4 * 3600)
+    return { date: d.toISOString().slice(0, 10), secs, sessions: secs ? 1 + Math.floor(rand() * 3) : 0 }
+  })
+  const total = daily.reduce((s, d) => s + d.secs, 0)
+  const sessions = daily.reduce((s, d) => s + d.sessions, 0)
+  const instances = [
+    { instance_id: 'preview-fabric', instance_name: 'Fabric 1.21.11', mc_version: '1.21.11', loader: 'fabric', share: 0.55, crashed: 2 },
+    { instance_id: 'preview-pvp', instance_name: 'PvP 1.8.9', mc_version: '1.8.9', loader: 'vanilla', share: 0.3, crashed: 0 },
+    { instance_id: 'preview-horizon', instance_name: 'Horizon 26.3', mc_version: '26.3', loader: 'horizon', share: 0.15, crashed: 1 },
+  ]
+  const recent = Array.from({ length: 16 }, (_, i) => {
+    const inst = instances[i % 3]
+    return {
+      id: i, instance_id: inst.instance_id, instance_name: inst.instance_name, mc_version: inst.mc_version, loader: inst.loader,
+      started_at: now - i * 0.7 * day - 3600, duration_secs: 600 + Math.round(rand() * 7200), crashed: i === 3, crash_report_id: null,
+      running: false, recovered: i === 5,
+    }
+  })
+  return {
+    from: start, to: now,
+    totals: { secs: total, sessions, crashed: 3, avg_secs: Math.round(total / sessions), longest_secs: 4 * 3600, active_days: daily.filter((d) => d.secs).length, current_streak: 3, longest_streak: 9, best_day: null },
+    daily,
+    hourly: Array.from({ length: 24 }, (_, h) => (h >= 14 && h <= 23 ? Math.round(rand() * 20 * 3600) : h < 2 ? 3600 : 0)),
+    per_instance: instances.map((i) => ({ ...i, sessions: Math.round(sessions * i.share), total_secs: Math.round(total * i.share), last_played_at: now - 3600, avg_secs: 2400 })),
+    per_loader: instances.map((i) => ({ key: i.loader, secs: Math.round(total * i.share), sessions: 1 })),
+    per_version: instances.map((i) => ({ key: i.mc_version, secs: Math.round(total * i.share), sessions: 1 })),
+    recent,
+    running: [],
+    known_instances: instances.map((i) => ({ id: i.instance_id, name: i.instance_name })),
+    known_loaders: instances.map((i) => i.loader),
+    known_versions: instances.map((i) => i.mc_version),
+    first_session_at: start,
+  }
+}
+
 /** Partie simulée : il n'y a pas de jeu derrière, donc personne pour annoncer
  *  sa fin. Sans ça, l'accueil resterait sur « En jeu… » pour toujours, et
  *  même après un rechargement (les instances lancées sont retenues). */
@@ -223,6 +277,35 @@ function answer(cmd: string, payload: unknown): unknown {
     for (const c of changes) merged.set(c.key, c.value)
     ANSWERS[key] = [...merged].map(([k, value]) => ({ key: k, value }))
     return ANSWERS[key]
+  }
+  if (cmd === 'stats_get') return demoStats()
+  // Catalogue de skins : deux pages de skins fictifs, sans aperçu (pas de réseau).
+  if (cmd === 'skin_catalog_browse') {
+    const page = (payload as { page?: number } | undefined)?.page ?? 1
+    const items = Array.from({ length: 40 }, (_, i) => {
+      const id = page * 100 + i
+      return { id, url: `https://ely.by/storage/skins/apercu-${id}.png`, variant: i % 3 ? 'classic' : 'slim', color: null, tags: [], wearers: 1200 - i * 17, likes: 0, views: 0 }
+    })
+    return { items, page, last_page: 2 }
+  }
+  if (cmd === 'skin_catalog_previews') return ((payload as { urls?: string[] } | undefined)?.urls ?? []).map(() => null)
+  if (cmd === 'jvm_profile_list') return jvmProfiles
+  if (cmd === 'jvm_profile_create') {
+    const { name, fromId } = (payload ?? {}) as { name?: string; fromId?: string }
+    const from = jvmProfiles.find((p) => p.id === fromId)
+    const created = { ...(from ?? JVM_BLANK), id: `preview-jvm-${Date.now()}`, name: name ?? 'Nouvelle configuration' }
+    jvmProfiles = [...jvmProfiles, created]
+    return created
+  }
+  if (cmd === 'jvm_profile_save') {
+    const profile = (payload as { profile: typeof JVM_BLANK }).profile
+    jvmProfiles = jvmProfiles.map((p) => (p.id === profile.id ? profile : p))
+    return profile
+  }
+  if (cmd === 'jvm_profile_delete') {
+    const id = (payload as { id?: string } | undefined)?.id
+    jvmProfiles = jvmProfiles.filter((p) => p.id !== id)
+    return null
   }
   if (cmd in ANSWERS) return ANSWERS[cmd]
   // Fenêtre, événements du système… : rien à rendre.
