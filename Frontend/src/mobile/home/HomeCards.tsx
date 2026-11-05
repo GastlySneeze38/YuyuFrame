@@ -57,10 +57,12 @@ export function MobileServerCard({ server, badge, onClick }: {
   const t = useT()
   const [ping, setPing] = useState<ServerPingInfo | null>(null)
   const [failed, setFailed] = useState(false)
+  const [iconShown, setIconShown] = useState(false)
 
   useEffect(() => {
     let alive = true
     setPing(null)
+    setIconShown(false)
     setFailed(false)
     api.launch.pingServer(server.ip)
       .then((info) => alive && setPing(info))
@@ -83,7 +85,14 @@ export function MobileServerCard({ server, badge, onClick }: {
     >
       <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white/[0.06] text-white/50">
         {ping?.favicon ? (
-          <img src={ping.favicon} alt="" className="h-full w-full [image-rendering:pixelated]" />
+          // L'icône du serveur arrive après le ping : un fondu court au lieu
+          // d'un remplacement sec de l'icône par défaut.
+          <img
+            src={ping.favicon}
+            alt=""
+            onLoad={() => setIconShown(true)}
+            className={`h-full w-full transition-opacity duration-150 ease-out [image-rendering:pixelated] ${iconShown ? 'opacity-100' : 'opacity-0'}`}
+          />
         ) : (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" className="h-[22px] w-[22px]">
             <rect x="3" y="4" width="18" height="6" rx="1" />
@@ -102,8 +111,14 @@ export function MobileServerCard({ server, badge, onClick }: {
       </span>
       <span className="flex shrink-0 flex-col items-end gap-1.5">
         <span className="flex h-3 items-end gap-[2px]" aria-hidden>
+          {/* À l'arrivée du ping, les barres s'allument de gauche à droite
+              (30 ms d'écart) : on lit la force du signal se remplir. */}
           {[4, 6, 9, 12].map((h, i) => (
-            <span key={h} className="w-[3px] rounded-[1px]" style={{ height: h, background: i < bars ? color : 'rgba(255,255,255,0.14)' }} />
+            <span
+              key={h}
+              className="w-[3px] rounded-[1px] transition-[background-color] duration-150 ease-out"
+              style={{ height: h, background: i < bars ? color : 'rgba(255,255,255,0.14)', transitionDelay: `${i * 30}ms` }}
+            />
           ))}
         </span>
         <span className={`text-[12px] font-medium tabular-nums ${failed ? 'text-[#fca5a5]' : 'text-white/55'}`}>{status}</span>

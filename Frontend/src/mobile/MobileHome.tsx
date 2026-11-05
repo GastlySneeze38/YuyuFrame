@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
+import { fastTransition } from '@/lib/motion'
 import { api, type CatalogServer, type SavedServer } from '@/api/client'
 import { useStore } from '@/stores/useStore'
 import { showError } from '@/stores/useErrorToast'
@@ -317,18 +318,31 @@ export default function MobileHome() {
                 <button
                   onClick={() => setSheetOpen(true)}
                   aria-haspopup="dialog"
-                  className="press flex h-14 min-w-0 flex-1 items-center gap-3 rounded-2xl border border-white/[0.1] bg-white/[0.05] px-4 text-left"
+                  className="press relative flex h-14 min-w-0 flex-1 items-center gap-3 rounded-2xl border border-white/[0.1] bg-white/[0.05] px-4 text-left"
                 >
-                  <span className="flex min-w-0 flex-1 flex-col">
-                    <span className="truncate text-[15px] font-semibold leading-tight text-white">
-                      {instance ? instance.name : t('home.chooseInstance')}
-                    </span>
-                    {instance && (
-                      <span className="truncate text-[13px] leading-tight text-white/55">
-                        {instance.mc_version} · {loaderName(instance.loader)}
+                  {/* Changer d'instance : le nouveau nom arrive en fondu, de
+                      4 px plus bas — on voit que le choix a été pris en
+                      compte. Rien à l'affichage de l'accueil (`initial`).
+                      `popLayout` : l'ancien nom sort du flux sans pousser. */}
+                  <AnimatePresence initial={false} mode="popLayout">
+                    <motion.span
+                      key={instance?.id ?? 'none'}
+                      initial={{ opacity: 0, transform: 'translateY(4px)' }}
+                      animate={{ opacity: 1, transform: 'translateY(0px)' }}
+                      exit={{ opacity: 0, transition: { duration: 0.1 } }}
+                      transition={fastTransition}
+                      className="flex min-w-0 flex-1 flex-col"
+                    >
+                      <span className="truncate text-[15px] font-semibold leading-tight text-white">
+                        {instance ? instance.name : t('home.chooseInstance')}
                       </span>
-                    )}
-                  </span>
+                      {instance && (
+                        <span className="truncate text-[13px] leading-tight text-white/55">
+                          {instance.mc_version} · {loaderName(instance.loader)}
+                        </span>
+                      )}
+                    </motion.span>
+                  </AnimatePresence>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0 text-white/50">
                     <path d="M6 9l6 6 6-6" />
                   </svg>
@@ -352,17 +366,32 @@ export default function MobileHome() {
               </div>
             )}
 
-            <div className="mt-3">
-              <LaunchButton
-                hasAccount={!!username}
-                hasInstance={!!instance}
-                running={running}
-                step={step}
-                cancelling={!!(selectedId && cancelling[selectedId])}
-                halloween={halloween}
-                onLaunch={() => (username ? play() : navigate('/login'))}
-                onCancel={() => selectedId && void cancel(selectedId)}
-              />
+            {/* « Jouer » ↔ lancement en cours : le nouvel état arrive en fondu
+                depuis 98 %, au lieu de remplacer l'autre d'un coup. Rien à
+                l'affichage de l'accueil (`initial`). */}
+            {/* `popLayout` : l'ancien état sort du flux le temps de partir,
+                sans quoi les deux s'empileraient une image. */}
+            <div className="relative mt-3">
+              <AnimatePresence initial={false} mode="popLayout">
+                <motion.div
+                  key={running || step ? 'busy' : 'idle'}
+                  initial={{ opacity: 0, transform: 'scale(0.98)' }}
+                  animate={{ opacity: 1, transform: 'scale(1)' }}
+                  exit={{ opacity: 0, transition: { duration: 0.1 } }}
+                  transition={fastTransition}
+                >
+                  <LaunchButton
+                    hasAccount={!!username}
+                    hasInstance={!!instance}
+                    running={running}
+                    step={step}
+                    cancelling={!!(selectedId && cancelling[selectedId])}
+                    halloween={halloween}
+                    onLaunch={() => (username ? play() : navigate('/login'))}
+                    onCancel={() => selectedId && void cancel(selectedId)}
+                  />
+                </motion.div>
+              </AnimatePresence>
             </div>
           </div>
         </div>

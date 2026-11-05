@@ -96,9 +96,12 @@ export function HomeShortcuts({ width = 'w-[clamp(250px,24vw,300px)]', tall = fa
           )}
           {/* La progression vers le palier suivant, en filet au pied de la case. */}
           <span className="absolute inset-x-0 bottom-0 h-[3px] bg-white/[0.06]">
+            {/* Quand l'XP change (retour d'une partie), la barre glisse jusqu'à
+                sa nouvelle valeur : `scaleX`, pas `width`, qui recalculerait
+                la mise en page. À l'affichage, elle est déjà à sa place. */}
             <span
-              className="block h-full bg-accent"
-              style={{ width: `${pass.tier >= pass.tiers ? 100 : (pass.xpInTier / pass.xpPerTier) * 100}%` }}
+              className="block h-full origin-left bg-accent transition-transform duration-[250ms] ease-[cubic-bezier(0.23,1,0.32,1)]"
+              style={{ transform: `scaleX(${pass.tier >= pass.tiers ? 1 : pass.xpInTier / pass.xpPerTier})` }}
             />
           </span>
         </motion.button>
