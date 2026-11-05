@@ -22,6 +22,14 @@ export const fr = {
   },
 
   mods: {
+    mobile: {
+      installed: 'Installés',
+      browse: 'Parcourir',
+      modpack: 'Modpack',
+      shaders: 'Shaders',
+      resourcepacks: 'Packs de ressources',
+      confirmDelete: 'Supprimer ce mod ?',
+    },
     menuMods: 'Mods',
     menuInstalledMods: 'Mods installés',
     menuPacks: 'Packs',
@@ -441,6 +449,10 @@ export const fr = {
 
   instancesPage: {
     title: 'Instances',
+    mobile: {
+      import: 'Importer',
+      emptyHint: 'Crée ta première instance, ou importe-en une depuis un autre launcher.',
+    },
     noInstance: 'Aucune instance',
     favorites: 'Favoris',
     others: 'Autres ({{count}})',

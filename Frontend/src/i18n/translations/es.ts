@@ -24,6 +24,14 @@ export const es: TranslationSchema = {
   },
 
   mods: {
+    mobile: {
+      installed: 'Instalados',
+      browse: 'Explorar',
+      modpack: 'Modpack',
+      shaders: 'Shaders',
+      resourcepacks: 'Paquetes de recursos',
+      confirmDelete: '¿Eliminar este mod?',
+    },
     menuMods: 'Mods',
     menuInstalledMods: 'Mods instalados',
     menuPacks: 'Packs',
@@ -443,6 +451,10 @@ export const es: TranslationSchema = {
 
   instancesPage: {
     title: 'Instancias',
+    mobile: {
+      import: 'Importar',
+      emptyHint: 'Crea tu primera instancia o importa una desde otro launcher.',
+    },
     noInstance: 'Ninguna instancia',
     favorites: 'Favoritas',
     others: 'Otras ({{count}})',

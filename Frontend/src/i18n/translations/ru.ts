@@ -24,6 +24,14 @@ export const ru: TranslationSchema = {
   },
 
   mods: {
+    mobile: {
+      installed: 'Установленные',
+      browse: 'Обзор',
+      modpack: 'Модпак',
+      shaders: 'Шейдеры',
+      resourcepacks: 'Ресурспаки',
+      confirmDelete: 'Удалить этот мод?',
+    },
     menuMods: 'Моды',
     menuInstalledMods: 'Установленные моды',
     menuPacks: 'Паки',
@@ -443,6 +451,10 @@ export const ru: TranslationSchema = {
 
   instancesPage: {
     title: 'Сборки',
+    mobile: {
+      import: 'Импорт',
+      emptyHint: 'Создай первую сборку или импортируй её из другого лаунчера.',
+    },
     noInstance: 'Сборок нет',
     favorites: 'Избранные',
     others: 'Прочие ({{count}})',

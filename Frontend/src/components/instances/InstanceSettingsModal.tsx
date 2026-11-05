@@ -19,6 +19,7 @@ import { useLoadersFor } from '@/lib/loaderCompat'
 import { formatRam } from '@/lib/format'
 import { press } from '@/lib/motion'
 import { InstanceIcon } from './InstanceIcon'
+import { useIsMobile } from '@/mobile/useIsMobile'
 import { ShareTab } from './ShareTab'
 import { CompatTab } from './CompatTab'
 import { ClientOptionsTransfer, OptionsLinkApply, OptionsLinkCreate } from './OptionsShare'
@@ -84,6 +85,7 @@ export function InstanceSettingsModal({
 }) {
   const t = useT()
   const navigate = useNavigate()
+  const mobile = useIsMobile()
   // Un onglet demandé de l'extérieur n'est honoré que s'il existe : une
   // adresse peut venir d'une version plus récente, ou avoir été tapée à la
   // main, et ouvrir une modale sur du vide serait pire que de l'ouvrir au
@@ -218,16 +220,29 @@ export function InstanceSettingsModal({
           <CloseButton onClick={requestClose} />
         </header>
 
-        <div className="flex min-h-0 flex-1">
-          <nav className="flex w-[196px] shrink-0 flex-col gap-1 overflow-y-auto border-r border-line p-3">
+        {/* Sur téléphone, la colonne d'onglets devient une rangée qui défile
+            de côté sous l'en-tête : une colonne de 196 px ne laisserait
+            presque rien au contenu. */}
+        <div className={`flex min-h-0 flex-1 ${mobile ? 'flex-col' : ''}`}>
+          <nav
+            className={
+              mobile
+                ? 'flex shrink-0 gap-2 overflow-x-auto overscroll-x-contain border-b border-line px-4 py-3'
+                : 'flex w-[196px] shrink-0 flex-col gap-1 overflow-y-auto border-r border-line p-3'
+            }
+          >
             {tabs.map((item) => (
               <button
                 key={item.id}
                 onClick={() => setTab(item.id)}
-                className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-[12.5px] font-semibold transition-colors ${
+                className={`flex shrink-0 items-center gap-2.5 text-left font-semibold transition-colors ${
+                  mobile ? 'h-10 rounded-full px-4 text-[14px]' : 'rounded-xl px-3 py-2.5 text-[12.5px]'
+                } ${
                   tab === item.id
                     ? 'bg-accent/20 text-txt-primary'
-                    : 'text-txt-secondary hover:bg-surface-2 hover:text-txt-primary'
+                    : mobile
+                      ? 'bg-white/[0.04] text-txt-secondary'
+                      : 'text-txt-secondary hover:bg-surface-2 hover:text-txt-primary'
                 }`}
               >
                 <span className={tab === item.id ? 'text-accent-hover' : 'text-txt-muted'}>{item.icon}</span>
@@ -236,7 +251,7 @@ export function InstanceSettingsModal({
             ))}
           </nav>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+          <div className={`min-h-0 flex-1 overflow-y-auto overscroll-contain ${mobile ? 'px-5 py-5' : 'px-6 py-5'}`}>
             {tab === 'general' && (
               <div className="flex flex-col gap-5">
                 {/* Le nom et l'icône côte à côte : ce sont les deux faces de
@@ -403,7 +418,7 @@ export function InstanceSettingsModal({
           <motion.footer
             initial={{ y: 12, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            className="flex shrink-0 items-center justify-between gap-3 border-t border-line bg-surface-1 px-5 py-3.5"
+            className="flex shrink-0 items-center justify-between gap-3 border-t border-line bg-surface-1 px-5 py-3.5 pb-[max(14px,env(safe-area-inset-bottom))]"
           >
             {askClose ? (
               <>
@@ -1923,11 +1938,14 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 
 /** Un réglage et son bouton, alignés — la forme de tout ce qui s'actionne. */
 function Row({ title, desc, action }: { title: string; desc: string; action: ReactNode }) {
+  // Sur téléphone, le texte au-dessus et les boutons dessous : côte à côte,
+  // l'explication se réduisait à un mot par ligne.
+  const mobile = useIsMobile()
   return (
-    <div className="flex items-center justify-between gap-4">
+    <div className={mobile ? 'flex flex-col items-start gap-3' : 'flex items-center justify-between gap-4'}>
       <div className="min-w-0">
-        <p className="text-[13px] font-semibold text-txt-primary">{title}</p>
-        <p className="mt-0.5 text-[11.5px] leading-relaxed text-txt-secondary">{desc}</p>
+        <p className={`font-semibold text-txt-primary ${mobile ? 'text-[15px]' : 'text-[13px]'}`}>{title}</p>
+        <p className={`mt-0.5 leading-relaxed text-txt-secondary ${mobile ? 'text-[13px]' : 'text-[11.5px]'}`}>{desc}</p>
       </div>
       {action}
     </div>

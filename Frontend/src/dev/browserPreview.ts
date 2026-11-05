@@ -20,7 +20,7 @@
 import { mockIPC, mockWindows } from '@tauri-apps/api/mocks'
 import { emit } from '@tauri-apps/api/event'
 import { useStore } from '@/stores/useStore'
-import type { AuthStatus, Instance, SystemMemoryInfo } from '@/types'
+import type { AuthStatus, Instance, Mod, SystemMemoryInfo } from '@/types'
 import type { AgentStatus, FleetConfig, McAccountInfo, SavedServer, ServerPingInfo, YuyuStatusResp } from '@/api/client'
 
 const PLAYER_UUID = '0f6c1c3a-6a5e-4d2b-9b1a-3c7e2f8d4a10'
@@ -82,6 +82,13 @@ const ANSWERS: Record<string, unknown> = {
   instance_id_migrations: [],
   running_instances: [],
   list_saved_servers: SERVERS,
+  // Quelques mods, pour voir la liste de l'écran des mods remplie.
+  mods_list: [
+    { name: 'sodium-fabric-0.6.5+mc1.21.1.jar', size: 1_245_000, enabled: true, sha1: 'preview-sodium' },
+    { name: 'lithium-fabric-0.14.3.jar', size: 712_000, enabled: true, sha1: 'preview-lithium' },
+    { name: 'iris-fabric-1.8.1+mc1.21.1.jar', size: 2_310_000, enabled: false, sha1: 'preview-iris' },
+  ] satisfies Mod[],
+  mods_check_conflicts: [],
   launcher_agent_status: { available: true, block: null, min_java: 21 } satisfies AgentStatus,
   system_memory_info: { total_mb: 16384, available_mb: 9216, suggested_mb: 4096 } satisfies SystemMemoryInfo,
   fleet_config: FLEET,

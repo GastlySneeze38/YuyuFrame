@@ -109,9 +109,10 @@ const JvmProfileEditor = lazy(() => import('@/pages/JvmProfileEditor'))
 const Skins = lazy(() => import('@/pages/Skins'))
 const SkinCatalog = lazy(() => import('@/pages/SkinCatalog'))
 const SkinEditor = lazy(() => import('@/pages/SkinEditor'))
-// Écrans du téléphone (`src/mobile/`), choisis par `useIsMobile`. Seul
-// l'accueil existe pour l'instant ; les autres routes gardent l'écran du PC.
+// Écrans du téléphone (`src/mobile/`), choisis par `useIsMobile`. Accueil et
+// Instances pour l'instant ; les autres routes gardent l'écran du PC.
 const MobileHome = lazy(() => import('@/mobile/MobileHome'))
+const MobileInstances = lazy(() => import('@/mobile/MobileInstances'))
 // Atelier des modales. Le `import()` est DANS la branche de développement,
 // pas seulement la route : écrit dehors, Vite voyait un module importable et
 // en sortait un morceau de JS livré à tout le monde — mort, mais livré.
@@ -728,7 +729,7 @@ export default function App() {
             <Route path="/" element={<Navigate to="/home" replace />} />
             <Route path="/home" element={mobile ? <MobileHome /> : <Home />} />
             <Route path="/login" element={<Login />} />
-            <Route path="/instances" element={<Instances />} />
+            <Route path="/instances" element={mobile ? <MobileInstances /> : <Instances />} />
             <Route path="/mods" element={<Mods />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/information" element={<Information />} />

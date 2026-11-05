@@ -8,6 +8,7 @@ import { PlugIcon } from '@/components/ui/icons/PlugIcon'
 import { displayName, baseFilename, type ModrinthInfo, type ModUpdate } from './modUtils'
 import { ModRow } from './ModRow'
 import { useT } from '@/i18n'
+import { useIsMobile } from '@/mobile/useIsMobile'
 
 export function InstalledTab({
   mods, modpackMeta, showPackContent, loading, error, isPlugin, modSearch, onModSearch, logoCache, versionMap,
@@ -44,6 +45,7 @@ export function InstalledTab({
   onUploadExtra: () => void
 }) {
   const t = useT()
+  const mobile = useIsMobile()
   if (loading) return <Spinner />
   if (error) return <ErrorState message={error} onRetry={onReload} />
 
@@ -53,7 +55,9 @@ export function InstalledTab({
 
   const hdrClass = 'text-[10px] text-[rgba(255,255,255,0.28)] uppercase tracking-[0.09em] font-semibold'
 
-  const renderHeader = () => (
+  // Sur téléphone, pas d'en-tête de colonnes : chaque ligne porte la version
+  // sous le nom, il n'y a plus de colonnes à nommer.
+  const renderHeader = () => mobile ? null : (
     <div
       className="flex items-center rounded-2xl px-4 py-1.5 sticky -top-3 z-10 mb-2 bg-[#09090D] border border-[rgba(255,255,255,0.08)]"
     >

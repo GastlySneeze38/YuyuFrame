@@ -8,6 +8,8 @@ import { Toggle } from '@/components/ui/Toggle'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { displayName, type ModUpdate } from './modUtils'
 import { useT } from '@/i18n'
+import { useIsMobile } from '@/mobile/useIsMobile'
+import { ActionSheet, SHEET_ICONS, type SheetAction } from '@/mobile/ui/ActionSheet'
 
 /** Mémoïsé : rendu en liste (potentiellement des dizaines de mods) — les
  * callbacks reçoivent l'identifiant du mod pour que le parent puisse passer
@@ -36,6 +38,90 @@ export const ModRow = memo(function ModRow({
 }) {
   const t = useT()
   const [confirm, setConfirm] = useState(false)
+  const mobile = useIsMobile()
+  const [sheetOpen, setSheetOpen] = useState(false)
+
+  // ── Téléphone ──
+  // Six éléments sur une ligne de 358 px ne laissaient plus de place au nom.
+  // On garde ce qui se fait souvent sous le doigt — lire le nom, la version,
+  // activer ou couper le mod — et le reste passe dans la feuille « … » :
+  // mettre à jour, changer de version, description, supprimer. Une mise à
+  // jour disponible se signale par une pastille à côté du nom.
+  if (mobile) {
+    const blocked = !!update && update.blockedBy.length > 0
+    const details = [version, formatBytes(mod.size)].filter(Boolean).join(' · ')
+    const actions: SheetAction[] = [
+      ...(update && !blocked ? [{
+        id: 'update',
+        label: t('mods.updateTo', { version: update.newVersion }),
+        icon: SHEET_ICONS.update,
+        disabled: updating,
+        onSelect: () => onUpdate(update),
+      }] : []),
+      ...(projectId || cfModId ? [{
+        id: 'versions',
+        label: t('mods.switchVersion'),
+        icon: SHEET_ICONS.versions,
+        disabled: switchingVersion,
+        onSelect: () => onSwitchVersion(mod),
+      }] : []),
+      ...(projectId ? [{ id: 'open', label: t('mods.openDescription'), icon: SHEET_ICONS.info, onSelect: () => onOpen(mod) }] : []),
+      {
+        id: 'delete',
+        label: t('common.delete'),
+        icon: SHEET_ICONS.delete,
+        danger: true,
+        confirm: t('mods.mobile.confirmDelete'),
+        onSelect: () => onDelete(mod.name),
+      },
+    ]
+    return (
+      <div className={`flex h-[68px] items-center gap-1 rounded-2xl border border-white/[0.06] pl-3 pr-1 ${mod.enabled ? 'bg-white/[0.04]' : 'bg-white/[0.02] opacity-60'}`}>
+        <div className={`flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl ${mod.enabled ? 'bg-[rgba(75,63,207,0.15)]' : 'bg-white/[0.05]'}`}>
+          {logoUrl
+            ? <img src={logoUrl} alt="" className="h-full w-full object-cover" />
+            : <PlugIcon size={20} color={mod.enabled ? 'rgba(120,110,230,0.8)' : 'rgba(255,255,255,0.2)'} />}
+        </div>
+        <div className="ml-2 flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="truncate text-[15px] font-semibold text-white">{modrinthName || displayName(mod.name)}</span>
+            {update && (
+              <span className={`shrink-0 rounded-md px-1.5 text-[11px] font-bold ${blocked ? 'bg-[rgba(248,113,113,0.15)] text-[#fca5a5]' : 'bg-[rgba(250,204,21,0.15)] text-[rgba(250,204,21,0.95)]'}`}>
+                {update.newVersion}
+              </span>
+            )}
+            {pinned && <span className="shrink-0 rounded-md bg-white/[0.08] px-1.5 text-[11px] font-semibold uppercase text-white/60">{t('mods.updatesIgnored')}</span>}
+          </span>
+          <span className="truncate text-[13px] text-white/55">{details}</span>
+        </div>
+        <Toggle checked={mod.enabled} onChange={() => onToggle(mod)} title={mod.enabled ? t('mods.disable') : t('mods.enable')} />
+        <button
+          onClick={() => setSheetOpen(true)}
+          aria-label={t('instancesPage.moreActions')}
+          aria-haspopup="dialog"
+          className="press flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/55"
+        >
+          {updating || switchingVersion
+            ? <ButtonSpinner size={16} trackColor="rgba(255,255,255,0.1)" />
+            : <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5"><circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" /></svg>}
+        </button>
+        <ActionSheet
+          open={sheetOpen}
+          onClose={() => setSheetOpen(false)}
+          header={
+            <>
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[rgba(75,63,207,0.15)]">
+                {logoUrl ? <img src={logoUrl} alt="" className="h-full w-full object-cover" /> : <PlugIcon size={18} color="rgba(120,110,230,0.8)" />}
+              </div>
+              <span className="min-w-0 flex-1 truncate text-[15px] font-bold text-txt-primary">{modrinthName || displayName(mod.name)}</span>
+            </>
+          }
+          actions={actions}
+        />
+      </div>
+    )
+  }
+
   return (
     // La ligne entière réagit au survol : elle se décale de trois pixels et
     // son fond s'éclaircit. Dans une liste de cinquante mods tous bâtis

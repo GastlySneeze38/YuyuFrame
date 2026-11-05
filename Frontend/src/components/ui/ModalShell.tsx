@@ -1,8 +1,19 @@
 import { useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import type { CSSProperties, ReactNode } from 'react'
 import { CloseButton } from './CloseButton'
 import { backdropVariants, modalVariants } from '@/lib/motion'
+import { useIsMobile } from '@/mobile/useIsMobile'
+
+/** Feuille du bas (téléphone) : monte de sa propre hauteur avec la courbe des
+ *  tiroirs d'iOS, repart plus vite qu'elle n'est venue. En chaîne `transform`,
+ *  calculée par le navigateur et non image par image en JavaScript. */
+const SHEET_VARIANTS = {
+  initial: { transform: 'translateY(100%)' },
+  animate: { transform: 'translateY(0%)', transition: { duration: 0.32, ease: [0.32, 0.72, 0, 1] } },
+  exit: { transform: 'translateY(100%)', transition: { duration: 0.2, ease: [0.32, 0.72, 0, 1] } },
+} as const
 
 // Avant ce fichier, cet overlay + cette carte existaient en copies quasi
 // identiques dans Instances.tsx (ModalShell local) et ImportSourceModal.tsx.
@@ -57,6 +68,55 @@ export function ModalShell({
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
   }, [closeOnEscape, onClose])
+
+  // Sur téléphone, toutes les fenêtres deviennent des feuilles qui montent du
+  // bas, la forme attendue sur iOS et Android : pleine largeur, collées au
+  // bord, défilant dans leur cadre. Une fenêtre qui fixait sa hauteur (les
+  // paramètres d'instance) prend presque tout l'écran.
+  const mobile = useIsMobile()
+  if (mobile) {
+    const sheetStyle: CSSProperties = {
+      ...cardStyle,
+      ...(cardStyle?.height !== undefined ? { height: '92dvh' } : {}),
+    }
+    // Rendue à la racine du document : la zone des pages porte un filtre de
+    // luminosité, qui enfermerait la feuille au-dessus de la barre d'onglets
+    // (un `filter` sert de repère aux éléments `fixed` qu'il contient).
+    return createPortal(
+      <motion.div
+        variants={backdropVariants}
+        initial="initial"
+        animate="animate"
+        exit="exit"
+        // Pas de flou derrière : il se recalculerait pendant toute la montée.
+        className="fixed inset-0 z-50 flex flex-col justify-end"
+        style={{ background: overlay }}
+        onClick={closeOnBackdrop ? (e) => { if (e.target === e.currentTarget) onClose() } : undefined}
+      >
+        <motion.div
+          variants={SHEET_VARIANTS}
+          className="flex max-h-[92dvh] w-full flex-col gap-5 overflow-y-auto overscroll-contain rounded-t-[22px] border-t border-accent/30 bg-bg-card p-5 pb-[max(20px,env(safe-area-inset-bottom))]"
+          style={sheetStyle}
+        >
+          {title !== undefined && (
+            <div className="flex flex-shrink-0 items-center justify-between gap-3">
+              <p className="text-[17px] font-bold leading-snug text-txt-primary">{title}</p>
+              <div className="flex flex-shrink-0 items-center gap-2">
+                {counter && counter.total > 1 && (
+                  <span className="rounded-full border border-accent/40 bg-accent/15 px-2.5 py-0.5 text-[12px] font-semibold tabular-nums text-txt-primary">
+                    {counter.index} / {counter.total}
+                  </span>
+                )}
+                <CloseButton onClick={onClose} />
+              </div>
+            </div>
+          )}
+          {children}
+        </motion.div>
+      </motion.div>,
+      document.body,
+    )
+  }
 
   return (
     <motion.div

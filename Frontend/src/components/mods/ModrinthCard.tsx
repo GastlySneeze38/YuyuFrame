@@ -30,18 +30,20 @@ export function ModrinthCard({ hit, installed, loading, progress, onInstall, onO
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <p className="truncate font-semibold text-white text-[13px]">{hit.title}</p>
-            <span className="flex-shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.03em] bg-[rgba(30,209,102,0.15)] text-[rgba(94,224,152,0.9)]">
+            <p className="truncate font-semibold text-white text-[13px] max-sm:text-[15px]">{hit.title}</p>
+            <span className="flex-shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.03em] bg-[rgba(30,209,102,0.15)] text-[rgba(94,224,152,0.9)] max-sm:text-[11px]">
               {t('mods.modrinthBadge')}
             </span>
           </div>
-          <p className="truncate text-[11px] text-[rgba(255,255,255,0.35)] mt-0.5">{hit.description}</p>
-          <p className="text-[10px] text-[rgba(255,255,255,0.2)] mt-[3px]">{formatDownloadCount(hit.downloads)} {t('mods.downloads')}</p>
+          {/* Sur téléphone : deux lignes de description lisibles plutôt
+              qu'une ligne coupée à 11 px. */}
+          <p className="truncate text-[11px] text-[rgba(255,255,255,0.35)] mt-0.5 max-sm:whitespace-normal max-sm:line-clamp-2 max-sm:text-[13px] max-sm:text-white/55">{hit.description}</p>
+          <p className="text-[10px] text-[rgba(255,255,255,0.2)] mt-[3px] max-sm:text-[12px] max-sm:text-white/45">{formatDownloadCount(hit.downloads)} {t('mods.downloads')}</p>
         </div>
         <motion.button {...pressIf(!(installed || loading))}
           onClick={(e) => { e.stopPropagation(); onInstall() }}
           disabled={installed || loading}
-          className={`flex-shrink-0 flex items-center gap-1.5 rounded-xl font-semibold transition-all duration-150 active:scale-95 h-8 pl-[14px] pr-[14px] text-[12px] border ${
+          className={`flex-shrink-0 flex items-center gap-1.5 rounded-xl font-semibold transition-all duration-150 active:scale-95 h-8 pl-[14px] pr-[14px] text-[12px] border max-sm:h-11 max-sm:text-[14px] ${
             installed
               ? 'bg-[rgba(255,255,255,0.05)] border-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.3)] cursor-not-allowed'
               : loading
