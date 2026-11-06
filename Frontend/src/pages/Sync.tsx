@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { api } from '@/api/client'
-import { useStore } from '@/stores/useStore'
+import { useStorePick } from '@/stores/useStore'
 import type { Instance, SyncInstance } from '@/types'
 import { PremiumGate } from '@/components/ui/PremiumGate'
 import { InstanceSyncCard } from '@/components/sync/InstanceSyncCard'
@@ -24,7 +24,7 @@ const COLLAPSE_ABOVE = 6
 
 function SyncContent() {
   const t = useT()
-  const { instances, yuyuSignedIn, isUltimate, addInstance } = useStore()
+  const { instances, yuyuSignedIn, isUltimate, addInstance } = useStorePick('instances', 'yuyuSignedIn', 'isUltimate', 'addInstance', 'yuyuPlan', 'yuyuPlanExpiresAt')
   const userIsUltimate = isUltimate()
 
   const [cloudInstances, setCloudInstances] = useState<SyncInstance[]>([])
@@ -209,7 +209,7 @@ function SyncContent() {
 export default function Sync() {
   const t = useT()
   const navigate = useNavigate()
-  const { yuyuSignedIn, isPremium } = useStore()
+  const { yuyuSignedIn, isPremium } = useStorePick('yuyuSignedIn', 'isPremium', 'yuyuPlan', 'yuyuPlanExpiresAt')
   // Deux verrous : celui du code (réécriture en cours) et celui du
   // back-office, qui permet de couper la sync à distance en cas d'incident.
   const allowedByFleet = useFleet((s) => s.isEnabled(SYNC_FLAG))

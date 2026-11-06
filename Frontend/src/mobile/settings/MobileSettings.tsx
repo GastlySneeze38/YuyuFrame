@@ -1,7 +1,7 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useStore } from '@/stores/useStore'
+import { useStorePick } from '@/stores/useStore'
 import { api } from '@/api/client'
 import { showError } from '@/stores/useErrorToast'
 import { formatRam } from '@/lib/format'
@@ -67,7 +67,7 @@ export function MobileSettings(p: {
     else setParams({}, { replace: true })
   }
 
-  const s = useStore()
+  const s = useStorePick('brightness', 'customRamMb', 'defaultRam', 'language')
   const preview: Record<string, string | undefined> = {
     lancement: formatRam(s.customRamMb ?? s.defaultRam),
     langue: LANGUAGES.find((l) => l.code === s.language)?.nativeLabel,
@@ -156,7 +156,12 @@ export function MobileSettings(p: {
 function SectionBody({ id, p }: { id: string; p: Parameters<typeof MobileSettings>[0] }) {
   const t = useT()
   const navigate = useNavigate()
-  const s = useStore()
+  const s = useStorePick(
+    'allowBackground', 'avoidBetaDependencies', 'brightness', 'closeOnLaunch', 'confirmServerLaunch', 'customRamMb',
+    'defaultRam', 'instanceSyncMode', 'language', 'setAvoidBetaDependencies', 'setBrightness', 'setCloseOnLaunch',
+    'setConfirmServerLaunch', 'setCustomRamMb', 'setDefaultRam', 'setInstanceSyncMode', 'setLanguage', 'setShowConsole',
+    'setShowHomeServers', 'setSyncGameSettings', 'sgaUnlocked', 'showConsole', 'showHomeServers', 'soundVolume', 'setSoundVolume', 'syncGameSettings',
+  )
   const [showRamInfo, setShowRamInfo] = useState(false)
 
   switch (id) {

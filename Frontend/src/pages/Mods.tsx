@@ -6,7 +6,7 @@ import { open } from '@tauri-apps/plugin-dialog'
 import { listen } from '@tauri-apps/api/event'
 import { api } from '@/api/client'
 import type { ModConflict } from '@/api/client'
-import { useStore } from '@/stores/useStore'
+import { useStorePick } from '@/stores/useStore'
 import { formatBytes } from '@/lib/format'
 import type { Instance, Mod, ModInstallProgress, ModpackInstallProgress, ModpackMeta } from '@/types'
 import { searchModrinthModpacks, resolveModpackFile, type ModpackHit, type ResolvedModpackFile } from '@/lib/modrinthModpacks'
@@ -97,7 +97,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
   // Vanilla et Horizon : aucun chargeur de mods Java. Les packs de ressources
   // et les shaders restent : Horizon lit aussi les shaders (vérifié en jeu).
   const isPlugin = !isModLoader(loader)
-  const { avoidBetaDependencies, pinnedMods } = useStore()
+  const { avoidBetaDependencies, pinnedMods } = useStorePick('avoidBetaDependencies', 'pinnedMods')
 
   const pinnedProjectIds = useMemo(() => {
     const prefix = `${instanceId}:`
@@ -1566,7 +1566,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
 export default function Mods() {
   const navigate = useNavigate()
   const t = useT()
-  const { selectedInstance } = useStore()
+  const { selectedInstance } = useStorePick('selectedInstance', 'instances', 'selectedInstanceId')
   const instance = selectedInstance()
 
   if (!instance) {

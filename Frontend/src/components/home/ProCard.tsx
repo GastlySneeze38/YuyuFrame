@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 import { press } from '@/lib/motion'
 import { useT } from '@/i18n'
+import { GlowPulse } from '@/components/ui/GlowPulse'
 
 /**
  * Carte d'offre, dernière de la rangée du bas.
@@ -19,11 +20,10 @@ export function ProCard({ onOpen }: { onOpen: () => void }) {
   const t = useT()
 
   return (
-    <motion.div
-      animate={{ boxShadow: ['0 0 0 rgba(120,100,255,0)', '0 0 22px rgba(120,100,255,0.18)', '0 0 0 rgba(120,100,255,0)'] }}
-      transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut' }}
-      className="flex min-w-0 flex-1 flex-col gap-1.5 rounded-xl border border-[rgba(120,100,255,0.28)] bg-[rgba(75,63,207,0.08)] px-[clamp(8px,1.4vh,12px)] py-[clamp(6px,1.1vh,10px)]"
+    <div
+      className="relative flex min-w-0 flex-1 flex-col gap-1.5 rounded-xl border border-[rgba(120,100,255,0.28)] bg-[rgba(75,63,207,0.08)] px-[clamp(8px,1.4vh,12px)] py-[clamp(6px,1.1vh,10px)]"
     >
+      <GlowPulse shadow="0 0 22px rgba(120,100,255,0.18)" duration={4.5} radius="rounded-xl" />
       <div className="flex items-center gap-1.5">
         <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13} className="flex-shrink-0 text-[#a78bfa]">
           <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
@@ -45,6 +45,6 @@ export function ProCard({ onOpen }: { onOpen: () => void }) {
         {t('home.proSeePlans')}
         <span className="text-[10px] font-bold text-[#a78bfa]">-50%</span>
       </motion.button>
-    </motion.div>
+    </div>
   )
 }

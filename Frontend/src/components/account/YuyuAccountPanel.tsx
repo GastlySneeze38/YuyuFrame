@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { api } from '@/api/client'
 import type { YuyuDevice, YuyuMfaResp } from '@/api/client'
-import { useStore } from '@/stores/useStore'
+import { useStore, useStorePick } from '@/stores/useStore'
 import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
 import { MaskedEmail } from '@/components/ui/MaskedEmail'
@@ -36,7 +36,7 @@ export function YuyuAccountPanel() {
     yuyuPlanExpiresAt,
     yuyuLicenseState,
     clearYuyuSession,
-  } = useStore()
+  } = useStorePick('yuyuSignedIn', 'yuyuUsername', 'yuyuEmail', 'yuyuPlan', 'yuyuPlanExpiresAt', 'yuyuLicenseState', 'clearYuyuSession')
   const [section, setSection] = useState<'email' | 'devices' | null>(null)
   const [showPassword, setShowPassword] = useState(false)
   const [showVerify, setShowVerify] = useState(false)

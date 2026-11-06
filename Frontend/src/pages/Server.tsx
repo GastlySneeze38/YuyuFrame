@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '@/api/client'
-import { useStore } from '@/stores/useStore'
+import { useStorePick } from '@/stores/useStore'
 import { P2P_ENABLED } from '@/config/features'
 import { useTauriEvent } from '@/hooks/useTauriEvent'
 import { DebugPanel } from '@/components/server/DebugPanel'
@@ -11,7 +11,8 @@ import { useT } from '@/i18n'
 export default function Server() {
   const t = useT()
   const navigate = useNavigate()
-  const { selectedInstanceId, selectedInstance, isInstanceRunning, setInstanceRunning } = useStore()
+  const { selectedInstanceId, selectedInstance, isInstanceRunning, setInstanceRunning } =
+    useStorePick('selectedInstanceId', 'selectedInstance', 'isInstanceRunning', 'setInstanceRunning', 'instances', 'runningInstances')
 
   if (!P2P_ENABLED) {
     return (

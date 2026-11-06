@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { api } from '@/api/client'
 import type { ServerPingInfo } from '@/api/client'
-import { useStore } from '@/stores/useStore'
+import { useStore, useStorePick } from '@/stores/useStore'
 import { t as translate, useT } from '@/i18n'
 import type { PingState } from '@/lib/serverPing'
 
@@ -152,7 +152,8 @@ export function NoInstance() {
  *  l'accueil, puis revient à l'accueil où la partie se suit. */
 export function useJoinServer() {
   const navigate = useNavigate()
-  const { avoidBetaDependencies, showConsole, setSelectedInstanceId, setInstanceRunning, isAgentEnabled } = useStore()
+  const { avoidBetaDependencies, showConsole, setSelectedInstanceId, setInstanceRunning, isAgentEnabled } =
+    useStorePick('avoidBetaDependencies', 'showConsole', 'setSelectedInstanceId', 'setInstanceRunning', 'isAgentEnabled', 'agentOptOut')
   return async (instanceId: string, address: string) => {
     await api.launch.start(instanceId, avoidBetaDependencies, showConsole, address, isAgentEnabled(instanceId))
     setSelectedInstanceId(instanceId)

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '@/api/client'
-import { useStore } from '@/stores/useStore'
+import { useStore, useStorePick } from '@/stores/useStore'
 import type { YuyuPlan } from '@/stores/useStore'
 import { showApiError } from '@/stores/useErrorToast'
 import { PlanBadge } from '@/components/plans/PlanBadge'
@@ -22,7 +22,7 @@ const PLAN_COLORS: Record<'free' | 'premium' | 'ultimate', string> = {
  */
 export function AccountMenu() {
   const t = useT()
-  const { yuyuUsername, isPremium, isUltimate, setYuyuPlan, clearYuyuSession } = useStore()
+  const { yuyuUsername, isPremium, isUltimate, setYuyuPlan, clearYuyuSession } = useStorePick('yuyuUsername', 'isPremium', 'isUltimate', 'setYuyuPlan', 'clearYuyuSession', 'yuyuPlan', 'yuyuPlanExpiresAt')
   const [open, setOpen] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const ref = useRef<HTMLDivElement>(null)

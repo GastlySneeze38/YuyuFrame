@@ -4,7 +4,8 @@ import { useT } from '@/i18n'
 
 export function TitleBar() {
   const t = useT()
-  const { username, apiOnline } = useStore()
+  const username = useStore((s) => s.username)
+  const apiOnline = useStore((s) => s.apiOnline)
   // Pris au rendu et non au chargement du module : dans l'aperçu navigateur,
   // la fausse fenêtre n'existe qu'une fois le module chargé.
   const win = getCurrentWindow()

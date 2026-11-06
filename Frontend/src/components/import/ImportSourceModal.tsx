@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { open } from '@tauri-apps/plugin-dialog'
 import { listen } from '@tauri-apps/api/event'
 import { api } from '@/api/client'
-import { useStore } from '@/stores/useStore'
+import { useStorePick } from '@/stores/useStore'
 import { clampLoader, loaderColor } from '@/lib/loader'
 import { formatBytes } from '@/lib/format'
 import { ModalShell } from '@/components/ui/ModalShell'
@@ -44,7 +44,7 @@ interface ImportSourceModalProps {
 
 export function ImportSourceModal({ onClose, onImported, fixedInstanceId, onPickShared }: ImportSourceModalProps) {
   const t = useT()
-  const { instances, versions, defaultRam } = useStore()
+  const { instances, versions, defaultRam } = useStorePick('instances', 'versions', 'defaultRam')
   const releaseVersions = versions.filter((v) => v.version_type === 'release').map((v) => v.id)
 
   const [step, setStep] = useState<'pick' | 'config' | 'mods' | 'done'>('pick')

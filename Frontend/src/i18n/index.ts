@@ -1,20 +1,61 @@
+import { create } from 'zustand'
 import { useStore } from '@/stores/useStore'
 import type { Lang } from '@/stores/useStore'
 import { fr } from './translations/fr'
-import { en } from './translations/en'
-import { es } from './translations/es'
-import { de } from './translations/de'
-import { it } from './translations/it'
-import { pt } from './translations/pt'
-import { pl } from './translations/pl'
-import { ru } from './translations/ru'
 import { sga, SGA_LABEL } from './translations/sga'
 
 export type { Lang }
 
+type Dict = Record<string, unknown>
+
+// Langues chargées à la demande (2026-11-06) : les huit dictionnaires
+// pesaient ~1 Mo dans le fichier de démarrage pour n'en utiliser qu'un.
+// Le français reste embarqué : c'est le filet de secours de toutes les
+// autres, et le galactique (`sga`) se calcule à partir de lui.
 // Une langue absente d'ici planterait à la lecture : le type `Lang` et cette
 // table doivent être modifiés ensemble.
-const DICTS: Record<Lang, Record<string, unknown>> = { fr, en, es, de, it, pt, pl, ru, sga }
+const LOADERS: Record<Exclude<Lang, 'fr' | 'sga'>, () => Promise<Dict>> = {
+  en: () => import('./translations/en').then((m) => m.en),
+  es: () => import('./translations/es').then((m) => m.es),
+  de: () => import('./translations/de').then((m) => m.de),
+  it: () => import('./translations/it').then((m) => m.it),
+  pt: () => import('./translations/pt').then((m) => m.pt),
+  pl: () => import('./translations/pl').then((m) => m.pl),
+  ru: () => import('./translations/ru').then((m) => m.ru),
+}
+
+const DICTS: Partial<Record<Lang, Dict>> = { fr, sga }
+const pending = new Map<Lang, Promise<void>>()
+
+/** Incrémenté à chaque dictionnaire arrivé : `useT` s'y abonne pour
+ *  redessiner ce qui s'affichait en français le temps du chargement. */
+const useLoaded = create(() => ({ version: 0 }))
+
+/** Charge le dictionnaire de `lang` (une seule fois). Ne rejette jamais :
+ *  un échec laisse simplement le français s'afficher. */
+export function loadLanguage(lang: Lang): Promise<void> {
+  if (DICTS[lang]) return Promise.resolve()
+  const running = pending.get(lang)
+  if (running) return running
+  const job = LOADERS[lang as keyof typeof LOADERS]()
+    .then((dict) => {
+      DICTS[lang] = dict
+      useLoaded.setState((s) => ({ version: s.version + 1 }))
+    })
+    .catch((e) => {
+      console.error(`Langue « ${lang} » non chargée, repli sur le français`, e)
+    })
+    .finally(() => pending.delete(lang))
+  pending.set(lang, job)
+  return job
+}
+
+// Un changement de langue (réglages, détection au premier démarrage) charge
+// son dictionnaire ; l'interface reste en français les quelques millisecondes
+// que ça prend.
+useStore.subscribe((state, prev) => {
+  if (state.language !== prev.language) void loadLanguage(state.language)
+})
 
 function getPath(obj: unknown, path: string): unknown {
   return path.split('.').reduce<unknown>((acc, key) => {
@@ -57,7 +98,16 @@ export function tIn(lang: Lang, key: string, vars?: Record<string, string | numb
  * change (t() seul ne le fait pas, il ne fait que lire l'état courant). */
 export function useT() {
   useStore((s) => s.language)
+  useLoaded((s) => s.version)
   return t
+}
+
+/** Pour `tIn` : charge une langue qui n'est pas celle de l'interface, et
+ *  redessine le composant à son arrivée. */
+export function useLanguageLoaded(lang: Lang): boolean {
+  useLoaded((s) => s.version)
+  if (!DICTS[lang]) void loadLanguage(lang)
+  return DICTS[lang] !== undefined
 }
 
 /** Langues proposées dans les réglages, dans leur propre langue.

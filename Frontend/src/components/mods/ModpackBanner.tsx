@@ -32,7 +32,7 @@ export function ModpackBanner({
   onUpdatePackVersion: () => void
 }) {
   const t = useT()
-  const { language } = useStore()
+  const language = useStore((s) => s.language)
   const installing = !!installProgress
   // Une bannière provisoire ne connaît pas encore tout du pack (un fichier
   // importé n'a ni auteur ni version) : on n'affiche que ce qu'on sait.

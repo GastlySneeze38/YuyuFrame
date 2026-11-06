@@ -6,7 +6,7 @@ import { EASE_OUT, SNAP, press } from '@/lib/motion'
 import { P2P_ENABLED } from '@/config/features'
 import { api } from '@/api/client'
 import { skinPreview } from '@/lib/skinCache'
-import { useStore } from '@/stores/useStore'
+import { useStore, useStorePick } from '@/stores/useStore'
 import { useSupportWatch } from '@/stores/useSupportWatch'
 import { useCrashWatch } from '@/stores/useCrashWatch'
 import { loaderColor } from '@/lib/loader'
@@ -172,7 +172,25 @@ export default function Home() {
     confirmServerLaunch,
     favoriteServers,
     isAgentEnabled, setAgentEnabled,
-  } = useStore()
+  } = useStorePick(
+    'username', 'uuid',
+    'instances', 'setInstances',
+    'selectedInstanceId', 'setSelectedInstanceId', 'selectedInstance',
+    'isInstanceRunning', 'setInstanceRunning',
+    'setLastSession',
+    'closeOnLaunch',
+    'p2pEnabled', 'setP2pEnabled',
+    'avoidBetaDependencies',
+    'showConsole',
+    'recordLaunchPhaseDuration',
+    'showHomeServers',
+    'confirmServerLaunch',
+    'favoriteServers',
+    'isAgentEnabled', 'setAgentEnabled',
+    // Lus par `isInstanceRunning` / `isAgentEnabled` : sans eux, la page ne
+    // se redessinerait pas quand une partie démarre ou que l'agent change.
+    'runningInstances', 'agentOptOut',
+  )
 
   const gameRunning = !!selectedInstanceId && isInstanceRunning(selectedInstanceId)
 

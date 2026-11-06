@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '@/api/client'
-import { useStore } from '@/stores/useStore'
+import { useStorePick } from '@/stores/useStore'
 import type { Instance } from '@/types'
 import { ModsContent } from '@/pages/Mods'
 import { ImportSourceModal } from '@/components/import/ImportSourceModal'
@@ -43,7 +43,12 @@ export default function MobileInstances() {
     instances, setInstances, addInstance, updateInstance, removeInstance,
     selectedInstanceId, setSelectedInstanceId,
     defaultRam, defaultJvmVendor, defaultJvmCustomPath, defaultGcPolicy,
-  } = useStore()
+  } = useStorePick(
+    'versions', 'setVersions',
+    'instances', 'setInstances', 'addInstance', 'updateInstance', 'removeInstance',
+    'selectedInstanceId', 'setSelectedInstanceId',
+    'defaultRam', 'defaultJvmVendor', 'defaultJvmCustomPath', 'defaultGcPolicy',
+  )
 
   const [loading, setLoading] = useState(instances.length === 0)
   const [showCreate, setShowCreate] = useState(false)

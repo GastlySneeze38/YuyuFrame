@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion, useInView, useMotionValueEvent, useReducedMotion, useScroll, useSpring, useTransform } from 'framer-motion'
 import { api } from '@/api/client'
-import { useStore } from '@/stores/useStore'
+import { useStorePick } from '@/stores/useStore'
 import { getPlans } from '@/data/plans'
 import type { PlanMeta } from '@/data/plans'
 import { PlanIcon } from '@/components/plans/PlanIcon'
@@ -35,7 +35,7 @@ import { useT } from '@/i18n'
 export default function MobilePlans() {
   const t = useT()
   const reduce = useReducedMotion()
-  const { yuyuPlanExpiresAt, isPremium, isUltimate, language } = useStore()
+  const { yuyuPlanExpiresAt, isPremium, isUltimate, language } = useStorePick('yuyuPlanExpiresAt', 'isPremium', 'isUltimate', 'language', 'yuyuPlan')
   const PLANS = getPlans(t)
   const effectivePlan = isUltimate() ? 'ultimate' : isPremium() ? 'premium' : 'free'
   const premium = PLANS.find((p) => p.id === 'premium')

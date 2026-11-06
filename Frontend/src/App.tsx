@@ -134,7 +134,21 @@ const label = inTauri ? getCurrentWindow().label : 'main'
 const isConsoleWindow = label.startsWith('mc-console-')
 
 export default function App() {
-  const { brightness, instanceSyncMode, setInstances, uuid, authSystemVersion, setAuthSystemVersion, setUser, setInstanceRunning, applyInstanceIdMigrations, setApiOnline, allowBackground, syncGameSettings } = useStore()
+  // Un sélecteur par champ, jamais `useStore()` entier : la racine se
+  // redessinait à chaque changement du magasin, et toute l'application avec
+  // elle (audit de performance, 2026-11-06). Les actions sont stables.
+  const brightness = useStore((s) => s.brightness)
+  const instanceSyncMode = useStore((s) => s.instanceSyncMode)
+  const setInstances = useStore((s) => s.setInstances)
+  const uuid = useStore((s) => s.uuid)
+  const authSystemVersion = useStore((s) => s.authSystemVersion)
+  const setAuthSystemVersion = useStore((s) => s.setAuthSystemVersion)
+  const setUser = useStore((s) => s.setUser)
+  const setInstanceRunning = useStore((s) => s.setInstanceRunning)
+  const applyInstanceIdMigrations = useStore((s) => s.applyInstanceIdMigrations)
+  const setApiOnline = useStore((s) => s.setApiOnline)
+  const allowBackground = useStore((s) => s.allowBackground)
+  const syncGameSettings = useStore((s) => s.syncGameSettings)
   // Mot de passe provisoire donné par le support : la modale s'impose tant
   // qu'il n'est pas changé (le serveur refuse tout le reste).
   const applyDetectedLanguage = useStore((s) => s.applyDetectedLanguage)

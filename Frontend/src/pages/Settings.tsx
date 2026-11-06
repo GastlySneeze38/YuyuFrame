@@ -3,7 +3,7 @@ import { SNAP } from '@/lib/motion'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { open as openDirPicker } from '@tauri-apps/plugin-dialog'
-import { useStore } from '@/stores/useStore'
+import { useStore, useStorePick } from '@/stores/useStore'
 import { api } from '@/api/client'
 import { BackgroundOffModal } from '@/components/settings/BackgroundOffModal'
 import { showError } from '@/stores/useErrorToast'
@@ -38,7 +38,15 @@ export default function Settings() {
     syncGameSettings, setSyncGameSettings, showConsole, setShowConsole,
     showHomeServers, setShowHomeServers, confirmServerLaunch, setConfirmServerLaunch,
     language, setLanguage,
-  } = useStore()
+  } = useStorePick(
+    'brightness', 'setBrightness', 'soundVolume', 'setSoundVolume', 'defaultRam', 'setDefaultRam', 'customRamMb', 'setCustomRamMb',
+    'closeOnLaunch', 'setCloseOnLaunch',
+    'allowBackground', 'setAllowBackground',
+    'instanceSyncMode', 'setInstanceSyncMode', 'avoidBetaDependencies', 'setAvoidBetaDependencies',
+    'syncGameSettings', 'setSyncGameSettings', 'showConsole', 'setShowConsole',
+    'showHomeServers', 'setShowHomeServers', 'confirmServerLaunch', 'setConfirmServerLaunch',
+    'language', 'setLanguage',
+  )
 
   /* ── L'écriture de la table d'enchantement ───────────────────────────────
    * Cinq clics d'affilée sur l'en-tête « Langue » découvrent une neuvième

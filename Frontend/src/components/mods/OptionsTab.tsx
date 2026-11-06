@@ -14,7 +14,7 @@ import { LanguagePickerModal } from './LanguagePickerModal'
 import { LANGUAGE_BY_CODE } from './gameLanguages'
 import { Flag } from '@/components/ui/Flag'
 import type { SearchCandidate } from './optionSearch'
-import { tIn, useT } from '@/i18n'
+import { tIn, useLanguageLoaded, useT } from '@/i18n'
 import type { Instance, McOption } from '@/types'
 
 /**
@@ -196,6 +196,8 @@ function agentSliderText(raw: string): string {
 
 export function OptionsTab({ instance }: { instance: Instance }) {
   const t = useT()
+  // L'anglais sert d'alias de recherche : chargé à la demande, comme toute langue.
+  const englishReady = useLanguageLoaded('en')
   const mobile = useIsMobile()
   const reduceMotion = useReducedMotion()
   const [advanced, setAdvanced] = useState(false)
@@ -305,7 +307,7 @@ export function OptionsTab({ instance }: { instance: Instance }) {
       .filter((k) => !KNOWN_KEYS.has(k))
       .map((key) => ({ key }))
     return [...known, ...unknown]
-  }, [saved, t])
+  }, [saved, t, englishReady])
 
   /** Amène le réglage choisi à l'œil : bascule vers la vue qui sait le
    *  montrer, puis fait défiler jusqu'à lui. Une clé que la vue lisible ne

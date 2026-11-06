@@ -139,7 +139,8 @@ function FilterChips<T extends string>({ options, value, onChange }: {
  */
 export default function JvmProfiles() {
   const navigate = useNavigate()
-  const { instances, setInstances } = useStore()
+  const instances = useStore((s) => s.instances)
+  const setInstances = useStore((s) => s.setInstances)
   const [profiles, setProfiles] = useState<JvmProfile[] | null>(null)
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')

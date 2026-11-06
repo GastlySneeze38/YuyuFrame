@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AnimatePresence, animate, motion, useInView, useMotionValue, useScroll, useSpring, useTransform } from 'framer-motion'
 import { api } from '@/api/client'
-import { useStore } from '@/stores/useStore'
+import { useStorePick } from '@/stores/useStore'
 import { getPlans } from '@/data/plans'
 import { usePlanCheckout } from '@/components/plans/usePlanCheckout'
 import type { PlanMeta } from '@/data/plans'
@@ -12,6 +12,7 @@ import { HeaderFriendsShortcut } from '@/components/ui/HeaderFriendsShortcut'
 import { BackArrowIcon } from '@/components/ui/icons/BackArrowIcon'
 import { PageGlow } from '@/components/PageGlow'
 import { Reveal } from '@/components/Reveal'
+import { GlowPulse } from '@/components/ui/GlowPulse'
 import { listItemVariants, listVariants, transition } from '@/lib/motion'
 import { useT } from '@/i18n'
 
@@ -31,7 +32,7 @@ import { useT } from '@/i18n'
 export default function Plans() {
   const navigate = useNavigate()
   const t = useT()
-  const { yuyuPlanExpiresAt, isPremium, isUltimate, language } = useStore()
+  const { yuyuPlanExpiresAt, isPremium, isUltimate, language } = useStorePick('yuyuPlanExpiresAt', 'isPremium', 'isUltimate', 'language', 'yuyuPlan')
 
   const PLANS = getPlans(t)
   const effectivePlan = isUltimate() ? 'ultimate' : isPremium() ? 'premium' : 'free'
@@ -261,13 +262,13 @@ export default function Plans() {
             <p className="text-[13px] text-txt-secondary">{t('plans.finalText')}</p>
             <motion.button
               onClick={() => setUpgradeTarget('premium')}
-              // Halo qui pulse doucement, et réaction franche au clic.
-              animate={{ boxShadow: ['0 0 0 rgba(75,63,207,0)', '0 0 32px rgba(75,63,207,0.45)', '0 0 0 rgba(75,63,207,0)'] }}
-              transition={{ duration: 3.4, repeat: Infinity, ease: 'easeInOut' }}
+              // Halo qui pulse doucement (calque à part, voir GlowPulse), et
+              // réaction franche au clic.
               whileHover={{ scale: 1.04 }}
               whileTap={{ scale: 0.97 }}
-              className="rounded-xl bg-accent px-7 py-3 text-[14px] font-semibold text-txt-primary transition-colors duration-150 hover:bg-accent-hover"
+              className="relative rounded-xl bg-accent px-7 py-3 text-[14px] font-semibold text-txt-primary transition-colors duration-150 hover:bg-accent-hover"
             >
+              <GlowPulse shadow="0 0 32px rgba(75,63,207,0.45)" duration={3.4} radius="rounded-xl" />
               {t('plans.finalCta')}
             </motion.button>
           </Reveal>
@@ -313,12 +314,11 @@ function FeaturedOffer({
   const t = useT()
 
   return (
-    <motion.div
-      // Respiration très lente de la lueur : l'offre « vit » sans clignoter.
-      animate={{ boxShadow: ['0 0 0 rgba(75,63,207,0)', '0 0 42px rgba(75,63,207,0.16)', '0 0 0 rgba(75,63,207,0)'] }}
-      transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
-      className="mx-auto grid max-w-4xl grid-cols-[1.1fr_1fr] items-center gap-10 rounded-2xl border border-accent/30 bg-accent/[0.06] p-9"
+    <div
+      className="relative mx-auto grid max-w-4xl grid-cols-[1.1fr_1fr] items-center gap-10 rounded-2xl border border-accent/30 bg-accent/[0.06] p-9"
     >
+      {/* Respiration très lente de la lueur : l'offre « vit » sans clignoter. */}
+      <GlowPulse shadow="0 0 42px rgba(75,63,207,0.16)" duration={6} radius="rounded-2xl" />
       <div className="flex flex-col gap-4">
         <div className="flex items-center gap-2.5">
           <PlanIcon plan={plan.id} color={plan.color} />
@@ -375,7 +375,7 @@ function FeaturedOffer({
             </motion.li>
           ))}
       </motion.ul>
-    </motion.div>
+    </div>
   )
 }
 

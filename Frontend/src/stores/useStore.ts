@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { useShallow } from 'zustand/react/shallow'
 import type { Instance, JvmVendor, Version, Account } from '@/types'
 import { AUTH_SYSTEM_VERSION } from '@/config/authVersion'
 
@@ -608,3 +609,27 @@ export const useStore = create<Store>()(
     }
   )
 )
+
+/**
+ * Lit plusieurs champs du magasin et ne redessine le composant que si l'un
+ * d'EUX change : `const { a, b } = useStorePick('a', 'b')`.
+ *
+ * À utiliser à la place de `useStore()` sans sélecteur, qui abonne le
+ * composant au magasin entier — chaque changement, même sans rapport, le
+ * redessinait (audit de performance, 2026-11-06).
+ *
+ * ⚠️ Les lecteurs (`isPremium()`, `isInstanceRunning(id)`, `isAgentEnabled(id)`,
+ * `selectedInstance()`) lisent l'état à l'appel : ce sont des fonctions
+ * stables, elles ne redessinent rien. Demander aussi le champ qu'ils lisent
+ * (`yuyuPlan` + `yuyuPlanExpiresAt`, `runningInstances`, `agentOptOut`,
+ * `instances` + `selectedInstanceId`), sans forcément le déstructurer.
+ */
+export function useStorePick<K extends keyof Store>(...keys: K[]): Pick<Store, K> {
+  return useStore(
+    useShallow((s) => {
+      const picked = {} as Pick<Store, K>
+      for (const k of keys) picked[k] = s[k]
+      return picked
+    }),
+  )
+}

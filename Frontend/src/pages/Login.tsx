@@ -6,7 +6,7 @@ import { SkinViewer, WalkingAnimation } from 'skinview3d'
 import { api } from '@/api/client'
 import { skinPreview } from '@/lib/skinCache'
 import { loadLatestSkin } from '@/lib/skinLoad'
-import { useStore } from '@/stores/useStore'
+import { useStorePick } from '@/stores/useStore'
 import type { Account } from '@/types'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { showError } from '@/stores/useErrorToast'
@@ -33,7 +33,8 @@ export default function Login() {
   const t = useT()
   const navigate = useNavigate()
   const mobile = useIsMobile()
-  const { uuid, username, accounts, setAccounts, setUser, clearUser, removeAccount, addAccount } = useStore()
+  const { uuid, username, accounts, setAccounts, setUser, clearUser, removeAccount, addAccount } =
+    useStorePick('uuid', 'username', 'accounts', 'setAccounts', 'setUser', 'clearUser', 'removeAccount', 'addAccount')
   const [showOfflineModal, setShowOfflineModal] = useState(false)
   // Choix Microsoft / hors ligne : un seul bouton d'ajout dans la liste.
   const [showAddModal, setShowAddModal] = useState(false)

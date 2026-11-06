@@ -6,7 +6,7 @@ import { loaderColor, showsRam } from '@/lib/loader'
 import { formatRam } from '@/lib/format'
 import { errorMessage } from '@/lib/apiError'
 import { skinOf } from '@/lib/friends'
-import { useStore } from '@/stores/useStore'
+import { useStore, useStorePick } from '@/stores/useStore'
 import { useFriends } from '@/stores/useFriends'
 import { api } from '@/api/client'
 import { showError } from '@/stores/useErrorToast'
@@ -46,7 +46,8 @@ export interface JoinRequest {
 export function JoinServerModal({ request, onClose }: { request: JoinRequest; onClose: () => void }) {
   const t = useT()
   const navigate = useNavigate()
-  const { instances, avoidBetaDependencies, showConsole, setSelectedInstanceId, setInstanceRunning, isAgentEnabled, addInstance, defaultRam } = useStore()
+  const { instances, avoidBetaDependencies, showConsole, setSelectedInstanceId, setInstanceRunning, isAgentEnabled, addInstance, defaultRam } =
+    useStorePick('instances', 'avoidBetaDependencies', 'showConsole', 'setSelectedInstanceId', 'setInstanceRunning', 'isAgentEnabled', 'addInstance', 'defaultRam', 'agentOptOut')
   const signedIn = useStore((s) => s.yuyuSignedIn)
   const refreshFriends = useFriends((s) => s.refresh)
   const [launchingId, setLaunchingId] = useState<string | null>(null)

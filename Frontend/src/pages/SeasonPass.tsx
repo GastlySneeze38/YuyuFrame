@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { RewardImage } from '@/components/competitive/RewardImage'
 import { TopoBackdrop } from '@/components/competitive/TopoBackdrop'
+import { GlowPulse } from '@/components/ui/GlowPulse'
 import { FREE_COLOR, Missions, PASS_COLOR } from '@/components/competitive/Challenges'
 import { type BattlePass, type Challenge, type MissionsMeta, type PassReward } from '@/lib/competitive'
 import { usePass } from '@/lib/usePass'
@@ -378,15 +379,14 @@ function ProgressCard({ pass, owned }: { pass: BattlePass; owned: boolean }) {
           {waiting > 0 ? t('competitive.pass.waitingCount', { count: waiting }) : t('competitive.pass.passAdds', { count: paid.length })}
         </span>
       )}
-      <motion.button
+      <button
         onClick={() => navigate('/plans')}
-        // Une récompense attend : le bouton respire pour le dire.
-        animate={waiting > 0 ? { boxShadow: [`0 0 0px rgb(${PASS_COLOR} / 0)`, `0 0 22px rgb(${PASS_COLOR} / 0.65)`, `0 0 0px rgb(${PASS_COLOR} / 0)`] } : undefined}
-        transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
-        className="rounded-xl bg-white py-2.5 text-[11.5px] font-black uppercase tracking-[0.05em] text-black transition-transform hover:scale-[1.02] active:scale-[0.98]"
+        className="relative rounded-xl bg-white py-2.5 text-[11.5px] font-black uppercase tracking-[0.05em] text-black transition-transform hover:scale-[1.02] active:scale-[0.98]"
       >
+        {/* Une récompense attend : le bouton respire pour le dire. */}
+        {waiting > 0 && <GlowPulse shadow={`0 0 22px rgb(${PASS_COLOR} / 0.65)`} duration={2.4} radius="rounded-xl" />}
         {t('competitive.pass.unlock')}
-      </motion.button>
+      </button>
     </div>
   )
 

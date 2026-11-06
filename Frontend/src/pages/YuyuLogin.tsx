@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api, type YuyuSessionResp } from '@/api/client'
-import { useStore } from '@/stores/useStore'
+import { useStore, useStorePick } from '@/stores/useStore'
 import { showError, showApiError, showNotice } from '@/stores/useErrorToast'
 import { parseApiError } from '@/lib/apiError'
 import { useT } from '@/i18n'
@@ -15,7 +15,8 @@ type Mode = 'checking' | 'login' | 'register' | 'forgot' | 'reset' | 'mfa' | 'er
 export default function YuyuLogin() {
   const t = useT()
   const navigate = useNavigate()
-  const { setYuyuSession, setAccounts, setUser } = useStore()
+  // Des actions seulement : stables, donc aucun redessin dû au magasin.
+  const { setYuyuSession, setAccounts, setUser } = useStorePick('setYuyuSession', 'setAccounts', 'setUser')
 
   const [mode, setMode] = useState<Mode>('checking')
   const [username, setUsername] = useState('')
