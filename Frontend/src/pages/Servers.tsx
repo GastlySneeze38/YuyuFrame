@@ -105,7 +105,7 @@ export default function Servers() {
   // tournerait en boucle derrière une liste qu'on fait défiler.
   if (mobile) {
     return (
-      <div className="relative flex h-full flex-col overflow-hidden bg-[#09090D] text-txt-primary">
+      <div className="relative flex h-full flex-col overflow-hidden bg-[rgb(var(--bg-primary))] text-txt-primary">
         <ScreenHeader title={t('servers.page.title')} subtitle={t('servers.page.subtitle')} fallback="/home" />
         <div className="shrink-0 px-4 pb-3 pt-3">
           <Segmented value={tab} onChange={go} options={TABS.map((v) => ({ value: v, label: t(`servers.page.tabs.${v}`) }))} />

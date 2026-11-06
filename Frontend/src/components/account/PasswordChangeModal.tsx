@@ -56,7 +56,7 @@ export function PasswordChangeModal({ forced, onClose }: { forced?: boolean; onC
       value={value}
       onChange={(e) => set(e.target.value)}
       placeholder={placeholder}
-      className="rounded-xl border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.04)] px-3 py-2 text-[13px] text-white outline-none transition-colors duration-150 focus:border-[rgba(75,63,207,0.6)]"
+      className="rounded-xl border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.04)] px-3 py-2 text-[13px] text-white outline-none transition-colors duration-150 focus:border-[rgb(var(--accent)/0.6)]"
     />
   )
 
@@ -87,7 +87,7 @@ export function PasswordChangeModal({ forced, onClose }: { forced?: boolean; onC
         <button
           onClick={submit}
           disabled={busy || !current || !next || (needsCode && !mfaCode.trim())}
-          className="flex items-center gap-2 rounded-xl border border-[rgba(75,63,207,0.35)] bg-[rgba(75,63,207,0.18)] px-5 py-2 text-[13px] font-semibold text-[rgba(180,170,255,0.9)] transition-all duration-150 hover:bg-[rgba(75,63,207,0.3)] disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex items-center gap-2 rounded-xl border border-[rgb(var(--accent)/0.35)] bg-[rgb(var(--accent)/0.18)] px-5 py-2 text-[13px] font-semibold text-[rgb(var(--accent-text)/0.9)] transition-all duration-150 hover:bg-[rgb(var(--accent)/0.3)] disabled:cursor-not-allowed disabled:opacity-50"
         >
           {busy && <ButtonSpinner />}
           {t('password.submit')}

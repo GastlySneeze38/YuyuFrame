@@ -280,7 +280,7 @@ export default function Competitive() {
         <div className="mx-auto flex h-full w-full max-w-6xl flex-col gap-4 px-6 py-5">
           {status.kind === 'loading' ? (
             <div className="flex items-center justify-center py-24">
-              <ButtonSpinner size={32} color="#818cf8" trackColor="rgba(255,255,255,0.08)" />
+              <ButtonSpinner size={32} color="rgb(var(--accent-text))" trackColor="rgba(255,255,255,0.08)" />
             </div>
           ) : !data ? (
             statusCard

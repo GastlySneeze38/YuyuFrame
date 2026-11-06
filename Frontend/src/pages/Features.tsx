@@ -95,7 +95,7 @@ export default function Features() {
       )
     }
     return (
-      <div className="flex h-full flex-col overflow-hidden bg-[#09090D] text-txt-primary">
+      <div className="flex h-full flex-col overflow-hidden bg-[rgb(var(--bg-primary))] text-txt-primary">
         <header className="flex shrink-0 items-center gap-1 pb-2 pl-1.5 pr-4 pt-[max(12px,env(safe-area-inset-top))]">
           <MenuButton />
           <h1 className="min-w-0 flex-1 truncate text-[28px] font-bold tracking-tight text-white">{t('features.title')}</h1>

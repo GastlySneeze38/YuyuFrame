@@ -19,7 +19,10 @@
  */
 
 import { api } from '@/api/client'
-import { useStore } from '@/stores/useStore'
+import {
+  ACCENT_COLORS, APPEARANCE_THEMES, UI_SCALE_MAX, UI_SCALE_MIN, useStore,
+  type AccentColor, type AppearanceTheme,
+} from '@/stores/useStore'
 import { formatRam } from '@/lib/format'
 import type { t as tFn } from '@/i18n'
 
@@ -116,14 +119,34 @@ export const SHARED_SETTINGS: SharedSetting[] = [
     apply: (v) => api.analytics.setDisabled(!(v as boolean)),
     format: onOff,
   },
+  // Apparence (2026-11-06) : remplace `brightness`. Un ancien lien qui le
+  // porte encore voit cette clé ignorée, comme toute clé inconnue.
   {
-    key: 'brightness',
-    label: 'settings.apparence.brightnessLabel',
-    read: () => store().brightness,
-    parse: intIn(40, 200),
-    apply: (v) => store().setBrightness(v as number),
+    key: 'appearanceTheme',
+    label: 'settings.apparence.themeLabel',
+    read: () => store().appearanceTheme,
+    parse: (raw) => (APPEARANCE_THEMES as string[]).includes(raw) ? raw : undefined,
+    apply: (v) => store().setAppearanceTheme(v as AppearanceTheme),
+    format: (v, t) => t(`settings.apparence.themes.${v}`),
+  },
+  {
+    key: 'accentColor',
+    label: 'settings.apparence.accentLabel',
+    read: () => store().accentColor,
+    parse: (raw) => (ACCENT_COLORS as string[]).includes(raw) ? raw : undefined,
+    apply: (v) => store().setAccentColor(v as AccentColor),
+    format: (v, t) => t(`settings.apparence.accents.${v}`),
+  },
+  {
+    key: 'uiScale',
+    label: 'settings.apparence.scaleLabel',
+    read: () => store().uiScale,
+    parse: intIn(UI_SCALE_MIN, UI_SCALE_MAX),
+    apply: (v) => store().setUiScale(v as number),
     format: (v) => `${v}%`,
   },
+  toggle('reduceMotion', 'settings.apparence.reduceMotionLabel', () => store().reduceMotion, (v) => store().setReduceMotion(v)),
+  toggle('glassBlur', 'settings.apparence.blurLabel', () => store().glassBlur, (v) => store().setGlassBlur(v)),
   {
     key: 'soundVolume',
     label: 'settings.apparence.soundLabel',

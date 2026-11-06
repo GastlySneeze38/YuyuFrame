@@ -88,7 +88,7 @@ export function BrowseTab({
   const chipClass = (active: boolean) =>
     `rounded-lg text-[11px] font-semibold transition-all duration-150 h-7 px-2.5 border ${
       active
-        ? 'bg-[rgba(75,63,207,0.35)] border-[rgba(75,63,207,0.7)] text-[rgba(255,255,255,0.95)]'
+        ? 'bg-[rgb(var(--accent)/0.35)] border-[rgb(var(--accent)/0.7)] text-[rgba(255,255,255,0.95)]'
         : 'bg-[rgba(0,0,0,0.3)] border-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.4)]'
     }`
 
@@ -106,10 +106,10 @@ export function BrowseTab({
             value={query}
             onChange={onQueryChange}
             enterKeyHint="search"
-            className="w-full rounded-xl pl-9 pr-4 text-sm text-white outline-none h-10 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] focus:border-[rgba(75,63,207,0.6)] max-sm:h-11"
+            className="w-full rounded-xl pl-9 pr-4 text-sm text-white outline-none h-10 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] focus:border-[rgb(var(--accent)/0.6)] max-sm:h-11"
           />
           {searching && (
-            <ButtonSpinner size={16} color="rgba(75,63,207,0.8)" trackColor="rgba(255,255,255,0.1)" className="absolute right-3 top-1/2 -translate-y-1/2" />
+            <ButtonSpinner size={16} color="rgb(var(--accent)/0.8)" trackColor="rgba(255,255,255,0.1)" className="absolute right-3 top-1/2 -translate-y-1/2" />
           )}
         </div>
         {mobile ? (
@@ -119,8 +119,8 @@ export function BrowseTab({
           onClick={() => setShowFilters((v) => !v)}
           className={`flex flex-shrink-0 items-center gap-1.5 rounded-xl px-3.5 text-[12px] font-semibold h-10 border transition-colors ${
             showFilters || isFiltersActive(filters)
-              ? 'bg-[rgba(75,63,207,0.25)] border-[rgba(75,63,207,0.6)] text-white'
-              : 'bg-[rgba(255,255,255,0.04)] border-[rgba(255,255,255,0.1)] text-[rgba(255,255,255,0.6)] hover:border-[rgba(75,63,207,0.5)]'
+              ? 'bg-[rgb(var(--accent)/0.25)] border-[rgb(var(--accent)/0.6)] text-white'
+              : 'bg-[rgba(255,255,255,0.04)] border-[rgba(255,255,255,0.1)] text-[rgba(255,255,255,0.6)] hover:border-[rgb(var(--accent)/0.5)]'
           }`}
         >
           <svg viewBox="0 0 24 24" fill="currentColor" width={14} height={14}>
@@ -190,7 +190,7 @@ export function BrowseTab({
                 className="rounded-lg px-2 text-[11px] font-medium text-white outline-none h-7 bg-[rgba(0,0,0,0.35)] border border-[rgba(255,255,255,0.08)]"
               >
                 {SORT_OPTIONS.map((s) => (
-                  <option key={s} value={s} className="bg-[#111118]">{t(`mods.sort${s.charAt(0).toUpperCase()}${s.slice(1)}`)}</option>
+                  <option key={s} value={s} className="bg-[rgb(var(--bg-card))]">{t(`mods.sort${s.charAt(0).toUpperCase()}${s.slice(1)}`)}</option>
                 ))}
               </select>
             </div>

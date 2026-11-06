@@ -1474,7 +1474,7 @@ function SkinEditorScreen({ mobile }: { mobile: boolean }) {
   if (mobile) {
     const stepIcon = (d: string) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-[22px] w-[22px]"><path d={d} /></svg>
     return (
-      <div className="flex h-full flex-col overflow-hidden bg-[#09090D] text-txt-primary">
+      <div className="flex h-full flex-col overflow-hidden bg-[rgb(var(--bg-primary))] text-txt-primary">
         <ScreenHeader title={t('skinEditor.title')} fallback={backTo} right={<PushedMoreButton label={t('stats.mobile.more')} onClick={() => setMenuOpen(true)} />} />
 
         <div ref={contentRef} className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-6 pt-3">
@@ -1494,7 +1494,7 @@ function SkinEditorScreen({ mobile }: { mobile: boolean }) {
                 {mode === '2d' && <HoverChip hover={hover} />}
                 {!ready && (
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <ButtonSpinner size={28} color="#818cf8" trackColor="rgba(255,255,255,0.08)" />
+                    <ButtonSpinner size={28} color="rgb(var(--accent-text))" trackColor="rgba(255,255,255,0.08)" />
                   </div>
                 )}
               </div>
@@ -1516,7 +1516,7 @@ function SkinEditorScreen({ mobile }: { mobile: boolean }) {
                   {/* Sur deux lignes au besoin : à côté de trois boutons, la place manque en allemand et en russe. */}
                   <span className="flex min-w-0 flex-col">
                     <span className="break-words text-[15px] font-semibold leading-tight text-white">{mode === '2d' ? t('skinEditor.modelTitle') : t('skinEditor.flatTitle')}</span>
-                    <span className="break-words text-[13px] leading-tight text-[#a29bfe]">{mode === '2d' ? t('skinEditor.backTo3d') : t('skinEditor.editFlat')}</span>
+                    <span className="break-words text-[13px] leading-tight text-[rgb(var(--accent-text))]">{mode === '2d' ? t('skinEditor.backTo3d') : t('skinEditor.editFlat')}</span>
                   </span>
                 </button>
                 <button onClick={undo} disabled={at <= 0} aria-label={t('skinEditor.undo')} className="press flex h-12 w-11 shrink-0 items-center justify-center rounded-xl text-white/80 disabled:opacity-30">
@@ -1612,8 +1612,8 @@ function SkinEditorScreen({ mobile }: { mobile: boolean }) {
           </div>
         </div>
 
-        <div className="flex shrink-0 flex-col gap-1.5 border-t border-white/[0.06] bg-[#0d0c14] px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3">
-          <button onClick={() => void save()} disabled={!ready || saving} className="press flex h-12 items-center justify-center gap-2 rounded-2xl bg-[#4B3FCF] text-[16px] font-semibold text-white disabled:opacity-50">
+        <div className="flex shrink-0 flex-col gap-1.5 border-t border-white/[0.06] bg-[rgb(var(--bg-primary))] px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3">
+          <button onClick={() => void save()} disabled={!ready || saving} className="press flex h-12 items-center justify-center gap-2 rounded-2xl bg-[rgb(var(--accent))] text-[16px] font-semibold text-white disabled:opacity-50">
             {saving && <ButtonSpinner />}
             {t('skinEditor.save')}
           </button>
@@ -1699,7 +1699,7 @@ function SkinEditorScreen({ mobile }: { mobile: boolean }) {
                   title={t('skinEditor.brush')}
                   aria-label={t('skinEditor.brush')}
                   onChange={(e) => setBrush(Number(e.target.value))}
-                  className="h-1 min-w-0 flex-1 cursor-pointer appearance-none rounded-full bg-[rgba(255,255,255,0.1)] accent-[#4B3FCF]"
+                  className="h-1 min-w-0 flex-1 cursor-pointer appearance-none rounded-full bg-[rgba(255,255,255,0.1)] accent-[rgb(var(--accent))]"
                 />
                 <span className="w-5 shrink-0 text-right font-mono text-[11px] tabular-nums text-txt-muted">
                   {brush}
@@ -1831,7 +1831,7 @@ function SkinEditorScreen({ mobile }: { mobile: boolean }) {
 
               {!ready && (
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <ButtonSpinner size={28} color="#818cf8" trackColor="rgba(255,255,255,0.08)" />
+                  <ButtonSpinner size={28} color="rgb(var(--accent-text))" trackColor="rgba(255,255,255,0.08)" />
                 </div>
               )}
             </div>
@@ -2080,7 +2080,7 @@ function RegionGrid({ active, pass }: { active: Layer; pass: 'under' | 'over' })
             key={key}
             {...box}
             fill={mine ? 'none' : 'rgba(0,0,0,0.42)'}
-            stroke={mine ? 'rgba(129,140,248,0.6)' : 'rgba(255,255,255,0.16)'}
+            stroke={mine ? 'rgb(var(--accent-text)/0.6)' : 'rgba(255,255,255,0.16)'}
             strokeWidth={mine ? 0.4 : 0.25}
             strokeDasharray={region.layer === 'outer' ? '1 1' : undefined}
           />
@@ -2485,7 +2485,7 @@ function JointSlider({
         step={1}
         value={degrees}
         onChange={(e) => onChange((Number(e.target.value) * Math.PI) / 180)}
-        className={mobile ? 'touch-range order-last basis-full' : 'h-1 min-w-0 flex-1 cursor-pointer appearance-none rounded-full bg-[rgba(255,255,255,0.1)] accent-[#4B3FCF]'}
+        className={mobile ? 'touch-range order-last basis-full' : 'h-1 min-w-0 flex-1 cursor-pointer appearance-none rounded-full bg-[rgba(255,255,255,0.1)] accent-[rgb(var(--accent))]'}
         style={mobile ? { ['--fill' as string]: `${((degrees + range) / (2 * range)) * 100}%` } : undefined}
       />
       <span className="w-10 shrink-0 text-right font-mono text-[11px] tabular-nums text-txt-muted max-sm:text-[13px]">

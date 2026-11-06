@@ -29,12 +29,12 @@ export function MobileFiltersButton({ count, onClick }: { count: number; onClick
       onClick={onClick}
       aria-haspopup="dialog"
       className={`press flex h-11 shrink-0 items-center gap-1.5 rounded-xl border px-3.5 text-[15px] font-semibold ${
-        count > 0 ? 'border-[rgba(120,100,255,0.55)] bg-[rgba(75,63,207,0.25)] text-white' : 'border-white/[0.1] bg-white/[0.04] text-white/75'
+        count > 0 ? 'border-[rgb(var(--accent-hover)/0.55)] bg-[rgb(var(--accent)/0.25)] text-white' : 'border-white/[0.1] bg-white/[0.04] text-white/75'
       }`}
     >
       <svg viewBox="0 0 24 24" fill="currentColor" className="h-[18px] w-[18px]"><path d="M4 6h16v2H4zm3 5h10v2H7zm4 5h2v2h-2z" /></svg>
       {t('mods.filtersToggle')}
-      {count > 0 && <span className="rounded-full bg-[#4B3FCF] px-1.5 text-[12px] font-bold tabular-nums">{count}</span>}
+      {count > 0 && <span className="rounded-full bg-[rgb(var(--accent))] px-1.5 text-[12px] font-bold tabular-nums">{count}</span>}
     </button>
   )
 }
@@ -87,7 +87,7 @@ export function MobileSearchFilters({ open, onClose, categories, selected, onCat
           </button>
           <button
             onClick={onClose}
-            className="press h-12 min-w-0 flex-1 rounded-2xl bg-[#4B3FCF] text-[15px] font-bold text-white"
+            className="press h-12 min-w-0 flex-1 rounded-2xl bg-[rgb(var(--accent))] text-[15px] font-bold text-white"
           >
             {t('mods.mobile.showResults')}
           </button>
@@ -121,7 +121,7 @@ export function MobileSearchFilters({ open, onClose, categories, selected, onCat
                     onClick={() => onFilters({ ...filters, environment: env })}
                     aria-pressed={filters.environment === env}
                     className={`h-10 min-w-0 flex-1 rounded-xl text-[14px] font-semibold transition-colors duration-150 ${
-                      filters.environment === env ? 'bg-[rgba(75,63,207,0.35)] text-white' : 'text-white/55'
+                      filters.environment === env ? 'bg-[rgb(var(--accent)/0.35)] text-white' : 'text-white/55'
                     }`}
                   >
                     {env === 'client' ? t('mods.filtersEnvironmentClient') : env === 'server' ? t('mods.filtersEnvironmentServer') : t('mods.filtersEnvironmentAny')}
@@ -150,7 +150,7 @@ export function MobileSearchFilters({ open, onClose, categories, selected, onCat
               autoCapitalize="none"
               autoCorrect="off"
               enterKeyHint="done"
-              className="h-12 w-full rounded-xl border border-white/[0.1] bg-black/30 px-4 text-[16px] text-white outline-none placeholder:text-white/35 focus:border-[rgba(120,100,255,0.6)]"
+              className="h-12 w-full rounded-xl border border-white/[0.1] bg-black/30 px-4 text-[16px] text-white outline-none placeholder:text-white/35 focus:border-[rgb(var(--accent-hover)/0.6)]"
             />
             <label className="mt-3 flex min-h-[48px] cursor-pointer items-center justify-between gap-3">
               <span className="text-[15px] text-white/85">{t('mods.filtersOpenSourceOnly')}</span>
@@ -181,7 +181,7 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
       onClick={onClick}
       aria-pressed={active}
       className={`press h-10 rounded-full border px-4 text-[14px] font-semibold transition-colors duration-150 ${
-        active ? 'border-[rgba(120,100,255,0.6)] bg-[rgba(75,63,207,0.35)] text-white' : 'border-white/[0.08] bg-white/[0.03] text-white/65'
+        active ? 'border-[rgb(var(--accent-hover)/0.6)] bg-[rgb(var(--accent)/0.35)] text-white' : 'border-white/[0.08] bg-white/[0.03] text-white/65'
       }`}
     >
       {children}

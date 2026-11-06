@@ -1,7 +1,8 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useStorePick } from '@/stores/useStore'
+import { ACCENT_COLORS, APPEARANCE_THEMES, useStorePick } from '@/stores/useStore'
+import { ThemePreview } from '@/components/settings/ThemePreview'
 import { api } from '@/api/client'
 import { showError } from '@/stores/useErrorToast'
 import { formatRam } from '@/lib/format'
@@ -67,15 +68,15 @@ export function MobileSettings(p: {
     else setParams({}, { replace: true })
   }
 
-  const s = useStorePick('brightness', 'customRamMb', 'defaultRam', 'language')
+  const s = useStorePick('appearanceTheme', 'customRamMb', 'defaultRam', 'language')
   const preview: Record<string, string | undefined> = {
     lancement: formatRam(s.customRamMb ?? s.defaultRam),
     langue: LANGUAGES.find((l) => l.code === s.language)?.nativeLabel,
-    apparence: s.brightness === 100 ? t('settings.apparence.oledLabel') : s.brightness === 200 ? t('settings.apparence.darkModeLabel') : `${s.brightness}%`,
+    apparence: t(`settings.apparence.themes.${s.appearanceTheme}`),
   }
 
   return (
-    <div className="relative h-full overflow-hidden bg-[#09090D]">
+    <div className="relative h-full overflow-hidden bg-[rgb(var(--bg-primary))]">
       {/* ── Liste des sections ─────────────────────────────────────────── */}
       <div className="flex h-full flex-col" aria-hidden={!!section}>
         <header className="flex shrink-0 items-center gap-1 pb-3 pl-1.5 pr-4 pt-[max(12px,env(safe-area-inset-top))]">
@@ -126,10 +127,10 @@ export function MobileSettings(p: {
             animate={reduce ? { opacity: 1 } : { transform: 'translateX(0%)', transitionEnd: { transform: 'none' } }}
             exit={reduce ? { opacity: 0, transition: { duration: 0.15 } } : { transform: 'translateX(100%)', transition: { duration: 0.22, ease: EASE_OUT } }}
             transition={{ duration: 0.32, ease: [0.32, 0.72, 0, 1] }}
-            className="absolute inset-0 z-10 flex flex-col bg-[#09090D] shadow-[-12px_0_32px_rgba(0,0,0,0.45)]"
+            className="absolute inset-0 z-10 flex flex-col bg-[rgb(var(--bg-primary))] shadow-[-12px_0_32px_rgba(0,0,0,0.45)]"
           >
             <header className="grid shrink-0 grid-cols-[48px_1fr_48px] items-center border-b border-white/[0.06] px-1 pb-2 pt-[max(8px,env(safe-area-inset-top))]">
-              <button onClick={close} aria-label={t('settings.title')} className="press flex h-11 w-11 items-center justify-center rounded-full text-[#a29bfe]">
+              <button onClick={close} aria-label={t('settings.title')} className="press flex h-11 w-11 items-center justify-center rounded-full text-[rgb(var(--accent-text))]">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
                   <path d="M15 6l-6 6 6 6" />
                 </svg>
@@ -157,8 +158,10 @@ function SectionBody({ id, p }: { id: string; p: Parameters<typeof MobileSetting
   const t = useT()
   const navigate = useNavigate()
   const s = useStorePick(
-    'allowBackground', 'avoidBetaDependencies', 'brightness', 'closeOnLaunch', 'confirmServerLaunch', 'customRamMb',
-    'defaultRam', 'instanceSyncMode', 'language', 'setAvoidBetaDependencies', 'setBrightness', 'setCloseOnLaunch',
+    'allowBackground', 'avoidBetaDependencies', 'closeOnLaunch', 'confirmServerLaunch', 'customRamMb',
+    'appearanceTheme', 'setAppearanceTheme', 'accentColor', 'setAccentColor', 'reduceMotion', 'setReduceMotion',
+    'glassBlur', 'setGlassBlur',
+    'defaultRam', 'instanceSyncMode', 'language', 'setAvoidBetaDependencies', 'setCloseOnLaunch',
     'setConfirmServerLaunch', 'setCustomRamMb', 'setDefaultRam', 'setInstanceSyncMode', 'setLanguage', 'setShowConsole',
     'setShowHomeServers', 'setSyncGameSettings', 'sgaUnlocked', 'showConsole', 'showHomeServers', 'soundVolume', 'setSoundVolume', 'syncGameSettings',
   )
@@ -195,7 +198,7 @@ function SectionBody({ id, p }: { id: string; p: Parameters<typeof MobileSetting
                       onClick={() => s.setCustomRamMb(active ? null : mb)}
                       aria-pressed={active}
                       className={`press h-10 rounded-full border px-4 text-[15px] font-semibold transition-colors duration-150 ${
-                        active ? 'border-[rgba(120,100,255,0.6)] bg-[rgba(75,63,207,0.35)] text-white' : 'border-white/[0.08] bg-white/[0.03] text-white/70'
+                        active ? 'border-[rgb(var(--accent-hover)/0.6)] bg-[rgb(var(--accent)/0.35)] text-white' : 'border-white/[0.08] bg-white/[0.03] text-white/70'
                       }`}
                     >
                       {go} Go
@@ -204,7 +207,7 @@ function SectionBody({ id, p }: { id: string; p: Parameters<typeof MobileSetting
                 })}
               </div>
               <div className="flex items-center gap-2">
-                <div className="flex h-12 min-w-0 flex-1 items-center gap-2 rounded-xl border border-white/[0.1] bg-black/30 px-4 focus-within:border-[rgba(120,100,255,0.6)]">
+                <div className="flex h-12 min-w-0 flex-1 items-center gap-2 rounded-xl border border-white/[0.1] bg-black/30 px-4 focus-within:border-[rgb(var(--accent-hover)/0.6)]">
                   <input
                     type="number"
                     inputMode="numeric"
@@ -233,7 +236,7 @@ function SectionBody({ id, p }: { id: string; p: Parameters<typeof MobileSetting
               <button
                 onClick={() => setShowRamInfo((v) => !v)}
                 aria-expanded={showRamInfo}
-                className="self-start text-[15px] font-semibold text-[#a99bff]"
+                className="self-start text-[15px] font-semibold text-[rgb(var(--accent-text))]"
               >
                 {t('settings.lancement.ramInfoTooltip')}
               </button>
@@ -319,7 +322,7 @@ function SectionBody({ id, p }: { id: string; p: Parameters<typeof MobileSetting
                 <button
                   onClick={p.pickDataRoot}
                   disabled={p.movingData}
-                  className="press h-11 min-w-0 flex-1 rounded-xl bg-[#4B3FCF] text-[15px] font-bold text-white disabled:opacity-40"
+                  className="press h-11 min-w-0 flex-1 rounded-xl bg-[rgb(var(--accent))] text-[15px] font-bold text-white disabled:opacity-40"
                 >
                   {t('common.change')}
                 </button>
@@ -381,22 +384,67 @@ function SectionBody({ id, p }: { id: string; p: Parameters<typeof MobileSetting
     case 'apparence':
       return (
         <div className="flex flex-col gap-6">
-          <Group title={t('settings.apparence.displayModeLabel')}>
-            {([
-              { id: 'oled', label: t('settings.apparence.oledLabel'), desc: t('settings.apparence.oledDesc'), value: 100 },
-              { id: 'dark', label: t('settings.apparence.darkModeLabel'), desc: t('settings.apparence.darkModeDesc'), value: 200 },
-            ] as const).map((o) => (
-              <RadioRow key={o.id} label={o.label} desc={o.desc} active={s.brightness === o.value} onClick={() => s.setBrightness(o.value)} />
-            ))}
-          </Group>
-          <Group footer={t('settings.apparence.brightnessDesc')}>
-            <SliderRow
-              label={t('settings.apparence.brightnessLabel')}
-              value={`${s.brightness}%`}
-              min={40} max={200} step={5}
-              current={s.brightness}
-              onChange={s.setBrightness}
-              ticks={[t('settings.apparence.dark'), 'OLED', t('settings.apparence.darkModeLabel')]}
+          {/* Thèmes : mêmes cartes que sur PC (`data-theme` sur la carte,
+              aperçu par les jetons). Pas de taille d'interface ici : sur
+              téléphone, c'est la taille de texte du système qui décide. */}
+          <div className="flex flex-col gap-2">
+            <p className="px-1 text-[13px] font-semibold uppercase tracking-[0.06em] text-white/55">{t('settings.apparence.themeLabel')}</p>
+            <div className="grid grid-cols-3 gap-2.5">
+              {APPEARANCE_THEMES.map((id) => {
+                const active = s.appearanceTheme === id
+                return (
+                  <button
+                    key={id}
+                    data-theme={id}
+                    onClick={() => s.setAppearanceTheme(id)}
+                    aria-pressed={active}
+                    className={`press flex flex-col overflow-hidden rounded-2xl border-2 text-left ${active ? 'border-accent' : 'border-line'}`}
+                  >
+                    <ThemePreview />
+                    <span className="bg-bg-card px-3 py-2.5 text-[15px] font-semibold text-white">{t(`settings.apparence.themes.${id}`)}</span>
+                  </button>
+                )
+              })}
+            </div>
+            <p className="px-1 text-[13px] leading-snug text-white/55">{t(`settings.apparence.themeDescs.${s.appearanceTheme}`)}</p>
+          </div>
+          <div className="flex flex-col gap-2">
+            <p className="px-1 text-[13px] font-semibold uppercase tracking-[0.06em] text-white/55">{t('settings.apparence.accentLabel')}</p>
+            <div className="flex justify-between rounded-2xl border border-line bg-white/[0.03] px-4 py-3.5">
+              {ACCENT_COLORS.map((id) => {
+                const active = s.accentColor === id
+                return (
+                  <button
+                    key={id}
+                    data-accent={id}
+                    onClick={() => s.setAccentColor(id)}
+                    aria-pressed={active}
+                    aria-label={t(`settings.apparence.accents.${id}`)}
+                    className={`press flex h-11 w-11 items-center justify-center rounded-full bg-accent ring-offset-2 ring-offset-[rgb(var(--bg-card))] ${active ? 'ring-2 ring-white' : ''}`}
+                  >
+                    {active && (
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 text-white">
+                        <path d="M5 12l5 5L20 7" />
+                      </svg>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+            <p className="px-1 text-[13px] text-white/55">{t(`settings.apparence.accents.${s.accentColor}`)}</p>
+          </div>
+          <Group>
+            <ToggleRow
+              label={t('settings.apparence.reduceMotionLabel')}
+              desc={t('settings.apparence.reduceMotionDesc')}
+              checked={s.reduceMotion}
+              onChange={() => s.setReduceMotion(!s.reduceMotion)}
+            />
+            <ToggleRow
+              label={t('settings.apparence.blurLabel')}
+              desc={t('settings.apparence.blurDesc')}
+              checked={s.glassBlur}
+              onChange={() => s.setGlassBlur(!s.glassBlur)}
             />
           </Group>
           <Group footer={t('settings.apparence.soundDesc')}>
@@ -410,7 +458,7 @@ function SectionBody({ id, p }: { id: string; p: Parameters<typeof MobileSetting
             <button
               onClick={playHalloweenLaunchSound}
               disabled={s.soundVolume === 0}
-              className="flex min-h-[52px] w-full items-center px-4 text-left text-[16px] font-semibold text-[#a99bff] active:bg-white/[0.04] disabled:opacity-40"
+              className="flex min-h-[52px] w-full items-center px-4 text-left text-[16px] font-semibold text-[rgb(var(--accent-text))] active:bg-white/[0.04] disabled:opacity-40"
             >
               {t('settings.apparence.soundTest')}
             </button>
@@ -491,7 +539,7 @@ function RadioRow({ label, desc, active, onClick }: { label: string; desc?: stri
         {desc && <span className="text-[13px] leading-snug text-white/55">{desc}</span>}
       </span>
       {active && (
-        <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 shrink-0 text-[#a99bff]"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" /></svg>
+        <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 shrink-0 text-[rgb(var(--accent-text))]"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" /></svg>
       )}
     </button>
   )
@@ -523,7 +571,7 @@ function SliderRow({ label, value, min, max, step, current, onChange, ticks }: {
     <div className="flex flex-col px-4 pt-3">
       <div className="flex items-baseline justify-between gap-3">
         <span className="min-w-0 truncate text-[15px] text-white/90">{label}</span>
-        <span className="shrink-0 text-[15px] font-semibold tabular-nums text-[#a99bff]">{value}</span>
+        <span className="shrink-0 text-[15px] font-semibold tabular-nums text-[rgb(var(--accent-text))]">{value}</span>
       </div>
       <input
         type="range"

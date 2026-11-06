@@ -36,7 +36,7 @@ export const InstanceRow = memo(function InstanceRow({ instance, selected, onOpe
     <div
       className={`flex h-[72px] items-center rounded-2xl border pr-1 transition-colors duration-150 ${
         selected
-          ? 'border-[rgba(120,100,255,0.5)] bg-[rgba(75,63,207,0.16)]'
+          ? 'border-[rgb(var(--accent-hover)/0.5)] bg-[rgb(var(--accent)/0.16)]'
           : 'border-white/[0.06] bg-white/[0.04]'
       }`}
     >
@@ -48,7 +48,7 @@ export const InstanceRow = memo(function InstanceRow({ instance, selected, onOpe
         <InstanceIcon
           instance={instance}
           size={44}
-          className={selected ? 'bg-[rgba(75,63,207,0.3)]' : 'bg-white/[0.05]'}
+          className={selected ? 'bg-[rgb(var(--accent)/0.3)]' : 'bg-white/[0.05]'}
         />
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="truncate text-[15px] font-semibold text-white">{instance.name}</span>

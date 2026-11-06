@@ -583,7 +583,7 @@ export default function Skins() {
   if (mobile) {
     const menuEntry = history.find((e) => e.id === historyMenu) ?? null
     return (
-      <div className="relative flex h-full flex-col overflow-hidden bg-[#09090D] text-txt-primary">
+      <div className="relative flex h-full flex-col overflow-hidden bg-[rgb(var(--bg-primary))] text-txt-primary">
         <ScreenHeader
           title={t('skins.title')}
           fallback="/features"
@@ -595,7 +595,7 @@ export default function Skins() {
         />
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[max(32px,env(safe-area-inset-bottom))] pt-4">
           {accounts === null ? (
-            <div className="flex justify-center py-16"><ButtonSpinner size={28} color="#818cf8" trackColor="rgba(255,255,255,0.08)" /></div>
+            <div className="flex justify-center py-16"><ButtonSpinner size={28} color="rgb(var(--accent-text))" trackColor="rgba(255,255,255,0.08)" /></div>
           ) : accounts.length === 0 ? (
             <div className={`${CARD} flex flex-col gap-1.5 px-5 py-8 text-center`}>
               <p className="text-[16px] font-semibold text-white">{t('skins.noAccount')}</p>
@@ -646,7 +646,7 @@ export default function Skins() {
                       <button onClick={() => setCandidate(null)} disabled={busy} className="press h-12 flex-1 rounded-2xl bg-white/[0.06] text-[15px] font-semibold text-white/75 disabled:opacity-40">
                         {t('skins.cancel')}
                       </button>
-                      <button onClick={askApply} disabled={busy} className="press flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-[#4B3FCF] text-[15px] font-semibold text-white disabled:opacity-50">
+                      <button onClick={askApply} disabled={busy} className="press flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-[rgb(var(--accent))] text-[15px] font-semibold text-white disabled:opacity-50">
                         {busy && <ButtonSpinner />}
                         {t('skins.apply')}
                       </button>
@@ -664,7 +664,7 @@ export default function Skins() {
                 />
                 <p className="px-1 text-[13px] leading-relaxed text-white/55">{t(`skins.source${tab[0].toUpperCase()}${tab.slice(1)}Hint`)}</p>
                 {tab === 'file' ? (
-                  <button onClick={pickFile} disabled={searching} className="press flex h-12 items-center justify-center gap-2 rounded-2xl bg-[#4B3FCF] text-[15px] font-semibold text-white disabled:opacity-50">
+                  <button onClick={pickFile} disabled={searching} className="press flex h-12 items-center justify-center gap-2 rounded-2xl bg-[rgb(var(--accent))] text-[15px] font-semibold text-white disabled:opacity-50">
                     {searching && <ButtonSpinner />}
                     {t('skins.chooseFile')}
                   </button>
@@ -685,7 +685,7 @@ export default function Skins() {
                     <button
                       onClick={tab === 'player' ? searchPlayer : checkUrl}
                       disabled={searching || !(tab === 'player' ? playerName.trim() : url.trim())}
-                      className="press flex h-12 shrink-0 items-center gap-2 rounded-xl bg-[#4B3FCF] px-4 text-[15px] font-semibold text-white disabled:opacity-40"
+                      className="press flex h-12 shrink-0 items-center gap-2 rounded-xl bg-[rgb(var(--accent))] px-4 text-[15px] font-semibold text-white disabled:opacity-40"
                     >
                       {searching && <ButtonSpinner />}
                       {tab === 'player' ? t('skins.search') : t('skins.check')}
@@ -736,7 +736,7 @@ export default function Skins() {
                               <span className="truncate text-[13px] text-white/55">{originLabel(e.origin, t)}</span>
                             </span>
                           </button>
-                          <span className={`shrink-0 text-[13px] font-semibold ${worn ? 'text-accent-hover' : 'text-[#a29bfe]'}`}>
+                          <span className={`shrink-0 text-[13px] font-semibold ${worn ? 'text-accent-hover' : 'text-[rgb(var(--accent-text))]'}`}>
                             {worn ? t('skins.worn') : e.data_uri ? t('skins.restore') : ''}
                           </span>
                           <PushedMoreButton label={t('skins.forget')} onClick={() => setHistoryMenu(e.id)} />
@@ -811,7 +811,7 @@ export default function Skins() {
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 lg:px-7 lg:py-5">
         {accounts === null ? (
           <div className="flex h-full items-center justify-center">
-            <ButtonSpinner size={28} color="#818cf8" trackColor="rgba(255,255,255,0.08)" />
+            <ButtonSpinner size={28} color="rgb(var(--accent-text))" trackColor="rgba(255,255,255,0.08)" />
           </div>
         ) : accounts.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
@@ -1960,7 +1960,7 @@ function AccountPicker({
             title={active ? undefined : t('skins.accountHint')}
             className={`flex items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition-all ${
               active
-                ? 'border-accent bg-accent/15 shadow-[0_0_20px_rgba(75,63,207,0.18)]'
+                ? 'border-accent bg-accent/15 shadow-[0_0_20px_rgb(var(--accent)/0.18)]'
                 : 'border-line bg-surface-1 opacity-60 hover:border-line-strong hover:opacity-100'
             }`}
           >

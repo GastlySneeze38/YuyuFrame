@@ -90,7 +90,7 @@ export function DuplicateInstanceModal({
           <p className="text-[11px] text-[rgba(255,255,255,0.35)]">
             {t('instancesPage.loaderKeptPrefix')} <span className="font-semibold" style={{ color: loaderColor(source.loader) }}>{source.loader}</span> {t('instancesPage.loaderKeptSuffix')}{' '}
             {versionChanged && updateMods
-              ? <>{t('instancesPage.modsWillUpdateForLower')} <span className="text-[rgba(120,110,230,0.9)] font-semibold">{mcVersion}</span>.</>
+              ? <>{t('instancesPage.modsWillUpdateForLower')} <span className="text-[rgb(var(--accent-hover)/0.9)] font-semibold">{mcVersion}</span>.</>
               : t('instancesPage.modsWillCopy')}
           </p>
         </div>
@@ -103,7 +103,7 @@ export function DuplicateInstanceModal({
             <span
               className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-md border transition-colors ${
                 updateMods
-                  ? 'border-[rgba(75,63,207,0.8)] bg-[#4B3FCF] text-white'
+                  ? 'border-[rgb(var(--accent)/0.8)] bg-[rgb(var(--accent))] text-white'
                   : 'border-[rgba(255,255,255,0.18)] bg-transparent text-transparent'
               }`}
             >

@@ -81,7 +81,7 @@ export function OptionSearchBar({ candidates, onPick }: {
       onMouseEnter={() => setCursor(index)}
       onClick={() => choose(result)}
       className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left transition-colors duration-100 max-sm:min-h-[52px] max-sm:rounded-xl max-sm:px-3 ${
-        cursor === index ? 'bg-[rgba(75,63,207,0.3)]' : 'hover:bg-[rgba(255,255,255,0.05)]'
+        cursor === index ? 'bg-[rgb(var(--accent)/0.3)]' : 'hover:bg-[rgba(255,255,255,0.05)]'
       }`}
     >
       <div className="flex min-w-0 flex-1 flex-col">
@@ -112,7 +112,7 @@ export function OptionSearchBar({ candidates, onPick }: {
         onKeyDown={onKeyDown}
         placeholder={t('options.searchPlaceholder')}
         enterKeyHint="search"
-        className="h-8 w-full rounded-lg border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] pl-9 pr-3 text-[12px] text-white outline-none transition-colors duration-150 focus:border-[rgba(75,63,207,0.5)] max-sm:h-11 max-sm:rounded-xl max-sm:pl-11 max-sm:text-[15px]"
+        className="h-8 w-full rounded-lg border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] pl-9 pr-3 text-[12px] text-white outline-none transition-colors duration-150 focus:border-[rgb(var(--accent)/0.5)] max-sm:h-11 max-sm:rounded-xl max-sm:pl-11 max-sm:text-[15px]"
       />
 
       <AnimatePresence>

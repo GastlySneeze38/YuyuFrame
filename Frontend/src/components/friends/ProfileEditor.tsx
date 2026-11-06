@@ -213,7 +213,7 @@ export function ProfileEditor({
         {/* La fiche telle que la verront mes amis, en direct. */}
         <div className="flex min-h-0 flex-col gap-2">
           <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-txt-muted">{t('friends.me.preview')}</span>
-          <div className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-line bg-[#111116]">
+          <div className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-line bg-[rgb(var(--bg-card))]">
             <ProfileLayout
               banner={draft.banner}
               accent={draft.accent}

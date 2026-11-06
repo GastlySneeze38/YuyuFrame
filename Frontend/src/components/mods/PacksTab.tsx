@@ -345,7 +345,7 @@ export function PacksTab({
             onChange={(e) => changeQuery(e.target.value)}
             placeholder={t(kind === 'shader' ? 'packs.searchShaders' : 'packs.searchResourcepacks')}
             enterKeyHint="search"
-            className="h-9 w-full rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] pl-9 pr-3 text-[13px] text-white outline-none transition-colors duration-150 focus:border-[rgba(75,63,207,0.5)] max-sm:h-11"
+            className="h-9 w-full rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] pl-9 pr-3 text-[13px] text-white outline-none transition-colors duration-150 focus:border-[rgb(var(--accent)/0.5)] max-sm:h-11"
           />
         </div>
         {searching && <ButtonSpinner size={16} />}
@@ -373,7 +373,7 @@ export function PacksTab({
               onClick={() => changeCategories(active ? categories.filter((x) => x !== c) : [...categories, c])}
               className={`h-7 rounded-lg border px-2.5 text-[11px] font-semibold transition-colors duration-150 ${
                 active
-                  ? 'border-[rgba(75,63,207,0.7)] bg-[rgba(75,63,207,0.35)] text-[rgba(255,255,255,0.95)]'
+                  ? 'border-[rgb(var(--accent)/0.7)] bg-[rgb(var(--accent)/0.35)] text-[rgba(255,255,255,0.95)]'
                   : 'border-[rgba(255,255,255,0.08)] bg-[rgba(0,0,0,0.3)] text-[rgba(255,255,255,0.4)] hover:text-[rgba(255,255,255,0.7)]'
               }`}
             >
@@ -409,7 +409,7 @@ export function PacksTab({
                     {hit.icon_url ? (
                       <img src={hit.icon_url} alt="" className="h-12 w-12 shrink-0 rounded-xl object-cover" />
                     ) : (
-                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[rgba(75,63,207,0.2)]">
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[rgb(var(--accent)/0.2)]">
                         <svg viewBox="0 0 24 24" fill="rgba(255,255,255,0.45)" className="h-[22px] w-[22px]"><path d={KIND_ICON[kind]} /></svg>
                       </div>
                     )}
@@ -425,7 +425,7 @@ export function PacksTab({
                           ? 'bg-white/[0.06] text-white/70'
                           : isInstalled
                             ? 'bg-[rgba(34,197,94,0.14)] text-[rgb(134,239,172)]'
-                            : 'bg-[#4B3FCF] text-white disabled:opacity-40'
+                            : 'bg-[rgb(var(--accent))] text-white disabled:opacity-40'
                       }`}
                     >
                       {busy ? (
@@ -452,7 +452,7 @@ export function PacksTab({
                   {hit.icon_url ? (
                     <img src={hit.icon_url} alt="" className="h-10 w-10 flex-shrink-0 rounded-lg object-cover" />
                   ) : (
-                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-[rgba(75,63,207,0.2)]">
+                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-[rgb(var(--accent)/0.2)]">
                       <svg viewBox="0 0 24 24" fill="rgba(255,255,255,0.35)" width={16} height={16}><path d={KIND_ICON[kind]} /></svg>
                     </div>
                   )}
@@ -468,7 +468,7 @@ export function PacksTab({
                         ? 'bg-[rgba(40,38,65,0.7)] text-[rgba(255,255,255,0.4)]'
                         : isInstalled
                           ? 'cursor-default bg-[rgba(34,197,94,0.14)] text-[rgb(134,239,172)]'
-                          : 'bg-[rgba(75,63,207,0.3)] text-[rgba(255,255,255,0.85)] hover:bg-[rgba(75,63,207,0.5)] disabled:opacity-40'
+                          : 'bg-[rgb(var(--accent)/0.3)] text-[rgba(255,255,255,0.85)] hover:bg-[rgb(var(--accent)/0.5)] disabled:opacity-40'
                     }`}
                   >
                     {busy
@@ -509,7 +509,7 @@ function MobilePackRow({ pack, onDelete }: { pack: PackInfo; onDelete: () => voi
   )
   return (
     <div className="flex h-[68px] items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.04] pl-3 pr-1">
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[rgba(75,63,207,0.15)]">{icon}</div>
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[rgb(var(--accent)/0.15)]">{icon}</div>
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="truncate text-[15px] font-semibold text-white">{pack.name.replace(/\.zip$/i, '')}</span>
         <span className="truncate text-[13px] text-white/55">{formatBytes(pack.size)}</span>
@@ -527,7 +527,7 @@ function MobilePackRow({ pack, onDelete }: { pack: PackInfo; onDelete: () => voi
         onClose={() => setSheetOpen(false)}
         header={
           <>
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[rgba(75,63,207,0.15)]">{icon}</div>
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[rgb(var(--accent)/0.15)]">{icon}</div>
             <span className="min-w-0 flex-1 truncate text-[15px] font-bold text-txt-primary">{pack.name.replace(/\.zip$/i, '')}</span>
           </>
         }

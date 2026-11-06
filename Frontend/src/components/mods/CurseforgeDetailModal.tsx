@@ -88,7 +88,7 @@ export function CurseforgeDetailModal({
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
       <div
-        className="flex w-full max-w-2xl flex-col gap-4 rounded-2xl p-6 bg-[#111118] border border-[rgba(75,63,207,0.3)] shadow-[0_24px_80px_rgba(0,0,0,0.6)] max-h-[85vh]"
+        className="flex w-full max-w-2xl flex-col gap-4 rounded-2xl p-6 bg-[rgb(var(--bg-card))] border border-[rgb(var(--accent)/0.3)] shadow-[0_24px_80px_rgba(0,0,0,0.6)] max-h-[85vh]"
       >
         {/* Header */}
         <div className="flex flex-shrink-0 items-start gap-3">
@@ -116,7 +116,7 @@ export function CurseforgeDetailModal({
           <motion.button {...press}
             onClick={() => setShowAllVersions((v) => !v)}
             className={`rounded-lg px-2.5 py-1 font-semibold text-[10.5px] border border-[rgba(255,255,255,0.08)] ${
-              showAllVersions ? 'bg-[rgba(75,63,207,0.3)] text-white' : 'bg-[rgba(255,255,255,0.05)] text-[rgba(255,255,255,0.45)]'
+              showAllVersions ? 'bg-[rgb(var(--accent)/0.3)] text-white' : 'bg-[rgba(255,255,255,0.05)] text-[rgba(255,255,255,0.45)]'
             }`}
           >
             {showAllVersions ? t('mods.allVersions') : t('mods.compatibleWith', { version: mcVersion })}
@@ -143,7 +143,7 @@ export function CurseforgeDetailModal({
                 <div
                   key={file.id}
                   className={`flex items-center gap-3 rounded-xl px-3 py-2 border border-[rgba(255,255,255,0.06)] ${
-                    isInstalledVersion ? 'bg-[rgba(75,63,207,0.1)]' : 'bg-[rgba(255,255,255,0.03)]'
+                    isInstalledVersion ? 'bg-[rgb(var(--accent)/0.1)]' : 'bg-[rgba(255,255,255,0.03)]'
                   }`}
                 >
                   <div className="min-w-0 flex-1">
@@ -168,8 +168,8 @@ export function CurseforgeDetailModal({
                       isInstalledVersion
                         ? 'bg-[rgba(255,255,255,0.05)] border-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.3)] cursor-not-allowed'
                         : installing
-                          ? 'bg-[rgba(40,38,65,0.7)] border-[rgba(75,63,207,0.5)] text-[rgba(255,255,255,0.85)] cursor-not-allowed'
-                          : 'bg-[rgba(75,63,207,0.3)] border-[rgba(75,63,207,0.5)] text-[rgba(255,255,255,0.85)] cursor-pointer'
+                          ? 'bg-[rgba(40,38,65,0.7)] border-[rgb(var(--accent)/0.5)] text-[rgba(255,255,255,0.85)] cursor-not-allowed'
+                          : 'bg-[rgb(var(--accent)/0.3)] border-[rgb(var(--accent)/0.5)] text-[rgba(255,255,255,0.85)] cursor-pointer'
                     }`}
                   >
                     {installing ? (

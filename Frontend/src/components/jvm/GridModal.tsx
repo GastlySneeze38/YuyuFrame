@@ -83,7 +83,7 @@ export function GridModal({ draft, onChange, instanceRam, linked, onManageLinks,
       footer={
         <button
           onClick={onClose}
-          className="h-[30px] rounded-lg border border-[rgba(75,63,207,0.7)] bg-[rgba(75,63,207,0.4)] px-4 text-[11px] font-bold text-white transition-colors hover:bg-[rgba(75,63,207,0.55)]"
+          className="h-[30px] rounded-lg border border-[rgb(var(--accent)/0.7)] bg-[rgb(var(--accent)/0.4)] px-4 text-[11px] font-bold text-white transition-colors hover:bg-[rgb(var(--accent)/0.55)]"
         >
           Terminé
         </button>
@@ -157,7 +157,7 @@ export function GridModal({ draft, onChange, instanceRam, linked, onManageLinks,
                   placeholder="C:\...\bin\java.exe"
                   value={draft.jvm_custom_path ?? ''}
                   onChange={(e) => onChange('jvm_custom_path', e.target.value || null)}
-                  className="h-[32px] w-full rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.4)] px-2.5 font-mono text-[11px] text-white outline-none focus:border-[rgba(75,63,207,0.6)]"
+                  className="h-[32px] w-full rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.4)] px-2.5 font-mono text-[11px] text-white outline-none focus:border-[rgb(var(--accent)/0.6)]"
                 />
               </Field>
 
@@ -185,7 +185,7 @@ export function GridModal({ draft, onChange, instanceRam, linked, onManageLinks,
             {linked.length > 0 ? `Reliée à ${linked.length} instance${linked.length > 1 ? 's' : ''}` : 'Reliée à aucune instance'}
           </span>
           {linked.map((i) => (
-            <span key={i.id} className="rounded-md border border-[rgba(75,63,207,0.5)] bg-[rgba(75,63,207,0.2)] px-1.5 py-0.5 text-[10px] font-semibold text-[rgba(200,195,255,0.9)]">
+            <span key={i.id} className="rounded-md border border-[rgb(var(--accent)/0.5)] bg-[rgb(var(--accent)/0.2)] px-1.5 py-0.5 text-[10px] font-semibold text-[rgba(200,195,255,0.9)]">
               {i.name}
             </span>
           ))}

@@ -328,7 +328,7 @@ export default function JvmProfileEditor() {
   // tailles des pièces partagées avec le PC (index.css).
   if (mobile) {
     return (
-      <div className="relative flex h-full flex-col overflow-hidden bg-[#09090D]">
+      <div className="relative flex h-full flex-col overflow-hidden bg-[rgb(var(--bg-primary))]">
         <ScreenHeader title={draft.name || 'Configuration JVM'} subtitle="Configuration JVM" fallback="/jvm" />
         <div className="jvm-touch min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-8 pt-4">
           <div className="flex flex-col gap-5">
@@ -337,7 +337,7 @@ export default function JvmProfileEditor() {
               <input
                 value={draft.name}
                 onChange={(e) => set('name', e.target.value)}
-                className="h-12 w-full rounded-xl border border-white/[0.1] bg-white/[0.04] px-3.5 text-[16px] font-semibold text-white outline-none focus:border-[rgba(75,63,207,0.6)]"
+                className="h-12 w-full rounded-xl border border-white/[0.1] bg-white/[0.04] px-3.5 text-[16px] font-semibold text-white outline-none focus:border-[rgb(var(--accent)/0.6)]"
               />
             </label>
             <GridSummary draft={draft} instanceRam={previewInstance?.ram_mb ?? 4096} onOpen={() => setGridOpen(true)} />
@@ -382,7 +382,7 @@ export default function JvmProfileEditor() {
                   <button
                     onClick={handlePreview}
                     disabled={previewing || !previewInstance}
-                    className="press flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-[#4B3FCF] text-[15px] font-semibold text-white disabled:opacity-40"
+                    className="press flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-[rgb(var(--accent))] text-[15px] font-semibold text-white disabled:opacity-40"
                   >
                     {previewing && <ButtonSpinner />}
                     {previewing ? 'Résolution…' : preview ? 'Recalculer' : 'Calculer'}
@@ -415,11 +415,11 @@ export default function JvmProfileEditor() {
           </div>
         </div>
         {dirty && (
-          <div className="flex shrink-0 gap-2 border-t border-white/[0.06] bg-[#0d0c14] px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3">
+          <div className="flex shrink-0 gap-2 border-t border-white/[0.06] bg-[rgb(var(--bg-primary))] px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3">
             <button onClick={() => setDraft(loaded)} className="press h-12 flex-1 rounded-2xl bg-white/[0.06] text-[15px] font-semibold text-white/75">
               Annuler
             </button>
-            <button onClick={handleSave} disabled={saving} className="press flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-[#4B3FCF] text-[15px] font-semibold text-white disabled:opacity-50">
+            <button onClick={handleSave} disabled={saving} className="press flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-[rgb(var(--accent))] text-[15px] font-semibold text-white disabled:opacity-50">
               {saving && <ButtonSpinner />}
               Enregistrer
             </button>
@@ -431,18 +431,18 @@ export default function JvmProfileEditor() {
   }
 
   return (
-    <div className="relative flex h-full flex-col overflow-hidden bg-[#09090D]">
+    <div className="relative flex h-full flex-col overflow-hidden bg-[rgb(var(--bg-primary))]">
       <PageHeader backTo="/jvm">
         <PageHeaderSeparator />
         <input
           value={draft.name}
           onChange={(e) => set('name', e.target.value)}
-          className="min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-[16px] font-black tracking-[-0.01em] text-white outline-none transition-colors hover:border-[rgba(255,255,255,0.1)] focus:border-[rgba(75,63,207,0.6)] focus:bg-[rgba(0,0,0,0.35)]"
+          className="min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-[16px] font-black tracking-[-0.01em] text-white outline-none transition-colors hover:border-[rgba(255,255,255,0.1)] focus:border-[rgb(var(--accent)/0.6)] focus:bg-[rgba(0,0,0,0.35)]"
         />
         <button
           onClick={handleSave}
           disabled={!dirty || saving}
-          className="flex h-[30px] flex-shrink-0 items-center gap-2 rounded-lg border border-[rgba(75,63,207,0.7)] bg-[rgba(75,63,207,0.35)] px-3.5 text-[11px] font-bold text-white transition-all duration-150 hover:bg-[rgba(75,63,207,0.5)] disabled:cursor-default disabled:opacity-35 disabled:hover:bg-[rgba(75,63,207,0.35)]"
+          className="flex h-[30px] flex-shrink-0 items-center gap-2 rounded-lg border border-[rgb(var(--accent)/0.7)] bg-[rgb(var(--accent)/0.35)] px-3.5 text-[11px] font-bold text-white transition-all duration-150 hover:bg-[rgb(var(--accent)/0.5)] disabled:cursor-default disabled:opacity-35 disabled:hover:bg-[rgb(var(--accent)/0.35)]"
         >
           {saving && <ButtonSpinner />}
           {dirty ? 'Enregistrer' : 'Enregistré'}
@@ -471,7 +471,7 @@ export default function JvmProfileEditor() {
                 <span
                   className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${
                     active
-                      ? 'bg-[rgba(75,63,207,0.4)] text-[rgba(210,205,255,0.95)]'
+                      ? 'bg-[rgb(var(--accent)/0.4)] text-[rgba(210,205,255,0.95)]'
                       : 'bg-[rgba(255,255,255,0.07)] text-[rgba(255,255,255,0.5)]'
                   }`}
                 >
@@ -537,7 +537,7 @@ export default function JvmProfileEditor() {
                 <button
                   onClick={handlePreview}
                   disabled={previewing || !previewInstance}
-                  className="flex h-[28px] items-center gap-2 rounded-lg border border-[rgba(75,63,207,0.7)] bg-[rgba(75,63,207,0.4)] px-3 text-[11px] font-bold text-white transition-colors hover:bg-[rgba(75,63,207,0.55)] disabled:opacity-40"
+                  className="flex h-[28px] items-center gap-2 rounded-lg border border-[rgb(var(--accent)/0.7)] bg-[rgb(var(--accent)/0.4)] px-3 text-[11px] font-bold text-white transition-colors hover:bg-[rgb(var(--accent)/0.55)] disabled:opacity-40"
                 >
                   {previewing && <ButtonSpinner />}
                   {previewing ? 'Résolution…' : preview ? 'Recalculer' : 'Calculer'}
@@ -606,7 +606,7 @@ function CategoryPane({ category, value, basePreset, onChange, onBrowseBase, onA
         <div className="flex flex-wrap justify-center gap-2">
           <button
             onClick={onBrowseBase}
-            className="h-[32px] rounded-xl border border-[rgba(75,63,207,0.7)] bg-[rgba(75,63,207,0.4)] px-4 text-[11px] font-bold text-white transition-colors hover:bg-[rgba(75,63,207,0.55)]"
+            className="h-[32px] rounded-xl border border-[rgb(var(--accent)/0.7)] bg-[rgb(var(--accent)/0.4)] px-4 text-[11px] font-bold text-white transition-colors hover:bg-[rgb(var(--accent)/0.55)]"
           >
             Partir d’un jeu de drapeaux
           </button>
@@ -630,7 +630,7 @@ function CategoryPane({ category, value, basePreset, onChange, onBrowseBase, onA
           onClick={onBrowseBase}
           className={`h-[28px] rounded-lg border px-2.5 text-[11px] font-semibold transition-colors ${
             basePreset
-              ? 'border-[rgba(75,63,207,0.5)] bg-[rgba(75,63,207,0.18)] text-[rgba(190,183,255,0.95)] hover:border-[rgba(75,63,207,0.8)]'
+              ? 'border-[rgb(var(--accent)/0.5)] bg-[rgb(var(--accent)/0.18)] text-[rgba(190,183,255,0.95)] hover:border-[rgb(var(--accent)/0.8)]'
               : 'border-[rgba(255,255,255,0.12)] bg-[rgba(255,255,255,0.05)] text-[rgba(255,255,255,0.55)] hover:border-white/25'
           }`}
         >
@@ -640,7 +640,7 @@ function CategoryPane({ category, value, basePreset, onChange, onBrowseBase, onA
         </button>
         <button
           onClick={onAddFlag}
-          className="flex h-[28px] items-center gap-1.5 rounded-lg border border-[rgba(75,63,207,0.7)] bg-[rgba(75,63,207,0.4)] px-3 text-[11px] font-bold text-white transition-colors hover:bg-[rgba(75,63,207,0.55)]"
+          className="flex h-[28px] items-center gap-1.5 rounded-lg border border-[rgb(var(--accent)/0.7)] bg-[rgb(var(--accent)/0.4)] px-3 text-[11px] font-bold text-white transition-colors hover:bg-[rgb(var(--accent)/0.55)]"
         >
           <svg viewBox="0 0 24 24" fill="currentColor" width={10} height={10} className="flex-shrink-0">
             <path d="M11 5h2v14h-2z" /><path d="M5 11h14v2H5z" />
@@ -666,14 +666,14 @@ function Shell({ children }: { children: React.ReactNode }) {
   const mobile = useIsMobile()
   if (mobile) {
     return (
-      <div className="flex h-full flex-col overflow-hidden bg-[#09090D]">
+      <div className="flex h-full flex-col overflow-hidden bg-[rgb(var(--bg-primary))]">
         <ScreenHeader title="Configuration JVM" fallback="/jvm" />
         {children}
       </div>
     )
   }
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-[#09090D]">
+    <div className="flex h-full flex-col overflow-hidden bg-[rgb(var(--bg-primary))]">
       <PageHeader backTo="/jvm">
         <PageHeaderSeparator />
         <h1 className="text-[16px] font-black tracking-[-0.01em] text-white">Configuration JVM</h1>

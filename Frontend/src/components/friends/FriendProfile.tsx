@@ -183,10 +183,10 @@ export function ThoughtBubble({ accent, children }: { accent: string | null; chi
       className="relative mb-1.5 ml-7 min-w-0 flex-1"
     >
       {/* Deux ronds qui grossissent en montant de la tête vers la bulle. */}
-      <span className="absolute -left-[26px] bottom-0.5 h-3 w-3 rounded-full border border-line bg-[#1d1d26] shadow-[0_4px_10px_rgba(0,0,0,0.35)]" style={{ borderColor: border }} />
-      <span className="absolute -left-[15px] bottom-3.5 h-[18px] w-[18px] rounded-full border border-line bg-[#1d1d26] shadow-[0_4px_10px_rgba(0,0,0,0.35)]" style={{ borderColor: border }} />
+      <span className="absolute -left-[26px] bottom-0.5 h-3 w-3 rounded-full border border-line bg-[rgb(var(--bg-raised))] shadow-[0_4px_10px_rgba(0,0,0,0.35)]" style={{ borderColor: border }} />
+      <span className="absolute -left-[15px] bottom-3.5 h-[18px] w-[18px] rounded-full border border-line bg-[rgb(var(--bg-raised))] shadow-[0_4px_10px_rgba(0,0,0,0.35)]" style={{ borderColor: border }} />
       <div
-        className="relative flex min-h-[54px] w-full items-center rounded-[22px] border border-line bg-[#1d1d26] px-4 py-3 text-[15.5px] font-bold leading-snug text-txt-primary shadow-[0_8px_22px_rgba(0,0,0,0.4)] [overflow-wrap:anywhere]"
+        className="relative flex min-h-[54px] w-full items-center rounded-[22px] border border-line bg-[rgb(var(--bg-raised))] px-4 py-3 text-[15.5px] font-bold leading-snug text-txt-primary shadow-[0_8px_22px_rgba(0,0,0,0.4)] [overflow-wrap:anywhere]"
         style={{ borderColor: border }}
       >
         {children}
@@ -428,7 +428,7 @@ function MoreMenu({ friend, onDone }: { friend: Friend; onDone: () => void }) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -4, scale: 0.97 }}
             transition={{ duration: 0.14 }}
-            className="absolute right-0 top-full z-10 mt-1.5 flex w-56 flex-col rounded-xl border border-line bg-[#18181f] p-1.5 shadow-[0_18px_50px_rgba(0,0,0,0.6)]"
+            className="absolute right-0 top-full z-10 mt-1.5 flex w-56 flex-col rounded-xl border border-line bg-[rgb(var(--bg-raised))] p-1.5 shadow-[0_18px_50px_rgba(0,0,0,0.6)]"
           >
             {serverVisibility === 'some' && (
               <MenuItem disabled={busy} onClick={() => void act(() => api.friends.setServerShare(friend.id, !friend.server_shared), false)}>

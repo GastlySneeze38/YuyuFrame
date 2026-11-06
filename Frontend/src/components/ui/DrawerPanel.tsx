@@ -48,7 +48,7 @@ export function DrawerPanel({ open, onClose, label, children }: {
           />
           <motion.aside
             // `sheet-touch` : plancher de lecture et de toucher pour le contenu partagé avec le PC (index.css).
-            className="sheet-touch relative flex h-[85dvh] flex-col overflow-hidden rounded-t-[22px] border-t border-line bg-[#111116] pb-[env(safe-area-inset-bottom,0px)] text-txt-primary"
+            className="sheet-touch relative flex h-[85dvh] flex-col overflow-hidden rounded-t-[22px] border-t border-line bg-[rgb(var(--bg-card))] pb-[env(safe-area-inset-bottom,0px)] text-txt-primary"
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
             // Fermer est une réponse : plus vif qu'ouvrir, courbe de tiroir iOS.
@@ -88,7 +88,7 @@ export function DrawerPanel({ open, onClose, label, children }: {
             exit={{ x: 40, opacity: 0 }}
             transition={{ type: 'spring', stiffness: 380, damping: 36 }}
             aria-label={label}
-            className="m-2 flex w-[360px] max-w-[calc(100vw-16px)] flex-col overflow-hidden rounded-2xl border border-line bg-[#111116] text-txt-primary shadow-[0_24px_80px_rgba(0,0,0,0.7)]"
+            className="m-2 flex w-[360px] max-w-[calc(100vw-16px)] flex-col overflow-hidden rounded-2xl border border-line bg-[rgb(var(--bg-card))] text-txt-primary shadow-[0_24px_80px_rgba(0,0,0,0.7)]"
           >
             {children}
           </motion.aside>

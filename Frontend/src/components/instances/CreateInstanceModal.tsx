@@ -207,7 +207,7 @@ export function CreateInstanceModal({
           <div key={label} className="flex items-center gap-2">
             {i > 0 && <span className="h-px w-6 bg-[rgba(255,255,255,0.12)]" />}
             <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${
-              active ? 'bg-[rgba(75,63,207,0.8)] text-white' : done ? 'bg-[rgba(75,63,207,0.3)] text-white' : 'bg-[rgba(255,255,255,0.06)] text-[rgba(255,255,255,0.4)]'
+              active ? 'bg-[rgb(var(--accent)/0.8)] text-white' : done ? 'bg-[rgb(var(--accent)/0.3)] text-white' : 'bg-[rgba(255,255,255,0.06)] text-[rgba(255,255,255,0.4)]'
             }`}>{n}</span>
             <span className={active ? 'text-white' : 'text-[rgba(255,255,255,0.4)]'}>{label}</span>
           </div>
@@ -246,7 +246,7 @@ export function CreateInstanceModal({
                   key={m}
                   onClick={() => handleSwitchMode(m)}
                   className={`h-[32px] flex-1 rounded-lg text-xs font-semibold transition-all duration-150 ${
-                    mode === m ? 'bg-[rgba(75,63,207,0.4)] text-white' : 'bg-transparent text-[rgba(255,255,255,0.4)]'
+                    mode === m ? 'bg-[rgb(var(--accent)/0.4)] text-white' : 'bg-transparent text-[rgba(255,255,255,0.4)]'
                   }`}
                 >
                   {m === 'blank' ? t('instancesPage.blank') : 'Modpack'}

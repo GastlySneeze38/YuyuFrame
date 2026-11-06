@@ -79,7 +79,7 @@ export function OfflineAccountModal({
             onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit() }}
             placeholder="Steve"
             maxLength={16}
-            className="h-10 rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] px-3 text-sm text-white outline-none transition-colors focus:border-[rgba(75,63,207,0.5)]"
+            className="h-10 rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] px-3 text-sm text-white outline-none transition-colors focus:border-[rgb(var(--accent)/0.5)]"
           />
           {username.length > 0 && !valid && (
             <p className="text-[10px] text-red-300">{t('account.usernameError')}</p>
@@ -96,7 +96,7 @@ export function OfflineAccountModal({
         <button
           onClick={handleSubmit}
           disabled={!valid || submitting}
-          className="h-10 rounded-xl text-[13px] font-semibold text-white transition-colors bg-[#4B3FCF] hover:bg-[#6155e8] disabled:cursor-not-allowed disabled:opacity-40"
+          className="h-10 rounded-xl text-[13px] font-semibold text-white transition-colors bg-[rgb(var(--accent))] hover:bg-[rgb(var(--accent-hover))] disabled:cursor-not-allowed disabled:opacity-40"
         >
           {submitting ? t('account.adding') : t('account.addAccount')}
         </button>

@@ -6,7 +6,7 @@ import { useT } from '@/i18n'
 import type { Activity, FriendPresence, PresenceState } from '@/types/friends'
 
 /** La tête d'un joueur et sa pastille de statut, posée sur le coin. */
-export function FriendAvatar({ skin, state, size = 36, ring = '#111116' }: {
+export function FriendAvatar({ skin, state, size = 36, ring = 'rgb(var(--bg-card))' }: {
   skin: string
   state: PresenceState | 'invisible' | null
   size?: number

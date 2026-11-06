@@ -47,7 +47,7 @@ export function UpdateChecker() {
 
   return (
     <div
-      className="fixed bottom-4 right-4 z-50 w-80 rounded-lg p-4 shadow-xl bg-[#13131A] border border-[rgba(255,255,255,0.08)]"
+      className="fixed bottom-4 right-4 z-50 w-80 rounded-lg p-4 shadow-xl bg-[rgb(var(--bg-card))] border border-[rgba(255,255,255,0.08)]"
     >
       <div className="mb-2 text-sm font-semibold text-white">
         Mise à jour disponible — v{update.version}
@@ -59,7 +59,7 @@ export function UpdateChecker() {
           </p>
           <button
             onClick={installUpdate}
-            className="w-full rounded px-3 py-1.5 text-xs font-medium text-white bg-[#4B3FCF]"
+            className="w-full rounded px-3 py-1.5 text-xs font-medium text-white bg-[rgb(var(--accent))]"
           >
             Télécharger et installer
           </button>

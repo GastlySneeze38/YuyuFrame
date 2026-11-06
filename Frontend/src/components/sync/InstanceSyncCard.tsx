@@ -104,7 +104,7 @@ export function InstanceSyncCard({
 
   return (
     <div
-      className={`rounded-2xl overflow-hidden transition-all duration-200 bg-[rgba(255,255,255,0.03)] border ${expanded ? 'border-[rgba(75,63,207,0.35)]' : 'border-[rgba(255,255,255,0.07)]'}`}
+      className={`rounded-2xl overflow-hidden transition-all duration-200 bg-[rgba(255,255,255,0.03)] border ${expanded ? 'border-[rgb(var(--accent)/0.35)]' : 'border-[rgba(255,255,255,0.07)]'}`}
     >
       {/* ── Header row ── */}
       <button
@@ -113,7 +113,7 @@ export function InstanceSyncCard({
         disabled={busy}
       >
         <div
-          className={`flex items-center justify-center rounded-xl flex-shrink-0 w-9 h-9 text-[15px] ${hasSynced ? 'bg-[rgba(75,63,207,0.12)]' : 'bg-[rgba(255,255,255,0.05)]'}`}
+          className={`flex items-center justify-center rounded-xl flex-shrink-0 w-9 h-9 text-[15px] ${hasSynced ? 'bg-[rgb(var(--accent)/0.12)]' : 'bg-[rgba(255,255,255,0.05)]'}`}
         >
           🧱
         </div>
@@ -145,11 +145,11 @@ export function InstanceSyncCard({
 
         {/* Chevron */}
         <motion.div
-          animate={{ rotate: expanded ? 180 : 0, backgroundColor: expanded ? 'rgba(75,63,207,0.2)' : 'rgba(255,255,255,0.04)' }}
+          animate={{ rotate: expanded ? 180 : 0, backgroundColor: expanded ? 'rgb(var(--accent)/0.2)' : 'rgba(255,255,255,0.04)' }}
           transition={SNAP}
           className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg"
         >
-          <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13} className={expanded ? 'text-[rgba(180,170,255,0.8)]' : 'text-[rgba(255,255,255,0.3)]'}>
+          <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13} className={expanded ? 'text-[rgb(var(--accent-text)/0.8)]' : 'text-[rgba(255,255,255,0.3)]'}>
             <path d="M7 10l5 5 5-5z" />
           </svg>
         </motion.div>
@@ -200,7 +200,7 @@ export function InstanceSyncCard({
 
           {/* Progress */}
           {progress && (
-            <div className="rounded-xl px-3 py-2.5 bg-[rgba(75,63,207,0.08)] border border-[rgba(75,63,207,0.2)]">
+            <div className="rounded-xl px-3 py-2.5 bg-[rgb(var(--accent)/0.08)] border border-[rgb(var(--accent)/0.2)]">
               <ProgressBar progress={progress} />
             </div>
           )}
@@ -229,7 +229,7 @@ export function InstanceSyncCard({
               {...pressIf(!pushing)}
               onClick={handlePush}
               disabled={pushing}
-              className={`flex items-center justify-center gap-1.5 font-bold text-white transition-colors duration-150 h-[38px] rounded-[10px] text-[12px] ${hasSynced ? 'flex-[2]' : 'flex-1'} ${pushing ? 'bg-[rgba(40,38,65,0.7)] shadow-none cursor-not-allowed' : 'bg-[#4B3FCF] shadow-[0_4px_16px_rgba(75,63,207,0.28)] cursor-pointer hover:bg-[#6155e8]'}`}
+              className={`flex items-center justify-center gap-1.5 font-bold text-white transition-colors duration-150 h-[38px] rounded-[10px] text-[12px] ${hasSynced ? 'flex-[2]' : 'flex-1'} ${pushing ? 'bg-[rgba(40,38,65,0.7)] shadow-none cursor-not-allowed' : 'bg-[rgb(var(--accent))] shadow-[0_4px_16px_rgb(var(--accent)/0.28)] cursor-pointer hover:bg-[rgb(var(--accent-hover))]'}`}
             >
               {pushing
                 ? <ButtonSpinner size={14} />

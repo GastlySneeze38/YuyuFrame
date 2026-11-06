@@ -21,15 +21,15 @@ export function ProCard({ onOpen }: { onOpen: () => void }) {
 
   return (
     <div
-      className="relative flex min-w-0 flex-1 flex-col gap-1.5 rounded-xl border border-[rgba(120,100,255,0.28)] bg-[rgba(75,63,207,0.08)] px-[clamp(8px,1.4vh,12px)] py-[clamp(6px,1.1vh,10px)]"
+      className="relative flex min-w-0 flex-1 flex-col gap-1.5 rounded-xl border border-[rgb(var(--accent-hover)/0.28)] bg-[rgb(var(--accent)/0.08)] px-[clamp(8px,1.4vh,12px)] py-[clamp(6px,1.1vh,10px)]"
     >
-      <GlowPulse shadow="0 0 22px rgba(120,100,255,0.18)" duration={4.5} radius="rounded-xl" />
+      <GlowPulse shadow="0 0 22px rgb(var(--accent-hover)/0.18)" duration={4.5} radius="rounded-xl" />
       <div className="flex items-center gap-1.5">
-        <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13} className="flex-shrink-0 text-[#a78bfa]">
+        <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13} className="flex-shrink-0 text-[rgb(var(--accent-text))]">
           <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
         </svg>
         <span className="truncate text-[clamp(9px,1.3vh,11px)] font-bold text-white">
-          YuyuFrame <span className="text-[#a78bfa]">Pro</span>
+          YuyuFrame <span className="text-[rgb(var(--accent-text))]">Pro</span>
         </span>
       </div>
 
@@ -40,10 +40,10 @@ export function ProCard({ onOpen }: { onOpen: () => void }) {
       <motion.button {...press}
         onClick={onOpen}
         title={t('home.proSeePlansTitle')}
-        className="mt-auto flex h-7 items-center justify-center gap-1.5 rounded-lg bg-[rgba(75,63,207,0.35)] text-[11px] font-semibold text-[rgba(255,255,255,0.88)] transition-colors duration-150 hover:bg-[rgba(75,63,207,0.55)]"
+        className="mt-auto flex h-7 items-center justify-center gap-1.5 rounded-lg bg-[rgb(var(--accent)/0.35)] text-[11px] font-semibold text-[rgba(255,255,255,0.88)] transition-colors duration-150 hover:bg-[rgb(var(--accent)/0.55)]"
       >
         {t('home.proSeePlans')}
-        <span className="text-[10px] font-bold text-[#a78bfa]">-50%</span>
+        <span className="text-[10px] font-bold text-[rgb(var(--accent-text))]">-50%</span>
       </motion.button>
     </div>
   )

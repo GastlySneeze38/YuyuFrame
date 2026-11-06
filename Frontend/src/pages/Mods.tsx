@@ -1240,10 +1240,10 @@ export function ModsContent({ instance }: { instance: Instance }) {
           <motion.button {...pressIf(!uploading)}
             onClick={() => setShowImportChoice(true)}
             disabled={uploading}
-            className={`flex items-center gap-1.5 rounded-lg border border-[rgba(75,63,207,0.35)] px-3.5 py-1.5 text-xs font-semibold transition-colors duration-150 ${
+            className={`flex items-center gap-1.5 rounded-lg border border-[rgb(var(--accent)/0.35)] px-3.5 py-1.5 text-xs font-semibold transition-colors duration-150 ${
               uploading
                 ? 'cursor-not-allowed bg-[rgba(40,38,65,0.7)] text-[rgba(255,255,255,0.3)]'
-                : 'bg-[rgba(75,63,207,0.25)] text-[rgba(255,255,255,0.85)] hover:bg-[rgba(75,63,207,0.4)]'
+                : 'bg-[rgb(var(--accent)/0.25)] text-[rgba(255,255,255,0.85)] hover:bg-[rgb(var(--accent)/0.4)]'
             }`}
           >
             <svg viewBox="0 0 24 24" fill="currentColor" width={12} height={12}>
@@ -1273,7 +1273,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
         {/* Centre : trois familles, chacune ouvrant ses écrans.
             Sept boutons à plat ne se liraient pas ; le libellé dit la famille,
             le menu dit lequel de ses écrans est ouvert. */}
-        <div className="flex flex-shrink-0 items-center divide-x divide-[rgba(75,63,207,0.35)] overflow-visible rounded-[10px] border border-[rgba(75,63,207,0.35)]">
+        <div className="flex flex-shrink-0 items-center divide-x divide-[rgb(var(--accent)/0.35)] overflow-visible rounded-[10px] border border-[rgb(var(--accent)/0.35)]">
           {/* Pas de menu « Mods » en vanilla : sans chargeur, aucun mod ni
               modpack ne s'installe, et « chercher des plugins » désignait de
               toute façon des greffons de serveur, qui n'ont rien à faire dans
@@ -1311,8 +1311,8 @@ export function ModsContent({ instance }: { instance: Instance }) {
             onClick={() => setTab('options')}
             className={`flex h-8 items-center gap-1.5 px-[14px] text-[12px] font-semibold transition-colors duration-150 cursor-pointer ${
               tab === 'options'
-                ? 'bg-[rgba(75,63,207,0.25)] text-[rgba(255,255,255,0.9)]'
-                : 'bg-transparent text-[rgba(255,255,255,0.55)] hover:bg-[rgba(75,63,207,0.12)]'
+                ? 'bg-[rgb(var(--accent)/0.25)] text-[rgba(255,255,255,0.9)]'
+                : 'bg-transparent text-[rgba(255,255,255,0.55)] hover:bg-[rgb(var(--accent)/0.12)]'
             }`}
           >
             <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13} className="flex-shrink-0">
@@ -1337,7 +1337,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
           <motion.button {...press}
             onClick={() => navigate('/home')}
             title={`${instance.name} · ${mcVersion} · ${loader}`}
-            className="flex h-8 min-w-0 flex-shrink items-center gap-1.5 rounded-lg bg-[#4B3FCF] px-3.5 text-[12px] font-semibold text-white transition-colors duration-150 hover:bg-[#6155e8]"
+            className="flex h-8 min-w-0 flex-shrink items-center gap-1.5 rounded-lg bg-[rgb(var(--accent))] px-3.5 text-[12px] font-semibold text-white transition-colors duration-150 hover:bg-[rgb(var(--accent-hover))]"
           >
             <svg viewBox="0 0 24 24" fill="currentColor" width={12} height={12} className="flex-shrink-0">
               <path d="M8 5v14l11-7z" />
@@ -1521,12 +1521,12 @@ export function ModsContent({ instance }: { instance: Instance }) {
         ) : (
           <div className="flex flex-col gap-3">
             {packImportingFile && packInstallProgress && (
-              <div className="flex flex-col gap-1.5 rounded-2xl px-4 py-3 bg-[rgba(75,63,207,0.1)] border border-[rgba(75,63,207,0.3)]">
+              <div className="flex flex-col gap-1.5 rounded-2xl px-4 py-3 bg-[rgb(var(--accent)/0.1)] border border-[rgb(var(--accent)/0.3)]">
                 <p className="text-[12px] font-semibold text-white">{t('mods.importingLocalModpack')}</p>
                 <div className="flex items-center gap-2">
                   <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]">
                     <div
-                      className="h-full rounded-full bg-[#4B3FCF] transition-all duration-200"
+                      className="h-full rounded-full bg-[rgb(var(--accent))] transition-all duration-200"
                       style={{ width: `${packInstallProgress.percent}%` }}
                     />
                   </div>
@@ -1571,12 +1571,12 @@ export default function Mods() {
 
   if (!instance) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-4 bg-[#09090D] text-white">
+      <div className="flex h-full flex-col items-center justify-center gap-4 bg-[rgb(var(--bg-primary))] text-white">
         <div className="text-[36px]">🧱</div>
         <p className="text-[14px] text-[rgba(255,255,255,0.4)] font-semibold">{t('mods.noInstanceSelected')}</p>
         <motion.button {...press}
           onClick={() => navigate('/instances')}
-          className="font-semibold transition-all duration-200 active:scale-95 h-[38px] px-5 rounded-[10px] text-[13px] bg-[#4B3FCF] text-white"
+          className="font-semibold transition-all duration-200 active:scale-95 h-[38px] px-5 rounded-[10px] text-[13px] bg-[rgb(var(--accent))] text-white"
         >
           {t('mods.manageInstances')}
         </motion.button>
@@ -1585,7 +1585,7 @@ export default function Mods() {
   }
 
   return (
-    <div className="flex h-full flex-col bg-[#09090D] text-white">
+    <div className="flex h-full flex-col bg-[rgb(var(--bg-primary))] text-white">
       <PageHeader>
         <h1 className="font-black text-white text-[18px] tracking-[-0.01em]">{t('mods.pageTitle')}</h1>
       </PageHeader>

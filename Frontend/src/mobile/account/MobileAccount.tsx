@@ -82,7 +82,7 @@ export function MobileAccount(p: {
   ] : []
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-[#09090D]">
+    <div className="flex h-full flex-col overflow-hidden bg-[rgb(var(--bg-primary))]">
       <header className="flex shrink-0 items-center gap-1 pb-1 pl-1.5 pr-4 pt-[max(12px,env(safe-area-inset-top))]">
         <MenuButton />
         <h1 className="min-w-0 flex-1 truncate text-[28px] font-bold tracking-tight text-white">{t('account.title')}</h1>
@@ -91,7 +91,7 @@ export function MobileAccount(p: {
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[max(24px,env(safe-area-inset-bottom))]">
         <div className="flex flex-col gap-6">
           {/* ── Le compte actif ─────────────────────────────────────────── */}
-          <section className="relative flex flex-col items-center overflow-hidden rounded-3xl border border-white/[0.06] bg-[radial-gradient(ellipse_at_50%_62%,rgba(75,63,207,0.24)_0%,transparent_72%)] pb-4 pt-2">
+          <section className="relative flex flex-col items-center overflow-hidden rounded-3xl border border-white/[0.06] bg-[radial-gradient(ellipse_at_50%_62%,rgb(var(--accent)/0.24)_0%,transparent_72%)] pb-4 pt-2">
             <div className="h-[220px] w-full">
               <SkinBust
                 uuid={active?.uuid ?? null}
@@ -139,7 +139,7 @@ export function MobileAccount(p: {
                         </span>
                       </span>
                       {isActive && (
-                        <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 shrink-0 text-[#a99bff]"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" /></svg>
+                        <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 shrink-0 text-[rgb(var(--accent-text))]"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" /></svg>
                       )}
                     </button>
                     <button
@@ -162,7 +162,7 @@ export function MobileAccount(p: {
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" className="h-5 w-5"><path d="M12 5v14M5 12h14" /></svg>
                 </span>
                 <span className="flex min-w-0 flex-col gap-0.5">
-                  <span className="text-[15px] font-semibold text-[#c4b9ff]">{t('login.addAccount')}</span>
+                  <span className="text-[15px] font-semibold text-[rgb(var(--accent-text))]">{t('login.addAccount')}</span>
                   <span className="truncate text-[13px] text-white/55">{t('login.connectViaMicrosoft')}</span>
                 </span>
               </button>
@@ -183,7 +183,7 @@ export function MobileAccount(p: {
                 <span className="truncate text-[15px] font-semibold text-white">
                   {yuyuSignedIn ? yuyuUsername : t('account.signedOutTitle')}
                 </span>
-                <span className={`truncate text-[13px] ${yuyuSignedIn && yuyuPlan !== 'free' ? 'font-semibold text-[#c4b5fd]' : 'text-white/55'}`}>
+                <span className={`truncate text-[13px] ${yuyuSignedIn && yuyuPlan !== 'free' ? 'font-semibold text-[rgb(var(--accent-text))]' : 'text-white/55'}`}>
                   {yuyuSignedIn
                     ? `${t('account.yuyuAccount')} · ${yuyuPlan === 'premium' ? 'Premium' : yuyuPlan === 'ultimate' ? 'Ultimate' : t('account.freePlan')}`
                     : t('account.signIn')}
@@ -237,7 +237,7 @@ export function MobileAccount(p: {
                 {copied ? t('login.copiedExclaim') : t('login.clickToCopy')}
               </span>
             </button>
-            <button onClick={p.onOpenVerify} className="press h-12 w-full rounded-2xl bg-[#4B3FCF] text-[16px] font-bold text-white">
+            <button onClick={p.onOpenVerify} className="press h-12 w-full rounded-2xl bg-[rgb(var(--accent))] text-[16px] font-bold text-white">
               {t('login.openMicrosoft')}
             </button>
             <div className="flex items-center justify-center gap-2.5">
@@ -269,7 +269,7 @@ export function MobileAccount(p: {
               <button onClick={p.onCancelLogin} className="press h-12 flex-1 rounded-2xl bg-white/[0.06] text-[15px] font-semibold text-white/75">
                 {t('common.cancel')}
               </button>
-              <button onClick={p.onRetry} className="press h-12 flex-1 rounded-2xl bg-[#4B3FCF] text-[15px] font-bold text-white">
+              <button onClick={p.onRetry} className="press h-12 flex-1 rounded-2xl bg-[rgb(var(--accent))] text-[15px] font-bold text-white">
                 {t('login.retry')}
               </button>
             </div>

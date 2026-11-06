@@ -137,7 +137,7 @@ export function MyServersView({
   if (loading && !data) {
     return (
       <div className="flex flex-1 items-center justify-center">
-        <ButtonSpinner size={30} color="#818cf8" trackColor="rgba(255,255,255,0.08)" />
+        <ButtonSpinner size={30} color="rgb(var(--accent-text))" trackColor="rgba(255,255,255,0.08)" />
       </div>
     )
   }
@@ -202,7 +202,7 @@ export function MyServersView({
             ) : (
               <Section
                 title={`${t('servers.page.list.count', { count: servers.length })} · ${t('servers.page.list.onlineCount', { count: onlineCount })}`}
-                aside={<button onClick={() => refresh()} className="press -my-3 h-11 shrink-0 px-1 text-[15px] font-semibold text-[#a29bfe]">{t('servers.page.list.refresh')}</button>}
+                aside={<button onClick={() => refresh()} className="press -my-3 h-11 shrink-0 px-1 text-[15px] font-semibold text-[rgb(var(--accent-text))]">{t('servers.page.list.refresh')}</button>}
               >
                 <div className="flex flex-col gap-3">
                   {sorted.map((s) => (
@@ -225,7 +225,7 @@ export function MyServersView({
               <button onClick={onCatalog} className="press h-12 flex-1 rounded-2xl border border-white/[0.1] bg-white/[0.05] text-[15px] font-semibold text-white">
                 {t('servers.page.mine.browse')}
               </button>
-              <button onClick={onAdd} className="press h-12 flex-1 rounded-2xl bg-[#4B3FCF] text-[15px] font-semibold text-white">
+              <button onClick={onAdd} className="press h-12 flex-1 rounded-2xl bg-[rgb(var(--accent))] text-[15px] font-semibold text-white">
                 {t('servers.page.mine.add')}
               </button>
             </div>
@@ -443,7 +443,7 @@ function ServerTile({
   return (
     <div
       className={`group flex h-full min-h-0 flex-col gap-2.5 overflow-hidden rounded-2xl border p-3.5 transition-[border-color,background-color,opacity] ${
-        onHome ? 'border-accent/50 bg-[#17152a]' : 'border-white/[0.07] bg-[#121217] hover:border-white/[0.18]'
+        onHome ? 'border-accent/50 bg-[color-mix(in_srgb,rgb(var(--accent))_10%,rgb(var(--bg-card)))]' : 'border-white/[0.07] bg-[rgb(var(--bg-card))] hover:border-white/[0.18]'
       } ${offline ? 'opacity-70 hover:opacity-100' : ''}`}
     >
       <div className="flex flex-shrink-0 items-start gap-3">
@@ -569,7 +569,7 @@ function MobileServerCard({ instanceId, server, state, onHome, onRefresh, onChan
   }
 
   return (
-    <div className={`flex flex-col gap-3 rounded-2xl border p-3.5 ${onHome ? 'border-accent/45 bg-[#17152a]' : 'border-white/[0.07] bg-white/[0.04]'}`}>
+    <div className={`flex flex-col gap-3 rounded-2xl border p-3.5 ${onHome ? 'border-accent/45 bg-[color-mix(in_srgb,rgb(var(--accent))_10%,rgb(var(--bg-card)))]' : 'border-white/[0.07] bg-white/[0.04]'}`}>
       <div className="flex items-start gap-3">
         <div className={offline ? 'opacity-50 grayscale' : ''}>
           <ServerFavicon ping={info} size={48} />
@@ -608,7 +608,7 @@ function MobileServerCard({ instanceId, server, state, onHome, onRefresh, onChan
         <button
           onClick={() => void doJoin()}
           disabled={busy}
-          className={`press flex h-11 flex-1 items-center justify-center gap-2 rounded-xl text-[15px] font-semibold disabled:opacity-60 ${offline ? 'border border-white/[0.1] bg-white/[0.05] text-white/80' : 'bg-[#4B3FCF] text-white'}`}
+          className={`press flex h-11 flex-1 items-center justify-center gap-2 rounded-xl text-[15px] font-semibold disabled:opacity-60 ${offline ? 'border border-white/[0.1] bg-white/[0.05] text-white/80' : 'bg-[rgb(var(--accent))] text-white'}`}
         >
           {busy && <ButtonSpinner />}
           {t('servers.page.mine.join')}

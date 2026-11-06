@@ -54,7 +54,7 @@ export function MobileStats({ data, loading, rangeDays, onRange, filters, onFilt
   const empty = data !== null && data.totals.sessions === 0 && data.known_instances.length === 0
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-[#09090D] text-txt-primary">
+    <div className="flex h-full flex-col overflow-hidden bg-[rgb(var(--bg-primary))] text-txt-primary">
       <ScreenHeader title={t('stats.title')} subtitle={t('stats.subtitle')} fallback="/features" right={data && <PushedMoreButton label={t('stats.mobile.more')} onClick={() => setMenu(true)} />} />
 
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[max(32px,env(safe-area-inset-bottom))] pt-4">
@@ -85,7 +85,7 @@ export function MobileStats({ data, loading, rangeDays, onRange, filters, onFilt
 
         <div className="mt-8">
           {loading && data === null ? (
-            <div className="flex justify-center py-16"><ButtonSpinner size={28} color="#818cf8" trackColor="rgba(255,255,255,0.08)" /></div>
+            <div className="flex justify-center py-16"><ButtonSpinner size={28} color="rgb(var(--accent-text))" trackColor="rgba(255,255,255,0.08)" /></div>
           ) : !data ? (
             <Note>{t('stats.cannotLoadStats')}</Note>
           ) : empty ? (
@@ -157,7 +157,7 @@ export function MobileStats({ data, loading, rangeDays, onRange, filters, onFilt
           open={filtering}
           onClose={() => setFiltering(false)}
           label={t('stats.mobile.filters')}
-          header={<SheetTitle action={active > 0 && <button onClick={() => onFilters(EMPTY_FILTERS)} className="press h-11 shrink-0 px-2 text-[15px] font-semibold text-[#a29bfe]">{t('stats.filter.reset')}</button>}>{t('stats.mobile.filters')}</SheetTitle>}
+          header={<SheetTitle action={active > 0 && <button onClick={() => onFilters(EMPTY_FILTERS)} className="press h-11 shrink-0 px-2 text-[15px] font-semibold text-[rgb(var(--accent-text))]">{t('stats.filter.reset')}</button>}>{t('stats.mobile.filters')}</SheetTitle>}
           bodyClassName="flex flex-col gap-6 px-2 pb-3"
         >
           <FilterGroup
@@ -346,7 +346,7 @@ function Ranking({ instances, sort, onSort, picked, onPick }: {
         </div>
       )}
       {ranked.length > 6 && (
-        <button onClick={() => setExpanded((v) => !v)} className="press h-11 self-center px-4 text-[15px] font-semibold text-[#a29bfe]">
+        <button onClick={() => setExpanded((v) => !v)} className="press h-11 self-center px-4 text-[15px] font-semibold text-[rgb(var(--accent-text))]">
           {expanded ? t('stats.ranking.showLess') : t('stats.ranking.showAll', { count: ranked.length - 6 })}
         </button>
       )}
@@ -502,7 +502,7 @@ function Sessions({ sessions }: { sessions: SessionEntry[] }) {
             </div>
           ))}
           {sessions.length > 12 && (
-            <button onClick={() => setExpanded((v) => !v)} className="press h-11 self-center px-4 text-[15px] font-semibold text-[#a29bfe]">
+            <button onClick={() => setExpanded((v) => !v)} className="press h-11 self-center px-4 text-[15px] font-semibold text-[rgb(var(--accent-text))]">
               {expanded ? t('stats.sessions.showLess') : t('stats.sessions.showAll', { count: sessions.length - 12 })}
             </button>
           )}

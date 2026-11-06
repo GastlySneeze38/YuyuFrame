@@ -35,8 +35,8 @@ export function useHomeBanner(): FleetAnnouncement | null {
  *  version plus récente du back-office) prend celles du ciel de nuit. */
 const CARD_STYLES: Record<FleetAnnouncement['theme'], { card: CSSProperties; kicker: CSSProperties; detail: string }> = {
   none: {
-    card: { background: 'rgba(14,13,24,0.74)', borderColor: 'rgba(129,140,248,0.38)', boxShadow: '0 12px 34px rgba(0,0,0,0.45)' },
-    kicker: { background: 'rgba(129,140,248,0.18)', color: '#c7d2fe' },
+    card: { background: 'rgba(14,13,24,0.74)', borderColor: 'rgb(var(--accent-text)/0.38)', boxShadow: '0 12px 34px rgba(0,0,0,0.45)' },
+    kicker: { background: 'rgb(var(--accent-text)/0.18)', color: '#c7d2fe' },
     detail: 'rgba(226,232,240,0.55)',
   },
   festive: {

@@ -13,7 +13,7 @@ import { motion } from 'framer-motion'
  * aurait des coins carrés.
  */
 export function GlowPulse({ shadow, duration, radius }: {
-  /** L'ombre au plus fort de la pulsation, ex. `0 0 22px rgba(120,100,255,0.18)`. */
+  /** L'ombre au plus fort de la pulsation, ex. `0 0 22px rgb(var(--accent-hover)/0.18)`. */
   shadow: string
   duration: number
   radius: string

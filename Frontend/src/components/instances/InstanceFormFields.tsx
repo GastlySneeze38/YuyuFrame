@@ -11,7 +11,7 @@ export function NameInput({ value, onChange, onEnter }: { value: string; onChang
       value={value}
       onChange={(e) => onChange(e.target.value)}
       onKeyDown={(e) => e.key === 'Enter' && onEnter?.()}
-      className="w-full rounded-xl px-3 text-sm text-white outline-none h-[40px] bg-[rgba(0,0,0,0.4)] border border-[rgba(255,255,255,0.1)] focus:border-[rgba(75,63,207,0.6)]"
+      className="w-full rounded-xl px-3 text-sm text-white outline-none h-[40px] bg-[rgba(0,0,0,0.4)] border border-[rgba(255,255,255,0.1)] focus:border-[rgb(var(--accent)/0.6)]"
       autoFocus
     />
   )
@@ -30,7 +30,7 @@ export function DescriptionInput({ value, onChange }: { value: string; onChange:
         onChange={(e) => onChange(e.target.value)}
         rows={2}
         maxLength={140}
-        className="w-full resize-none rounded-xl px-3 py-2 text-sm text-white outline-none mt-1 bg-[rgba(0,0,0,0.4)] border border-[rgba(255,255,255,0.1)] focus:border-[rgba(75,63,207,0.6)]"
+        className="w-full resize-none rounded-xl px-3 py-2 text-sm text-white outline-none mt-1 bg-[rgba(0,0,0,0.4)] border border-[rgba(255,255,255,0.1)] focus:border-[rgb(var(--accent)/0.6)]"
       />
     </div>
   )
@@ -45,7 +45,7 @@ export function SubmitButton({ loading, disabled, label, loadingLabel, onClick }
       className={`w-full font-bold text-white transition-all duration-200 active:scale-95 h-[42px] rounded-xl text-[13px] ${
         isDisabled
           ? 'bg-[rgba(40,38,65,0.7)] shadow-none cursor-not-allowed opacity-60'
-          : 'bg-[#4B3FCF] shadow-[0_4px_20px_rgba(75,63,207,0.35)] cursor-pointer hover:bg-[#6155e8]'
+          : 'bg-[rgb(var(--accent))] shadow-[0_4px_20px_rgb(var(--accent)/0.35)] cursor-pointer hover:bg-[rgb(var(--accent-hover))]'
       }`}
     >
       {loading ? loadingLabel : label}
@@ -65,7 +65,7 @@ export function VersionSelect({ versions, value, onChange, className = '' }: { v
           className="w-full appearance-none rounded-xl px-3 pr-7 text-sm font-medium text-white outline-none h-[40px] bg-[rgba(0,0,0,0.4)] border border-[rgba(255,255,255,0.1)]"
         >
           {versions.map((v) => (
-            <option key={v} value={v} className="bg-[#111118]">{v}</option>
+            <option key={v} value={v} className="bg-[rgb(var(--bg-card))]">{v}</option>
           ))}
         </select>
         <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">
@@ -95,7 +95,7 @@ export function LoaderPicker({ value, onChange, available }: { value: Loader; on
             onClick={() => onChange(l)}
             className={`rounded-xl text-xs font-semibold transition-all duration-150 h-[40px] px-3 border ${
               value === l
-                ? 'bg-[rgba(75,63,207,0.35)] border-[rgba(75,63,207,0.7)] text-[rgba(255,255,255,0.95)]'
+                ? 'bg-[rgb(var(--accent)/0.35)] border-[rgb(var(--accent)/0.7)] text-[rgba(255,255,255,0.95)]'
                 : 'bg-[rgba(0,0,0,0.35)] border-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.35)]'
             }`}
           >

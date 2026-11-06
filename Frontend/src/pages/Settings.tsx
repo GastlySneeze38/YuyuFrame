@@ -3,7 +3,8 @@ import { SNAP } from '@/lib/motion'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { open as openDirPicker } from '@tauri-apps/plugin-dialog'
-import { useStore, useStorePick } from '@/stores/useStore'
+import { ACCENT_COLORS, APPEARANCE_THEMES, UI_SCALE_MAX, UI_SCALE_MIN, useStore, useStorePick } from '@/stores/useStore'
+import { ThemePreview } from '@/components/settings/ThemePreview'
 import { api } from '@/api/client'
 import { BackgroundOffModal } from '@/components/settings/BackgroundOffModal'
 import { showError } from '@/stores/useErrorToast'
@@ -31,7 +32,8 @@ export default function Settings() {
   const navigate = useNavigate()
   const mobile = useIsMobile()
   const {
-    brightness, setBrightness, soundVolume, setSoundVolume, defaultRam, setDefaultRam, customRamMb, setCustomRamMb,
+    appearanceTheme, setAppearanceTheme, accentColor, setAccentColor, uiScale, setUiScale,
+    reduceMotion, setReduceMotion, glassBlur, setGlassBlur, soundVolume, setSoundVolume, defaultRam, setDefaultRam, customRamMb, setCustomRamMb,
     closeOnLaunch, setCloseOnLaunch,
     allowBackground, setAllowBackground,
     instanceSyncMode, setInstanceSyncMode, avoidBetaDependencies, setAvoidBetaDependencies,
@@ -39,7 +41,8 @@ export default function Settings() {
     showHomeServers, setShowHomeServers, confirmServerLaunch, setConfirmServerLaunch,
     language, setLanguage,
   } = useStorePick(
-    'brightness', 'setBrightness', 'soundVolume', 'setSoundVolume', 'defaultRam', 'setDefaultRam', 'customRamMb', 'setCustomRamMb',
+    'appearanceTheme', 'setAppearanceTheme', 'accentColor', 'setAccentColor', 'uiScale', 'setUiScale',
+    'reduceMotion', 'setReduceMotion', 'glassBlur', 'setGlassBlur', 'soundVolume', 'setSoundVolume', 'defaultRam', 'setDefaultRam', 'customRamMb', 'setCustomRamMb',
     'closeOnLaunch', 'setCloseOnLaunch',
     'allowBackground', 'setAllowBackground',
     'instanceSyncMode', 'setInstanceSyncMode', 'avoidBetaDependencies', 'setAvoidBetaDependencies',
@@ -47,6 +50,15 @@ export default function Settings() {
     'showHomeServers', 'setShowHomeServers', 'confirmServerLaunch', 'setConfirmServerLaunch',
     'language', 'setLanguage',
   )
+
+  /** Taille de l'interface pendant qu'on tire le curseur : le zoom n'est
+   *  appliqué qu'au relâchement (`commitScale`). */
+  const [scaleDraft, setScaleDraft] = useState<number | null>(null)
+  const commitScale = () => {
+    if (scaleDraft === null) return
+    setUiScale(scaleDraft)
+    setScaleDraft(null)
+  }
 
   /* ── L'écriture de la table d'enchantement ───────────────────────────────
    * Cinq clics d'affilée sur l'en-tête « Langue » découvrent une neuvième
@@ -227,7 +239,7 @@ export default function Settings() {
   }
 
   return (
-    <div className="relative flex h-full flex-col overflow-hidden bg-[#09090D]">
+    <div className="relative flex h-full flex-col overflow-hidden bg-[rgb(var(--bg-primary))]">
       <PageGlow />
 
       <PageHeader>
@@ -294,7 +306,7 @@ export default function Settings() {
                       {t('settings.lancement.ramDesc')}
                     </p>
                   </div>
-                  <span className="text-sm font-bold text-[#7b72e9]">
+                  <span className="text-sm font-bold text-[rgb(var(--accent-text))]">
                     {formatRam(defaultRam)}
                   </span>
                 </div>
@@ -311,7 +323,7 @@ export default function Settings() {
                   min={2048} max={8192} step={1024}
                   value={defaultRam}
                   onChange={(e) => setDefaultRam(Number(e.target.value))}
-                  className="w-full accent-[#4B3FCF]"
+                  className="w-full accent-[rgb(var(--accent))]"
                 />
                 <div className="flex justify-between text-[10px] text-white/25">
                   <span>2 Go</span><span>3 Go</span><span>4 Go</span><span>5 Go</span><span>6 Go</span><span>7 Go</span><span>8 Go</span>
@@ -606,7 +618,7 @@ export default function Settings() {
                       <button
                         key={value}
                         onClick={() => setInstanceSyncMode(value)}
-                        className={`flex flex-col gap-1 rounded-xl p-3 text-left transition-all duration-150 ${active ? 'bg-[rgba(75,63,207,0.2)] border border-[rgba(75,63,207,0.55)]' : 'bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.07)]'}`}
+                        className={`flex flex-col gap-1 rounded-xl p-3 text-left transition-all duration-150 ${active ? 'bg-[rgb(var(--accent)/0.2)] border border-[rgb(var(--accent)/0.55)]' : 'bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.07)]'}`}
                       >
                         <span className="font-semibold text-white text-[12px]">{label}</span>
                         <span className="text-[10px] text-white/35 leading-[1.4]">{desc}</span>
@@ -651,7 +663,7 @@ export default function Settings() {
                 <button
                   onClick={pickDataRoot}
                   disabled={movingData}
-                  className="flex-shrink-0 rounded-lg px-3 py-1.5 text-[11px] font-semibold text-white bg-[rgba(75,63,207,0.4)] hover:bg-[rgba(75,63,207,0.6)] disabled:cursor-not-allowed disabled:opacity-40"
+                  className="flex-shrink-0 rounded-lg px-3 py-1.5 text-[11px] font-semibold text-white bg-[rgb(var(--accent)/0.4)] hover:bg-[rgb(var(--accent)/0.6)] disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {t('common.change')}
                 </button>
@@ -819,24 +831,30 @@ export default function Settings() {
             }
           >
             <div className="flex flex-col gap-6">
-              {/* Mode d'affichage */}
+              {/* Thème de fond — chaque carte pose `data-theme` sur elle-même :
+                  son aperçu montre donc les vraies couleurs du thème, sans
+                  copie à tenir à jour. */}
               <div className="flex flex-col gap-3">
-                <p className="text-sm font-medium text-white">{t('settings.apparence.displayModeLabel')}</p>
-                <div className="grid grid-cols-2 gap-3">
-                  {([
-                    { id: 'oled', label: t('settings.apparence.oledLabel'), desc: t('settings.apparence.oledDesc'), value: 100, icon: '◑' },
-                    { id: 'dark', label: t('settings.apparence.darkModeLabel'), desc: t('settings.apparence.darkModeDesc'), value: 200, icon: '☀' },
-                  ] as const).map(({ id, label, desc, value, icon }) => {
-                    const active = brightness === value
+                <div>
+                  <p className="text-sm font-medium text-white">{t('settings.apparence.themeLabel')}</p>
+                  <p className="text-[11px] text-white/35 mt-0.5">{t('settings.apparence.themeDesc')}</p>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  {APPEARANCE_THEMES.map((id) => {
+                    const active = appearanceTheme === id
                     return (
                       <button
                         key={id}
-                        onClick={() => setBrightness(value)}
-                        className={`flex flex-col gap-1 rounded-xl p-4 text-left transition-all duration-150 ${active ? 'bg-[rgba(75,63,207,0.2)] border border-[rgba(75,63,207,0.55)]' : 'bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.07)]'}`}
+                        data-theme={id}
+                        onClick={() => setAppearanceTheme(id)}
+                        aria-pressed={active}
+                        className={`press flex flex-col overflow-hidden rounded-xl border text-left transition-colors duration-150 ${active ? 'border-accent' : 'border-line hover:border-line-strong'}`}
                       >
-                        <span className="text-[18px] leading-none">{icon}</span>
-                        <span className="font-semibold text-white text-[13px]">{label}</span>
-                        <span className="text-[11px] text-white/35">{desc}</span>
+                        <ThemePreview />
+                        <span className="flex flex-col gap-0.5 bg-bg-card px-3 py-2.5">
+                          <span className="text-[13px] font-semibold text-white">{t(`settings.apparence.themes.${id}`)}</span>
+                          <span className="text-[11px] text-white/45">{t(`settings.apparence.themeDescs.${id}`)}</span>
+                        </span>
                       </button>
                     )
                   })}
@@ -845,31 +863,85 @@ export default function Settings() {
 
               <div className="h-px bg-white/6" />
 
-              {/* Luminosité */}
+              {/* Couleur d'accent — même principe : `data-accent` sur la pastille. */}
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-white">{t('settings.apparence.accentLabel')}</p>
+                  <p className="text-[11px] text-white/35 mt-0.5">{t(`settings.apparence.accents.${accentColor}`)}</p>
+                </div>
+                <div className="flex flex-none items-center gap-2">
+                  {ACCENT_COLORS.map((id) => {
+                    const active = accentColor === id
+                    return (
+                      <button
+                        key={id}
+                        data-accent={id}
+                        onClick={() => setAccentColor(id)}
+                        aria-pressed={active}
+                        aria-label={t(`settings.apparence.accents.${id}`)}
+                        title={t(`settings.apparence.accents.${id}`)}
+                        className={`press flex h-8 w-8 items-center justify-center rounded-full bg-accent ring-offset-2 ring-offset-bg-card transition-shadow duration-150 ${active ? 'ring-2 ring-white' : 'hover:ring-2 hover:ring-white/30'}`}
+                      >
+                        {active && (
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-white">
+                            <path d="M5 12l5 5L20 7" />
+                          </svg>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div className="h-px bg-white/6" />
+
+              {/* Taille de l'interface — zoom natif de la fenêtre. */}
               <div className="flex flex-col gap-4">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-4">
                   <div>
-                    <p className="text-sm font-medium text-white">{t('settings.apparence.brightnessLabel')}</p>
-                    <p className="text-[11px] text-white/35 mt-0.5">
-                      {t('settings.apparence.brightnessDesc')}
-                    </p>
+                    <p className="text-sm font-medium text-white">{t('settings.apparence.scaleLabel')}</p>
+                    <p className="text-[11px] text-white/35 mt-0.5">{t('settings.apparence.scaleDesc')}</p>
                   </div>
-                  <span className="text-sm font-bold text-[#7b72e9]">
-                    {brightness}%
-                  </span>
+                  <div className="flex flex-none items-center gap-3">
+                    <span className="text-sm font-bold tabular-nums text-accent-text">{scaleDraft ?? uiScale}%</span>
+                    <Button size="sm" variant="secondary" disabled={uiScale === 100} onClick={() => setUiScale(100)}>
+                      {t('settings.apparence.scaleReset')}
+                    </Button>
+                  </div>
                 </div>
                 <input
                   type="range"
-                  min={40} max={200} step={5}
-                  value={brightness}
-                  onChange={(e) => setBrightness(Number(e.target.value))}
-                  className="w-full accent-[#4B3FCF]"
+                  min={UI_SCALE_MIN} max={UI_SCALE_MAX} step={5}
+                  value={scaleDraft ?? uiScale}
+                  // Appliqué au relâchement : zoomer la fenêtre pendant qu'on
+                  // tire le curseur déplacerait le curseur sous la souris.
+                  onChange={(e) => setScaleDraft(Number(e.target.value))}
+                  onPointerUp={commitScale}
+                  onKeyUp={commitScale}
+                  className="w-full accent-accent"
                 />
-                <div className="flex justify-between text-[10px] text-white/25">
-                  <span>{t('settings.apparence.dark')}</span>
-                  <span>OLED</span>
-                  <span>{t('settings.apparence.darkModeLabel')}</span>
+              </div>
+
+              <div className="h-px bg-white/6" />
+
+              {/* Animations réduites */}
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-white">{t('settings.apparence.reduceMotionLabel')}</p>
+                  <p className="text-[11px] text-white/35 mt-0.5">{t('settings.apparence.reduceMotionDesc')}</p>
                 </div>
+                <Toggle checked={reduceMotion} onChange={() => setReduceMotion(!reduceMotion)} />
+              </div>
+
+              <div className="h-px bg-white/6" />
+
+              {/* Flou de verre */}
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-white">{t('settings.apparence.blurLabel')}</p>
+                  <p className="text-[11px] text-white/35 mt-0.5">{t('settings.apparence.blurDesc')}</p>
+                </div>
+                <Toggle checked={glassBlur} onChange={() => setGlassBlur(!glassBlur)} />
               </div>
 
               <div className="h-px bg-white/6" />
@@ -884,7 +956,7 @@ export default function Settings() {
                     </p>
                   </div>
                   <div className="flex flex-none items-center gap-3">
-                    <span className="text-sm font-bold text-[#7b72e9]">
+                    <span className="text-sm font-bold text-[rgb(var(--accent-text))]">
                       {soundVolume === 0 ? t('settings.apparence.soundOff') : `${soundVolume}%`}
                     </span>
                     {/* Le seul son du launcher aujourd'hui : l'écouter dit
@@ -899,7 +971,7 @@ export default function Settings() {
                   min={0} max={100} step={5}
                   value={soundVolume}
                   onChange={(e) => setSoundVolume(Number(e.target.value))}
-                  className="w-full accent-[#4B3FCF]"
+                  className="w-full accent-[rgb(var(--accent))]"
                 />
               </div>
             </div>

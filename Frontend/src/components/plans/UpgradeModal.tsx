@@ -29,8 +29,8 @@ export function UpgradeModal({
   const mobile = useIsMobile()
   const planMeta = getPlans(t).find((p) => p.id === plan)!
   const busy = checkoutState === 'loading' || checkoutState === 'waiting'
-  const accentColor = planMeta.color === '#818cf8' ? '#4B3FCF' : 'rgba(245,158,11,0.9)'
-  const accentText = planMeta.color === '#818cf8' ? 'white' : '#09090D'
+  const accentColor = planMeta.color === '#818cf8' ? 'rgb(var(--accent))' : 'rgba(245,158,11,0.9)'
+  const accentText = planMeta.color === '#818cf8' ? 'white' : 'rgb(var(--bg-primary))'
 
   const content = (
       <>
@@ -182,7 +182,7 @@ export function UpgradeModal({
       onClick={busy ? undefined : onClose}
     >
       <div
-        className="flex flex-col gap-6 rounded-2xl p-8 w-full max-w-sm relative bg-[#111118]"
+        className="flex flex-col gap-6 rounded-2xl p-8 w-full max-w-sm relative bg-[rgb(var(--bg-card))]"
         style={{
           border: `1px solid ${planMeta.borderColor}`,
           boxShadow: `0 0 60px ${planMeta.glowColor}, 0 24px 48px rgba(0,0,0,0.6)`,

@@ -45,7 +45,7 @@ export function ImportModal({ onImport, onClose }: {
                 onClick={() => setMode(m)}
                 className={`h-[28px] rounded-lg border px-2.5 text-[10px] font-semibold transition-colors ${
                   mode === m
-                    ? 'border-[rgba(75,63,207,0.7)] bg-[rgba(75,63,207,0.3)] text-white'
+                    ? 'border-[rgb(var(--accent)/0.7)] bg-[rgb(var(--accent)/0.3)] text-white'
                     : 'border-[rgba(255,255,255,0.08)] bg-[rgba(0,0,0,0.3)] text-[rgba(255,255,255,0.42)] hover:border-white/25'
                 }`}
               >
@@ -56,7 +56,7 @@ export function ImportModal({ onImport, onClose }: {
           <button
             onClick={() => { onImport(analysis.byCategory, mode); onClose() }}
             disabled={analysis.count === 0}
-            className="h-[30px] rounded-lg border border-[rgba(75,63,207,0.7)] bg-[rgba(75,63,207,0.4)] px-4 text-[11px] font-bold text-white transition-colors hover:bg-[rgba(75,63,207,0.55)] disabled:opacity-35 disabled:hover:bg-[rgba(75,63,207,0.4)]"
+            className="h-[30px] rounded-lg border border-[rgb(var(--accent)/0.7)] bg-[rgb(var(--accent)/0.4)] px-4 text-[11px] font-bold text-white transition-colors hover:bg-[rgb(var(--accent)/0.55)] disabled:opacity-35 disabled:hover:bg-[rgb(var(--accent)/0.4)]"
           >
             {analysis.count > 0 ? `Importer ${analysis.count} drapeau${analysis.count > 1 ? 'x' : ''}` : 'Importer'}
           </button>
@@ -70,7 +70,7 @@ export function ImportModal({ onImport, onClose }: {
           onChange={(e) => setRaw(e.target.value)}
           spellCheck={false}
           placeholder={PLACEHOLDER}
-          className="min-h-[130px] w-full resize-y rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] p-3 font-mono text-[11px] leading-relaxed text-[rgba(255,255,255,0.85)] outline-none placeholder:text-[rgba(255,255,255,0.2)] focus:border-[rgba(75,63,207,0.6)]"
+          className="min-h-[130px] w-full resize-y rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] p-3 font-mono text-[11px] leading-relaxed text-[rgba(255,255,255,0.85)] outline-none placeholder:text-[rgba(255,255,255,0.2)] focus:border-[rgb(var(--accent)/0.6)]"
         />
 
         {raw.trim() && analysis.count === 0 && (

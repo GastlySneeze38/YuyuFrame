@@ -8,7 +8,7 @@ export function PlanBadge({ plan }: { plan: string }) {
   }
   if (plan === 'premium') {
     return (
-      <span className="rounded-full px-2 py-0.5 text-[10px] font-bold text-[#818cf8] bg-[rgba(75,63,207,0.2)] tracking-[0.05em]">
+      <span className="rounded-full px-2 py-0.5 text-[10px] font-bold text-[rgb(var(--accent-text))] bg-[rgb(var(--accent)/0.2)] tracking-[0.05em]">
         PREMIUM
       </span>
     )

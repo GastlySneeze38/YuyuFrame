@@ -71,7 +71,7 @@ export function MobileModsToolbar({ tab, onTab, isPlugin, hasModpack, modCount, 
             aria-selected={family === f.id}
             onClick={() => { if (family !== f.id) onTab(f.first) }}
             className={`flex h-10 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl text-[14px] font-semibold transition-colors duration-150 ${
-              family === f.id ? 'bg-[rgba(75,63,207,0.35)] text-white' : 'text-white/55'
+              family === f.id ? 'bg-[rgb(var(--accent)/0.35)] text-white' : 'text-white/55'
             }`}
           >
             <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4 shrink-0"><path d={f.icon} /></svg>
@@ -92,7 +92,7 @@ export function MobileModsToolbar({ tab, onTab, isPlugin, hasModpack, modCount, 
               aria-pressed={tab === s.id}
               className={`press relative flex h-10 min-w-0 flex-1 items-center justify-center rounded-full border px-2 text-[14px] font-semibold transition-colors duration-150 [&>span:first-child]:truncate ${
                 tab === s.id
-                  ? 'border-[rgba(120,100,255,0.5)] bg-[rgba(75,63,207,0.2)] text-white'
+                  ? 'border-[rgb(var(--accent-hover)/0.5)] bg-[rgb(var(--accent)/0.2)] text-white'
                   : 'border-white/[0.08] bg-white/[0.03] text-white/65'
               }`}
             >
@@ -100,7 +100,7 @@ export function MobileModsToolbar({ tab, onTab, isPlugin, hasModpack, modCount, 
               {/* Le nombre en coin : dans la pastille, il prenait la place
                   du libellé, coupé dans les langues aux mots longs. */}
               {s.badge !== undefined && s.badge > 0 && (
-                <span className="absolute -right-1 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full border border-[#09090D] bg-[#3a3550] px-1.5 text-[11px] font-bold tabular-nums text-white">{s.badge}</span>
+                <span className="absolute -right-1 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full border border-[rgb(var(--bg-primary))] bg-[#3a3550] px-1.5 text-[11px] font-bold tabular-nums text-white">{s.badge}</span>
               )}
             </button>
           ))}
@@ -154,7 +154,7 @@ export function MobileImportFab({ uploading, collapsed = false, onImport }: {
       onClick={onImport}
       disabled={uploading}
       aria-label={label}
-      className="press absolute bottom-[max(16px,env(safe-area-inset-bottom))] right-4 z-10 flex h-14 items-center rounded-full bg-[#4B3FCF] px-4 text-[16px] font-semibold text-white shadow-[0_8px_28px_rgba(75,63,207,0.5),0_2px_8px_rgba(0,0,0,0.4)] disabled:opacity-60"
+      className="press absolute bottom-[max(16px,env(safe-area-inset-bottom))] right-4 z-10 flex h-14 items-center rounded-full bg-[rgb(var(--accent))] px-4 text-[16px] font-semibold text-white shadow-[0_8px_28px_rgb(var(--accent)/0.5),0_2px_8px_rgba(0,0,0,0.4)] disabled:opacity-60"
     >
       <svg viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6 shrink-0"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" /></svg>
       <span

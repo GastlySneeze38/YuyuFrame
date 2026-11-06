@@ -190,7 +190,7 @@ export default function Support() {
 
   if (mobile) {
     return (
-      <div className="relative flex h-full flex-col overflow-hidden bg-[#09090D] text-txt-primary">
+      <div className="relative flex h-full flex-col overflow-hidden bg-[rgb(var(--bg-primary))] text-txt-primary">
         <header className="flex shrink-0 items-center gap-1 pb-2 pl-1.5 pr-4 pt-[max(12px,env(safe-area-inset-top))]">
           <MenuButton />
           <h1 className="min-w-0 flex-1 truncate text-[28px] font-bold tracking-tight text-white">{t('support.title')}</h1>
@@ -213,7 +213,7 @@ export default function Support() {
                 <h2 className="px-1 text-[13px] font-semibold uppercase tracking-[0.06em] text-white/55">{t('support.myRequests')}</h2>
                 {tickets === null ? (
                   <div className="flex justify-center py-8">
-                    <ButtonSpinner size={24} color="#818cf8" trackColor="rgba(255,255,255,0.08)" />
+                    <ButtonSpinner size={24} color="rgb(var(--accent-text))" trackColor="rgba(255,255,255,0.08)" />
                   </div>
                 ) : tickets.length === 0 ? (
                   <div className="flex flex-col gap-1 rounded-2xl border border-white/[0.06] bg-white/[0.04] px-4 py-5 text-center">
@@ -311,7 +311,7 @@ export default function Support() {
 
           {tickets === null ? (
             <div className="flex flex-1 items-center justify-center">
-              <ButtonSpinner size={28} color="#818cf8" trackColor="rgba(255,255,255,0.08)" />
+              <ButtonSpinner size={28} color="rgb(var(--accent-text))" trackColor="rgba(255,255,255,0.08)" />
             </div>
           ) : (
             <div className="grid min-h-0 flex-1 grid-cols-[300px_minmax(0,1fr)]">
@@ -378,7 +378,7 @@ function TabBar({ tab, onPick }: { tab: Tab; onPick: (tab: Tab) => void }) {
               aria-pressed={tab === key}
               aria-label={t(`support.tab.${key}`)}
               className={`relative h-10 min-w-0 rounded-xl px-1 text-[13px] font-semibold transition-colors duration-150 ${
-                tab === key ? 'bg-[rgba(75,63,207,0.35)] text-white' : 'text-white/60'
+                tab === key ? 'bg-[rgb(var(--accent)/0.35)] text-white' : 'text-white/60'
               }`}
             >
               <span className="block truncate">{t(`support.tabShort.${key}`)}</span>
@@ -620,7 +620,7 @@ function Conversation({
   if (loading) {
     return (
       <div className="flex items-center justify-center">
-        <ButtonSpinner size={24} color="#818cf8" trackColor="rgba(255,255,255,0.08)" />
+        <ButtonSpinner size={24} color="rgb(var(--accent-text))" trackColor="rgba(255,255,255,0.08)" />
       </div>
     )
   }
@@ -753,7 +753,7 @@ function MobileConversation({ ticket, loading, labelOf, onReplied, onBack, onDel
         right={shown?.status === 'closed' ? <PushedMoreButton label={t('support.remove')} onClick={() => setMenu(true)} /> : undefined}
         bodyClassName="px-4 py-4"
         footer={shown && (
-          <div className="shrink-0 border-t border-white/[0.06] bg-[#09090D] px-3 pb-[max(10px,env(safe-area-inset-bottom))] pt-2.5">
+          <div className="shrink-0 border-t border-white/[0.06] bg-[rgb(var(--bg-primary))] px-3 pb-[max(10px,env(safe-area-inset-bottom))] pt-2.5">
             <div className="flex items-end gap-2">
               <textarea
                 value={message}
@@ -768,13 +768,13 @@ function MobileConversation({ ticket, loading, labelOf, onReplied, onBack, onDel
                   el.style.height = 'auto'
                   el.style.height = `${Math.min(el.scrollHeight, 132)}px`
                 }}
-                className="max-h-[132px] min-h-[44px] flex-1 resize-none rounded-2xl border border-white/[0.1] bg-white/[0.05] px-4 py-2.5 text-[16px] leading-snug text-white outline-none placeholder:text-white/40 focus:border-[rgba(120,100,255,0.6)]"
+                className="max-h-[132px] min-h-[44px] flex-1 resize-none rounded-2xl border border-white/[0.1] bg-white/[0.05] px-4 py-2.5 text-[16px] leading-snug text-white outline-none placeholder:text-white/40 focus:border-[rgb(var(--accent-hover)/0.6)]"
               />
               <button
                 onClick={send}
                 disabled={!message.trim() || sending}
                 aria-label={t('support.send')}
-                className="press flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#4B3FCF] text-white disabled:opacity-40"
+                className="press flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[rgb(var(--accent))] text-white disabled:opacity-40"
               >
                 {sending
                   ? <ButtonSpinner size={16} trackColor="rgba(255,255,255,0.2)" />
@@ -786,7 +786,7 @@ function MobileConversation({ ticket, loading, labelOf, onReplied, onBack, onDel
       >
         {loading && !ticket ? (
           <div className="flex justify-center py-10">
-            <ButtonSpinner size={24} color="#818cf8" trackColor="rgba(255,255,255,0.08)" />
+            <ButtonSpinner size={24} color="rgb(var(--accent-text))" trackColor="rgba(255,255,255,0.08)" />
           </div>
         ) : shown && (
           <div className="flex flex-col gap-3">
@@ -975,7 +975,7 @@ function RequestModal({
                 type="checkbox"
                 checked={attach}
                 onChange={(e) => setAttach(e.target.checked)}
-                className="mt-0.5 h-4 w-4 accent-[#818cf8]"
+                className="mt-0.5 h-4 w-4 accent-[rgb(var(--accent-text))]"
               />
               <span className="flex flex-col gap-0.5">
                 <span className="text-[12px] font-medium max-sm:text-[15px]">{t('support.attachDiagnostic')}</span>

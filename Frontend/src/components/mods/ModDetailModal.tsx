@@ -106,7 +106,7 @@ export function ModDetailModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.6)] p-6 backdrop-blur-[4px]"
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="flex h-[min(85vh,820px)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[#111116] shadow-[0_24px_80px_rgba(0,0,0,0.6)]">
+      <div className="flex h-[min(85vh,820px)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[rgb(var(--bg-card))] shadow-[0_24px_80px_rgba(0,0,0,0.6)]">
         {/* En-tête */}
         <div className="flex flex-shrink-0 items-start gap-4 px-6 pb-4 pt-6">
           <div className="flex h-[60px] w-[60px] flex-shrink-0 items-center justify-center overflow-hidden rounded-[16px] bg-[rgba(255,255,255,0.06)]">
@@ -124,7 +124,7 @@ export function ModDetailModal({
                 <span key={c} className="rounded-full bg-[rgba(255,255,255,0.06)] px-2 py-0.5 text-[10px] text-[rgba(255,255,255,0.45)]">{c}</span>
               ))}
               {installedVersionNumber && (
-                <span className="rounded-full bg-[rgba(75,63,207,0.2)] px-2 py-0.5 text-[10px] font-semibold text-[rgba(179,163,255,0.9)]">
+                <span className="rounded-full bg-[rgb(var(--accent)/0.2)] px-2 py-0.5 text-[10px] font-semibold text-[rgba(179,163,255,0.9)]">
                   {t('mods.installedVersion', { version: installedVersionNumber })}
                 </span>
               )}
@@ -172,7 +172,7 @@ export function ModDetailModal({
               <motion.button {...press}
                 onClick={() => setShowAllVersions((v) => !v)}
                 className={`rounded-lg border border-[rgba(255,255,255,0.08)] px-2.5 py-1 text-[10.5px] font-semibold ${
-                  showAllVersions ? 'bg-[rgba(75,63,207,0.3)] text-white' : 'bg-[rgba(255,255,255,0.05)] text-[rgba(255,255,255,0.45)]'
+                  showAllVersions ? 'bg-[rgb(var(--accent)/0.3)] text-white' : 'bg-[rgba(255,255,255,0.05)] text-[rgba(255,255,255,0.45)]'
                 }`}
               >
                 {showAllVersions ? t('mods.allVersions') : t('mods.compatibleWith', { version: mcVersion })}
@@ -196,7 +196,7 @@ export function ModDetailModal({
                     <div
                       key={v.id}
                       className={`flex items-center gap-3 rounded-xl border border-[rgba(255,255,255,0.06)] px-3 py-2 ${
-                        isInstalledVersion ? 'bg-[rgba(75,63,207,0.1)]' : 'bg-[rgba(255,255,255,0.03)]'
+                        isInstalledVersion ? 'bg-[rgb(var(--accent)/0.1)]' : 'bg-[rgba(255,255,255,0.03)]'
                       }`}
                     >
                       <div className="min-w-0 flex-1">
@@ -221,8 +221,8 @@ export function ModDetailModal({
                           isInstalledVersion
                             ? 'cursor-not-allowed border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.05)] text-[rgba(255,255,255,0.3)]'
                             : installing
-                              ? 'cursor-not-allowed border-[rgba(75,63,207,0.5)] bg-[rgba(40,38,65,0.7)] text-[rgba(255,255,255,0.85)]'
-                              : 'cursor-pointer border-[rgba(75,63,207,0.5)] bg-[rgba(75,63,207,0.3)] text-[rgba(255,255,255,0.85)]'
+                              ? 'cursor-not-allowed border-[rgb(var(--accent)/0.5)] bg-[rgba(40,38,65,0.7)] text-[rgba(255,255,255,0.85)]'
+                              : 'cursor-pointer border-[rgb(var(--accent)/0.5)] bg-[rgb(var(--accent)/0.3)] text-[rgba(255,255,255,0.85)]'
                         }`}
                       >
                         {installing ? (

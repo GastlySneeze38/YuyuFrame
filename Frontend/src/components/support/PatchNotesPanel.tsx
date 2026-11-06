@@ -35,7 +35,7 @@ export function PatchNotesPanel() {
   if (notes === null) {
     return (
       <div className="flex flex-1 items-center justify-center">
-        <ButtonSpinner size={28} color="#818cf8" trackColor="rgba(255,255,255,0.08)" />
+        <ButtonSpinner size={28} color="rgb(var(--accent-text))" trackColor="rgba(255,255,255,0.08)" />
       </div>
     )
   }
@@ -182,7 +182,7 @@ function VersionPicker({
                 type="button"
                 onClick={() => { onPick(n.id); setOpen(false) }}
                 aria-pressed={active}
-                className={`press flex min-h-[60px] w-full flex-col justify-center rounded-2xl px-3 py-2 text-left ${active ? 'bg-[rgba(75,63,207,0.2)]' : 'active:bg-white/[0.06]'}`}
+                className={`press flex min-h-[60px] w-full flex-col justify-center rounded-2xl px-3 py-2 text-left ${active ? 'bg-[rgb(var(--accent)/0.2)]' : 'active:bg-white/[0.06]'}`}
               >
                 <span className="flex items-center gap-2">
                   <span className="text-[16px] font-semibold text-white">{n.version}</span>

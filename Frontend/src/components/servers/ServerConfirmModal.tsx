@@ -33,7 +33,7 @@ export function ServerConfirmModal({
             type="checkbox"
             checked={confirmServerLaunch}
             onChange={(e) => setConfirmServerLaunch(e.target.checked)}
-            className="accent-[#4B3FCF]"
+            className="accent-[rgb(var(--accent))]"
           />
           <span className="text-[11px] text-[rgba(255,255,255,0.5)]">{t('servers.alwaysAsk')}</span>
         </label>
@@ -47,7 +47,7 @@ export function ServerConfirmModal({
           </button>
           <button
             onClick={onConfirm}
-            className="flex-1 h-9 rounded-lg text-[12px] font-semibold text-white bg-[#4B3FCF] transition-colors hover:bg-[#6155e8]"
+            className="flex-1 h-9 rounded-lg text-[12px] font-semibold text-white bg-[rgb(var(--accent))] transition-colors hover:bg-[rgb(var(--accent-hover))]"
           >
             {t('servers.launch')}
           </button>

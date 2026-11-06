@@ -101,8 +101,8 @@ export function ServerCard({
         onToggleFavorite ? 'pb-[24px]' : ''
       } ${
         favorite
-          ? 'bg-[rgba(75,63,207,0.12)] border-[rgba(120,100,255,0.4)]'
-          : 'bg-[rgba(255,255,255,0.02)] border-[rgba(255,255,255,0.05)] hover:bg-[rgba(75,63,207,0.06)] hover:border-[rgba(120,100,255,0.25)]'
+          ? 'bg-[rgb(var(--accent)/0.12)] border-[rgb(var(--accent-hover)/0.4)]'
+          : 'bg-[rgba(255,255,255,0.02)] border-[rgba(255,255,255,0.05)] hover:bg-[rgb(var(--accent)/0.06)] hover:border-[rgb(var(--accent-hover)/0.25)]'
       } ${className}`}
     >
       {/* `flex-1 justify-center` : la carte est étirée sur la hauteur de la
@@ -127,7 +127,7 @@ export function ServerCard({
             {server.name || t('servers.defaultName')}
           </span>
           {badge && (
-            <span className="flex-shrink-0 rounded-[4px] bg-[rgba(75,63,207,0.3)] px-[clamp(3px,1.5cqw,5px)] text-[clamp(6px,3cqw,8px)] font-bold uppercase tracking-[0.04em] text-[rgba(255,255,255,0.75)]">
+            <span className="flex-shrink-0 rounded-[4px] bg-[rgb(var(--accent)/0.3)] px-[clamp(3px,1.5cqw,5px)] text-[clamp(6px,3cqw,8px)] font-bold uppercase tracking-[0.04em] text-[rgba(255,255,255,0.75)]">
               {badge}
             </span>
           )}
@@ -164,7 +164,7 @@ export function ServerCard({
             favorite ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
           } ${
             favorite
-              ? 'bg-[rgba(75,63,207,0.35)] border-[rgba(120,100,255,0.3)] text-white hover:bg-[rgba(75,63,207,0.5)]'
+              ? 'bg-[rgb(var(--accent)/0.35)] border-[rgb(var(--accent-hover)/0.3)] text-white hover:bg-[rgb(var(--accent)/0.5)]'
               : 'bg-[rgba(255,255,255,0.05)] border-[rgba(255,255,255,0.06)] text-[rgba(255,255,255,0.7)] hover:bg-[rgba(255,255,255,0.1)]'
           }`}
         >

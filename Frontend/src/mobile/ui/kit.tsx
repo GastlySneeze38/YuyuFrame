@@ -48,12 +48,12 @@ export function Segmented<T extends string | number>({ value, options, onChange,
           onClick={() => onChange(o.value)}
           aria-pressed={value === o.value}
           className={`relative h-10 min-w-0 rounded-xl px-1 font-semibold transition-colors duration-150 ${size === 'sm' ? 'text-[13px]' : 'text-[14px]'} ${
-            value === o.value ? 'bg-[rgba(75,63,207,0.35)] text-white' : 'text-white/60'
+            value === o.value ? 'bg-[rgb(var(--accent)/0.35)] text-white' : 'text-white/60'
           }`}
         >
           <span className="block truncate">{o.label}</span>
           {o.badge !== undefined && o.badge > 0 && (
-            <span className="absolute -right-0.5 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border border-[#09090D] bg-[#3a3550] px-1 text-[11px] font-bold tabular-nums text-white">
+            <span className="absolute -right-0.5 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border border-[rgb(var(--bg-primary))] bg-[#3a3550] px-1 text-[11px] font-bold tabular-nums text-white">
               {o.badge}
             </span>
           )}
@@ -72,7 +72,7 @@ export function CheckRow({ label, sub, checked, onClick }: { label: ReactNode; s
         {sub && <span className="truncate text-[13px] text-white/55">{sub}</span>}
       </span>
       {checked && (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0 text-[#a29bfe]">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0 text-[rgb(var(--accent-text))]">
           <path d="M5 12.5l4.5 4.5L19 7.5" />
         </svg>
       )}

@@ -5,7 +5,7 @@ import { pressable } from '@/lib/motion'
 
 /**
  * Bouton unique du launcher. Avant lui, chaque écran recopiait sa propre
- * chaîne de classes (`rgba(75,63,207,0.18)` et compagnie) : les variantes
+ * chaîne de classes (`rgb(var(--accent)/0.18)` et compagnie) : les variantes
  * ci-dessous remplacent ces copies et ne parlent qu'en jetons de couleur.
  */
 
@@ -22,7 +22,7 @@ export type ButtonSize = 'sm' | 'md'
  * ressemblait pas à un bouton.
  */
 const VARIANTS: Record<ButtonVariant, string> = {
-  primary: 'bg-accent border-accent text-white hover:bg-accent-hover hover:border-accent-hover shadow-[0_2px_12px_rgba(75,63,207,0.35)]',
+  primary: 'bg-accent border-accent text-white hover:bg-accent-hover hover:border-accent-hover shadow-[0_2px_12px_rgb(var(--accent)/0.35)]',
   secondary: 'bg-surface-3 border-line-strong text-txt-primary hover:bg-surface-4 hover:border-accent/40',
   ghost: 'bg-transparent border-line text-txt-primary hover:bg-surface-2 hover:border-line-strong',
   danger: 'bg-danger/15 border-danger/40 text-danger hover:bg-danger/25',

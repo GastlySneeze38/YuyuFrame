@@ -78,7 +78,7 @@ export function BaseModal({ category, family, value, baseId, onChange, onBaseCha
             </button>
             <button
               onClick={() => setBrowsing(true)}
-              className="h-[30px] rounded-lg border border-[rgba(75,63,207,0.7)] bg-[rgba(75,63,207,0.4)] px-3.5 text-[11px] font-bold text-white transition-colors hover:bg-[rgba(75,63,207,0.55)]"
+              className="h-[30px] rounded-lg border border-[rgb(var(--accent)/0.7)] bg-[rgb(var(--accent)/0.4)] px-3.5 text-[11px] font-bold text-white transition-colors hover:bg-[rgb(var(--accent)/0.55)]"
             >
               Changer de jeu
             </button>
@@ -152,13 +152,13 @@ export function BaseModal({ category, family, value, baseId, onChange, onBaseCha
         </button>
       ) : undefined}
     >
-      <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-[rgba(255,255,255,0.07)] bg-[#111018] px-5 py-3">
+      <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-[rgba(255,255,255,0.07)] bg-[rgb(var(--bg-card))] px-5 py-3">
         <input
           autoFocus
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Chercher un jeu — nom, intention (« pauses ») ou drapeau (« Shenandoah »)"
-          className="h-[32px] min-w-0 flex-1 rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] px-3 text-[12px] text-white outline-none placeholder:text-[rgba(255,255,255,0.25)] focus:border-[rgba(75,63,207,0.6)]"
+          className="h-[32px] min-w-0 flex-1 rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] px-3 text-[12px] text-white outline-none placeholder:text-[rgba(255,255,255,0.25)] focus:border-[rgb(var(--accent)/0.6)]"
         />
         {/* Un jeu trouvé ailleurs se colle au lieu de se chercher — même
             question ("d'où viennent ces drapeaux ?"), donc même endroit. */}
@@ -241,7 +241,7 @@ function PresetCard({ preset, current, open, onToggle, onApply }: {
         </button>
         <button
           onClick={onApply}
-          className="h-[24px] flex-shrink-0 rounded-md border border-[rgba(75,63,207,0.6)] bg-[rgba(75,63,207,0.35)] px-2.5 text-[10px] font-bold text-white transition-colors hover:bg-[rgba(75,63,207,0.5)]"
+          className="h-[24px] flex-shrink-0 rounded-md border border-[rgb(var(--accent)/0.6)] bg-[rgb(var(--accent)/0.35)] px-2.5 text-[10px] font-bold text-white transition-colors hover:bg-[rgb(var(--accent)/0.5)]"
         >
           Appliquer
         </button>

@@ -107,7 +107,7 @@ export function CatalogDetail({ server, onClose, onAdded }: { server: CatalogSer
   const version = server.recommended_version ?? server.game_versions[0] ?? null
   const gallery = detail?.gallery ?? []
   const packHolder = packInstance ? instances.find((i) => i.id === packInstance) : null
-  const accent = server.color ?? '#4b3fcf'
+  const accent = server.color ?? 'rgb(var(--accent))'
 
   const play = () => {
     if (!version) return
@@ -195,7 +195,7 @@ export function CatalogDetail({ server, onClose, onAdded }: { server: CatalogSer
       <button
         disabled={!modpack && !version}
         onClick={() => (modpack ? (packHolder ? void playExistingPack(packHolder.id) : void installPack()) : play())}
-        className="press h-12 w-full truncate rounded-2xl bg-[#4B3FCF] px-4 text-[16px] font-semibold text-white disabled:opacity-40"
+        className="press h-12 w-full truncate rounded-2xl bg-[rgb(var(--accent))] px-4 text-[16px] font-semibold text-white disabled:opacity-40"
       >
         {modpack ? (packHolder ? t('servers.page.detail.playWith', { name: packHolder.name }) : t('servers.page.detail.install')) : t('servers.page.detail.play')}
       </button>
@@ -214,14 +214,14 @@ export function CatalogDetail({ server, onClose, onAdded }: { server: CatalogSer
     return (
       <>
         <motion.div
-          className="absolute inset-0 z-30 flex flex-col bg-[#09090D] shadow-[-12px_0_32px_rgba(0,0,0,0.45)]"
+          className="absolute inset-0 z-30 flex flex-col bg-[rgb(var(--bg-primary))] shadow-[-12px_0_32px_rgba(0,0,0,0.45)]"
           initial={reduce ? { opacity: 0 } : { transform: 'translateX(100%)' }}
           animate={reduce ? { opacity: 1 } : { transform: 'translateX(0%)' }}
           exit={reduce ? { opacity: 0, transition: { duration: 0.15 } } : { transform: 'translateX(100%)', transition: { duration: 0.22, ease: [0.32, 0.72, 0, 1] } }}
           transition={{ duration: 0.32, ease: [0.32, 0.72, 0, 1] }}
         >
           <header className="grid shrink-0 grid-cols-[48px_1fr_48px] items-center border-b border-white/[0.06] px-1 pb-2 pt-[max(8px,env(safe-area-inset-top))]">
-            <button onClick={() => !installing && onClose()} aria-label={t('servers.page.detail.close')} className="press flex h-11 w-11 items-center justify-center rounded-full text-[#a29bfe]">
+            <button onClick={() => !installing && onClose()} aria-label={t('servers.page.detail.close')} className="press flex h-11 w-11 items-center justify-center rounded-full text-[rgb(var(--accent-text))]">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6"><path d="M15 6l-6 6 6 6" /></svg>
             </button>
             <h2 className="truncate text-center text-[17px] font-bold text-white">{server.name}</h2>
@@ -231,11 +231,11 @@ export function CatalogDetail({ server, onClose, onAdded }: { server: CatalogSer
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[max(32px,env(safe-area-inset-bottom))]">
             <div className="relative h-[150px] overflow-hidden" style={{ background: `linear-gradient(135deg, ${accent}66, ${accent}10)` }}>
               {server.banner_url && <img src={server.banner_url} alt="" className="h-full w-full object-cover" draggable={false} />}
-              <div className="absolute inset-0 bg-gradient-to-t from-[#09090D] via-[#09090D]/30 to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-[rgb(var(--bg-primary))] via-[rgb(var(--bg-primary))]/30 to-transparent" />
             </div>
             <div className="relative -mt-12 flex flex-col gap-4 px-4">
               <div className="flex items-end gap-3.5">
-                <div className="h-[80px] w-[80px] shrink-0 overflow-hidden rounded-[20px] border-4 border-[#09090D] bg-surface-3">
+                <div className="h-[80px] w-[80px] shrink-0 overflow-hidden rounded-[20px] border-4 border-[rgb(var(--bg-primary))] bg-surface-3">
                   {server.icon_url && <img src={server.icon_url} alt="" className="h-full w-full object-cover" draggable={false} />}
                 </div>
                 <div className="flex min-w-0 flex-1 flex-col gap-1 pb-1">
@@ -355,7 +355,7 @@ export function CatalogDetail({ server, onClose, onAdded }: { server: CatalogSer
           label={t('servers.page.detail.addToInstance')}
           header={<SheetTitle>{t('servers.page.detail.addTo')}</SheetTitle>}
           footer={instances.length > 0 && (
-            <button onClick={() => void addTo()} disabled={adding || !target} className="press flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#4B3FCF] text-[16px] font-semibold text-white disabled:opacity-50">
+            <button onClick={() => void addTo()} disabled={adding || !target} className="press flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[rgb(var(--accent))] text-[16px] font-semibold text-white disabled:opacity-50">
               {adding && <ButtonSpinner />}
               {t('servers.page.detail.addButton')}
             </button>
@@ -394,7 +394,7 @@ export function CatalogDetail({ server, onClose, onAdded }: { server: CatalogSer
         onMouseDown={(e) => e.target === e.currentTarget && !installing && onClose()}
       >
         <motion.article
-          className="flex h-full w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#111116] shadow-2xl"
+          className="flex h-full w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[rgb(var(--bg-card))] shadow-2xl"
           initial={{ y: 16, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 16, opacity: 0 }}
@@ -406,7 +406,7 @@ export function CatalogDetail({ server, onClose, onAdded }: { server: CatalogSer
           <header className="relative flex-shrink-0">
             <div className="relative h-[140px] overflow-hidden" style={{ background: `linear-gradient(135deg, ${accent}66, ${accent}10)` }}>
               {server.banner_url && <img src={server.banner_url} alt="" className="h-full w-full object-cover" draggable={false} />}
-              <div className="absolute inset-0 bg-gradient-to-t from-[#111116] via-[#111116]/40 to-black/10" />
+              <div className="absolute inset-0 bg-gradient-to-t from-[rgb(var(--bg-card))] via-[rgb(var(--bg-card))]/40 to-black/10" />
               <button
                 onClick={onClose}
                 className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-xl bg-black/55 text-white/80 backdrop-blur transition hover:text-white"
@@ -419,7 +419,7 @@ export function CatalogDetail({ server, onClose, onAdded }: { server: CatalogSer
             </div>
 
             <div className="relative -mt-16 flex items-end gap-5 px-7">
-              <div className="h-[104px] w-[104px] flex-shrink-0 overflow-hidden rounded-[22px] border-4 border-[#111116] bg-surface-3 shadow-xl">
+              <div className="h-[104px] w-[104px] flex-shrink-0 overflow-hidden rounded-[22px] border-4 border-[rgb(var(--bg-card))] bg-surface-3 shadow-xl">
                 {server.icon_url && <img src={server.icon_url} alt="" className="h-full w-full object-cover" draggable={false} />}
               </div>
               <div className="flex min-w-0 flex-1 flex-col gap-1.5 pb-1">
@@ -695,7 +695,7 @@ export function CatalogDetail({ server, onClose, onAdded }: { server: CatalogSer
 function Loading() {
   return (
     <div className="flex justify-center py-10">
-      <ButtonSpinner size={24} color="#818cf8" trackColor="rgba(255,255,255,0.08)" />
+      <ButtonSpinner size={24} color="rgb(var(--accent-text))" trackColor="rgba(255,255,255,0.08)" />
     </div>
   )
 }

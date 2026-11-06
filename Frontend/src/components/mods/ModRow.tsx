@@ -77,10 +77,10 @@ export const ModRow = memo(function ModRow({
     ]
     return (
       <div className={`flex h-[68px] items-center gap-1 rounded-2xl border border-white/[0.06] pl-3 pr-1 ${mod.enabled ? 'bg-white/[0.04]' : 'bg-white/[0.02] opacity-60'}`}>
-        <div className={`flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl ${mod.enabled ? 'bg-[rgba(75,63,207,0.15)]' : 'bg-white/[0.05]'}`}>
+        <div className={`flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl ${mod.enabled ? 'bg-[rgb(var(--accent)/0.15)]' : 'bg-white/[0.05]'}`}>
           {logoUrl
             ? <img src={logoUrl} alt="" className="h-full w-full object-cover" />
-            : <PlugIcon size={20} color={mod.enabled ? 'rgba(120,110,230,0.8)' : 'rgba(255,255,255,0.2)'} />}
+            : <PlugIcon size={20} color={mod.enabled ? 'rgb(var(--accent-hover)/0.8)' : 'rgba(255,255,255,0.2)'} />}
         </div>
         <div className="ml-2 flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="flex min-w-0 items-center gap-1.5">
@@ -110,8 +110,8 @@ export const ModRow = memo(function ModRow({
           onClose={() => setSheetOpen(false)}
           header={
             <>
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[rgba(75,63,207,0.15)]">
-                {logoUrl ? <img src={logoUrl} alt="" className="h-full w-full object-cover" /> : <PlugIcon size={18} color="rgba(120,110,230,0.8)" />}
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[rgb(var(--accent)/0.15)]">
+                {logoUrl ? <img src={logoUrl} alt="" className="h-full w-full object-cover" /> : <PlugIcon size={18} color="rgb(var(--accent-hover)/0.8)" />}
               </div>
               <span className="min-w-0 flex-1 truncate text-[15px] font-bold text-txt-primary">{modrinthName || displayName(mod.name)}</span>
             </>
@@ -149,11 +149,11 @@ export const ModRow = memo(function ModRow({
           variants={{ row: { scale: 1.08, rotate: -3 } }}
           transition={SNAP}
           className={`w-9 h-9 rounded-[10px] flex-shrink-0 overflow-hidden flex items-center justify-center ${
-          mod.enabled ? 'bg-[rgba(75,63,207,0.15)]' : 'bg-[rgba(255,255,255,0.05)]'
+          mod.enabled ? 'bg-[rgb(var(--accent)/0.15)]' : 'bg-[rgba(255,255,255,0.05)]'
         }`}>
           {logoUrl
             ? <img src={logoUrl} alt="" className="w-full h-full object-cover" />
-            : <PlugIcon size={18} color={mod.enabled ? 'rgba(120,110,230,0.8)' : 'rgba(255,255,255,0.2)'} />
+            : <PlugIcon size={18} color={mod.enabled ? 'rgb(var(--accent-hover)/0.8)' : 'rgba(255,255,255,0.2)'} />
           }
         </motion.div>
         {/* Ne grandit pas : le badge se pose juste après le bloc nom + taille
@@ -242,7 +242,7 @@ export const ModRow = memo(function ModRow({
             className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl transition-all duration-150 ${
               switchingVersion
                 ? 'text-[rgba(255,255,255,0.15)] cursor-not-allowed'
-                : 'text-[rgba(255,255,255,0.3)] hover:text-[rgba(180,170,255,0.9)] hover:bg-[rgba(75,63,207,0.12)] cursor-pointer'
+                : 'text-[rgba(255,255,255,0.3)] hover:text-[rgb(var(--accent-text)/0.9)] hover:bg-[rgb(var(--accent)/0.12)] cursor-pointer'
             }`}
           >
             {switchingVersion ? (

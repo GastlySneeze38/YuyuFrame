@@ -217,7 +217,7 @@ function RankHero({ standing, onOpen }: { standing: Standing; onOpen: () => void
       </div>
 
       {/* Ce que fait la carte, dit en clair. */}
-      <span className="mt-5 flex h-12 w-[calc(100%+40px)] items-center justify-center gap-1 border-t border-white/[0.06] text-[15px] font-semibold text-[#a29bfe]">
+      <span className="mt-5 flex h-12 w-[calc(100%+40px)] items-center justify-center gap-1 border-t border-white/[0.06] text-[15px] font-semibold text-[rgb(var(--accent-text))]">
         {t('competitive.tabs.openHub')}
         <Chevron />
       </span>
@@ -301,7 +301,7 @@ function DuelLine({ duel: d, locale, showServer }: { duel: DuelRow; locale: stri
       </div>
       <div className="shrink-0 text-right">
         {d.placement ? (
-          <p className="text-[13px] font-bold uppercase tracking-[0.04em] text-[#a29bfe]">{t('competitive.history.placement')}</p>
+          <p className="text-[13px] font-bold uppercase tracking-[0.04em] text-[rgb(var(--accent-text))]">{t('competitive.history.placement')}</p>
         ) : (
           <p className={`text-[15px] font-black tabular-nums ${rrColor}`}>{d.rr === null ? '—' : `${d.rr > 0 ? '+' : ''}${d.rr} RR`}</p>
         )}
@@ -343,7 +343,7 @@ function ServerSheet({ open, stats: s, filtered, onClose, onFilter }: {
         </div>
       }
       footer={
-        <button onClick={onFilter} className="press h-12 w-full rounded-2xl bg-[#4B3FCF] text-[16px] font-semibold text-white">
+        <button onClick={onFilter} className="press h-12 w-full rounded-2xl bg-[rgb(var(--accent))] text-[16px] font-semibold text-white">
           {filtered ? t('competitive.servers.all') : t('competitive.servers.filter')}
         </button>
       }
@@ -770,7 +770,7 @@ export function MobileLeaderboard({ rows: globalRows, friendRows, placed, subjec
               key={s}
               onClick={() => setScope(s)}
               aria-pressed={scope === s}
-              className={`h-10 rounded-xl text-[15px] font-semibold transition-colors duration-150 ${scope === s ? 'bg-[rgba(75,63,207,0.35)] text-white' : 'text-white/60'}`}
+              className={`h-10 rounded-xl text-[15px] font-semibold transition-colors duration-150 ${scope === s ? 'bg-[rgb(var(--accent)/0.35)] text-white' : 'text-white/60'}`}
             >
               {t(`competitive.leaderboard.scope.${s}`)}
             </button>
@@ -826,7 +826,7 @@ function Podium({ rows }: { rows: LeaderboardRow[] }) {
             {r ? (
               <>
                 <SkinFace dataUri={playerSkinSrc(r.uuid, r.name)} size={face} className="rounded-lg" />
-                <p className={`mt-2 max-w-full truncate font-bold ${position === 1 ? 'text-[15px]' : 'text-[14px]'} ${r.me ? 'text-[#a29bfe]' : 'text-white'}`}>{r.name}</p>
+                <p className={`mt-2 max-w-full truncate font-bold ${position === 1 ? 'text-[15px]' : 'text-[14px]'} ${r.me ? 'text-[rgb(var(--accent-text))]' : 'text-white'}`}>{r.name}</p>
                 <span className="mt-0.5 max-w-full truncate text-[13px] font-semibold" style={{ color: `rgb(${TIER_COLORS[tierOf(r.division)]})` }}>
                   {rankName(r.division, true)}
                 </span>
@@ -870,7 +870,7 @@ function BoardLine({ row: r, mark }: { row: LeaderboardRow; mark: string }) {
       <div className="min-w-0 flex-1">
         <p className="flex min-w-0 items-baseline gap-2">
           <span className="truncate text-[15px] font-semibold text-white">{r.name}</span>
-          {r.me && <span className="shrink-0 text-[13px] font-bold uppercase tracking-[0.04em] text-[#a29bfe]">{mark}</span>}
+          {r.me && <span className="shrink-0 text-[13px] font-bold uppercase tracking-[0.04em] text-[rgb(var(--accent-text))]">{mark}</span>}
         </p>
         <p className="truncate text-[13px]">
           <span className="font-semibold" style={{ color: `rgb(${TIER_COLORS[tierOf(r.division)]})` }}>{rankName(r.division, true)}</span>

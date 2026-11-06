@@ -28,6 +28,13 @@ export type StatsSort = 'time' | 'sessions' | 'recent' | 'crashes'
  *  ne l'a pas trouvée (voir `sgaUnlocked`). */
 export type Lang = 'fr' | 'en' | 'es' | 'de' | 'it' | 'pt' | 'pl' | 'ru' | 'sga'
 
+export type AppearanceTheme = 'night' | 'oled' | 'graphite'
+export type AccentColor = 'violet' | 'blue' | 'teal' | 'green' | 'pink' | 'orange'
+export const APPEARANCE_THEMES: AppearanceTheme[] = ['night', 'oled', 'graphite']
+export const ACCENT_COLORS: AccentColor[] = ['violet', 'blue', 'teal', 'green', 'pink', 'orange']
+export const UI_SCALE_MIN = 90
+export const UI_SCALE_MAX = 125
+
 interface Store {
   // ── Session YuyuFrame ──
   // Les jetons vivent côté Rust (base locale + mémoire) et ne passent plus
@@ -131,8 +138,20 @@ interface Store {
   p2pEnabled: boolean
   setP2pEnabled: (v: boolean) => void
 
-  brightness: number
-  setBrightness: (b: number) => void
+  /** Apparence (2026-11-06, remplace `brightness`) — appliquée par `lib/appearance.ts`. */
+  appearanceTheme: AppearanceTheme
+  setAppearanceTheme: (v: AppearanceTheme) => void
+  accentColor: AccentColor
+  setAccentColor: (v: AccentColor) => void
+  /** Taille de l'interface en %, de 90 à 125 (zoom de la fenêtre). */
+  uiScale: number
+  setUiScale: (v: number) => void
+  /** Animations réduites même si le système ne le demande pas. */
+  reduceMotion: boolean
+  setReduceMotion: (v: boolean) => void
+  /** Flou de verre (backdrop-filter) ; coupé = plus léger pour le GPU. */
+  glassBlur: boolean
+  setGlassBlur: (v: boolean) => void
 
   /** Volume des sons du launcher, de 0 (coupé) à 100. */
   soundVolume: number
@@ -409,8 +428,16 @@ export const useStore = create<Store>()(
       p2pEnabled: false,
       setP2pEnabled: (p2pEnabled) => set({ p2pEnabled }),
 
-      brightness: 100,
-      setBrightness: (brightness) => set({ brightness }),
+      appearanceTheme: 'night',
+      setAppearanceTheme: (appearanceTheme) => set({ appearanceTheme }),
+      accentColor: 'violet',
+      setAccentColor: (accentColor) => set({ accentColor }),
+      uiScale: 100,
+      setUiScale: (v) => set({ uiScale: Math.min(UI_SCALE_MAX, Math.max(UI_SCALE_MIN, Math.round(v / 5) * 5)) }),
+      reduceMotion: false,
+      setReduceMotion: (reduceMotion) => set({ reduceMotion }),
+      glassBlur: true,
+      setGlassBlur: (glassBlur) => set({ glassBlur }),
 
       soundVolume: 80,
       setSoundVolume: (soundVolume) => set({ soundVolume: Math.min(100, Math.max(0, Math.round(soundVolume))) }),
@@ -579,7 +606,11 @@ export const useStore = create<Store>()(
         closeOnLaunch: s.closeOnLaunch,
         allowBackground: s.allowBackground,
         p2pEnabled: s.p2pEnabled,
-        brightness: s.brightness,
+        appearanceTheme: s.appearanceTheme,
+        accentColor: s.accentColor,
+        uiScale: s.uiScale,
+        reduceMotion: s.reduceMotion,
+        glassBlur: s.glassBlur,
         soundVolume: s.soundVolume,
         instanceSyncMode: s.instanceSyncMode,
         avoidBetaDependencies: s.avoidBetaDependencies,
@@ -606,6 +637,19 @@ export const useStore = create<Store>()(
         authSystemVersion: s.authSystemVersion,
         yuyuAuthVersion: s.yuyuAuthVersion,
       }),
+      // Ancien réglage « Luminosité » (2026-11-06) : le mode « Dark » (200 %,
+      // « luminosité boostée ») devient le thème Graphite, plus clair ; tout
+      // le reste garde le thème Nuit. Lu une fois, quand le thème n'existe
+      // pas encore dans la sauvegarde.
+      merge: (persisted, current) => {
+        const saved = (persisted ?? {}) as Partial<Store> & { brightness?: number }
+        const merged = { ...current, ...saved }
+        if (saved.appearanceTheme === undefined && typeof saved.brightness === 'number') {
+          merged.appearanceTheme = saved.brightness >= 150 ? 'graphite' : 'night'
+        }
+        delete (merged as { brightness?: number }).brightness
+        return merged
+      },
     }
   )
 )

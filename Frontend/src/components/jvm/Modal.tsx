@@ -57,7 +57,7 @@ export function JvmModal({ title, sub, onClose, width = 640, footer, children }:
       onClick={onClose}
     >
       <div
-        className="flex max-h-full w-full flex-col overflow-hidden rounded-2xl border border-[rgba(255,255,255,0.12)] bg-[#111018] shadow-[0_20px_60px_rgba(0,0,0,0.6)]"
+        className="flex max-h-full w-full flex-col overflow-hidden rounded-2xl border border-[rgba(255,255,255,0.12)] bg-[rgb(var(--bg-card))] shadow-[0_20px_60px_rgba(0,0,0,0.6)]"
         style={{ maxWidth: width }}
         onClick={(e) => e.stopPropagation()}
       >

@@ -59,7 +59,7 @@ export function InstalledTab({
   // sous le nom, il n'y a plus de colonnes à nommer.
   const renderHeader = () => mobile ? null : (
     <div
-      className="flex items-center rounded-2xl px-4 py-1.5 sticky -top-3 z-10 mb-2 bg-[#09090D] border border-[rgba(255,255,255,0.08)]"
+      className="flex items-center rounded-2xl px-4 py-1.5 sticky -top-3 z-10 mb-2 bg-[rgb(var(--bg-primary))] border border-[rgba(255,255,255,0.08)]"
     >
       <div className="flex items-center gap-3 min-w-0 flex-1">
         <div className="w-9 flex-shrink-0" />
@@ -122,7 +122,7 @@ export function InstalledTab({
         placeholder={t('mods.filterModsPlaceholder')}
         value={modSearch}
         onChange={(e) => onModSearch(e.target.value)}
-        className="w-full rounded-xl pl-8 pr-4 text-sm text-white outline-none h-9 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] focus:border-[rgba(75,63,207,0.6)]"
+        className="w-full rounded-xl pl-8 pr-4 text-sm text-white outline-none h-9 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] focus:border-[rgb(var(--accent)/0.6)]"
       />
     </div>
   )
@@ -166,7 +166,7 @@ export function InstalledTab({
                 </motion.button>
                 <motion.button {...press}
                   onClick={onBrowseExtra}
-                  className="flex items-center gap-1.5 rounded-xl font-semibold transition-all duration-150 h-[34px] px-[14px] text-[12px] bg-[rgba(75,63,207,0.3)] text-white border border-[rgba(75,63,207,0.5)]"
+                  className="flex items-center gap-1.5 rounded-xl font-semibold transition-all duration-150 h-[34px] px-[14px] text-[12px] bg-[rgb(var(--accent)/0.3)] text-white border border-[rgb(var(--accent)/0.5)]"
                 >
                   <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" /></svg>
                   {t('mods.browseContent')}
@@ -191,7 +191,7 @@ export function InstalledTab({
       {/* États vides */}
       {filtered.length === 0 && mods.length === 0 && (
         <EmptyState
-          icon={<PlugIcon size={28} color="rgba(75,63,207,0.55)" />}
+          icon={<PlugIcon size={28} color="rgb(var(--accent)/0.55)" />}
           title={isPlugin ? t('mods.noPluginInstalled') : t('mods.noModInstalled')}
           subtitle={isPlugin
             ? t('mods.importJarOrBrowsePlugins')

@@ -17,11 +17,11 @@ export function TitleBar() {
   return (
     <div
       data-tauri-drag-region
-      className="flex h-9 flex-shrink-0 items-center justify-between px-4 bg-[#09090D] border-b border-[rgba(255,255,255,0.05)]"
+      className="flex h-9 flex-shrink-0 items-center justify-between px-4 bg-[rgb(var(--bg-primary))] border-b border-[rgba(255,255,255,0.05)]"
     >
       {/* Logo */}
       <div className="flex items-center gap-2">
-        <div className="h-3.5 w-3.5 rounded-sm bg-[#4B3FCF]" />
+        <div className="h-3.5 w-3.5 rounded-sm bg-[rgb(var(--accent))]" />
         <span className="text-xs font-bold tracking-[0.2em] text-[rgba(255,255,255,0.5)]">
           YUYUFRAME
         </span>

@@ -13,7 +13,7 @@ export const SERVERS_TINT = '150 150 165'
 
 /** Fond des panneaux : presque opaque, pour que le texte se détache des
  *  courbes qui passent dessous. */
-export const PANEL = 'border border-white/[0.07] bg-[#121217]/95'
+export const PANEL = 'border border-white/[0.07] bg-[rgb(var(--bg-card))]/95'
 
 /** Le MOTD d'un serveur, avec ses couleurs et ses styles, comme dans la
  *  liste du jeu. Sans morceaux (ancienne réponse), le texte brut. */
@@ -140,7 +140,7 @@ export function NoInstance() {
       <p className="max-w-xs text-[14px] leading-relaxed text-white/75 max-sm:text-[15px]">{t('servers.page.mine.noInstance')}</p>
       <button
         onClick={() => navigate('/instances')}
-        className="press h-10 rounded-xl bg-[#4B3FCF] px-5 text-[13px] font-semibold text-white transition-colors hover:bg-[#5b4fe0] max-sm:h-12 max-sm:w-full max-sm:rounded-2xl max-sm:text-[15px]"
+        className="press h-10 rounded-xl bg-[rgb(var(--accent))] px-5 text-[13px] font-semibold text-white transition-colors hover:bg-[#5b4fe0] max-sm:h-12 max-sm:w-full max-sm:rounded-2xl max-sm:text-[15px]"
       >
         {t('servers.page.mine.createInstance')}
       </button>
@@ -181,7 +181,7 @@ export function Select<T extends string>({
       className={`h-9 cursor-pointer rounded-xl border border-line bg-surface-2 px-3 text-[12.5px] text-txt-primary outline-none transition-colors hover:border-white/20 focus:border-accent/60 ${className}`}
     >
       {options.map((o) => (
-        <option key={o.value} value={o.value} className="bg-[#16161d]">
+        <option key={o.value} value={o.value} className="bg-[rgb(var(--bg-raised))]">
           {o.label}
         </option>
       ))}

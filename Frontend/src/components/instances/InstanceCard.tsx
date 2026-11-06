@@ -126,7 +126,7 @@ export const InstanceCard = memo(forwardRef<HTMLDivElement, InstanceCardProps>(f
       // carte, donc plus rien à faire passer au-dessus des voisines.
       className={`flex flex-col rounded-2xl px-4 py-3.5 cursor-pointer transition-colors duration-150 relative border ${
         selected
-          ? 'bg-[rgba(75,63,207,0.18)] border-[rgba(75,63,207,0.55)] shadow-[0_0_20px_rgba(75,63,207,0.18)]'
+          ? 'bg-[rgb(var(--accent)/0.18)] border-[rgb(var(--accent)/0.55)] shadow-[0_0_20px_rgb(var(--accent)/0.18)]'
           : hovered
             ? 'bg-[rgba(255,255,255,0.06)] border-[rgba(255,255,255,0.06)] shadow-none'
             : 'bg-[rgba(255,255,255,0.04)] border-[rgba(255,255,255,0.06)] shadow-none'
@@ -146,7 +146,7 @@ export const InstanceCard = memo(forwardRef<HTMLDivElement, InstanceCardProps>(f
           <InstanceIcon
             instance={instance}
             size={36}
-            className={selected ? 'bg-[rgba(75,63,207,0.3)]' : 'bg-[rgba(255,255,255,0.05)]'}
+            className={selected ? 'bg-[rgb(var(--accent)/0.3)]' : 'bg-[rgba(255,255,255,0.05)]'}
           />
         </motion.div>
 
@@ -214,7 +214,7 @@ export const InstanceCard = memo(forwardRef<HTMLDivElement, InstanceCardProps>(f
                   // Le menu s'ouvre depuis son coin haut droit, sous le bouton
                   // qui l'a appelé, au lieu de grandir depuis son centre.
                   style={{ transformOrigin: 'top right', top: menuAt.top, right: menuAt.right }}
-                  className="fixed flex flex-col gap-0.5 rounded-xl p-1 w-[190px] z-[60] bg-[#1a1a24] border border-[rgba(255,255,255,0.1)] shadow-[0_12px_32px_rgba(0,0,0,0.5)]"
+                  className="fixed flex flex-col gap-0.5 rounded-xl p-1 w-[190px] z-[60] bg-[rgb(var(--bg-raised))] border border-[rgba(255,255,255,0.1)] shadow-[0_12px_32px_rgba(0,0,0,0.5)]"
                 >
                   {!confirm ? (
                     <>

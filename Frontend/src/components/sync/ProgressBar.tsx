@@ -13,7 +13,7 @@ export function ProgressBar({ progress }: { progress: SyncProgress }) {
       </div>
       <div className="h-1.5 w-full overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]">
         <div
-          className={`h-full rounded-full transition-all duration-300 ${progress.phase === 'done' ? 'bg-[#4ade80]' : 'bg-[#4B3FCF]'}`}
+          className={`h-full rounded-full transition-all duration-300 ${progress.phase === 'done' ? 'bg-[#4ade80]' : 'bg-[rgb(var(--accent))]'}`}
           style={{ width: `${progress.percent}%` }}
         />
       </div>

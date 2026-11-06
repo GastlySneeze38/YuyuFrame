@@ -31,6 +31,7 @@ module.exports = {
           primary: 'rgb(var(--bg-primary) / <alpha-value>)',
           secondary: 'rgb(var(--bg-secondary) / <alpha-value>)',
           card: 'rgb(var(--bg-card) / <alpha-value>)',
+          raised: 'rgb(var(--bg-raised) / <alpha-value>)',
         },
         // Surfaces empilées (cartes, champs, survols) : l'opacité est déjà
         // dans le jeton, d'où `rgb(var(--…))` sans <alpha-value>.
@@ -51,6 +52,7 @@ module.exports = {
         accent: {
           DEFAULT: 'rgb(var(--accent) / <alpha-value>)',
           hover: 'rgb(var(--accent-hover) / <alpha-value>)',
+          text: 'rgb(var(--accent-text) / <alpha-value>)',
         },
         txt: {
           primary: 'rgb(var(--txt-primary) / <alpha-value>)',

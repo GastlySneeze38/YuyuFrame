@@ -167,7 +167,7 @@ export function JoinServerModal({ request, onClose }: { request: JoinRequest; on
           <button
             disabled={creating || launchingId !== null}
             onClick={() => void handleCreate()}
-            className="mt-1 rounded-xl bg-[#4B3FCF] px-4 py-2 text-[12.5px] font-bold text-white transition-colors hover:bg-[#6155e8] disabled:opacity-50 max-sm:h-12 max-sm:w-full max-sm:text-[15px]"
+            className="mt-1 rounded-xl bg-[rgb(var(--accent))] px-4 py-2 text-[12.5px] font-bold text-white transition-colors hover:bg-[rgb(var(--accent-hover))] disabled:opacity-50 max-sm:h-12 max-sm:w-full max-sm:text-[15px]"
           >
             {creating ? t('friends.join.creating') : launchingId ? t('friends.join.launching') : t('friends.join.create')}
           </button>
@@ -182,7 +182,7 @@ export function JoinServerModal({ request, onClose }: { request: JoinRequest; on
                 key={inst.id}
                 onClick={() => void handleJoin(inst.id)}
                 disabled={launchingId !== null}
-                className="flex items-center justify-between gap-3 rounded-2xl border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.03)] px-4 py-3 text-left transition-all duration-150 hover:border-[rgba(75,63,207,0.4)] hover:bg-[rgba(75,63,207,0.12)] disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex items-center justify-between gap-3 rounded-2xl border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.03)] px-4 py-3 text-left transition-all duration-150 hover:border-[rgb(var(--accent)/0.4)] hover:bg-[rgb(var(--accent)/0.12)] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <div className="flex min-w-0 flex-col gap-1">
                   <p className="truncate text-[13px] font-bold text-white">{inst.name}</p>
@@ -198,7 +198,7 @@ export function JoinServerModal({ request, onClose }: { request: JoinRequest; on
                     )}
                   </div>
                 </div>
-                <span className="flex-shrink-0 rounded-xl bg-[#4B3FCF] px-3 py-1.5 text-[11px] font-semibold text-white">
+                <span className="flex-shrink-0 rounded-xl bg-[rgb(var(--accent))] px-3 py-1.5 text-[11px] font-semibold text-white">
                   {launchingId === inst.id ? t('friends.join.launching') : t('friends.join.join')}
                 </span>
               </button>

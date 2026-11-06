@@ -332,9 +332,9 @@ if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
 
   if (overlayActive) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-4 bg-[#09090D] px-5 py-4">
+      <div className="flex h-full flex-col items-center justify-center gap-4 bg-[rgb(var(--bg-primary))] px-5 py-4">
         <div className="flex items-center gap-2">
-          <div className="h-3.5 w-3.5 rounded-sm bg-[#4B3FCF]" />
+          <div className="h-3.5 w-3.5 rounded-sm bg-[rgb(var(--accent))]" />
           <span className="font-black text-white text-[13px] tracking-[-0.01em]">YuyuFrame</span>
         </div>
 
@@ -358,7 +358,7 @@ if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
             <div className="flex gap-2">
               <button
                 onClick={() => open(verifyUrl)}
-                className="flex-1 rounded-xl py-2 text-[12px] font-medium text-white transition-all duration-150 bg-[rgba(75,63,207,0.15)] border border-[rgba(75,63,207,0.3)] hover:bg-[rgba(75,63,207,0.3)]"
+                className="flex-1 rounded-xl py-2 text-[12px] font-medium text-white transition-all duration-150 bg-[rgb(var(--accent)/0.15)] border border-[rgb(var(--accent)/0.3)] hover:bg-[rgb(var(--accent)/0.3)]"
               >
                 {t('login.openMicrosoft')}
               </button>
@@ -370,7 +370,7 @@ if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
               </button>
             </div>
             <div className="flex items-center justify-center gap-2">
-              <span className="h-3 w-3 animate-spin-slow rounded-full border border-[rgba(255,255,255,0.12)] border-t-[#4B3FCF]" />
+              <span className="h-3 w-3 animate-spin-slow rounded-full border border-[rgba(255,255,255,0.12)] border-t-[rgb(var(--accent))]" />
               <span className="text-[10px] text-[rgba(255,255,255,0.35)]">
                 {t('login.waitingForConfirmation')}
               </span>
@@ -416,7 +416,7 @@ if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
               </button>
               <button
                 onClick={() => { exitOverlay(); setStep('idle') }}
-                className="flex-1 rounded-xl py-2 text-[12px] transition-all duration-150 text-[rgba(255,255,255,0.4)] border border-[rgba(255,255,255,0.08)] hover:border-[rgba(75,63,207,0.4)] hover:text-[rgba(255,255,255,0.7)]"
+                className="flex-1 rounded-xl py-2 text-[12px] transition-all duration-150 text-[rgba(255,255,255,0.4)] border border-[rgba(255,255,255,0.08)] hover:border-[rgb(var(--accent)/0.4)] hover:text-[rgba(255,255,255,0.7)]"
               >
                 {t('login.retry')}
               </button>
@@ -428,7 +428,7 @@ if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-[#09090D]">
+    <div className="flex h-full flex-col overflow-hidden bg-[rgb(var(--bg-primary))]">
 
       <PageHeader>
         <PageHeaderSeparator />
@@ -468,7 +468,7 @@ if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
         {/* Colonne droite — le skin en grand, puis les comptes Minecraft */}
         <motion.div variants={listItemVariants} className="flex min-h-0 flex-col gap-3">
           {/* Le skin prend toute la place qui reste au-dessus des comptes. */}
-          <div className="relative flex min-h-[220px] flex-1 flex-col overflow-hidden rounded-2xl border border-line bg-[radial-gradient(ellipse_at_50%_58%,rgba(75,63,207,0.22)_0%,transparent_72%)]">
+          <div className="relative flex min-h-[220px] flex-1 flex-col overflow-hidden rounded-2xl border border-line bg-[radial-gradient(ellipse_at_50%_58%,rgb(var(--accent)/0.22)_0%,transparent_72%)]">
             <div className="absolute bottom-[16%] left-1/2 h-[12px] w-[28%] -translate-x-1/2 rounded-full bg-accent/50 blur-[20px]" />
             <div ref={canvasContainerRef} className="relative z-10 min-h-0 flex-1">
               <canvas ref={canvasRef} className="block bg-transparent" />
@@ -574,7 +574,7 @@ if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
                   <div className="flex gap-2">
                     <button
                       onClick={() => open(verifyUrl)}
-                      className="flex-1 rounded-xl py-2 text-sm font-medium text-white transition-all duration-150 bg-[rgba(75,63,207,0.15)] border border-[rgba(75,63,207,0.3)] hover:bg-[rgba(75,63,207,0.3)]"
+                      className="flex-1 rounded-xl py-2 text-sm font-medium text-white transition-all duration-150 bg-[rgb(var(--accent)/0.15)] border border-[rgb(var(--accent)/0.3)] hover:bg-[rgb(var(--accent)/0.3)]"
                     >
                       {t('login.openMicrosoft')}
                     </button>
@@ -586,7 +586,7 @@ if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
                     </button>
                   </div>
                   <div className="flex items-center justify-center gap-2">
-                    <span className="h-3 w-3 animate-spin-slow rounded-full border border-[rgba(255,255,255,0.12)] border-t-[#4B3FCF]" />
+                    <span className="h-3 w-3 animate-spin-slow rounded-full border border-[rgba(255,255,255,0.12)] border-t-[rgb(var(--accent))]" />
                     <span className="text-[11px] text-[rgba(255,255,255,0.35)]">
                       {t('login.waitingForConfirmation')}
                     </span>
@@ -608,7 +608,7 @@ if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
                     </button>
                     <button
                       onClick={() => setStep('idle')}
-                      className="flex-1 rounded-xl py-2 text-sm transition-all duration-150 text-[rgba(255,255,255,0.4)] border border-[rgba(255,255,255,0.08)] hover:border-[rgba(75,63,207,0.4)] hover:text-[rgba(255,255,255,0.7)]"
+                      className="flex-1 rounded-xl py-2 text-sm transition-all duration-150 text-[rgba(255,255,255,0.4)] border border-[rgba(255,255,255,0.08)] hover:border-[rgb(var(--accent)/0.4)] hover:text-[rgba(255,255,255,0.7)]"
                     >
                       {t('login.retry')}
                     </button>
@@ -709,7 +709,7 @@ function AccountRow({
       transition={fastTransition}
       className={`flex items-center gap-3 rounded-xl border p-3 transition-colors duration-150 ease-out ${
         isActive
-          ? 'border-accent/35 bg-accent/10 shadow-[0_0_24px_rgba(75,63,207,0.1)]'
+          ? 'border-accent/35 bg-accent/10 shadow-[0_0_24px_rgb(var(--accent)/0.1)]'
           : hovered
             ? 'border-line-strong bg-surface-2'
             : 'border-line bg-surface-1'
@@ -737,13 +737,13 @@ function AccountRow({
                 if (fb) fb.style.display = 'flex'
               }}
             />
-            <div className="hidden items-center justify-center rounded-lg font-black text-white w-11 h-11 bg-[rgba(75,63,207,0.45)] [font-family:monospace] text-[18px]">
+            <div className="hidden items-center justify-center rounded-lg font-black text-white w-11 h-11 bg-[rgb(var(--accent)/0.45)] [font-family:monospace] text-[18px]">
               {acc.username[0].toUpperCase()}
             </div>
           </>
         )}
         {isActive && (
-          <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 bg-[#22c55e] border-[#09090D]" />
+          <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 bg-[#22c55e] border-[rgb(var(--bg-primary))]" />
         )}
       </div>
 

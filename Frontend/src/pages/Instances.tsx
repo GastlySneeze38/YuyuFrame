@@ -167,7 +167,7 @@ export default function Instances() {
   }
 
   return (
-    <div className="flex h-full flex-col bg-[#09090D] text-white">
+    <div className="flex h-full flex-col bg-[rgb(var(--bg-primary))] text-white">
 
       <PageHeader px={5}>
         <motion.h1
@@ -290,9 +290,9 @@ export default function Instances() {
               whileHover="hover"
               animate="rest"
               whileTap={{ scale: 0.97 }}
-              variants={{ rest: { y: 0, boxShadow: '0 4px 20px rgba(75,63,207,0.3)' }, hover: { y: -2, boxShadow: '0 8px 28px rgba(75,63,207,0.45)' } }}
+              variants={{ rest: { y: 0, boxShadow: '0 4px 20px rgb(var(--accent)/0.3)' }, hover: { y: -2, boxShadow: '0 8px 28px rgb(var(--accent)/0.45)' } }}
               transition={SNAP}
-              className="flex h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-[#4B3FCF] text-[13px] font-bold text-white hover:bg-[#6155e8]"
+              className="flex h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-[rgb(var(--accent))] text-[13px] font-bold text-white hover:bg-[rgb(var(--accent-hover))]"
             >
               <motion.svg
                 viewBox="0 0 24 24" fill="currentColor" width={15} height={15}

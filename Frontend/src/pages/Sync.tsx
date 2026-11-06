@@ -117,7 +117,7 @@ function SyncContent() {
   if (cloudLoading) {
     return (
       <div className="flex justify-center py-8">
-        <ButtonSpinner size={20} color="rgba(75,63,207,0.8)" trackColor="rgba(255,255,255,0.08)" />
+        <ButtonSpinner size={20} color="rgb(var(--accent)/0.8)" trackColor="rgba(255,255,255,0.08)" />
       </div>
     )
   }
@@ -217,7 +217,7 @@ export default function Sync() {
 
   if (!SYNC_ENABLED || !allowedByFleet) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-4 bg-[#09090D]">
+      <div className="flex h-full flex-col items-center justify-center gap-4 bg-[rgb(var(--bg-primary))]">
         <div className="text-[32px] opacity-[0.15]">
           <svg viewBox="0 0 24 24" fill="white" width={48} height={48}><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z" /></svg>
         </div>
@@ -228,7 +228,7 @@ export default function Sync() {
         </p>
         <button
           onClick={() => navigate('/home')}
-          className="rounded-xl px-5 py-2 text-sm font-semibold transition-all duration-150 bg-[rgba(75,63,207,0.18)] border border-[rgba(75,63,207,0.35)] text-[rgba(180,170,255,0.9)] hover:bg-[rgba(75,63,207,0.3)]"
+          className="rounded-xl px-5 py-2 text-sm font-semibold transition-all duration-150 bg-[rgb(var(--accent)/0.18)] border border-[rgb(var(--accent)/0.35)] text-[rgb(var(--accent-text)/0.9)] hover:bg-[rgb(var(--accent)/0.3)]"
         >
           {t('sync.back')}
         </button>
@@ -237,7 +237,7 @@ export default function Sync() {
   }
 
   return (
-    <div className="flex h-full flex-col bg-[#09090D] text-white">
+    <div className="flex h-full flex-col bg-[rgb(var(--bg-primary))] text-white">
       <PageHeader px={5}>
         <h1 className="font-black text-white text-[16px] tracking-[-0.01em]">
           {t('sync.title')}
@@ -253,7 +253,7 @@ export default function Sync() {
             </p>
             <button
               onClick={() => navigate('/yuyu')}
-              className="rounded-xl px-5 py-2 text-sm font-semibold transition-all duration-150 bg-[rgba(75,63,207,0.18)] border border-[rgba(75,63,207,0.35)] text-[rgba(180,170,255,0.9)] hover:bg-[rgba(75,63,207,0.3)]"
+              className="rounded-xl px-5 py-2 text-sm font-semibold transition-all duration-150 bg-[rgb(var(--accent)/0.18)] border border-[rgb(var(--accent)/0.35)] text-[rgb(var(--accent-text)/0.9)] hover:bg-[rgb(var(--accent)/0.3)]"
             >
               {t('sync.loginCta')}
             </button>

@@ -223,7 +223,7 @@ export function InstanceSettingsModal({
               <button
                 onClick={() => setSectionOpen(false)}
                 aria-label={t('instancesPage.settings')}
-                className="press flex h-11 w-11 items-center justify-center rounded-full text-[#a29bfe]"
+                className="press flex h-11 w-11 items-center justify-center rounded-full text-[rgb(var(--accent-text))]"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
                   <path d="M15 6l-6 6 6 6" />
@@ -1811,11 +1811,11 @@ function Select({
         className="h-10 w-full appearance-none rounded-xl border border-line bg-black/40 px-3 pr-8 text-[13px] font-medium text-txt-primary outline-none"
       >
         {placeholder && (
-          <option value={placeholder.value} className="bg-[#111118]">{placeholder.label}</option>
+          <option value={placeholder.value} className="bg-[rgb(var(--bg-card))]">{placeholder.label}</option>
         )}
         {options.map((o) => {
           const { value: v, label: l } = typeof o === 'string' ? { value: o, label: o } : o
-          return <option key={v} value={v} className="bg-[#111118]">{l}</option>
+          return <option key={v} value={v} className="bg-[rgb(var(--bg-card))]">{l}</option>
         })}
       </select>
       <svg viewBox="0 0 10 6" fill="currentColor" width={10} height={6} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-txt-muted">

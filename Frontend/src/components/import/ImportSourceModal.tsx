@@ -234,7 +234,7 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId, onPick
             {onPickShared && (
               <button
                 onClick={onPickShared}
-                className="flex items-center gap-3 rounded-xl border border-[rgba(75,63,207,0.35)] bg-[rgba(75,63,207,0.1)] p-3 text-left transition-colors hover:bg-[rgba(75,63,207,0.18)]"
+                className="flex items-center gap-3 rounded-xl border border-[rgb(var(--accent)/0.35)] bg-[rgb(var(--accent)/0.1)] p-3 text-left transition-colors hover:bg-[rgb(var(--accent)/0.18)]"
               >
                 <div className="min-w-0">
                   <p className="text-[13px] font-semibold text-white">{t('share.importEntry')}</p>
@@ -272,7 +272,7 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId, onPick
                               key={inst.path}
                               onClick={() => scanPath(inst.path)}
                               disabled={scanning}
-                              className="flex items-center gap-2 rounded-xl px-3 py-2 text-left bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] transition-colors hover:border-[rgba(75,63,207,0.4)]"
+                              className="flex items-center gap-2 rounded-xl px-3 py-2 text-left bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] transition-colors hover:border-[rgb(var(--accent)/0.4)]"
                             >
                               <span className="flex-1 truncate text-[12.5px] font-semibold text-[rgba(255,255,255,0.85)]">
                                 {inst.source.name ?? inst.path.split(/[\\/]/).pop()}
@@ -304,7 +304,7 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId, onPick
               <button
                 onClick={handlePickFolder}
                 disabled={scanning}
-                className={`flex items-center gap-2 rounded-xl px-5 font-bold text-white transition-all duration-150 active:scale-95 h-[42px] text-[13px] ${scanning ? 'bg-[rgba(75,63,207,0.3)]' : 'bg-[#4B3FCF]'}`}
+                className={`flex items-center gap-2 rounded-xl px-5 font-bold text-white transition-all duration-150 active:scale-95 h-[42px] text-[13px] ${scanning ? 'bg-[rgb(var(--accent)/0.3)]' : 'bg-[rgb(var(--accent))]'}`}
               >
                 {scanning ? t('import.analyzing') : launchers.length > 0 ? t('import.otherFolder') : t('import.chooseFolder')}
               </button>
@@ -322,7 +322,7 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId, onPick
               {t('import.back')}
             </button>
 
-            <div className="flex-shrink-0 rounded-xl px-3 py-2 bg-[rgba(75,63,207,0.12)] border border-[rgba(75,63,207,0.3)]">
+            <div className="flex-shrink-0 rounded-xl px-3 py-2 bg-[rgb(var(--accent)/0.12)] border border-[rgb(var(--accent)/0.3)]">
               <p className="text-[11.5px] text-[rgba(255,255,255,0.7)] font-semibold">{sourceLabel(t, scan.source)}</p>
               <p className="text-[10.5px] text-[rgba(255,255,255,0.35)]">{scan.modsDir}</p>
             </div>
@@ -333,7 +333,7 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId, onPick
                   <button
                     key={m}
                     onClick={() => handleDestModeChange(m)}
-                    className={`flex-1 rounded-lg text-xs font-semibold transition-all duration-150 h-8 ${destMode === m ? 'bg-[rgba(75,63,207,0.4)] text-white' : 'bg-transparent text-[rgba(255,255,255,0.4)]'}`}
+                    className={`flex-1 rounded-lg text-xs font-semibold transition-all duration-150 h-8 ${destMode === m ? 'bg-[rgb(var(--accent)/0.4)] text-white' : 'bg-transparent text-[rgba(255,255,255,0.4)]'}`}
                   >
                     {m === 'new' ? t('import.newInstance') : t('import.existingInstance')}
                   </button>
@@ -365,14 +365,14 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId, onPick
                 className="w-full flex-shrink-0 rounded-xl px-3 text-sm font-medium text-white outline-none h-[38px] bg-[rgba(0,0,0,0.4)] border border-[rgba(255,255,255,0.1)]"
               >
                 {instances.map((i) => (
-                  <option key={i.id} value={i.id} className="bg-[#111118]">{i.name}</option>
+                  <option key={i.id} value={i.id} className="bg-[rgb(var(--bg-card))]">{i.name}</option>
                 ))}
               </select>
             )}
 
             <button
               onClick={handleContinueToMods}
-              className="mt-auto flex-shrink-0 rounded-xl font-bold text-white transition-all duration-150 active:scale-95 h-10 text-[13px] bg-[#4B3FCF] hover:bg-[#6155e8]"
+              className="mt-auto flex-shrink-0 rounded-xl font-bold text-white transition-all duration-150 active:scale-95 h-10 text-[13px] bg-[rgb(var(--accent))] hover:bg-[rgb(var(--accent-hover))]"
             >
               {t('import.continueButton')}
             </button>
@@ -395,7 +395,7 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId, onPick
                 {scan.extraDirs.map((dir) => (
                   <label
                     key={dir}
-                    className={`flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1 ${extraDirsSelected.has(dir) ? 'bg-[rgba(75,63,207,0.18)]' : 'bg-[rgba(255,255,255,0.04)]'}`}
+                    className={`flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1 ${extraDirsSelected.has(dir) ? 'bg-[rgb(var(--accent)/0.18)]' : 'bg-[rgba(255,255,255,0.04)]'}`}
                   >
                     <input type="checkbox" checked={extraDirsSelected.has(dir)} onChange={() => toggleExtraDir(dir)} />
                     <span className="text-[11px] text-[rgba(255,255,255,0.75)] font-semibold">
@@ -423,7 +423,7 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId, onPick
               {scan.mods.map((m) => {
                 const isDuplicate = duplicates.has(m.name)
                 return (
-                  <label key={m.name} className={`flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 ${selected.has(m.name) ? 'bg-[rgba(75,63,207,0.12)]' : 'bg-transparent'}`}>
+                  <label key={m.name} className={`flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 ${selected.has(m.name) ? 'bg-[rgb(var(--accent)/0.12)]' : 'bg-transparent'}`}>
                     <input type="checkbox" checked={selected.has(m.name)} onChange={() => toggleMod(m.name)} />
                     <span className={`flex-1 truncate text-[12px] ${isDuplicate ? 'text-[rgba(255,255,255,0.4)]' : 'text-[rgba(255,255,255,0.85)]'}`}>{m.name}</span>
                     {isDuplicate && (
@@ -439,7 +439,7 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId, onPick
               <div className="flex flex-shrink-0 flex-col gap-1">
                 <div className="h-1.5 w-full overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]">
                   <div
-                    className="h-full rounded-full transition-all duration-150 bg-[#4B3FCF]"
+                    className="h-full rounded-full transition-all duration-150 bg-[rgb(var(--accent))]"
                     style={{
                       width: `${progress.total > 0 ? Math.min(100, (progress.current / progress.total) * 100) : 0}%`,
                     }}
@@ -456,7 +456,7 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId, onPick
             <button
               onClick={handleApply}
               disabled={applying}
-              className={`flex-shrink-0 rounded-xl font-bold text-white transition-all duration-150 active:scale-95 h-10 text-[13px] ${applying ? 'bg-[rgba(75,63,207,0.3)]' : 'bg-[#4B3FCF]'}`}
+              className={`flex-shrink-0 rounded-xl font-bold text-white transition-all duration-150 active:scale-95 h-10 text-[13px] ${applying ? 'bg-[rgb(var(--accent)/0.3)]' : 'bg-[rgb(var(--accent))]'}`}
             >
               {applying ? t('import.importing') : t('import.importCount', { count: selected.size })}
             </button>
@@ -473,7 +473,7 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId, onPick
             </p>
             <button
               onClick={onClose}
-              className="rounded-xl px-5 font-bold text-white h-10 bg-[#4B3FCF] text-[13px]"
+              className="rounded-xl px-5 font-bold text-white h-10 bg-[rgb(var(--accent))] text-[13px]"
             >
               {t('import.close')}
             </button>

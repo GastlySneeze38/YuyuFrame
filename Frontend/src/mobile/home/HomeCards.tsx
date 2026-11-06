@@ -13,21 +13,21 @@ export function MobileProCard({ onOpen }: { onOpen: () => void }) {
   return (
     <button
       onClick={onOpen}
-      className="press flex w-full items-center gap-3.5 rounded-2xl border border-[rgba(120,100,255,0.3)] bg-[rgba(75,63,207,0.1)] p-4 text-left"
+      className="press flex w-full items-center gap-3.5 rounded-2xl border border-[rgb(var(--accent-hover)/0.3)] bg-[rgb(var(--accent)/0.1)] p-4 text-left"
     >
-      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[rgba(120,100,255,0.18)] text-[#a78bfa]">
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[rgb(var(--accent-hover)/0.18)] text-[rgb(var(--accent-text))]">
         <svg viewBox="0 0 24 24" fill="currentColor" className="h-[22px] w-[22px]">
           <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
         </svg>
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-[16px] font-bold text-white">
-          YuyuFrame <span className="text-[#a78bfa]">Pro</span>
+          YuyuFrame <span className="text-[rgb(var(--accent-text))]">Pro</span>
         </span>
         <span className="line-clamp-2 text-[13px] leading-snug text-white/60">{t('home.proTagline')}</span>
       </span>
       <span className="flex shrink-0 flex-col items-end gap-1">
-        <span className="rounded-full bg-[rgba(167,139,250,0.18)] px-2 py-0.5 text-[12px] font-bold text-[#c4b5fd]">-50%</span>
+        <span className="rounded-full bg-[rgb(var(--accent-text)/0.18)] px-2 py-0.5 text-[12px] font-bold text-[rgb(var(--accent-text))]">-50%</span>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 text-white/50">
           <path d="M9 6l6 6-6 6" />
         </svg>
@@ -104,7 +104,7 @@ export function MobileServerCard({ server, badge, onClick }: {
         <span className="flex min-w-0 items-center gap-2">
           <span className="truncate text-[15px] font-semibold text-white">{server.name || t('servers.defaultName')}</span>
           {badge && (
-            <span className="shrink-0 rounded-md bg-[rgba(75,63,207,0.35)] px-1.5 py-px text-[11px] font-semibold text-white/85">{badge}</span>
+            <span className="shrink-0 rounded-md bg-[rgb(var(--accent)/0.35)] px-1.5 py-px text-[11px] font-semibold text-white/85">{badge}</span>
           )}
         </span>
         <span className="truncate text-[13px] text-white/55">{server.ip}</span>

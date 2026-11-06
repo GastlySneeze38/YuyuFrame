@@ -235,10 +235,10 @@ export function CatalogView({ onAdded }: { onAdded: () => void }) {
             <div className="flex flex-col items-center gap-3 py-12 text-center">
               <p className="text-[16px] font-semibold text-white">{t('servers.page.catalog.error')}</p>
               <p className="text-[13px] text-white/55">{error}</p>
-              <button onClick={run} className="press h-12 rounded-2xl bg-[#4B3FCF] px-6 text-[15px] font-semibold text-white">{t('servers.page.catalog.retry')}</button>
+              <button onClick={run} className="press h-12 rounded-2xl bg-[rgb(var(--accent))] px-6 text-[15px] font-semibold text-white">{t('servers.page.catalog.retry')}</button>
             </div>
           ) : !result ? (
-            <div className="flex justify-center py-16"><ButtonSpinner size={28} color="#818cf8" trackColor="rgba(255,255,255,0.08)" /></div>
+            <div className="flex justify-center py-16"><ButtonSpinner size={28} color="rgb(var(--accent-text))" trackColor="rgba(255,255,255,0.08)" /></div>
           ) : result.servers.length === 0 ? (
             <Note>{t('servers.page.catalog.empty')}</Note>
           ) : (
@@ -264,7 +264,7 @@ export function CatalogView({ onAdded }: { onAdded: () => void }) {
           full
           header={
             <SheetTitle action={filtered || query.sort !== 'relevance' ? (
-              <button onClick={() => setQuery({ ...EMPTY, query: query.query, pageSize: query.pageSize })} className="press h-11 shrink-0 px-2 text-[15px] font-semibold text-[#a29bfe]">{t('servers.page.catalog.clear')}</button>
+              <button onClick={() => setQuery({ ...EMPTY, query: query.query, pageSize: query.pageSize })} className="press h-11 shrink-0 px-2 text-[15px] font-semibold text-[rgb(var(--accent-text))]">{t('servers.page.catalog.clear')}</button>
             ) : undefined}>{t('stats.mobile.filters')}</SheetTitle>
           }
           bodyClassName="flex flex-col gap-6 px-2 pb-4"
@@ -389,7 +389,7 @@ export function CatalogView({ onAdded }: { onAdded: () => void }) {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.15 }}
-              className="absolute left-0 right-0 top-full z-20 mt-2 grid max-h-[50vh] grid-cols-2 gap-4 overflow-y-auto rounded-2xl border border-white/[0.1] bg-[#16161c] p-4 shadow-2xl lg:grid-cols-4"
+              className="absolute left-0 right-0 top-full z-20 mt-2 grid max-h-[50vh] grid-cols-2 gap-4 overflow-y-auto rounded-2xl border border-white/[0.1] bg-[rgb(var(--bg-raised))] p-4 shadow-2xl lg:grid-cols-4"
             >
               {groups.map((g) => (
                 <div key={g.header} className="flex flex-col gap-1.5">
@@ -420,7 +420,7 @@ export function CatalogView({ onAdded }: { onAdded: () => void }) {
           </div>
         ) : !result ? (
           <div className="flex h-full items-center justify-center">
-            <ButtonSpinner size={30} color="#818cf8" trackColor="rgba(255,255,255,0.08)" />
+            <ButtonSpinner size={30} color="rgb(var(--accent-text))" trackColor="rgba(255,255,255,0.08)" />
           </div>
         ) : result.servers.length === 0 ? (
           <div className="flex h-full items-center justify-center text-[13px] text-txt-muted">{t('servers.page.catalog.empty')}</div>
@@ -472,7 +472,7 @@ function FilterBlock({ title, children }: { title: string; children: React.React
  *  la fiche. */
 function MobileCatalogCard({ server, onOpen }: { server: CatalogServer; onOpen: () => void }) {
   const t = useT()
-  const accent = server.color ?? '#4b3fcf'
+  const accent = server.color ?? 'rgb(var(--accent))'
   const tags = [
     ...(server.content.kind === 'modpack' ? [{ key: 'modded', label: t('servers.page.catalog.modded'), warm: true }] : []),
     ...(server.recommended_version ? [{ key: 'version', label: server.recommended_version }] : []),
@@ -480,10 +480,10 @@ function MobileCatalogCard({ server, onOpen }: { server: CatalogServer; onOpen: 
     ...server.categories.slice(0, 3).map((c) => ({ key: c, label: categoryLabel(c) })),
   ] as { key: string; label: string; warm?: boolean }[]
   return (
-    <button onClick={onOpen} className="press flex w-full flex-col overflow-hidden rounded-2xl border border-white/[0.07] bg-[#121217] text-left">
+    <button onClick={onOpen} className="press flex w-full flex-col overflow-hidden rounded-2xl border border-white/[0.07] bg-[rgb(var(--bg-card))] text-left">
       <div className="relative h-[104px] w-full shrink-0 overflow-hidden" style={{ background: `linear-gradient(135deg, ${accent}55, ${accent}11)` }}>
         {server.banner_url && <img src={server.banner_url} alt="" loading="lazy" draggable={false} className="h-full w-full object-cover" />}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#121217] via-[#121217]/20 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[rgb(var(--bg-card))] via-[rgb(var(--bg-card))]/20 to-transparent" />
         {server.ping && (
           <span className="absolute right-2.5 top-2.5 flex items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1 text-[13px] font-bold text-white">
             <span className="h-2 w-2 rounded-full bg-[#4ade80]" />
@@ -493,7 +493,7 @@ function MobileCatalogCard({ server, onOpen }: { server: CatalogServer; onOpen: 
       </div>
       <div className="relative -mt-8 flex flex-col gap-2.5 px-3.5 pb-3.5">
         <div className="flex items-end gap-3">
-          <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl border-2 border-[#121217] bg-surface-3">
+          <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl border-2 border-[rgb(var(--bg-card))] bg-surface-3">
             {server.icon_url && <img src={server.icon_url} alt="" loading="lazy" draggable={false} className="h-full w-full object-cover" />}
           </div>
           <div className="flex min-w-0 flex-1 flex-col pb-0.5">
@@ -520,7 +520,7 @@ function MobileCatalogCard({ server, onOpen }: { server: CatalogServer; onOpen: 
  *  le texte en dessous garde toujours la sienne. */
 function CatalogCard({ server, index, bannerH, onOpen }: { server: CatalogServer; index: number; bannerH: number; onOpen: () => void }) {
   const t = useT()
-  const accent = server.color ?? '#4b3fcf'
+  const accent = server.color ?? 'rgb(var(--accent))'
   return (
     <motion.button
       onClick={onOpen}
@@ -530,14 +530,14 @@ function CatalogCard({ server, index, bannerH, onOpen }: { server: CatalogServer
       // Hauteur fixe (CARD_H, posée par la grille) : c'est elle qui permet de
       // savoir combien de rangées tiennent. Pas de soulèvement au survol, la
       // grille ne défilant pas, il serait rogné en haut.
-      className="group flex h-full flex-col overflow-hidden rounded-2xl border border-white/[0.07] bg-[#121217] text-left transition-colors hover:border-white/30 hover:bg-[#16161c]"
+      className="group flex h-full flex-col overflow-hidden rounded-2xl border border-white/[0.07] bg-[rgb(var(--bg-card))] text-left transition-colors hover:border-white/30 hover:bg-[rgb(var(--bg-raised))]"
     >
       {/* En-tête : l'image de la galerie, sinon un dégradé de sa couleur */}
       <div className="relative w-full flex-shrink-0 overflow-hidden" style={{ height: bannerH, background: `linear-gradient(135deg, ${accent}55, ${accent}11)` }}>
         {server.banner_url && (
           <img src={server.banner_url} alt="" loading="lazy" draggable={false} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]" />
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#121217] via-[#121217]/20 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[rgb(var(--bg-card))] via-[rgb(var(--bg-card))]/20 to-transparent" />
         {server.ping && (
           <span className="absolute right-2 top-2 flex items-center gap-1.5 rounded-full bg-black/55 px-2 py-0.5 text-[10.5px] font-bold text-white backdrop-blur">
             <span className="h-1.5 w-1.5 rounded-full bg-[#4ade80] shadow-[0_0_6px_#4ade80]" />
@@ -549,7 +549,7 @@ function CatalogCard({ server, index, bannerH, onOpen }: { server: CatalogServer
           l'image et son dégradé passent par-dessus le nom. */}
       <div className="relative -mt-7 flex flex-1 flex-col gap-2 px-3 pb-3">
         <div className="flex items-end gap-2.5">
-          <div className="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded-xl border-2 border-[#121217] bg-surface-3">
+          <div className="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded-xl border-2 border-[rgb(var(--bg-card))] bg-surface-3">
             {server.icon_url && <img src={server.icon_url} alt="" loading="lazy" draggable={false} className="h-full w-full object-cover" />}
           </div>
           <div className="flex min-w-0 flex-1 flex-col pb-0.5">

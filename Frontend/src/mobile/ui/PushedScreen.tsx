@@ -34,10 +34,10 @@ export function PushedScreen({ open, onBack, backLabel, title, subtitle, right, 
           animate={reduce ? { opacity: 1 } : { transform: 'translateX(0%)', transitionEnd: { transform: 'none' } }}
           exit={reduce ? { opacity: 0, transition: { duration: 0.15 } } : { transform: 'translateX(100%)', transition: { duration: 0.22, ease: EASE_OUT } }}
           transition={{ duration: 0.32, ease: [0.32, 0.72, 0, 1] }}
-          className="absolute inset-0 z-20 flex flex-col bg-[#09090D] shadow-[-12px_0_32px_rgba(0,0,0,0.45)]"
+          className="absolute inset-0 z-20 flex flex-col bg-[rgb(var(--bg-primary))] shadow-[-12px_0_32px_rgba(0,0,0,0.45)]"
         >
           <header className="grid shrink-0 grid-cols-[48px_1fr_48px] items-center border-b border-white/[0.06] px-1 pb-2 pt-[max(8px,env(safe-area-inset-top))]">
-            <button onClick={onBack} aria-label={backLabel} className="press flex h-11 w-11 items-center justify-center rounded-full text-[#a29bfe]">
+            <button onClick={onBack} aria-label={backLabel} className="press flex h-11 w-11 items-center justify-center rounded-full text-[rgb(var(--accent-text))]">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
                 <path d="M15 6l-6 6 6 6" />
               </svg>

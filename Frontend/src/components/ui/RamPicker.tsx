@@ -190,7 +190,7 @@ export function RamPicker({ value, onChange, loader, modCount, onStatusChange }:
               title={reason ?? (isRecommended ? 'Recommandé pour cette configuration' : undefined)}
               className={`relative flex items-center gap-1 rounded-xl text-xs font-semibold transition-all duration-150 h-[34px] px-2.5 ${
                 isSelected
-                  ? 'bg-[rgba(75,63,207,0.35)] border border-[rgba(75,63,207,0.7)] text-[rgba(255,255,255,0.95)]'
+                  ? 'bg-[rgb(var(--accent)/0.35)] border border-[rgb(var(--accent)/0.7)] text-[rgba(255,255,255,0.95)]'
                   // "Ouvert" (sous-liste dépliée) est un état DIFFÉRENT de
                   // "sélectionné" — même style que la sélection ici créait un
                   // conflit visuel (retour utilisateur) : déplier "5 Go+" le
@@ -234,7 +234,7 @@ export function RamPicker({ value, onChange, loader, modCount, onStatusChange }:
                 title={sub.reason ?? (subRecommended ? 'Recommandé pour cette configuration' : undefined)}
                 className={`rounded-lg text-[11px] font-semibold whitespace-nowrap transition-all duration-150 h-[28px] px-3 ${
                   subSelected
-                    ? 'bg-[rgba(75,63,207,0.4)] text-white'
+                    ? 'bg-[rgb(var(--accent)/0.4)] text-white'
                     : sub.severity === 'red'
                       ? 'text-[rgba(240,110,100,0.75)] hover:bg-[rgba(220,60,50,0.15)]'
                       : sub.severity === 'orange'

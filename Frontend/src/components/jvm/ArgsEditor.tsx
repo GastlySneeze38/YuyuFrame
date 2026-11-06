@@ -96,7 +96,7 @@ export function ArgsEditor({ value, onChange }: {
                             className={`h-[22px] w-[24px] text-[12px] font-bold leading-none transition-colors ${
                               e.value === sign
                                 ? sign === '+'
-                                  ? 'bg-[rgba(75,63,207,0.5)] text-white'
+                                  ? 'bg-[rgb(var(--accent)/0.5)] text-white'
                                   : 'bg-[rgba(220,90,90,0.35)] text-white'
                                 : 'bg-[rgba(0,0,0,0.3)] text-[rgba(255,255,255,0.3)] hover:text-[rgba(255,255,255,0.6)]'
                             }`}
@@ -125,7 +125,7 @@ export function ArgsEditor({ value, onChange }: {
                           value={e.value}
                           onChange={(ev) => update(e.id, { value: ev.target.value })}
                           spellCheck={false}
-                          className="h-[24px] w-[130px] flex-shrink-0 max-sm:order-last max-sm:basis-full rounded-lg border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] px-2 font-mono text-[11px] text-[rgba(190,183,255,0.95)] outline-none focus:border-[rgba(75,63,207,0.7)]"
+                          className="h-[24px] w-[130px] flex-shrink-0 max-sm:order-last max-sm:basis-full rounded-lg border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] px-2 font-mono text-[11px] text-[rgba(190,183,255,0.95)] outline-none focus:border-[rgb(var(--accent)/0.7)]"
                         />
                         {doc && (
                           <span className="flex-shrink-0 text-[10px] text-[rgba(255,255,255,0.28)]">

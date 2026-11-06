@@ -19,7 +19,7 @@ import { CARD, CheckRow, Note } from '@/mobile/ui/kit'
 /** Une case des caractéristiques d'une configuration, sur téléphone. */
 function MobileSpec({ label, value, accent, note }: { label: string; value: string; accent?: boolean; note?: string }) {
   return (
-    <span className={`flex min-w-0 flex-col rounded-xl border px-3 py-2 ${accent ? 'border-[rgba(75,63,207,0.45)] bg-[rgba(75,63,207,0.16)]' : 'border-white/[0.07] bg-black/25'}`}>
+    <span className={`flex min-w-0 flex-col rounded-xl border px-3 py-2 ${accent ? 'border-[rgb(var(--accent)/0.45)] bg-[rgb(var(--accent)/0.16)]' : 'border-white/[0.07] bg-black/25'}`}>
       <span className="truncate text-[13px] text-white/55">{label}</span>
       {/* Sur deux lignes s'il le faut (« Celle de l'instance ») : une demi-largeur est étroite. */}
       <span className={`break-words text-[15px] font-semibold leading-snug ${accent ? 'text-[rgba(190,183,255,0.95)]' : 'text-white/90'}`}>{value}</span>
@@ -73,7 +73,7 @@ function Spec({ label, value, accent, note }: { label: string; value: string; ac
     <div
       className={`flex flex-col rounded-lg border px-2.5 py-1.5 ${
         accent
-          ? 'border-[rgba(75,63,207,0.45)] bg-[rgba(75,63,207,0.16)]'
+          ? 'border-[rgb(var(--accent)/0.45)] bg-[rgb(var(--accent)/0.16)]'
           : 'border-[rgba(255,255,255,0.07)] bg-[rgba(0,0,0,0.28)]'
       }`}
     >
@@ -111,7 +111,7 @@ function FilterChips<T extends string>({ options, value, onChange }: {
           onClick={() => onChange(o.id)}
           className={`h-[26px] rounded-lg border px-2.5 text-[10px] font-semibold transition-colors ${
             value === o.id
-              ? 'border-[rgba(75,63,207,0.7)] bg-[rgba(75,63,207,0.3)] text-white'
+              ? 'border-[rgb(var(--accent)/0.7)] bg-[rgb(var(--accent)/0.3)] text-white'
               : 'border-[rgba(255,255,255,0.08)] bg-[rgba(0,0,0,0.3)] text-[rgba(255,255,255,0.42)] hover:border-white/25'
           }`}
         >
@@ -266,7 +266,7 @@ export default function JvmProfiles() {
     const menuProfile = described.find((d) => d.profile.id === menuId) ?? null
     const linkProfile = profiles?.find((p) => p.id === linkingId) ?? null
     return (
-      <div className="relative flex h-full flex-col overflow-hidden bg-[#09090D]">
+      <div className="relative flex h-full flex-col overflow-hidden bg-[rgb(var(--bg-primary))]">
         <ScreenHeader
           title="Configurations JVM"
           subtitle={`${linkedCount}/${javaInstances.length} instance${javaInstances.length > 1 ? 's' : ''} reliée${linkedCount > 1 ? 's' : ''}`}
@@ -277,7 +277,7 @@ export default function JvmProfiles() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Nom ou drapeau"
-            className="h-11 min-w-0 flex-1 rounded-xl border border-white/[0.1] bg-white/[0.04] px-3.5 text-[16px] text-white outline-none placeholder:text-white/35 focus:border-[rgba(75,63,207,0.6)]"
+            className="h-11 min-w-0 flex-1 rounded-xl border border-white/[0.1] bg-white/[0.04] px-3.5 text-[16px] text-white outline-none placeholder:text-white/35 focus:border-[rgb(var(--accent)/0.6)]"
           />
           <button
             onClick={() => setFiltering(true)}
@@ -303,7 +303,7 @@ export default function JvmProfiles() {
             {profiles !== null && profiles.length > 0 && visible.length === 0 && <Note>Aucune configuration ne correspond à ces filtres.</Note>}
 
             {visible.map(({ profile: p, info, linked }) => (
-              <div key={p.id} className={`flex flex-col overflow-hidden rounded-2xl border bg-white/[0.04] ${linked.length > 0 ? 'border-[rgba(75,63,207,0.4)]' : 'border-white/[0.06]'}`}>
+              <div key={p.id} className={`flex flex-col overflow-hidden rounded-2xl border bg-white/[0.04] ${linked.length > 0 ? 'border-[rgb(var(--accent)/0.4)]' : 'border-white/[0.06]'}`}>
                 <div className="flex items-start gap-1 pl-4 pr-1 pt-2">
                   <button onClick={() => navigate(`/jvm/${p.id}`)} className="flex min-w-0 flex-1 flex-col gap-1.5 py-1.5 text-left">
                     <span className="truncate text-[16px] font-bold text-white">{p.name}</span>
@@ -320,19 +320,19 @@ export default function JvmProfiles() {
                   <MobileSpec label="Mémoire" value={info.ram} />
                   <MobileSpec label="Drapeaux" value={`${info.total} au total`} />
                 </button>
-                <div className={`flex flex-col gap-2.5 border-t px-4 py-3 ${linked.length > 0 ? 'border-[rgba(75,63,207,0.3)] bg-[rgba(75,63,207,0.08)]' : 'border-white/[0.06]'}`}>
+                <div className={`flex flex-col gap-2.5 border-t px-4 py-3 ${linked.length > 0 ? 'border-[rgb(var(--accent)/0.3)] bg-[rgb(var(--accent)/0.08)]' : 'border-white/[0.06]'}`}>
                   <div className="flex items-center justify-between gap-3">
                     <span className={`text-[13px] font-semibold ${linked.length > 0 ? 'text-[rgba(190,183,255,0.95)]' : 'text-white/55'}`}>
                       {linked.length > 0 ? `Appliquée à ${linked.length} instance${linked.length > 1 ? 's' : ''}` : 'Appliquée à aucune instance'}
                     </span>
-                    <button onClick={() => setLinkingId(p.id)} className="press h-11 shrink-0 px-1 text-[15px] font-semibold text-[#a29bfe]">
+                    <button onClick={() => setLinkingId(p.id)} className="press h-11 shrink-0 px-1 text-[15px] font-semibold text-[rgb(var(--accent-text))]">
                       {linked.length > 0 ? 'Modifier' : 'Relier'}
                     </button>
                   </div>
                   {linked.length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
                       {linked.map((i) => (
-                        <span key={i.id} className="rounded-lg border border-[rgba(75,63,207,0.5)] bg-[rgba(75,63,207,0.22)] px-2 py-1 text-[13px] font-semibold text-white">
+                        <span key={i.id} className="rounded-lg border border-[rgb(var(--accent)/0.5)] bg-[rgb(var(--accent)/0.22)] px-2 py-1 text-[13px] font-semibold text-white">
                           {i.name} <span className="font-normal text-white/55">{i.mc_version}</span>
                         </span>
                       ))}
@@ -361,7 +361,7 @@ export default function JvmProfiles() {
         {/* Créer : l'action principale, en bouton flottant sous le pouce. */}
         <button
           onClick={() => setCreating(true)}
-          className="press absolute bottom-[max(16px,env(safe-area-inset-bottom))] right-4 z-10 flex h-14 items-center gap-2 rounded-full bg-[#4B3FCF] pl-4 pr-5 text-[16px] font-semibold text-white shadow-[0_8px_28px_rgba(75,63,207,0.5),0_2px_8px_rgba(0,0,0,0.4)]"
+          className="press absolute bottom-[max(16px,env(safe-area-inset-bottom))] right-4 z-10 flex h-14 items-center gap-2 rounded-full bg-[rgb(var(--accent))] pl-4 pr-5 text-[16px] font-semibold text-white shadow-[0_8px_28px_rgb(var(--accent)/0.5),0_2px_8px_rgba(0,0,0,0.4)]"
         >
           <svg viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" /></svg>
           Nouvelle
@@ -373,7 +373,7 @@ export default function JvmProfiles() {
           label="Nouvelle configuration"
           header={<SheetTitle>Nouvelle configuration</SheetTitle>}
           footer={
-            <button onClick={() => handleCreate()} disabled={busy} className="press flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#4B3FCF] text-[16px] font-semibold text-white disabled:opacity-50">
+            <button onClick={() => handleCreate()} disabled={busy} className="press flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[rgb(var(--accent))] text-[16px] font-semibold text-white disabled:opacity-50">
               {busy && <ButtonSpinner />}
               Créer
             </button>
@@ -384,7 +384,7 @@ export default function JvmProfiles() {
             onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') handleCreate() }}
             placeholder="Nom (ex : Shenandoah + JIT débridé)"
-            className="h-12 w-full rounded-xl border border-white/[0.1] bg-white/[0.04] px-3.5 text-[16px] text-white outline-none placeholder:text-white/35 focus:border-[rgba(75,63,207,0.6)]"
+            className="h-12 w-full rounded-xl border border-white/[0.1] bg-white/[0.04] px-3.5 text-[16px] text-white outline-none placeholder:text-white/35 focus:border-[rgb(var(--accent)/0.6)]"
           />
         </Sheet>
 
@@ -463,7 +463,7 @@ export default function JvmProfiles() {
   }
 
   return (
-    <div className="relative flex h-full flex-col overflow-hidden bg-[#09090D]">
+    <div className="relative flex h-full flex-col overflow-hidden bg-[rgb(var(--bg-primary))]">
       <PageHeader>
         <PageHeaderSeparator />
         <h1 className="text-[16px] font-black tracking-[-0.01em] text-white">Configurations JVM</h1>
@@ -480,7 +480,7 @@ export default function JvmProfiles() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Rechercher — nom ou drapeau (ex : Shenandoah, MaxGCPause)"
-          className="h-[28px] w-[330px] rounded-lg border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.4)] px-2.5 text-[11px] text-white outline-none placeholder:text-[rgba(255,255,255,0.25)] focus:border-[rgba(75,63,207,0.6)]"
+          className="h-[28px] w-[330px] rounded-lg border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.4)] px-2.5 text-[11px] text-white outline-none placeholder:text-[rgba(255,255,255,0.25)] focus:border-[rgb(var(--accent)/0.6)]"
         />
         <div className="h-[20px] w-px bg-[rgba(255,255,255,0.07)]" />
         <FilterChips
@@ -547,7 +547,7 @@ export default function JvmProfiles() {
                 key={p.id}
                 className={`flex flex-col gap-3 rounded-2xl border bg-[rgba(255,255,255,0.03)] p-4 transition-colors ${
                   linked.length > 0
-                    ? 'border-[rgba(75,63,207,0.35)] hover:border-[rgba(75,63,207,0.6)]'
+                    ? 'border-[rgb(var(--accent)/0.35)] hover:border-[rgb(var(--accent)/0.6)]'
                     : 'border-[rgba(255,255,255,0.07)] hover:border-[rgba(255,255,255,0.14)]'
                 }`}
               >
@@ -619,7 +619,7 @@ export default function JvmProfiles() {
                 <div
                   className={`flex flex-col gap-2 rounded-xl border p-2.5 ${
                     linked.length > 0
-                      ? 'border-[rgba(75,63,207,0.35)] bg-[rgba(75,63,207,0.09)]'
+                      ? 'border-[rgb(var(--accent)/0.35)] bg-[rgb(var(--accent)/0.09)]'
                       : 'border-dashed border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.2)]'
                   }`}
                 >
@@ -633,7 +633,7 @@ export default function JvmProfiles() {
                     </span>
                     <button
                       onClick={() => setLinkingId(isLinking ? null : p.id)}
-                      className="h-[24px] flex-shrink-0 rounded-md border border-[rgba(255,255,255,0.15)] bg-[rgba(255,255,255,0.05)] px-2 text-[10px] font-semibold text-[rgba(150,140,240,0.95)] transition-colors hover:border-[rgba(75,63,207,0.7)]"
+                      className="h-[24px] flex-shrink-0 rounded-md border border-[rgba(255,255,255,0.15)] bg-[rgba(255,255,255,0.05)] px-2 text-[10px] font-semibold text-[rgba(150,140,240,0.95)] transition-colors hover:border-[rgb(var(--accent)/0.7)]"
                     >
                       {isLinking ? 'Terminé' : linked.length > 0 ? 'Modifier les liens' : 'Relier une instance'}
                     </button>
@@ -644,7 +644,7 @@ export default function JvmProfiles() {
                       {linked.map((i) => (
                         <span
                           key={i.id}
-                          className="flex items-center gap-1 rounded-md border border-[rgba(75,63,207,0.55)] bg-[rgba(75,63,207,0.25)] px-1.5 py-0.5 text-[10px] font-semibold text-white"
+                          className="flex items-center gap-1 rounded-md border border-[rgb(var(--accent)/0.55)] bg-[rgb(var(--accent)/0.25)] px-1.5 py-0.5 text-[10px] font-semibold text-white"
                         >
                           {i.name}
                           <span className="font-normal opacity-50">{i.mc_version}</span>
@@ -689,7 +689,7 @@ export default function JvmProfiles() {
                               onClick={() => toggleLink(i, p.id)}
                               className={`h-[24px] rounded-md border px-2 text-[10px] font-semibold transition-colors ${
                                 here
-                                  ? 'border-[rgba(75,63,207,0.7)] bg-[rgba(75,63,207,0.35)] text-white'
+                                  ? 'border-[rgb(var(--accent)/0.7)] bg-[rgb(var(--accent)/0.35)] text-white'
                                   : 'border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.3)] text-[rgba(255,255,255,0.45)] hover:border-white/30'
                               }`}
                             >
@@ -739,7 +739,7 @@ export default function JvmProfiles() {
           regard aurait à aller chercher. */}
       <div className="absolute bottom-6 right-6 z-10">
         {creating ? (
-          <div className="flex items-center gap-2 rounded-2xl border border-[rgba(75,63,207,0.5)] bg-[rgba(20,18,32,0.96)] p-2 shadow-[0_8px_32px_rgba(0,0,0,0.55)] backdrop-blur-sm">
+          <div className="flex items-center gap-2 rounded-2xl border border-[rgb(var(--accent)/0.5)] bg-[rgba(20,18,32,0.96)] p-2 shadow-[0_8px_32px_rgba(0,0,0,0.55)] backdrop-blur-sm">
             <input
               autoFocus
               value={newName}
@@ -749,12 +749,12 @@ export default function JvmProfiles() {
                 if (e.key === 'Escape') { setCreating(false); setNewName('') }
               }}
               placeholder="Nom (ex : Shenandoah + JIT débridé)"
-              className="h-[34px] w-[300px] rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] px-3 text-[12px] text-white outline-none focus:border-[rgba(75,63,207,0.6)]"
+              className="h-[34px] w-[300px] rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] px-3 text-[12px] text-white outline-none focus:border-[rgb(var(--accent)/0.6)]"
             />
             <button
               onClick={() => handleCreate()}
               disabled={busy}
-              className="flex h-[34px] items-center gap-2 rounded-xl border border-[rgba(75,63,207,0.7)] bg-[rgba(75,63,207,0.45)] px-3.5 text-[11px] font-bold text-white transition-colors hover:bg-[rgba(75,63,207,0.6)] disabled:opacity-50"
+              className="flex h-[34px] items-center gap-2 rounded-xl border border-[rgb(var(--accent)/0.7)] bg-[rgb(var(--accent)/0.45)] px-3.5 text-[11px] font-bold text-white transition-colors hover:bg-[rgb(var(--accent)/0.6)] disabled:opacity-50"
             >
               {busy && <ButtonSpinner />}
               Créer
@@ -763,7 +763,7 @@ export default function JvmProfiles() {
         ) : (
           <button
             onClick={() => setCreating(true)}
-            className="flex h-[42px] items-center gap-2 rounded-2xl border border-[rgba(75,63,207,0.7)] bg-[rgba(75,63,207,0.45)] px-5 text-[12px] font-bold text-white shadow-[0_8px_28px_rgba(40,30,140,0.45)] transition-all duration-150 hover:bg-[rgba(75,63,207,0.62)] hover:shadow-[0_10px_34px_rgba(40,30,140,0.6)]"
+            className="flex h-[42px] items-center gap-2 rounded-2xl border border-[rgb(var(--accent)/0.7)] bg-[rgb(var(--accent)/0.45)] px-5 text-[12px] font-bold text-white shadow-[0_8px_28px_rgba(40,30,140,0.45)] transition-all duration-150 hover:bg-[rgb(var(--accent)/0.62)] hover:shadow-[0_10px_34px_rgba(40,30,140,0.6)]"
           >
             <svg viewBox="0 0 24 24" fill="currentColor" width={14} height={14} className="flex-shrink-0">
               <path d="M11 5h2v14h-2z" />

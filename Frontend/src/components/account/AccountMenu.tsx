@@ -10,7 +10,7 @@ import { useT } from '@/i18n'
 /** Le fond de l'initiale selon le plan : gris en gratuit, violet en Premium, ambre en Ultimate (les couleurs de `PlanBadge`). */
 const PLAN_COLORS: Record<'free' | 'premium' | 'ultimate', string> = {
   free: 'bg-[rgba(255,255,255,0.12)] text-[rgba(255,255,255,0.75)] ring-[rgba(255,255,255,0.15)]',
-  premium: 'bg-[#4b3fcf] text-white ring-[rgba(129,140,248,0.55)]',
+  premium: 'bg-[rgb(var(--accent))] text-white ring-[rgb(var(--accent-text)/0.55)]',
   ultimate: 'bg-[#d97706] text-white ring-[rgba(245,158,11,0.6)]',
 }
 
@@ -71,7 +71,7 @@ export function AccountMenu() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-20 mt-2 w-48 overflow-hidden rounded-xl border border-[rgba(255,255,255,0.1)] bg-[#111118] shadow-xl shadow-black/50">
+        <div className="absolute right-0 top-full z-20 mt-2 w-48 overflow-hidden rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgb(var(--bg-card))] shadow-xl shadow-black/50">
           {/* Qui je suis et mon plan. */}
           <div className="flex items-center gap-2 border-b border-[rgba(255,255,255,0.07)] px-3 py-2.5">
             <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-white">{yuyuUsername}</span>
@@ -83,7 +83,7 @@ export function AccountMenu() {
             className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[12px] text-[rgba(255,255,255,0.55)] transition-colors duration-150 hover:bg-[rgba(255,255,255,0.05)] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             {refreshing ? (
-              <ButtonSpinner size={12} color="rgba(75,63,207,0.6)" trackColor="rgba(255,255,255,0.1)" />
+              <ButtonSpinner size={12} color="rgb(var(--accent)/0.6)" trackColor="rgba(255,255,255,0.1)" />
             ) : (
               <svg viewBox="0 0 24 24" fill="currentColor" width={12} height={12}>
                 <path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />

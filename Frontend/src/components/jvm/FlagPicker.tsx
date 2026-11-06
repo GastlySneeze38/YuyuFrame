@@ -67,13 +67,13 @@ export function FlagPicker({ family, category, present, onAdd, onClose }: {
       onClose={onClose}
       width={720}
     >
-      <div className="sticky top-0 z-10 flex flex-col gap-2 border-b border-[rgba(255,255,255,0.07)] bg-[#111018] px-5 py-3">
+      <div className="sticky top-0 z-10 flex flex-col gap-2 border-b border-[rgba(255,255,255,0.07)] bg-[rgb(var(--bg-card))] px-5 py-3">
         <input
           autoFocus
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Chercher — un nom, ou ce que ça fait (« pause », « code cache »)"
-          className="h-[34px] w-full rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] px-3 text-[12px] text-white outline-none placeholder:text-[rgba(255,255,255,0.25)] focus:border-[rgba(75,63,207,0.6)]"
+          className="h-[34px] w-full rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] px-3 text-[12px] text-white outline-none placeholder:text-[rgba(255,255,255,0.25)] focus:border-[rgb(var(--accent)/0.6)]"
         />
         <div className="flex flex-wrap gap-1">
           {CATEGORY_FILTERS.map((c) => (
@@ -82,7 +82,7 @@ export function FlagPicker({ family, category, present, onAdd, onClose }: {
               onClick={() => setFilter(c.id)}
               className={`h-[24px] rounded-lg border px-2.5 text-[10px] font-semibold transition-colors ${
                 filter === c.id
-                  ? 'border-[rgba(75,63,207,0.7)] bg-[rgba(75,63,207,0.3)] text-white'
+                  ? 'border-[rgb(var(--accent)/0.7)] bg-[rgb(var(--accent)/0.3)] text-white'
                   : 'border-[rgba(255,255,255,0.08)] bg-[rgba(0,0,0,0.3)] text-[rgba(255,255,255,0.42)] hover:border-white/25'
               }`}
             >
@@ -100,7 +100,7 @@ export function FlagPicker({ family, category, present, onAdd, onClose }: {
               {manualLooksLikeFlag && (
                 <button
                   onClick={() => { onAdd(manual); setQuery('') }}
-                  className="h-[30px] rounded-xl border border-[rgba(75,63,207,0.7)] bg-[rgba(75,63,207,0.4)] px-3.5 text-[11px] font-bold text-white transition-colors hover:bg-[rgba(75,63,207,0.55)]"
+                  className="h-[30px] rounded-xl border border-[rgb(var(--accent)/0.7)] bg-[rgb(var(--accent)/0.4)] px-3.5 text-[11px] font-bold text-white transition-colors hover:bg-[rgb(var(--accent)/0.55)]"
                 >
                   Ajouter <span className="font-mono">{manual}</span> quand même
                 </button>
@@ -135,7 +135,7 @@ export function FlagPicker({ family, category, present, onAdd, onClose }: {
                     </span>
                   )}
                   {already && (
-                    <span className="rounded-md bg-[rgba(75,63,207,0.22)] px-1.5 py-0.5 text-[9px] font-semibold text-[rgba(180,172,255,0.9)]">
+                    <span className="rounded-md bg-[rgb(var(--accent)/0.22)] px-1.5 py-0.5 text-[9px] font-semibold text-[rgba(180,172,255,0.9)]">
                       déjà dans la config
                     </span>
                   )}
@@ -159,12 +159,12 @@ export function FlagPicker({ family, category, present, onAdd, onClose }: {
                           onKeyDown={(e) => { if (e.key === 'Enter') addDoc(d) }}
                           spellCheck={false}
                           placeholder="valeur"
-                          className="h-[26px] w-[120px] rounded-lg border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] px-2 font-mono text-[11px] text-white outline-none placeholder:font-sans placeholder:text-[rgba(255,255,255,0.22)] focus:border-[rgba(75,63,207,0.7)]"
+                          className="h-[26px] w-[120px] rounded-lg border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] px-2 font-mono text-[11px] text-white outline-none placeholder:font-sans placeholder:text-[rgba(255,255,255,0.22)] focus:border-[rgb(var(--accent)/0.7)]"
                         />
                         <button
                           onClick={() => addDoc(d)}
                           disabled={!(values[d.name] ?? '').trim()}
-                          className="h-[26px] rounded-lg border border-[rgba(75,63,207,0.6)] bg-[rgba(75,63,207,0.35)] px-2.5 text-[10px] font-bold text-white transition-colors hover:bg-[rgba(75,63,207,0.5)] disabled:opacity-30"
+                          className="h-[26px] rounded-lg border border-[rgb(var(--accent)/0.6)] bg-[rgb(var(--accent)/0.35)] px-2.5 text-[10px] font-bold text-white transition-colors hover:bg-[rgb(var(--accent)/0.5)] disabled:opacity-30"
                         >
                           Ajouter
                         </button>
@@ -173,7 +173,7 @@ export function FlagPicker({ family, category, present, onAdd, onClose }: {
                       <>
                         <button
                           onClick={() => addDoc(d, '+')}
-                          className="h-[26px] rounded-lg border border-[rgba(75,63,207,0.6)] bg-[rgba(75,63,207,0.35)] px-2.5 text-[10px] font-bold text-white transition-colors hover:bg-[rgba(75,63,207,0.5)]"
+                          className="h-[26px] rounded-lg border border-[rgb(var(--accent)/0.6)] bg-[rgb(var(--accent)/0.35)] px-2.5 text-[10px] font-bold text-white transition-colors hover:bg-[rgb(var(--accent)/0.5)]"
                         >
                           Activer
                         </button>

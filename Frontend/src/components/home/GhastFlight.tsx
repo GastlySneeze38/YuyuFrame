@@ -53,7 +53,7 @@ export function GhastFlight({ onDone }: { onDone: () => void }) {
         transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
         viewBox="0 0 16 27"
         shapeRendering="crispEdges"
-        className="h-full w-auto drop-shadow-[0_0_14px_rgba(160,150,255,0.35)]"
+        className="h-full w-auto drop-shadow-[0_0_14px_rgb(var(--accent-text)/0.35)]"
       >
         {TENTACLES.map(([x, length, delay]) => (
           <motion.rect

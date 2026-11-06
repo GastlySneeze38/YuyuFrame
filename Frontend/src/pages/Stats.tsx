@@ -151,7 +151,7 @@ export default function Stats() {
 
           {loading && data === null ? (
             <div className="flex items-center justify-center py-24">
-              <ButtonSpinner size={32} color="#818cf8" trackColor="rgba(255,255,255,0.08)" />
+              <ButtonSpinner size={32} color="rgb(var(--accent-text))" trackColor="rgba(255,255,255,0.08)" />
             </div>
           ) : !data ? (
             <p className="py-24 text-center text-[13px] text-txt-muted">{t('stats.cannotLoadStats')}</p>

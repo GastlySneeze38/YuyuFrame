@@ -52,7 +52,7 @@ export function MyStatusBar({ onOpenProfile }: { onOpenProfile: () => void }) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.98 }}
             transition={{ duration: 0.16 }}
-            className="absolute inset-x-2 bottom-full mb-2 flex flex-col gap-1 rounded-2xl border border-line bg-[#18181f] p-2 shadow-[0_18px_50px_rgba(0,0,0,0.6)]"
+            className="absolute inset-x-2 bottom-full mb-2 flex flex-col gap-1 rounded-2xl border border-line bg-[rgb(var(--bg-raised))] p-2 shadow-[0_18px_50px_rgba(0,0,0,0.6)]"
           >
             {MY_STATUSES.map((s) => (
               <button
@@ -97,7 +97,7 @@ export function MyStatusBar({ onOpenProfile }: { onOpenProfile: () => void }) {
       </AnimatePresence>
 
       <button onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-2.5 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-white/[0.05]">
-        <FriendAvatar skin={skin} state={autoAway ? 'away' : me.status} size={32} ring="#0d0d12" />
+        <FriendAvatar skin={skin} state={autoAway ? 'away' : me.status} size={32} ring="rgb(var(--bg-primary))" />
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="truncate text-[13px] font-bold">{username ?? '—'}</span>
           <span className="truncate text-[11px] text-txt-muted">{custom ?? (autoAway ? t('friends.status.autoAway') : t(`friends.status.${me.status}`))}</span>

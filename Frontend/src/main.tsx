@@ -8,21 +8,34 @@ import { transition } from './lib/motion'
 import { inTauri } from './lib/platform'
 import { loadLanguage } from './i18n'
 import { useStore } from './stores/useStore'
+import { startAppearance } from './lib/appearance'
+
+/** `reducedMotion` : « user » suit le système (Framer Motion supprime alors
+ *  les déplacements et ne garde que les fondus) ; « always » quand le réglage
+ *  Animations réduites est coché dans Apparence. `transition` fixe le rythme
+ *  par défaut de toute l'application. */
+function Root() {
+  const reduce = useStore((s) => s.reduceMotion)
+  return (
+    <MotionConfig reducedMotion={reduce ? 'always' : 'user'} transition={transition}>
+      <HashRouter>
+        <App />
+      </HashRouter>
+    </MotionConfig>
+  )
+}
 
 function render() {
   ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
-      {/* `reducedMotion="user"` : si le système demande des animations réduites,
-          Framer Motion supprime les déplacements et ne garde que les fondus.
-          `transition` fixe le rythme par défaut de toute l'application. */}
-      <MotionConfig reducedMotion="user" transition={transition}>
-        <HashRouter>
-          <App />
-        </HashRouter>
-      </MotionConfig>
+      <Root />
     </React.StrictMode>
   )
 }
+
+// Thème, accent, taille… posés avant le premier rendu : pas d'éclair violet
+// sur fond Nuit au démarrage quand on a choisi autre chose.
+startAppearance()
 
 // Ouverte dans un navigateur pendant le développement : on simule Tauri avant
 // le premier rendu (voir `dev/browserPreview.ts`). Le `import()` est DANS la

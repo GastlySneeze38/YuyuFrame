@@ -119,8 +119,8 @@ export function ToolbarMenu({
         aria-expanded={open}
         className={`flex h-8 items-center gap-1.5 px-[14px] text-[12px] font-semibold transition-colors duration-150 cursor-pointer ${
           active
-            ? 'bg-[rgba(75,63,207,0.25)] text-[rgba(255,255,255,0.9)]'
-            : 'bg-transparent text-[rgba(255,255,255,0.55)] hover:bg-[rgba(75,63,207,0.12)]'
+            ? 'bg-[rgb(var(--accent)/0.25)] text-[rgba(255,255,255,0.9)]'
+            : 'bg-transparent text-[rgba(255,255,255,0.55)] hover:bg-[rgb(var(--accent)/0.12)]'
         }`}
       >
         <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13} className="flex-shrink-0">
@@ -159,7 +159,7 @@ export function ToolbarMenu({
                   onClick={() => { item.onSelect(); setOpen(false) }}
                   className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[12px] font-medium transition-colors duration-150 ${
                     activeId === item.id
-                      ? 'bg-[rgba(75,63,207,0.28)] text-white'
+                      ? 'bg-[rgb(var(--accent)/0.28)] text-white'
                       : 'text-[rgba(255,255,255,0.62)] hover:bg-[rgba(255,255,255,0.06)] hover:text-[rgba(255,255,255,0.9)]'
                   }`}
                 >

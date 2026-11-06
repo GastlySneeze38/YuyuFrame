@@ -86,7 +86,7 @@ export function ProfileLayout({ banner, accent, color, corner, avatar, bubble, n
         )}
 
         <motion.div
-          className="pointer-events-auto absolute rounded-[30%] bg-[#111116] p-1.5"
+          className="pointer-events-auto absolute rounded-[30%] bg-[rgb(var(--bg-card))] p-1.5"
           style={{ top: avatarTop, left: avatarLeft, scale: avatarScale, transformOrigin: 'top left' }}
         >
           {avatar}

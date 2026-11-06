@@ -38,7 +38,7 @@ export default function Legal() {
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-[#09090D] text-white">
+    <div className="flex h-full flex-col overflow-hidden bg-[rgb(var(--bg-primary))] text-white">
 
       <PageHeader backTo={-1}>
         <h1 className="font-black text-white text-[18px] tracking-[-0.01em]">{t('legal.title')}</h1>

@@ -78,7 +78,7 @@ export function MobileMissions() {
   const t = useT()
   const { challenges, pass, season, meta, reroll } = usePass()
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-[#09090D] text-txt-primary">
+    <div className="flex h-full flex-col overflow-hidden bg-[rgb(var(--bg-primary))] text-txt-primary">
       <ScreenHeader title={t('features.missionsTitle')} fallback="/features" />
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[max(32px,env(safe-area-inset-bottom))] pt-4">
         <div className="flex flex-col gap-8">
@@ -143,7 +143,7 @@ function PassCard({ pass, season }: { pass: BattlePass; season: Season | null })
           </div>
           <Bar ratio={pass.xpInTier / pass.xpPerTier} />
         </div>
-        <span className="flex h-11 items-center justify-between border-t border-white/[0.08] pt-1 text-[15px] font-semibold text-[#a29bfe]">
+        <span className="flex h-11 items-center justify-between border-t border-white/[0.08] pt-1 text-[15px] font-semibold text-[rgb(var(--accent-text))]">
           {t('competitive.pass.seeTiers')}
           <RowChevron />
         </span>
@@ -340,7 +340,7 @@ export function MobileSeasonPass() {
   const t = useT()
   const { pass, season } = usePass()
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-[#09090D] text-txt-primary">
+    <div className="flex h-full flex-col overflow-hidden bg-[rgb(var(--bg-primary))] text-txt-primary">
       <ScreenHeader
         title={t('competitive.pass.tiersTitle')}
         subtitle={season ? t('competitive.pass.season', { number: season.number, name: season.name }) : undefined}
@@ -539,7 +539,7 @@ function TierTile({ tier, reward, state, owned, selected, ratio, onPick }: {
       onClick={onPick}
       aria-pressed={selected}
       aria-label={`${t('competitive.pass.tierLabel', { tier })} · ${reward.free ? t('competitive.pass.freeTier') : t('competitive.pass.passTier')}`}
-      className={`press relative flex min-w-0 flex-col overflow-hidden rounded-xl border-2 bg-[#121119] ${selected ? 'border-white' : ''}`}
+      className={`press relative flex min-w-0 flex-col overflow-hidden rounded-xl border-2 bg-[rgb(var(--bg-card))] ${selected ? 'border-white' : ''}`}
       style={{
         borderColor: selected ? undefined : `rgb(${tone} / ${state === 'current' || state === 'waiting' ? 0.8 : reward.free ? 0.5 : 0.25})`,
         backgroundImage: `linear-gradient(180deg, rgb(${tone} / 0.14), transparent 70%)`,

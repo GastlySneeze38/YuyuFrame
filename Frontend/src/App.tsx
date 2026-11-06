@@ -137,7 +137,6 @@ export default function App() {
   // Un sélecteur par champ, jamais `useStore()` entier : la racine se
   // redessinait à chaque changement du magasin, et toute l'application avec
   // elle (audit de performance, 2026-11-06). Les actions sont stables.
-  const brightness = useStore((s) => s.brightness)
   const instanceSyncMode = useStore((s) => s.instanceSyncMode)
   const setInstances = useStore((s) => s.setInstances)
   const uuid = useStore((s) => s.uuid)
@@ -730,7 +729,9 @@ export default function App() {
       {emailVerificationRequired && !passwordResetRequired && !verifyLater && (
         <EmailVerifyModal forced onClose={() => setVerifyLater(true)} />
       )}
-      <div className="flex-1 overflow-hidden" style={{ filter: `brightness(${brightness / 100})` }}>
+      {/* Plus de `filter: brightness()` ici (2026-11-06) : remplacé par les
+          thèmes d'Apparence, qui ne changent que des variables CSS. */}
+      <div className="flex-1 overflow-hidden">
         {/* Suspense À L'INTÉRIEUR de la transition, jamais au-dessus : une
             page chargée à la demande suspend le rendu, et un Suspense placé
             au-dessus remplacerait tout l'arbre — AnimatePresence compris —

@@ -141,12 +141,12 @@ export default function Console() {
   }, [logs])
 
   return (
-    <div className="flex h-screen flex-col bg-[#07070C] [font-family:monospace]">
+    <div className="flex h-screen flex-col bg-[rgb(var(--bg-primary))] [font-family:monospace]">
 
       {/* Drag bar + window controls */}
       <div
         data-tauri-drag-region
-        className="flex flex-shrink-0 items-center h-9 bg-[#09090D] border-b border-b-[rgba(255,255,255,0.07)] select-none"
+        className="flex flex-shrink-0 items-center h-9 bg-[rgb(var(--bg-primary))] border-b border-b-[rgba(255,255,255,0.07)] select-none"
       >
         {/* Titre (drag zone) */}
         <div

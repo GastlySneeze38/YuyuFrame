@@ -97,7 +97,7 @@ export function InviteCard({ invite, now, onAccept, onClose, autoHide }: {
   }
 
   return (
-    <div className="group relative flex flex-col gap-2.5 overflow-hidden rounded-2xl border border-line bg-[#18181f] p-3">
+    <div className="group relative flex flex-col gap-2.5 overflow-hidden rounded-2xl border border-line bg-[rgb(var(--bg-raised))] p-3">
       <div className="flex items-center gap-3">
         <FriendAvatar skin={friend ? skinOf(friend) : 'https://mc-heads.net/skin/MHF_Steve'} state={null} size={38} />
         <div className="flex min-w-0 flex-1 flex-col">

@@ -34,7 +34,7 @@ export default function Information() {
   }, [])
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-[#09090D] text-white">
+    <div className="flex h-full flex-col overflow-hidden bg-[rgb(var(--bg-primary))] text-white">
 
       <PageHeader>
         <h1 className="font-black text-white text-[18px] tracking-[-0.01em]">{t('information.title')}</h1>
@@ -46,15 +46,15 @@ export default function Information() {
 
           {/* Branding */}
           <div
-            className="flex flex-col items-center gap-3 rounded-2xl px-6 py-8 text-center bg-[rgba(75,63,207,0.08)] border border-[rgba(75,63,207,0.2)]"
+            className="flex flex-col items-center gap-3 rounded-2xl px-6 py-8 text-center bg-[rgb(var(--accent)/0.08)] border border-[rgb(var(--accent)/0.2)]"
           >
             <div
-              className="flex items-center justify-center rounded-2xl font-black text-white w-[72px] h-[72px] bg-[rgba(75,63,207,0.25)] text-[32px] font-mono shadow-[0_0_40px_rgba(75,63,207,0.3)]"
+              className="flex items-center justify-center rounded-2xl font-black text-white w-[72px] h-[72px] bg-[rgb(var(--accent)/0.25)] text-[32px] font-mono shadow-[0_0_40px_rgb(var(--accent)/0.3)]"
             >
               Y
             </div>
             <div>
-              <h2 className="font-black text-white text-[28px] tracking-[-0.02em] [text-shadow:0_0_32px_rgba(75,63,207,0.5)]">
+              <h2 className="font-black text-white text-[28px] tracking-[-0.02em] [text-shadow:0_0_32px_rgb(var(--accent)/0.5)]">
                 YuyuFrame
               </h2>
               <p className="text-[13px] text-white/40 mt-1 max-sm:text-[15px] max-sm:text-white/60">
@@ -64,7 +64,7 @@ export default function Information() {
             {info && (
               <div className="flex items-center gap-2 mt-1">
                 <span
-                  className="text-[12px] font-bold text-[rgba(120,110,230,0.9)] bg-[rgba(75,63,207,0.2)] border border-[rgba(75,63,207,0.35)] rounded-lg px-[10px] py-[3px] max-sm:text-[13px]"
+                  className="text-[12px] font-bold text-[rgb(var(--accent-hover)/0.9)] bg-[rgb(var(--accent)/0.2)] border border-[rgb(var(--accent)/0.35)] rounded-lg px-[10px] py-[3px] max-sm:text-[13px]"
                 >
                   v{info.version}
                 </span>
@@ -89,7 +89,7 @@ export default function Information() {
                   key={f}
                   className="flex items-center gap-3 rounded-xl px-4 py-3 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]"
                 >
-                  <div className="w-[5px] h-[5px] rounded-full bg-[rgba(75,63,207,0.8)] flex-shrink-0" />
+                  <div className="w-[5px] h-[5px] rounded-full bg-[rgb(var(--accent)/0.8)] flex-shrink-0" />
                   <span className="text-[13px] text-white/60 max-sm:text-[15px] max-sm:text-white/75">{f}</span>
                 </div>
               ))}
@@ -103,7 +103,7 @@ export default function Information() {
                 {BETA_TESTERS.map((name) => (
                   <span
                     key={name}
-                    className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-semibold text-[rgba(120,110,230,0.9)] bg-[rgba(75,63,207,0.12)] border border-[rgba(75,63,207,0.3)] max-sm:text-[14px]"
+                    className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-semibold text-[rgb(var(--accent-hover)/0.9)] bg-[rgb(var(--accent)/0.12)] border border-[rgb(var(--accent)/0.3)] max-sm:text-[14px]"
                   >
                     <svg viewBox="0 0 24 24" fill="currentColor" width={11} height={11}>
                       <path d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
@@ -132,10 +132,10 @@ export default function Information() {
               page), pour rester cohérent tout en se détachant des sections
               neutres environnantes. */}
           <Section title={t('information.forgeTitle')}>
-            <div className="flex flex-col gap-3 rounded-xl px-4 py-3.5 bg-[rgba(75,63,207,0.1)] border border-[rgba(75,63,207,0.3)]">
+            <div className="flex flex-col gap-3 rounded-xl px-4 py-3.5 bg-[rgb(var(--accent)/0.1)] border border-[rgb(var(--accent)/0.3)]">
               <div className="flex items-start gap-3">
-                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[rgba(75,63,207,0.2)]">
-                  <svg viewBox="0 0 24 24" fill="#818cf8" width={16} height={16}>
+                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[rgb(var(--accent)/0.2)]">
+                  <svg viewBox="0 0 24 24" fill="currentColor" width={16} height={16} className="text-accent-text">
                     <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
                   </svg>
                 </div>
@@ -145,7 +145,7 @@ export default function Information() {
               </div>
               <button
                 onClick={() => open(FORGE_PATREON_URL)}
-                className="press flex h-9 items-center justify-center rounded-lg text-[12px] font-bold text-white bg-[#4B3FCF] transition-colors hover:bg-[#6155e8] max-sm:h-12 max-sm:rounded-2xl max-sm:text-[15px]"
+                className="press flex h-9 items-center justify-center rounded-lg text-[12px] font-bold text-white bg-[rgb(var(--accent))] transition-colors hover:bg-[rgb(var(--accent-hover))] max-sm:h-12 max-sm:rounded-2xl max-sm:text-[15px]"
               >
                 {t('information.forgeLink')}
               </button>
@@ -185,12 +185,12 @@ function InfoRow({ label, value, dim, onClick }: { label: string; value: string;
     <Tag
       onClick={onClick}
       className={`flex w-full items-center justify-between gap-3 rounded-xl px-4 py-3 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] max-sm:min-h-[52px] ${
-        onClick ? 'transition-colors hover:bg-[rgba(75,63,207,0.1)] hover:border-[rgba(75,63,207,0.3)] cursor-pointer' : ''
+        onClick ? 'transition-colors hover:bg-[rgb(var(--accent)/0.1)] hover:border-[rgb(var(--accent)/0.3)] cursor-pointer' : ''
       }`}
     >
       <span className="shrink-0 text-[13px] text-white/40 max-sm:text-[15px] max-sm:text-white/60">{label}</span>
       {/* Sur téléphone la valeur passe à la ligne : « Repositorio » + l'adresse du dépôt ne tiennent pas sur 360 px. */}
-      <span className={`min-w-0 truncate text-[13px] font-semibold max-sm:whitespace-normal max-sm:break-all max-sm:text-right max-sm:text-[15px] ${onClick ? 'text-[rgba(120,110,230,0.9)]' : dim ? 'text-white/25' : 'text-white/75'}`}>
+      <span className={`min-w-0 truncate text-[13px] font-semibold max-sm:whitespace-normal max-sm:break-all max-sm:text-right max-sm:text-[15px] ${onClick ? 'text-[rgb(var(--accent-hover)/0.9)]' : dim ? 'text-white/25' : 'text-white/75'}`}>
         {value}
       </span>
     </Tag>

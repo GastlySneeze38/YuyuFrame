@@ -78,7 +78,7 @@ export function ModpackDetailModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.6)] backdrop-blur-[4px]"
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="flex w-full max-w-2xl flex-col gap-4 rounded-2xl p-6 bg-[#111118] border border-[rgba(75,63,207,0.3)] shadow-[0_24px_80px_rgba(0,0,0,0.6)] max-h-[85vh]">
+      <div className="flex w-full max-w-2xl flex-col gap-4 rounded-2xl p-6 bg-[rgb(var(--bg-card))] border border-[rgb(var(--accent)/0.3)] shadow-[0_24px_80px_rgba(0,0,0,0.6)] max-h-[85vh]">
         {/* Header */}
         <div className="flex flex-shrink-0 items-start gap-3">
           <div className="w-[52px] h-[52px] rounded-[14px] flex-shrink-0 overflow-hidden bg-[rgba(255,255,255,0.06)] flex items-center justify-center">
@@ -165,7 +165,7 @@ export function ModpackDetailModal({
           onClick={onInstall}
           disabled={installing}
           className={`flex-shrink-0 flex items-center justify-center gap-1.5 rounded-xl font-bold text-white transition-all duration-150 active:scale-95 h-10 text-[13px] ${
-            installing ? 'bg-[rgba(75,63,207,0.3)]' : 'bg-[#4B3FCF] hover:bg-[#6155e8]'
+            installing ? 'bg-[rgb(var(--accent)/0.3)]' : 'bg-[rgb(var(--accent))] hover:bg-[rgb(var(--accent-hover))]'
           }`}
         >
           {installing ? <ButtonSpinner size={14} trackColor="rgba(255,255,255,0.15)" /> : t('mods.installButton')}
@@ -174,7 +174,7 @@ export function ModpackDetailModal({
           <div className="flex flex-shrink-0 items-center gap-2">
             <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]">
               <div
-                className="h-full rounded-full bg-[#4B3FCF] transition-all duration-200"
+                className="h-full rounded-full bg-[rgb(var(--accent))] transition-all duration-200"
                 style={{ width: `${installProgress.percent}%` }}
               />
             </div>

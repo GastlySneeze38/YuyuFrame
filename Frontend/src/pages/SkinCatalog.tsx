@@ -418,7 +418,7 @@ export default function SkinCatalog() {
       <AnimatePresence mode="wait">
         {visible.length === 0 && loading ? (
           <Layer key="loading">
-            <ButtonSpinner size={28} color="#818cf8" trackColor="rgba(255,255,255,0.08)" />
+            <ButtonSpinner size={28} color="rgb(var(--accent-text))" trackColor="rgba(255,255,255,0.08)" />
           </Layer>
         ) : visible.length === 0 ? (
           <Layer key="empty">
@@ -476,7 +476,7 @@ export default function SkinCatalog() {
   if (mobile) {
     const activeFilters = (model !== 'any' ? 1 : 0) + (kind ? 1 : 0) + (showSensitive ? 1 : 0)
     return (
-      <div className="flex h-full flex-col overflow-hidden bg-[#09090D] text-txt-primary">
+      <div className="flex h-full flex-col overflow-hidden bg-[rgb(var(--bg-primary))] text-txt-primary">
         <ScreenHeader title={t('skinCatalog.title')} subtitle={t('skinCatalog.subtitle')} fallback={backTo} />
         <div className="flex shrink-0 flex-col gap-2 px-4 pt-3">
           <div className="flex gap-2">
@@ -869,7 +869,7 @@ function Tile({
         ) : (
           <div className="flex h-full w-full items-center justify-center">
             {pending ? (
-              <ButtonSpinner size={18} color="#818cf8" trackColor="rgba(255,255,255,0.08)" />
+              <ButtonSpinner size={18} color="rgb(var(--accent-text))" trackColor="rgba(255,255,255,0.08)" />
             ) : (
               <span className="text-[11px] text-txt-muted max-sm:text-[13px]">{t('skinCatalog.noPreview')}</span>
             )}

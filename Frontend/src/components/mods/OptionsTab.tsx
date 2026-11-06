@@ -392,8 +392,8 @@ export function OptionsTab({ instance }: { instance: Instance }) {
     ? 'flex flex-col divide-y divide-white/[0.06] overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.04]'
     : 'flex flex-col gap-1'
   const moreLink = mobile
-    ? 'press flex h-12 w-full items-center justify-between rounded-2xl bg-white/[0.04] px-4 text-left text-[15px] font-semibold text-[#a99bff]'
-    : 'self-start text-[11px] font-semibold text-[rgba(75,63,207,0.85)] transition-colors duration-150 hover:text-[#8b7ff0]'
+    ? 'press flex h-12 w-full items-center justify-between rounded-2xl bg-white/[0.04] px-4 text-left text-[15px] font-semibold text-[rgb(var(--accent-text))]'
+    : 'self-start text-[11px] font-semibold text-[rgb(var(--accent)/0.85)] transition-colors duration-150 hover:text-[#8b7ff0]'
   const chevron = mobile && (
     <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 shrink-0 opacity-60"><path d="M9.3 6.7 10.7 5.3l6.7 6.7-6.7 6.7-1.4-1.4 5.3-5.3z" /></svg>
   )
@@ -414,7 +414,7 @@ export function OptionsTab({ instance }: { instance: Instance }) {
                 onClick={() => setAdvanced(mode)}
                 aria-pressed={advanced === mode}
                 className={`h-10 min-w-0 flex-1 rounded-xl text-[14px] font-semibold transition-colors duration-150 ${
-                  advanced === mode ? 'bg-[rgba(75,63,207,0.35)] text-white' : 'text-white/55'
+                  advanced === mode ? 'bg-[rgb(var(--accent)/0.35)] text-white' : 'text-white/55'
                 }`}
               >
                 {t(mode ? 'options.viewAdvanced' : 'options.viewReadable')}
@@ -432,7 +432,7 @@ export function OptionsTab({ instance }: { instance: Instance }) {
               key={String(mode)}
               onClick={() => setAdvanced(mode)}
               className={`rounded-md px-3 py-1 text-[11px] font-semibold transition-colors duration-150 ${
-                advanced === mode ? 'bg-[rgba(75,63,207,0.35)] text-white' : 'text-[rgba(255,255,255,0.35)] hover:text-[rgba(255,255,255,0.6)]'
+                advanced === mode ? 'bg-[rgb(var(--accent)/0.35)] text-white' : 'text-[rgba(255,255,255,0.35)] hover:text-[rgba(255,255,255,0.6)]'
               }`}
             >
               {t(mode ? 'options.viewAdvanced' : 'options.viewReadable')}
@@ -457,7 +457,7 @@ export function OptionsTab({ instance }: { instance: Instance }) {
             className={`h-8 rounded-lg px-4 text-[12px] font-semibold transition-colors duration-150 ${
               pending === 0 || saving
                 ? 'cursor-not-allowed bg-[rgba(40,38,65,0.7)] text-[rgba(255,255,255,0.3)]'
-                : 'bg-[#4B3FCF] text-white hover:bg-[#6155e8]'
+                : 'bg-[rgb(var(--accent))] text-white hover:bg-[rgb(var(--accent-hover))]'
             }`}
           >
             {saving ? t('options.saving') : t('options.save')}
@@ -524,7 +524,7 @@ export function OptionsTab({ instance }: { instance: Instance }) {
                 ref={(el) => { rowRefs.current[key] = el }}
                 className={`flex items-center gap-3 rounded-lg px-2.5 py-1.5 transition-colors duration-300 ${
                   highlight === key
-                    ? 'bg-[rgba(75,63,207,0.28)] ring-1 ring-[rgba(139,92,246,0.6)]'
+                    ? 'bg-[rgb(var(--accent)/0.28)] ring-1 ring-[rgba(139,92,246,0.6)]'
                     : 'odd:bg-[rgba(255,255,255,0.02)]'
                 }`}
               >
@@ -534,7 +534,7 @@ export function OptionsTab({ instance }: { instance: Instance }) {
                 <input
                   value={value(key)}
                   onChange={(e) => set(key, e.target.value)}
-                  className={`h-7 flex-1 rounded-md border bg-[rgba(0,0,0,0.4)] px-2 font-mono text-[11.5px] text-white outline-none transition-colors duration-150 focus:border-[rgba(75,63,207,0.5)] ${
+                  className={`h-7 flex-1 rounded-md border bg-[rgba(0,0,0,0.4)] px-2 font-mono text-[11.5px] text-white outline-none transition-colors duration-150 focus:border-[rgb(var(--accent)/0.5)] ${
                     key in draft && draft[key] !== saved[key]
                       ? 'border-[rgba(139,92,246,0.55)]'
                       : 'border-[rgba(255,255,255,0.08)]'
@@ -564,7 +564,7 @@ export function OptionsTab({ instance }: { instance: Instance }) {
                       value={agentValue(key)}
                       onChange={(e) => setAgent(key, e.target.value)}
                       disabled={agentBlocked}
-                      className={`h-7 flex-1 rounded-md border bg-[rgba(0,0,0,0.4)] px-2 font-mono text-[11.5px] text-white outline-none transition-colors duration-150 focus:border-[rgba(75,63,207,0.5)] ${
+                      className={`h-7 flex-1 rounded-md border bg-[rgba(0,0,0,0.4)] px-2 font-mono text-[11.5px] text-white outline-none transition-colors duration-150 focus:border-[rgb(var(--accent)/0.5)] ${
                         key in agentDraft && agentDraft[key] !== agentSaved[key]
                           ? 'border-[rgba(139,92,246,0.55)]'
                           : 'border-[rgba(255,255,255,0.08)]'
@@ -693,7 +693,7 @@ export function OptionsTab({ instance }: { instance: Instance }) {
               transition={{ duration: 0.24, ease: EASE_OUT }}
               className="fixed inset-x-4 bottom-[max(12px,env(safe-area-inset-bottom))] z-40 flex items-center gap-2 rounded-2xl border border-white/[0.08] bg-bg-secondary p-2 pl-4 shadow-[0_10px_32px_rgba(0,0,0,0.55)]"
             >
-              <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-[#c4b9ff]">
+              <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-[rgb(var(--accent-text))]">
                 {t('options.pendingShort', { count: pending })}
               </span>
               <button
@@ -706,7 +706,7 @@ export function OptionsTab({ instance }: { instance: Instance }) {
               <button
                 onClick={save}
                 disabled={saving}
-                className="press flex h-11 shrink-0 items-center gap-2 rounded-xl bg-[#4B3FCF] px-5 text-[15px] font-bold text-white disabled:opacity-70"
+                className="press flex h-11 shrink-0 items-center gap-2 rounded-xl bg-[rgb(var(--accent))] px-5 text-[15px] font-bold text-white disabled:opacity-70"
               >
                 {saving && <ButtonSpinner size={14} trackColor="rgba(255,255,255,0.2)" />}
                 {saving ? t('options.saving') : t('options.save')}
@@ -733,7 +733,7 @@ function MobileRawRow({ name, value, changed, highlighted, rowRef, onChange }: {
     <div
       ref={rowRef}
       className={`flex flex-col gap-2 px-4 py-3 transition-colors duration-300 ${
-        highlighted ? 'bg-[rgba(75,63,207,0.28)]' : changed ? 'bg-[rgba(75,63,207,0.1)]' : ''
+        highlighted ? 'bg-[rgb(var(--accent)/0.28)]' : changed ? 'bg-[rgb(var(--accent)/0.1)]' : ''
       }`}
     >
       <span className="selectable break-all font-mono text-[13px] text-white/55">{name}</span>
@@ -744,7 +744,7 @@ function MobileRawRow({ name, value, changed, highlighted, rowRef, onChange }: {
         autoCorrect="off"
         spellCheck={false}
         enterKeyHint="done"
-        className={`h-11 w-full rounded-xl border bg-black/30 px-3 font-mono text-[15px] text-white outline-none focus:border-[rgba(120,100,255,0.6)] ${
+        className={`h-11 w-full rounded-xl border bg-black/30 px-3 font-mono text-[15px] text-white outline-none focus:border-[rgb(var(--accent-hover)/0.6)] ${
           changed ? 'border-[rgba(139,92,246,0.55)]' : 'border-white/[0.08]'
         }`}
       />
@@ -774,7 +774,7 @@ function MobileOptionRow({ option, value, changed, highlighted, rowRef, onChange
   const { control } = option
   const [picking, setPicking] = useState(false)
   const label = t(option.labelKey)
-  const tint = highlighted ? 'bg-[rgba(75,63,207,0.28)]' : changed ? 'bg-[rgba(75,63,207,0.1)]' : ''
+  const tint = highlighted ? 'bg-[rgb(var(--accent)/0.28)]' : changed ? 'bg-[rgb(var(--accent)/0.1)]' : ''
   const rowChevron = (
     <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 shrink-0 text-white/35"><path d="M9.3 6.7 10.7 5.3l6.7 6.7-6.7 6.7-1.4-1.4 5.3-5.3z" /></svg>
   )
@@ -843,12 +843,12 @@ function MobileOptionRow({ option, value, changed, highlighted, rowRef, onChange
                 onClick={() => { onChange(c.value); setPicking(false) }}
                 aria-pressed={active}
                 className={`press flex h-14 w-full items-center gap-3 rounded-2xl px-3 text-left text-[16px] ${
-                  active ? 'bg-[rgba(75,63,207,0.2)] font-semibold text-white' : 'text-white/85 active:bg-white/[0.06]'
+                  active ? 'bg-[rgb(var(--accent)/0.2)] font-semibold text-white' : 'text-white/85 active:bg-white/[0.06]'
                 }`}
               >
                 <span className="min-w-0 flex-1 truncate">{t(c.labelKey)}</span>
                 {active && (
-                  <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 shrink-0 text-[#a99bff]"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" /></svg>
+                  <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 shrink-0 text-[rgb(var(--accent-text))]"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" /></svg>
                 )}
               </button>
             )
@@ -897,7 +897,7 @@ function MobileOptionRow({ option, value, changed, highlighted, rowRef, onChange
           onChange={(e) => onChange(e.target.value)}
           autoCapitalize="none"
           autoCorrect="off"
-          className="h-11 w-full rounded-xl border border-white/[0.1] bg-black/30 px-3 font-mono text-[15px] text-white outline-none focus:border-[rgba(120,100,255,0.6)]"
+          className="h-11 w-full rounded-xl border border-white/[0.1] bg-black/30 px-3 font-mono text-[15px] text-white outline-none focus:border-[rgb(var(--accent-hover)/0.6)]"
         />
       )}
     </div>
@@ -922,9 +922,9 @@ function OptionRow({ option, value, changed, highlighted, rowRef, onChange }: {
       ref={rowRef}
       className={`flex items-center gap-3 rounded-lg px-2.5 py-2 transition-colors duration-300 ${
         highlighted
-          ? 'bg-[rgba(75,63,207,0.28)] ring-1 ring-[rgba(139,92,246,0.6)]'
+          ? 'bg-[rgb(var(--accent)/0.28)] ring-1 ring-[rgba(139,92,246,0.6)]'
           : changed
-            ? 'bg-[rgba(75,63,207,0.1)]'
+            ? 'bg-[rgb(var(--accent)/0.1)]'
             : 'odd:bg-[rgba(255,255,255,0.02)]'
       }`}
     >
@@ -941,7 +941,7 @@ function OptionRow({ option, value, changed, highlighted, rowRef, onChange }: {
             step={control.step ?? 1}
             value={Number(value) || control.min}
             onChange={(e) => onChange(e.target.value)}
-            className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-[rgba(255,255,255,0.1)] accent-[#4B3FCF]"
+            className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-[rgba(255,255,255,0.1)] accent-[rgb(var(--accent))]"
           />
           <span className="w-[68px] flex-shrink-0 text-right font-mono text-[11.5px] text-[rgba(255,255,255,0.55)]">
             {value}{control.suffix ?? ''}
@@ -953,7 +953,7 @@ function OptionRow({ option, value, changed, highlighted, rowRef, onChange }: {
         <button
           onClick={() => onChange(value === 'true' ? 'false' : 'true')}
           className={`relative ml-auto h-[18px] w-[34px] flex-shrink-0 rounded-full transition-colors duration-200 ${
-            value === 'true' ? 'bg-[rgba(75,63,207,0.9)]' : 'bg-[rgba(255,255,255,0.12)]'
+            value === 'true' ? 'bg-[rgb(var(--accent)/0.9)]' : 'bg-[rgba(255,255,255,0.12)]'
           }`}
         >
           <span className={`absolute top-[3px] h-3 w-3 rounded-full bg-white transition-all duration-200 ${value === 'true' ? 'left-[19px]' : 'left-[3px]'}`} />
@@ -983,7 +983,7 @@ function OptionRow({ option, value, changed, highlighted, rowRef, onChange }: {
         <input
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="ml-auto h-7 w-[140px] rounded-md border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] px-2 font-mono text-[11.5px] text-white outline-none transition-colors duration-150 focus:border-[rgba(75,63,207,0.5)]"
+          className="ml-auto h-7 w-[140px] rounded-md border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] px-2 font-mono text-[11.5px] text-white outline-none transition-colors duration-150 focus:border-[rgb(var(--accent)/0.5)]"
         />
       )}
 
@@ -991,7 +991,7 @@ function OptionRow({ option, value, changed, highlighted, rowRef, onChange }: {
         <>
           <button
             onClick={() => setPickingLanguage(true)}
-            className="ml-auto flex h-7 items-center gap-2 rounded-md border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] pl-2 pr-2.5 transition-colors duration-150 hover:border-[rgba(75,63,207,0.5)]"
+            className="ml-auto flex h-7 items-center gap-2 rounded-md border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] pl-2 pr-2.5 transition-colors duration-150 hover:border-[rgb(var(--accent)/0.5)]"
           >
             {language ? (
               <>
@@ -1109,8 +1109,8 @@ function KeybindButton({ value, onChange }: { value: string; onChange: (v: strin
         onBlur={() => setCapturing(false)}
         className={`h-7 min-w-[120px] rounded-md border px-2.5 font-mono text-[11.5px] outline-none transition-colors duration-150 max-sm:h-11 max-sm:flex-1 max-sm:rounded-xl max-sm:text-[15px] ${
           capturing
-            ? 'border-[rgba(139,92,246,0.7)] bg-[rgba(75,63,207,0.25)] text-white'
-            : 'border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] text-white hover:border-[rgba(75,63,207,0.5)]'
+            ? 'border-[rgba(139,92,246,0.7)] bg-[rgb(var(--accent)/0.25)] text-white'
+            : 'border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] text-white hover:border-[rgb(var(--accent)/0.5)]'
         }`}
       >
         {capturing

@@ -77,7 +77,7 @@ export function ModpackBrowseTab({
   const chipClass = (active: boolean) =>
     `rounded-lg text-[11px] font-semibold transition-all duration-150 h-7 px-2.5 border ${
       active
-        ? 'bg-[rgba(75,63,207,0.35)] border-[rgba(75,63,207,0.7)] text-[rgba(255,255,255,0.95)]'
+        ? 'bg-[rgb(var(--accent)/0.35)] border-[rgb(var(--accent)/0.7)] text-[rgba(255,255,255,0.95)]'
         : 'bg-[rgba(0,0,0,0.3)] border-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.4)]'
     }`
 
@@ -95,10 +95,10 @@ export function ModpackBrowseTab({
             value={query}
             onChange={onQueryChange}
             enterKeyHint="search"
-            className="w-full rounded-xl pl-9 pr-4 text-sm text-white outline-none h-10 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] focus:border-[rgba(75,63,207,0.6)] max-sm:h-11"
+            className="w-full rounded-xl pl-9 pr-4 text-sm text-white outline-none h-10 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] focus:border-[rgb(var(--accent)/0.6)] max-sm:h-11"
           />
           {searching && (
-            <ButtonSpinner size={16} color="rgba(75,63,207,0.8)" trackColor="rgba(255,255,255,0.1)" className="absolute right-3 top-1/2 -translate-y-1/2" />
+            <ButtonSpinner size={16} color="rgb(var(--accent)/0.8)" trackColor="rgba(255,255,255,0.1)" className="absolute right-3 top-1/2 -translate-y-1/2" />
           )}
         </div>
         {mobile ? (
@@ -108,8 +108,8 @@ export function ModpackBrowseTab({
           onClick={() => setShowFilters((v) => !v)}
           className={`flex flex-shrink-0 items-center gap-1.5 rounded-xl px-3.5 text-[12px] font-semibold h-10 border transition-colors ${
             showFilters || isFiltersActive(filters)
-              ? 'bg-[rgba(75,63,207,0.25)] border-[rgba(75,63,207,0.6)] text-white'
-              : 'bg-[rgba(255,255,255,0.04)] border-[rgba(255,255,255,0.1)] text-[rgba(255,255,255,0.6)] hover:border-[rgba(75,63,207,0.5)]'
+              ? 'bg-[rgb(var(--accent)/0.25)] border-[rgb(var(--accent)/0.6)] text-white'
+              : 'bg-[rgba(255,255,255,0.04)] border-[rgba(255,255,255,0.1)] text-[rgba(255,255,255,0.6)] hover:border-[rgb(var(--accent)/0.5)]'
           }`}
         >
           <svg viewBox="0 0 24 24" fill="currentColor" width={14} height={14}>
@@ -176,7 +176,7 @@ export function ModpackBrowseTab({
                 className="rounded-lg px-2 text-[11px] font-medium text-white outline-none h-7 bg-[rgba(0,0,0,0.35)] border border-[rgba(255,255,255,0.08)]"
               >
                 {SORT_OPTIONS.map((s) => (
-                  <option key={s} value={s} className="bg-[#111118]">{t(`mods.sort${s.charAt(0).toUpperCase()}${s.slice(1)}`)}</option>
+                  <option key={s} value={s} className="bg-[rgb(var(--bg-card))]">{t(`mods.sort${s.charAt(0).toUpperCase()}${s.slice(1)}`)}</option>
                 ))}
               </select>
             </div>
@@ -240,7 +240,7 @@ export function ModpackBrowseTab({
             <div
               key={key}
               onClick={() => onOpenDetail(r)}
-              className="flex flex-col gap-2.5 rounded-2xl px-4 py-3 cursor-pointer transition-colors bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] hover:border-[rgba(75,63,207,0.35)]"
+              className="flex flex-col gap-2.5 rounded-2xl px-4 py-3 cursor-pointer transition-colors bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] hover:border-[rgb(var(--accent)/0.35)]"
             >
               <div className="flex items-center gap-3">
                 <div className="w-11 h-11 rounded-xl flex-shrink-0 overflow-hidden bg-[rgba(255,255,255,0.06)] flex items-center justify-center">
@@ -265,8 +265,8 @@ export function ModpackBrowseTab({
                 <motion.button {...pressIf(!(isInstallingThis))}
                   onClick={(e) => { e.stopPropagation(); handleInstall() }}
                   disabled={isInstallingThis}
-                  className={`flex-shrink-0 flex items-center gap-1.5 rounded-xl font-semibold transition-all duration-150 active:scale-95 h-8 pl-[14px] pr-[14px] text-[12px] border border-[rgba(75,63,207,0.5)] text-[rgba(255,255,255,0.85)] ${
-                    isInstallingThis ? 'bg-[rgba(40,38,65,0.7)] cursor-not-allowed' : 'bg-[rgba(75,63,207,0.3)] cursor-pointer'
+                  className={`flex-shrink-0 flex items-center gap-1.5 rounded-xl font-semibold transition-all duration-150 active:scale-95 h-8 pl-[14px] pr-[14px] text-[12px] border border-[rgb(var(--accent)/0.5)] text-[rgba(255,255,255,0.85)] ${
+                    isInstallingThis ? 'bg-[rgba(40,38,65,0.7)] cursor-not-allowed' : 'bg-[rgb(var(--accent)/0.3)] cursor-pointer'
                   }`}
                 >
                   {isInstallingThis ? (
@@ -279,7 +279,7 @@ export function ModpackBrowseTab({
                 <div className="flex items-center gap-2 pl-[56px]">
                   <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]">
                     <div
-                      className="h-full rounded-full bg-[#4B3FCF] transition-all duration-200"
+                      className="h-full rounded-full bg-[rgb(var(--accent))] transition-all duration-200"
                       style={{ width: `${progress.percent}%` }}
                     />
                   </div>

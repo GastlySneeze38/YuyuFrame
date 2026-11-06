@@ -171,7 +171,7 @@ export default function Backup() {
 
           {loading && !data ? (
             <div className="flex items-center justify-center py-20">
-              <ButtonSpinner size={30} color="#818cf8" trackColor="rgba(255,255,255,0.08)" />
+              <ButtonSpinner size={30} color="rgb(var(--accent-text))" trackColor="rgba(255,255,255,0.08)" />
             </div>
           ) : (
             <>

@@ -76,10 +76,10 @@ export function MobileCompetitive({
   const [picking, setPicking] = useState(false)
 
   return (
-    <div className="relative flex h-full flex-col overflow-hidden bg-[#09090D] text-txt-primary">
+    <div className="relative flex h-full flex-col overflow-hidden bg-[rgb(var(--bg-primary))] text-txt-primary">
       <header className="flex shrink-0 items-center gap-1 pb-2 pl-1.5 pr-4 pt-[max(12px,env(safe-area-inset-top))]">
         {friend ? (
-          <button onClick={() => navigate(-1)} aria-label={t('competitive.back')} className="press flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[#a29bfe]">
+          <button onClick={() => navigate(-1)} aria-label={t('competitive.back')} className="press flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[rgb(var(--accent-text))]">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6"><path d="M15 6l-6 6 6 6" /></svg>
           </button>
         ) : (
@@ -104,7 +104,7 @@ export function MobileCompetitive({
                 // Sous 375 px, 13 px et presque sans marge : « Classement »
                 // et « Temporada » tiennent encore sur 360 px.
                 className={`h-10 min-w-0 rounded-xl px-1 text-[14px] font-semibold transition-colors duration-150 max-[374px]:px-0 max-[374px]:text-[13px] ${
-                  view === v ? 'bg-[rgba(75,63,207,0.35)] text-white' : 'text-white/60'
+                  view === v ? 'bg-[rgb(var(--accent)/0.35)] text-white' : 'text-white/60'
                 }`}
               >
                 <span className="block truncate">{t(`competitive.navShort.${v}`)}</span>
@@ -116,7 +116,7 @@ export function MobileCompetitive({
 
       {loading ? (
         <div className="flex flex-1 items-center justify-center">
-          <ButtonSpinner size={28} color="#818cf8" trackColor="rgba(255,255,255,0.08)" />
+          <ButtonSpinner size={28} color="rgb(var(--accent-text))" trackColor="rgba(255,255,255,0.08)" />
         </div>
       ) : !data ? (
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-6">{empty}</div>
@@ -226,7 +226,7 @@ function ModeSheet({ open, onClose, value, standings, onPick }: {
               </span>
             </span>
             {active && (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6 shrink-0 text-[#a29bfe]"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6 shrink-0 text-[rgb(var(--accent-text))]"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
             )}
           </button>
         )

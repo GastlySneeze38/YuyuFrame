@@ -270,7 +270,7 @@ export default function MobileHome() {
           />
           {halloween && <HalloweenSky />}
           {/* La lueur, fixe : en boucle elle dépensait de la batterie pour de la décoration. */}
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_60%,rgba(90,70,255,0.45)_0%,rgba(75,63,207,0.2)_40%,transparent_70%)]" />
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_60%,rgba(90,70,255,0.45)_0%,rgb(var(--accent)/0.2)_40%,transparent_70%)]" />
           <div className="absolute inset-0">
             {STARS.map((s, i) => (
               <div key={i} className="absolute rounded-full" style={{ left: `${s.x}%`, top: `${s.y}%`, width: s.r, height: s.r, background: `rgba(255,255,255,${s.o})` }} />
@@ -332,7 +332,7 @@ export default function MobileHome() {
         <div
           className={`pointer-events-none sticky top-0 z-30 -mx-4 -mt-[env(safe-area-inset-top,0px)] shrink-0 border-b pt-[env(safe-area-inset-top,0px)] transition-[background-color,border-color,box-shadow] duration-150 ${
             stuck
-              ? 'border-white/[0.06] bg-[#09090D] shadow-[0_8px_24px_rgba(0,0,0,0.5)]'
+              ? 'border-white/[0.06] bg-[rgb(var(--bg-primary))] shadow-[0_8px_24px_rgba(0,0,0,0.5)]'
               : 'border-transparent bg-transparent'
           }`}
         >
@@ -520,7 +520,7 @@ function SectionHeader({ title, action }: { title: string; action?: { label: str
       {action && (
         <button
           onClick={action.onClick}
-          className="-mr-2 flex h-11 items-center gap-0.5 px-2 text-[14px] font-semibold text-[#a29bfe] transition-opacity active:opacity-60"
+          className="-mr-2 flex h-11 items-center gap-0.5 px-2 text-[14px] font-semibold text-[rgb(var(--accent-text))] transition-opacity active:opacity-60"
         >
           {action.label}
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
@@ -552,16 +552,16 @@ function LaunchButton({ hasAccount, hasInstance, running, step, cancelling, hall
   const bg = canLaunch && halloween
     ? 'bg-[linear-gradient(135deg,#ff8a1f_0%,#d9480f_50%,#6d1d5c_100%)]'
     : canLaunch || !hasAccount
-      ? 'bg-[#4B3FCF]'
+      ? 'bg-[rgb(var(--accent))]'
       : 'bg-white/[0.08]'
   const shadow = canLaunch
-    ? halloween ? 'shadow-[0_6px_24px_rgba(255,110,20,0.35)]' : 'shadow-[0_6px_24px_rgba(75,63,207,0.4)]'
+    ? halloween ? 'shadow-[0_6px_24px_rgba(255,110,20,0.35)]' : 'shadow-[0_6px_24px_rgb(var(--accent)/0.4)]'
     : ''
 
   if (running || step) {
     return (
       <div className="flex gap-2">
-        <div className="relative flex h-14 min-w-0 flex-1 items-center justify-center gap-2.5 overflow-hidden rounded-2xl bg-[#4B3FCF]/70 px-4 text-[15px] font-semibold text-white">
+        <div className="relative flex h-14 min-w-0 flex-1 items-center justify-center gap-2.5 overflow-hidden rounded-2xl bg-[rgb(var(--accent))]/70 px-4 text-[15px] font-semibold text-white">
           {step && (
             <span
               // Pleine largeur, réduite par `scaleX` depuis la gauche : animer

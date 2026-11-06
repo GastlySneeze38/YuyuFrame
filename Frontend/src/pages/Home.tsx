@@ -132,8 +132,8 @@ function useFeatures(t: ReturnType<typeof useT>) {
  */
 const LAUNCH_HOVER_SHADOW = [
   '3px 3px 0 rgba(139,92,246,0.55)',
-  '6px 6px 0 rgba(75,63,207,0.45)',
-  '0 6px 32px rgba(75,63,207,0.55)',
+  '6px 6px 0 rgb(var(--accent)/0.45)',
+  '0 6px 32px rgb(var(--accent)/0.55)',
 ].join(', ')
 
 /** La même ombre en habillage Halloween : orange puis violet. */
@@ -606,19 +606,19 @@ export default function Home() {
   const launchBtnBg = canLaunch && halloween
     ? 'bg-[linear-gradient(135deg,#ff8a1f_0%,#d9480f_50%,#6d1d5c_100%)] hover:brightness-110'
     : canLaunch
-    ? 'bg-[#4B3FCF] hover:bg-[#6155e8]'
+    ? 'bg-[rgb(var(--accent))] hover:bg-[rgb(var(--accent-hover))]'
     : !username
-      ? 'bg-[rgba(75,63,207,0.45)] hover:bg-[rgba(75,63,207,0.65)]'
+      ? 'bg-[rgb(var(--accent)/0.45)] hover:bg-[rgb(var(--accent)/0.65)]'
       : 'bg-[rgba(40,38,65,0.7)]'
 
   const launchBtnShadow = canLaunch && halloween
     ? 'shadow-[0_4px_28px_rgba(255,110,20,0.42)] hover:shadow-[0_6px_32px_rgba(255,110,20,0.62)]'
     : canLaunch
-    ? 'shadow-[0_4px_28px_rgba(75,63,207,0.42)] hover:shadow-[0_6px_32px_rgba(75,63,207,0.62)]'
+    ? 'shadow-[0_4px_28px_rgb(var(--accent)/0.42)] hover:shadow-[0_6px_32px_rgb(var(--accent)/0.62)]'
     : 'shadow-none'
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-[#09090D]">
+    <div className="flex h-full flex-col overflow-hidden bg-[rgb(var(--bg-primary))]">
 
       {/* ── Zone principale ──
           Une seule colonne, plus deux panneaux côte à côte. La bannière
@@ -642,7 +642,7 @@ export default function Home() {
           className="relative min-h-[150px] max-h-[540px] flex-[1_1_0] overflow-hidden rounded-[20px] border border-[rgba(200,200,220,0.08)] shadow-[0_8px_40px_rgba(0,0,0,0.7)]"
         >
           <div className="absolute inset-0 bg-[linear-gradient(180deg,#020208_0%,#06041a_18%,#0e0932_40%,#1c1250_58%,#130d35_76%,#070512_100%)]" />
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_38%_55%,rgba(75,63,207,0.09)_0%,transparent_55%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_38%_55%,rgb(var(--accent)/0.09)_0%,transparent_55%)]" />
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_68%_58%,rgba(80,210,80,0.06)_0%,transparent_38%)]" />
 
           {/* Ciel de fête : le dégradé chaud se fond par-dessus la nuit plutôt
@@ -682,7 +682,7 @@ export default function Home() {
           <motion.div
             animate={{ opacity: [0.35, 0.95, 0.35] }}
             transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut' }}
-            className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_38%_60%,rgba(90,70,255,0.56)_0%,rgba(75,63,207,0.28)_40%,transparent_70%)]"
+            className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_38%_60%,rgba(90,70,255,0.56)_0%,rgb(var(--accent)/0.28)_40%,transparent_70%)]"
           />
 
           <motion.div
@@ -742,9 +742,9 @@ export default function Home() {
             <motion.h1
               animate={{
                 textShadow: [
-                  '0 0 30px rgba(75,63,207,0.55)',
-                  '0 0 44px rgba(75,63,207,0.8)',
-                  '0 0 30px rgba(75,63,207,0.55)',
+                  '0 0 30px rgb(var(--accent)/0.55)',
+                  '0 0 44px rgb(var(--accent)/0.8)',
+                  '0 0 30px rgb(var(--accent)/0.55)',
                 ],
               }}
               transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
@@ -839,7 +839,7 @@ export default function Home() {
               </label>
               <button
                 onClick={() => navigate('/instances')}
-                className="flex items-center gap-1 transition-colors duration-150 text-[clamp(8px,1.3vh,10px)] text-[rgba(75,63,207,0.7)] font-semibold hover:text-[#7872e8]"
+                className="flex items-center gap-1 transition-colors duration-150 text-[clamp(8px,1.3vh,10px)] text-[rgb(var(--accent)/0.7)] font-semibold hover:text-[rgb(var(--accent-hover))]"
               >
                 <svg viewBox="0 0 24 24" fill="currentColor" width={10} height={10}><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" /></svg>
                 {t('home.manage')}
@@ -849,7 +849,7 @@ export default function Home() {
             {instances.length === 0 ? (
               <button
                 onClick={() => navigate('/instances')}
-                className="w-full flex items-center justify-center gap-2 rounded-xl transition-all duration-200 h-[clamp(30px,6vh,45px)] border-2 border-dashed border-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.2)] text-[12px] hover:border-[rgba(75,63,207,0.4)] hover:text-[rgba(120,110,230,0.6)]"
+                className="w-full flex items-center justify-center gap-2 rounded-xl transition-all duration-200 h-[clamp(30px,6vh,45px)] border-2 border-dashed border-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.2)] text-[12px] hover:border-[rgb(var(--accent)/0.4)] hover:text-[rgb(var(--accent-hover)/0.6)]"
               >
                 {t('home.createInstance')}
               </button>
@@ -874,7 +874,7 @@ export default function Home() {
                   whileTap={{ scale: 0.99 }}
                   variants={{ rest: { y: 0 }, hover: { y: -1 } }}
                   transition={SNAP}
-                  className="relative flex h-[clamp(34px,6.4vh,48px)] min-w-0 flex-1 items-center justify-between rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] px-3.5 text-sm font-medium text-white outline-none transition-colors duration-150 hover:border-[rgba(75,63,207,0.4)]"
+                  className="relative flex h-[clamp(34px,6.4vh,48px)] min-w-0 flex-1 items-center justify-between rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] px-3.5 text-sm font-medium text-white outline-none transition-colors duration-150 hover:border-[rgb(var(--accent)/0.4)]"
                 >
                   <span className="truncate">
                     {instance ? `${instance.name} — ${instance.mc_version} (${instance.loader})` : t('home.chooseInstance')}
@@ -899,7 +899,7 @@ export default function Home() {
                   onClick={() => setShowAgentModal(true)}
                   disabled={!instance}
                   title={t('agent.title')}
-                  className="relative flex h-[clamp(34px,6.4vh,48px)] w-[clamp(34px,6.4vh,48px)] flex-shrink-0 items-center justify-center rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] text-[rgba(255,255,255,0.45)] transition-colors duration-150 hover:border-[rgba(75,63,207,0.4)] hover:text-[rgba(255,255,255,0.85)] disabled:cursor-not-allowed disabled:opacity-40"
+                  className="relative flex h-[clamp(34px,6.4vh,48px)] w-[clamp(34px,6.4vh,48px)] flex-shrink-0 items-center justify-center rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] text-[rgba(255,255,255,0.45)] transition-colors duration-150 hover:border-[rgb(var(--accent)/0.4)] hover:text-[rgba(255,255,255,0.85)] disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <svg viewBox="0 0 24 24" fill="currentColor" className="h-[45%] w-[45%]">
                     <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
@@ -975,7 +975,7 @@ export default function Home() {
                   aria-hidden
                   animate={{ opacity: [0.25, 0.7, 0.25] }}
                   transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
-                  className={`pointer-events-none absolute inset-x-3 inset-y-1.5 rounded-xl blur-[16px] ${halloween ? 'bg-[#ff6a14]' : 'bg-[#4B3FCF]'}`}
+                  className={`pointer-events-none absolute inset-x-3 inset-y-1.5 rounded-xl blur-[16px] ${halloween ? 'bg-[#ff6a14]' : 'bg-[rgb(var(--accent))]'}`}
                 />
               )}
 
@@ -1048,7 +1048,7 @@ export default function Home() {
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: EASE_OUT, delay: 0.12 }}
-        className="flex flex-shrink-0 flex-col px-6 py-[clamp(8px,2vh,16px)] bg-[#09090D] border-t border-t-[rgba(255,255,255,0.06)] gap-[clamp(6px,1.2vh,12px)]"
+        className="flex flex-shrink-0 flex-col px-6 py-[clamp(8px,2vh,16px)] bg-[rgb(var(--bg-primary))] border-t border-t-[rgba(255,255,255,0.06)] gap-[clamp(6px,1.2vh,12px)]"
       >
 
         {/* Zone principale — sa hauteur est celle de son contenu.
@@ -1108,7 +1108,7 @@ export default function Home() {
                     // Un emplacement vide mène à l'écran Serveurs : au
                     // catalogue quand l'instance n'en a aucun.
                     onClick={() => navigate(savedServers.length === 0 ? '/servers?tab=catalog' : '/servers')}
-                    className="flex flex-1 cursor-pointer flex-col items-center justify-center gap-1 rounded-xl px-[clamp(8px,1.4vh,12px)] py-[clamp(6px,1.1vh,10px)] text-center border-2 border-dashed border-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.2)] text-[clamp(8px,1.15vh,10px)] transition-all duration-200 hover:border-[rgba(75,63,207,0.4)] hover:text-[rgba(120,110,230,0.6)]"
+                    className="flex flex-1 cursor-pointer flex-col items-center justify-center gap-1 rounded-xl px-[clamp(8px,1.4vh,12px)] py-[clamp(6px,1.1vh,10px)] text-center border-2 border-dashed border-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.2)] text-[clamp(8px,1.15vh,10px)] transition-all duration-200 hover:border-[rgb(var(--accent)/0.4)] hover:text-[rgb(var(--accent-hover)/0.6)]"
                   >
                     {savedServers.length === 0
                       ? t('home.noServerRegistered')
@@ -1123,7 +1123,7 @@ export default function Home() {
               <button
                 onClick={() => navigate('/servers')}
                 title={t('home.allServers')}
-                className="flex-shrink-0 flex items-center justify-center w-9 rounded-xl bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.05)] text-[rgba(255,255,255,0.35)] transition-all duration-150 hover:bg-[rgba(75,63,207,0.06)] hover:border-[rgba(120,100,255,0.25)] hover:text-white"
+                className="flex-shrink-0 flex items-center justify-center w-9 rounded-xl bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.05)] text-[rgba(255,255,255,0.35)] transition-all duration-150 hover:bg-[rgb(var(--accent)/0.06)] hover:border-[rgb(var(--accent-hover)/0.25)] hover:text-white"
               >
                 <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}>
                   <circle cx="12" cy="5" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="12" cy="19" r="1.8" />
@@ -1138,7 +1138,7 @@ export default function Home() {
                 whileHover={f.path ? { y: -3 } : undefined}
                 transition={{ type: 'spring', stiffness: 420, damping: 26 }}
                 onClick={f.path ? () => navigate(f.path!) : undefined}
-                className={`flex flex-1 flex-col gap-1.5 rounded-xl px-[clamp(8px,1.4vh,12px)] py-[clamp(6px,1.1vh,10px)] transition-all duration-150 bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.05)] ${f.path ? 'cursor-pointer opacity-100' : 'cursor-default opacity-100'} ${f.path ? 'hover:bg-[rgba(75,63,207,0.06)] hover:border-[rgba(120,100,255,0.25)]' : ''}`}
+                className={`flex flex-1 flex-col gap-1.5 rounded-xl px-[clamp(8px,1.4vh,12px)] py-[clamp(6px,1.1vh,10px)] transition-all duration-150 bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.05)] ${f.path ? 'cursor-pointer opacity-100' : 'cursor-default opacity-100'} ${f.path ? 'hover:bg-[rgb(var(--accent)/0.06)] hover:border-[rgb(var(--accent-hover)/0.25)]' : ''}`}
               >
                 <div className="flex items-center gap-1.5 text-[rgba(255,255,255,0.35)]">
                   <span className="flex-shrink-0 text-[clamp(12px,1.6vh,16px)]">{f.icon}</span>
@@ -1310,14 +1310,14 @@ function NavLink({ label, onClick, plans, accent, distance = 0, badge = 0, child
   // Unités cqw : relatives à la largeur réellement disponible pour la nav (container query),
   // plutôt qu'à la largeur de toute la fenêtre — la nav s'adapte donc à la place qui lui est laissée.
   const d = Math.min(distance, 3)
-  const baseColorClass = plans ? 'text-[#c4b5fd]' : 'text-[rgba(255,255,255,0.9)]'
+  const baseColorClass = plans ? 'text-[rgb(var(--accent-text))]' : 'text-[rgba(255,255,255,0.9)]'
   const bgBorderShadow = plans
-    ? 'bg-[rgba(75,63,207,0.1)] border border-[rgba(120,100,255,0.22)] shadow-[0_0_18px_rgba(75,63,207,0.12)_inset]'
+    ? 'bg-[rgb(var(--accent)/0.1)] border border-[rgb(var(--accent-hover)/0.22)] shadow-[0_0_18px_rgb(var(--accent)/0.12)_inset]'
     : 'bg-transparent border border-transparent shadow-none'
   const hoverClasses = plans
-    ? 'hover:text-[#e9d5ff] hover:bg-[rgba(75,63,207,0.22)] hover:border-[rgba(139,92,246,0.48)]'
+    ? 'hover:text-[#e9d5ff] hover:bg-[rgb(var(--accent)/0.22)] hover:border-[rgba(139,92,246,0.48)]'
     : accent
-      ? 'hover:text-[#c4b5fd] hover:bg-[rgba(139,92,246,0.22)] hover:border-[rgba(139,92,246,0.60)]'
+      ? 'hover:text-[rgb(var(--accent-text))] hover:bg-[rgba(139,92,246,0.22)] hover:border-[rgba(139,92,246,0.60)]'
       : 'hover:text-[rgba(255,255,255,0.92)] hover:bg-[rgba(255,255,255,0.06)]'
 
   return (
@@ -1342,7 +1342,7 @@ function NavLink({ label, onClick, plans, accent, distance = 0, badge = 0, child
       // à côté.
       className={`group relative flex items-center gap-[0.45em] rounded-xl px-[0.85em] py-[0.62em] transition-colors duration-150 whitespace-nowrap cursor-pointer ${NAV_SIZE_CLASSES[d]} ${baseColorClass} ${bgBorderShadow} ${hoverClasses}`}
     >
-      <span className={`relative flex h-[1.35em] w-[1.35em] flex-shrink-0 transition-transform duration-150 ease-out group-hover:scale-110 ${plans ? 'text-[#a78bfa]' : 'text-inherit'}`}>
+      <span className={`relative flex h-[1.35em] w-[1.35em] flex-shrink-0 transition-transform duration-150 ease-out group-hover:scale-110 ${plans ? 'text-[rgb(var(--accent-text))]' : 'text-inherit'}`}>
         {children}
         {/* Posée sur l'icône et non à côté du libellé : elle reste au même
             endroit quelle que soit la longueur du mot, dans une barre dont

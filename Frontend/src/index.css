@@ -20,10 +20,13 @@
    * déroulantes du launcher, et au passage les ascenseurs et les champs. */
   color-scheme: dark;
 
-  /* Fonds */
+  /* Fonds — thème « Nuit », celui de toujours. Les autres thèmes ne
+   * changent que ces quatre valeurs (voir `[data-theme]` plus bas et
+   * `lib/appearance.ts`). `raised` = une carte posée sur une carte. */
   --bg-primary: 9 9 13;
   --bg-secondary: 14 14 20;
   --bg-card: 17 17 24;
+  --bg-raised: 24 24 31;
 
   /* Surfaces posées par-dessus : du plus discret au plus marqué. */
   --surface-1: 255 255 255 / 0.03;
@@ -39,9 +42,12 @@
   --line: 255 255 255 / 0.08;
   --line-strong: 255 255 255 / 0.15;
 
-  /* Accent */
+  /* Accent — violet par défaut. Les autres couleurs sont posées par
+   * `[data-accent]` plus bas. `accent-text` : la teinte claire, lisible en
+   * texte sur fond sombre (l'accent lui-même y est trop foncé). */
   --accent: 75 63 207;
   --accent-hover: 96 84 230;
+  --accent-text: 162 155 254;
   --glow: 75 63 207;
 
   /* Textes : primaire, secondaire, atténué.
@@ -68,6 +74,60 @@
   --motion-base: 220ms;
   --motion-slow: 380ms;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ── Apparence (2026-11-06) ──────────────────────────────────────────────────
+ * Remplace le réglage « Luminosité », qui posait un `filter: brightness()`
+ * sur toute la page : coûteux à chaque repeint, et il délavait les couleurs
+ * au lieu de changer le thème. Ici on ne change que des variables, posées
+ * sur <html> par `lib/appearance.ts` — gratuit au rendu. */
+/* Les valeurs par défaut ont AUSSI leur règle : un aperçu « Nuit » ou une
+ * pastille « Violet » posés dans une page en Graphite / en vert hériteraient
+ * sinon des couleurs de la page. Répète `:root` — modifier les deux. */
+[data-theme='night'] {
+  --bg-primary: 9 9 13;
+  --bg-secondary: 14 14 20;
+  --bg-card: 17 17 24;
+  --bg-raised: 24 24 31;
+}
+[data-accent='violet'] { --accent: 75 63 207; --accent-hover: 96 84 230; --accent-text: 162 155 254; --glow: 75 63 207; }
+[data-theme='oled'] {
+  --bg-primary: 0 0 0;
+  --bg-secondary: 5 5 7;
+  --bg-card: 10 10 13;
+  --bg-raised: 16 16 20;
+}
+[data-theme='graphite'] {
+  --bg-primary: 24 24 30;
+  --bg-secondary: 30 30 37;
+  --bg-card: 36 36 44;
+  --bg-raised: 45 45 54;
+}
+
+[data-accent='blue']   { --accent: 37 99 235;  --accent-hover: 59 130 246; --accent-text: 147 197 253; --glow: 37 99 235; }
+[data-accent='teal']   { --accent: 13 148 136; --accent-hover: 20 184 166; --accent-text: 94 234 212;  --glow: 13 148 136; }
+[data-accent='green']  { --accent: 22 163 74;  --accent-hover: 34 197 94;  --accent-text: 134 239 172; --glow: 22 163 74; }
+[data-accent='pink']   { --accent: 219 39 119; --accent-hover: 236 72 153; --accent-text: 249 168 212; --glow: 219 39 119; }
+[data-accent='orange'] { --accent: 234 88 12;  --accent-hover: 249 115 22; --accent-text: 253 186 116; --glow: 234 88 12; }
+
+/* « Flou de verre » coupé : pour les PC modestes, le flou d'arrière-plan est
+ * l'effet le plus cher de l'interface. */
+[data-blur='off'] *,
+[data-blur='off'] *::before,
+[data-blur='off'] *::after {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+/* « Animations réduites » forcé depuis les réglages, même si le système ne
+ * le demande pas — même règle que le bloc `prefers-reduced-motion`. Les
+ * animations de framer-motion suivent par `MotionConfig` (main.tsx). */
+[data-motion='reduced'] *,
+[data-motion='reduced'] *::before,
+[data-motion='reduced'] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
 }
 
 /* Le menu déroulant d'un `<select>` est dessiné par le système, hors de la
@@ -167,7 +227,7 @@ option {
 .touch-range::-webkit-slider-runnable-track {
   height: 4px;
   border-radius: 9999px;
-  background: linear-gradient(to right, #4b3fcf var(--fill, 0%), rgba(255, 255, 255, 0.12) var(--fill, 0%));
+  background: linear-gradient(to right, rgb(var(--accent)) var(--fill, 0%), rgba(255, 255, 255, 0.12) var(--fill, 0%));
 }
 .touch-range::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -186,7 +246,7 @@ option {
 .touch-range::-moz-range-progress {
   height: 4px;
   border-radius: 9999px;
-  background: #4b3fcf;
+  background: rgb(var(--accent));
 }
 .touch-range::-moz-range-thumb {
   width: 24px;

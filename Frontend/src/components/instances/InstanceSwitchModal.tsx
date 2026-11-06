@@ -32,12 +32,12 @@ export function InstanceSwitchModal({
         onClick={() => { onSelect(inst.id); onClose() }}
         className={`flex flex-col items-start gap-2 rounded-2xl p-3.5 text-left transition-all duration-150 border ${
           selected
-            ? 'bg-[rgba(75,63,207,0.18)] border-[rgba(75,63,207,0.55)] shadow-[0_0_20px_rgba(75,63,207,0.18)]'
+            ? 'bg-[rgb(var(--accent)/0.18)] border-[rgb(var(--accent)/0.55)] shadow-[0_0_20px_rgb(var(--accent)/0.18)]'
             : 'bg-[rgba(255,255,255,0.03)] border-[rgba(255,255,255,0.07)] hover:bg-[rgba(255,255,255,0.06)] hover:border-[rgba(255,255,255,0.12)]'
         }`}
       >
         <div className="flex w-full items-start justify-between gap-2">
-          <div className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl text-[15px] ${selected ? 'bg-[rgba(75,63,207,0.3)]' : 'bg-[rgba(255,255,255,0.05)]'}`}>
+          <div className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl text-[15px] ${selected ? 'bg-[rgb(var(--accent)/0.3)]' : 'bg-[rgba(255,255,255,0.05)]'}`}>
             🧱
           </div>
           {inst.favorite && (
@@ -76,7 +76,7 @@ export function InstanceSwitchModal({
     <button
       key="create"
       onClick={() => { onClose(); navigate('/instances') }}
-      className="flex min-h-[110px] flex-col items-center justify-center gap-2 rounded-2xl p-3.5 transition-all duration-200 border-2 border-dashed border-[rgba(255,255,255,0.1)] text-[rgba(255,255,255,0.3)] hover:border-[rgba(75,63,207,0.45)] hover:text-[rgba(140,130,240,0.8)] hover:bg-[rgba(75,63,207,0.05)]"
+      className="flex min-h-[110px] flex-col items-center justify-center gap-2 rounded-2xl p-3.5 transition-all duration-200 border-2 border-dashed border-[rgba(255,255,255,0.1)] text-[rgba(255,255,255,0.3)] hover:border-[rgb(var(--accent)/0.45)] hover:text-[rgba(140,130,240,0.8)] hover:bg-[rgb(var(--accent)/0.05)]"
     >
       <svg viewBox="0 0 24 24" fill="currentColor" width={22} height={22}>
         <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />

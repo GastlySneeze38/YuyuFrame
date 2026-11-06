@@ -238,7 +238,7 @@ export default function MobilePlans() {
                 <p className="text-[15px] leading-relaxed text-txt-secondary">{t('plans.finalText')}</p>
                 <button
                   onClick={() => setUpgradeTarget('premium')}
-                  className="press mt-1 h-12 w-full rounded-2xl bg-accent text-[16px] font-bold text-txt-primary shadow-[0_8px_28px_rgba(75,63,207,0.35)]"
+                  className="press mt-1 h-12 w-full rounded-2xl bg-accent text-[16px] font-bold text-txt-primary shadow-[0_8px_28px_rgb(var(--accent)/0.35)]"
                 >
                   {t('plans.finalCta')}
                 </button>
@@ -310,7 +310,7 @@ function FeaturedOffer({ plan, current, buttonRef, onChoose, onCompare }: {
 }) {
   const t = useT()
   return (
-    <div className="flex flex-col gap-5 rounded-3xl border border-accent/30 bg-accent/[0.06] p-5 shadow-[0_0_42px_rgba(75,63,207,0.12)]">
+    <div className="flex flex-col gap-5 rounded-3xl border border-accent/30 bg-accent/[0.06] p-5 shadow-[0_0_42px_rgb(var(--accent)/0.12)]">
       <div className="flex items-center gap-2.5">
         <PlanIcon plan={plan.id} color={plan.color} />
         <span className="text-[17px] font-semibold" style={{ color: plan.color }}>{plan.name}</span>

@@ -157,7 +157,7 @@ export default function SyncInstancePage() {
         <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-6 py-6">
           {loading ? (
             <div className="flex items-center justify-center py-20">
-              <ButtonSpinner size={30} color="#818cf8" trackColor="rgba(255,255,255,0.08)" />
+              <ButtonSpinner size={30} color="rgb(var(--accent-text))" trackColor="rgba(255,255,255,0.08)" />
             </div>
           ) : !remote || !manifest ? (
             <p className="py-20 text-center text-[13px] text-txt-muted">{t('sync.instanceGone')}</p>

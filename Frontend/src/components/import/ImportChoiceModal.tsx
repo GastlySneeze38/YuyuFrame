@@ -32,9 +32,9 @@ function ImportRow({ icon, title, desc, onClick }: {
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-3 rounded-xl border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.03)] p-3 text-left transition-all duration-150 hover:border-[rgba(75,63,207,0.35)] hover:bg-[rgba(75,63,207,0.1)]"
+      className="flex items-center gap-3 rounded-xl border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.03)] p-3 text-left transition-all duration-150 hover:border-[rgb(var(--accent)/0.35)] hover:bg-[rgb(var(--accent)/0.1)]"
     >
-      <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[rgba(75,63,207,0.18)] text-[rgba(180,170,255,0.9)]">
+      <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[rgb(var(--accent)/0.18)] text-[rgb(var(--accent-text)/0.9)]">
         <svg viewBox="0 0 24 24" fill="currentColor" width={16} height={16}>
           <path d={icon} />
         </svg>

@@ -47,8 +47,8 @@ export function ModrinthCard({ hit, installed, loading, progress, onInstall, onO
             installed
               ? 'bg-[rgba(255,255,255,0.05)] border-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.3)] cursor-not-allowed'
               : loading
-                ? 'bg-[rgba(40,38,65,0.7)] border-[rgba(75,63,207,0.5)] text-[rgba(255,255,255,0.85)] cursor-not-allowed'
-                : 'bg-[rgba(75,63,207,0.3)] border-[rgba(75,63,207,0.5)] text-[rgba(255,255,255,0.85)] cursor-pointer hover:bg-[rgba(75,63,207,0.5)]'
+                ? 'bg-[rgba(40,38,65,0.7)] border-[rgb(var(--accent)/0.5)] text-[rgba(255,255,255,0.85)] cursor-not-allowed'
+                : 'bg-[rgb(var(--accent)/0.3)] border-[rgb(var(--accent)/0.5)] text-[rgba(255,255,255,0.85)] cursor-pointer hover:bg-[rgb(var(--accent)/0.5)]'
           }`}
         >
           {loading ? (
@@ -61,7 +61,7 @@ export function ModrinthCard({ hit, installed, loading, progress, onInstall, onO
         <div className="flex items-center gap-2 pl-[56px]" onClick={(e) => e.stopPropagation()}>
           <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]">
             <div
-              className="h-full rounded-full bg-[#4B3FCF] transition-all duration-200"
+              className="h-full rounded-full bg-[rgb(var(--accent))] transition-all duration-200"
               style={{ width: `${progress.percent}%` }}
             />
           </div>

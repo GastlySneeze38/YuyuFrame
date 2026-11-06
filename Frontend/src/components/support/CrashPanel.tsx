@@ -123,7 +123,7 @@ export function CrashPanel({ signedIn }: { signedIn: boolean }) {
   if (entries === null) {
     return (
       <div className="flex flex-1 items-center justify-center">
-        <ButtonSpinner size={28} color="#818cf8" trackColor="rgba(255,255,255,0.08)" />
+        <ButtonSpinner size={28} color="rgb(var(--accent-text))" trackColor="rgba(255,255,255,0.08)" />
       </div>
     )
   }

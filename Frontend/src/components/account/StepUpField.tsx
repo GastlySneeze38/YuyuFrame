@@ -67,7 +67,7 @@ export function StepUpField({
           onChange={(e) => onChange(e.target.value)}
           autoComplete="one-time-code"
           placeholder={factor === 'totp' ? t('mfa.stepUpTotp') : t('mfa.stepUpEmail')}
-          className="min-w-0 flex-1 rounded-xl border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.04)] px-3 py-2 text-[13px] text-white outline-none transition-colors duration-150 focus:border-[rgba(75,63,207,0.6)]"
+          className="min-w-0 flex-1 rounded-xl border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.04)] px-3 py-2 text-[13px] text-white outline-none transition-colors duration-150 focus:border-[rgb(var(--accent)/0.6)]"
         />
         {factor === 'email' && (
           <button

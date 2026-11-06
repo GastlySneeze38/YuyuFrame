@@ -95,7 +95,7 @@ export function SkinSourceInput({
             key={m}
             onClick={() => { setMode(m); onChange(null) }}
             className={`flex-1 rounded-md py-1 text-[11px] font-semibold transition-colors ${
-              mode === m ? 'bg-[rgba(75,63,207,0.35)] text-white' : 'text-[rgba(255,255,255,0.35)] hover:text-[rgba(255,255,255,0.6)]'
+              mode === m ? 'bg-[rgb(var(--accent)/0.35)] text-white' : 'text-[rgba(255,255,255,0.35)] hover:text-[rgba(255,255,255,0.6)]'
             }`}
           >
             {t(`skins.source${m[0].toUpperCase()}${m.slice(1)}`)}
@@ -107,7 +107,7 @@ export function SkinSourceInput({
         <button
           onClick={pickFile}
           disabled={busy}
-          className="flex h-10 items-center justify-center gap-2 rounded-xl border border-dashed border-[rgba(255,255,255,0.12)] px-3 text-[12px] text-[rgba(255,255,255,0.5)] transition-colors hover:border-[rgba(75,63,207,0.4)] hover:text-[rgba(255,255,255,0.8)] disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex h-10 items-center justify-center gap-2 rounded-xl border border-dashed border-[rgba(255,255,255,0.12)] px-3 text-[12px] text-[rgba(255,255,255,0.5)] transition-colors hover:border-[rgb(var(--accent)/0.4)] hover:text-[rgba(255,255,255,0.8)] disabled:cursor-not-allowed disabled:opacity-40"
         >
           {busy ? <ButtonSpinner size={14} /> : t('skins.chooseFile')}
         </button>
@@ -123,12 +123,12 @@ export function SkinSourceInput({
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); resolve() } }}
           placeholder={mode === 'player' ? t('skins.playerPlaceholder') : 'https://.../skin.png'}
           maxLength={mode === 'player' ? 16 : undefined}
-          className="h-10 min-w-0 flex-1 rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] px-3 text-sm text-white outline-none transition-colors focus:border-[rgba(75,63,207,0.5)]"
+          className="h-10 min-w-0 flex-1 rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] px-3 text-sm text-white outline-none transition-colors focus:border-[rgb(var(--accent)/0.5)]"
         />
         <button
           onClick={resolve}
           disabled={busy || !(mode === 'player' ? player.trim() : url.trim())}
-          className="flex h-10 w-10 items-center justify-center rounded-xl border border-[rgba(255,255,255,0.1)] text-[rgba(255,255,255,0.6)] transition-colors hover:border-[rgba(75,63,207,0.4)] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex h-10 w-10 items-center justify-center rounded-xl border border-[rgba(255,255,255,0.1)] text-[rgba(255,255,255,0.6)] transition-colors hover:border-[rgb(var(--accent)/0.4)] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
           title={mode === 'player' ? t('skins.search') : t('skins.check')}
         >
           {busy ? (
@@ -152,7 +152,7 @@ export function SkinSourceInput({
       )}
 
       {value && (
-        <div className="flex items-center gap-2 rounded-xl border border-[rgba(75,63,207,0.3)] bg-[rgba(75,63,207,0.08)] p-2">
+        <div className="flex items-center gap-2 rounded-xl border border-[rgb(var(--accent)/0.3)] bg-[rgb(var(--accent)/0.08)] p-2">
           <SkinFace dataUri={value.dataUri} size={32} className="rounded-md" />
           <p className="truncate text-[11px] text-[rgba(255,255,255,0.7)]">
             {value.origin.startsWith('player:')

@@ -30,7 +30,7 @@ export function Segmented<T extends string>({ options, value, onChange, size = '
             size === 'sm' ? 'h-[24px] text-[10px]' : 'h-[28px] text-[11px]'
           } ${
             value === o.id
-              ? 'border-[rgba(75,63,207,0.7)] bg-[rgba(75,63,207,0.35)] text-white'
+              ? 'border-[rgb(var(--accent)/0.7)] bg-[rgb(var(--accent)/0.35)] text-white'
               : 'border-[rgba(255,255,255,0.08)] bg-[rgba(0,0,0,0.35)] text-[rgba(255,255,255,0.45)] hover:border-white/25'
           }`}
         >

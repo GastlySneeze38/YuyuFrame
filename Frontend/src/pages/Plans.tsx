@@ -268,7 +268,7 @@ export default function Plans() {
               whileTap={{ scale: 0.97 }}
               className="relative rounded-xl bg-accent px-7 py-3 text-[14px] font-semibold text-txt-primary transition-colors duration-150 hover:bg-accent-hover"
             >
-              <GlowPulse shadow="0 0 32px rgba(75,63,207,0.45)" duration={3.4} radius="rounded-xl" />
+              <GlowPulse shadow="0 0 32px rgb(var(--accent)/0.45)" duration={3.4} radius="rounded-xl" />
               {t('plans.finalCta')}
             </motion.button>
           </Reveal>
@@ -318,7 +318,7 @@ function FeaturedOffer({
       className="relative mx-auto grid max-w-4xl grid-cols-[1.1fr_1fr] items-center gap-10 rounded-2xl border border-accent/30 bg-accent/[0.06] p-9"
     >
       {/* Respiration très lente de la lueur : l'offre « vit » sans clignoter. */}
-      <GlowPulse shadow="0 0 42px rgba(75,63,207,0.16)" duration={6} radius="rounded-2xl" />
+      <GlowPulse shadow="0 0 42px rgb(var(--accent)/0.16)" duration={6} radius="rounded-2xl" />
       <div className="flex flex-col gap-4">
         <div className="flex items-center gap-2.5">
           <PlanIcon plan={plan.id} color={plan.color} />

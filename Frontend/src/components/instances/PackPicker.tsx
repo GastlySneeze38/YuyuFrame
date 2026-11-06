@@ -95,10 +95,10 @@ export function PackPicker({ choice, onChoice }: {
           value={query}
           onChange={(e) => { setQuery(e.target.value); setPage(1) }}
           placeholder={t('instancesPage.packSearchPlaceholder')}
-          className="h-10 w-full rounded-xl border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.05)] pl-9 pr-9 text-sm text-white outline-none focus:border-[rgba(75,63,207,0.6)]"
+          className="h-10 w-full rounded-xl border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.05)] pl-9 pr-9 text-sm text-white outline-none focus:border-[rgb(var(--accent)/0.6)]"
         />
         {searching && (
-          <ButtonSpinner size={16} color="rgba(75,63,207,0.8)" trackColor="rgba(255,255,255,0.1)" className="absolute right-3 top-1/2 -translate-y-1/2" />
+          <ButtonSpinner size={16} color="rgb(var(--accent)/0.8)" trackColor="rgba(255,255,255,0.1)" className="absolute right-3 top-1/2 -translate-y-1/2" />
         )}
       </div>
 
@@ -114,8 +114,8 @@ export function PackPicker({ choice, onChoice }: {
               onClick={() => { if (!selected) onChoice({ hit, version: null }) }}
               className={`flex flex-col gap-2.5 rounded-2xl border px-3.5 py-3 transition-colors ${
                 selected
-                  ? 'border-[rgba(75,63,207,0.75)] bg-[rgba(75,63,207,0.14)]'
-                  : 'cursor-pointer border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.03)] hover:border-[rgba(75,63,207,0.35)]'
+                  ? 'border-[rgb(var(--accent)/0.75)] bg-[rgb(var(--accent)/0.14)]'
+                  : 'cursor-pointer border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.03)] hover:border-[rgb(var(--accent)/0.35)]'
               }`}
             >
               <div className="flex items-center gap-3">
@@ -152,7 +152,7 @@ export function PackPicker({ choice, onChoice }: {
                         className="h-9 min-w-0 flex-1 rounded-lg border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.35)] px-2 text-[12px] font-medium text-white outline-none"
                       >
                         {versions.map((v) => (
-                          <option key={v.id} value={v.id} className="bg-[#111118]">{versionLabel(v)}</option>
+                          <option key={v.id} value={v.id} className="bg-[rgb(var(--bg-card))]">{versionLabel(v)}</option>
                         ))}
                       </select>
                       {choice?.version?.loaders[0] && (

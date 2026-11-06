@@ -108,7 +108,7 @@ export function AddServerView({
                 <span className="truncate text-[13px] text-white/55"><span style={{ color: loaderColor(i.loader) }}>{i.loader}</span> · {i.mc_version}</span>
               </span>
               {target === i.id && (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0 text-[#a29bfe]"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0 text-[rgb(var(--accent-text))]"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
               )}
             </button>
           ))}

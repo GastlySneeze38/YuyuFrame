@@ -55,7 +55,7 @@ export function ModpackBanner({
                 <span className="ml-auto text-[11px] font-semibold tabular-nums text-[rgba(255,255,255,0.5)]">{installProgress.percent} %</span>
               </div>
               <div className="h-1.5 overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]">
-                <div className="h-full rounded-full bg-[#4B3FCF] transition-all duration-200" style={{ width: `${installProgress.percent}%` }} />
+                <div className="h-full rounded-full bg-[rgb(var(--accent))] transition-all duration-200" style={{ width: `${installProgress.percent}%` }} />
               </div>
               <p className="truncate text-[10.5px] text-[rgba(255,255,255,0.4)]">{installProgress.label}</p>
             </div>
@@ -95,7 +95,7 @@ export function ModpackBanner({
             <svg viewBox="0 0 24 24" fill="currentColor" width={14} height={14}><path d="M12 8a2 2 0 100-4 2 2 0 000 4zm0 2a2 2 0 100 4 2 2 0 000-4zm0 8a2 2 0 100 4 2 2 0 000-4z" /></svg>
           </motion.button>
           {menuOpen && (
-            <div className="absolute right-0 top-9 z-20 flex flex-col gap-0.5 rounded-xl p-1 w-[190px] bg-[#191923] border border-[rgba(255,255,255,0.1)] shadow-[0_12px_30px_rgba(0,0,0,0.5)]">
+            <div className="absolute right-0 top-9 z-20 flex flex-col gap-0.5 rounded-xl p-1 w-[190px] bg-[rgb(var(--bg-raised))] border border-[rgba(255,255,255,0.1)] shadow-[0_12px_30px_rgba(0,0,0,0.5)]">
               <motion.button {...press} onClick={onToggleShowContent} className="rounded-lg px-3 py-2 text-left transition-all duration-150 text-[12px] text-[rgba(255,255,255,0.8)] hover:bg-[rgba(255,255,255,0.06)]">
                 {showPackContent ? t('mods.hidePackContent') : t('mods.showPackContent')}
               </motion.button>

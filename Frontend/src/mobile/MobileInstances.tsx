@@ -223,7 +223,7 @@ export default function MobileInstances() {
       <div className="flex shrink-0 gap-2 border-t border-white/[0.06] bg-bg-primary px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3">
         <button
           onClick={() => setShowCreate(true)}
-          className="press flex h-[52px] min-w-0 flex-1 items-center justify-center gap-2 rounded-2xl bg-[#4B3FCF] text-[16px] font-bold text-white shadow-[0_6px_24px_rgba(75,63,207,0.35)]"
+          className="press flex h-[52px] min-w-0 flex-1 items-center justify-center gap-2 rounded-2xl bg-[rgb(var(--accent))] text-[16px] font-bold text-white shadow-[0_6px_24px_rgb(var(--accent)/0.35)]"
         >
           <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 shrink-0"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" /></svg>
           <span className="truncate">{t('instancesPage.newInstance')}</span>
@@ -255,7 +255,7 @@ export default function MobileInstances() {
               <button
                 onClick={closeInstance}
                 aria-label={t('instancesPage.title')}
-                className="press flex h-11 w-11 items-center justify-center rounded-full text-[#a29bfe]"
+                className="press flex h-11 w-11 items-center justify-center rounded-full text-[rgb(var(--accent-text))]"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
                   <path d="M15 6l-6 6 6 6" />

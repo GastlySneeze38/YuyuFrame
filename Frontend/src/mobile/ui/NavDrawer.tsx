@@ -108,13 +108,13 @@ export function NavDrawer() {
         onClick={() => go(e.path)}
         aria-current={active ? 'page' : undefined}
         className={`press flex h-[52px] w-full items-center gap-3.5 rounded-2xl px-3.5 text-left transition-colors duration-150 ${
-          active ? 'bg-white/[0.08] text-white' : e.accent ? 'text-[#c4b5fd]' : 'text-white/75'
+          active ? 'bg-white/[0.08] text-white' : e.accent ? 'text-[rgb(var(--accent-text))]' : 'text-white/75'
         }`}
       >
         <svg
           viewBox="0 0 24 24"
           fill="currentColor"
-          className={`h-[22px] w-[22px] shrink-0 ${active ? 'text-[#a29bfe]' : e.accent ? 'text-[#a78bfa]' : 'text-white/55'}`}
+          className={`h-[22px] w-[22px] shrink-0 ${active ? 'text-[rgb(var(--accent-text))]' : e.accent ? 'text-[rgb(var(--accent-text))]' : 'text-white/55'}`}
         >
           {e.icon}
         </svg>
@@ -194,7 +194,7 @@ export function NavDrawer() {
                   </span>
                   <span className="flex min-w-0 flex-1 flex-col">
                     <span className="truncate text-[15px] font-semibold text-white">{yuyuUsername}</span>
-                    <span className={`truncate text-[13px] ${yuyuPlan === 'free' ? 'text-white/55' : 'font-semibold text-[#c4b5fd]'}`}>
+                    <span className={`truncate text-[13px] ${yuyuPlan === 'free' ? 'text-white/55' : 'font-semibold text-[rgb(var(--accent-text))]'}`}>
                       {t('account.yuyuAccount')} · {PLAN_NAMES[yuyuPlan] ?? t('account.freePlan')}
                     </span>
                   </span>
@@ -206,7 +206,7 @@ export function NavDrawer() {
                   <div className="flex gap-2">
                     <button
                       onClick={() => go('/yuyu?mode=login')}
-                      className="press h-11 min-w-0 flex-1 rounded-xl bg-[#4B3FCF] px-3 text-[15px] font-bold text-white"
+                      className="press h-11 min-w-0 flex-1 rounded-xl bg-[rgb(var(--accent))] px-3 text-[15px] font-bold text-white"
                     >
                       {t('account.signIn')}
                     </button>

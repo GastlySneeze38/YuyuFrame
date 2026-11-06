@@ -54,14 +54,14 @@ export function LanguagePickerModal({ current, onPick, onClose }: {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t('options.langPickerSearch')}
-            className="h-9 w-full rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] pl-9 pr-3 text-[13px] text-white outline-none transition-colors duration-150 focus:border-[rgba(75,63,207,0.5)]"
+            className="h-9 w-full rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] pl-9 pr-3 text-[13px] text-white outline-none transition-colors duration-150 focus:border-[rgb(var(--accent)/0.5)]"
           />
         </div>
 
         {unknown && !query && (
           <button
             onClick={() => { onPick(unknown); onClose() }}
-            className="flex items-center gap-3 rounded-xl border border-[rgba(75,63,207,0.5)] bg-[rgba(75,63,207,0.2)] px-3 py-2.5 text-left"
+            className="flex items-center gap-3 rounded-xl border border-[rgb(var(--accent)/0.5)] bg-[rgb(var(--accent)/0.2)] px-3 py-2.5 text-left"
           >
             <div className="flex min-w-0 flex-col">
               <span className="truncate text-[12.5px] font-semibold text-white">{unknown}</span>
@@ -79,8 +79,8 @@ export function LanguagePickerModal({ current, onPick, onClose }: {
                 onClick={() => { onPick(lang.code); onClose() }}
                 className={`flex items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left transition-colors duration-150 ${
                   active
-                    ? 'border-[rgba(75,63,207,0.6)] bg-[rgba(75,63,207,0.28)]'
-                    : 'border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.02)] hover:border-[rgba(75,63,207,0.35)] hover:bg-[rgba(75,63,207,0.1)]'
+                    ? 'border-[rgb(var(--accent)/0.6)] bg-[rgb(var(--accent)/0.28)]'
+                    : 'border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.02)] hover:border-[rgb(var(--accent)/0.35)] hover:bg-[rgb(var(--accent)/0.1)]'
                 }`}
               >
                 <Flag spec={lang.flag} size={20} />
@@ -91,7 +91,7 @@ export function LanguagePickerModal({ current, onPick, onClose }: {
                   <span className="truncate font-mono text-[10px] text-[rgba(255,255,255,0.3)]">{lang.code}</span>
                 </div>
                 {active && (
-                  <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13} className="flex-shrink-0 text-[rgba(180,170,255,0.9)]">
+                  <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13} className="flex-shrink-0 text-[rgb(var(--accent-text)/0.9)]">
                     <path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" />
                   </svg>
                 )}
