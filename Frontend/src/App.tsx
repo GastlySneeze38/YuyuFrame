@@ -34,6 +34,7 @@ import { AUTH_SYSTEM_VERSION, YUYU_AUTH_VERSION } from '@/config/authVersion'
 import { useTauriEvent } from '@/hooks/useTauriEvent'
 import { parseFriendUrl, parseInviteUrl, parseJoinUrl } from '@/lib/joinLink'
 import { inTauri } from '@/lib/platform'
+import { startHeadPreload } from '@/lib/headPreload'
 import { useIsMobile } from '@/mobile/useIsMobile'
 import { DRAWER_ROOTS, NavDrawer } from '@/mobile/ui/NavDrawer'
 
@@ -162,6 +163,8 @@ export default function App() {
   useEffect(() => {
     if (!emailVerificationRequired) setVerifyLater(false)
   }, [emailVerificationRequired])
+  // Les têtes de toute l'interface, préparées en arrière-plan dès le lancement.
+  useEffect(() => startHeadPreload(), [])
   // Les trois modales de démarrage ne sont plus des drapeaux locaux : elles
   // sont déposées dans la file, qui décide de l'ordre et n'en montre qu'une
   // à la fois (voir stores/useModalQueue.ts).

@@ -517,6 +517,16 @@ export interface ApiBoard {
   total: number
 }
 
+/** Tout l'écran compétitif en une requête (`/v1/ranked/overview`). Un bloc
+ *  absent = sa lecture a échoué côté serveur. */
+export interface ApiOverview {
+  state: unknown
+  summary: ApiSummary | null
+  history: { mace: ApiHistoryPage; sword: ApiHistoryPage } | null
+  leaderboard: { mace: ApiBoard; sword: ApiBoard } | null
+  friends_leaderboard: { mace: ApiBoard; sword: ApiBoard } | null
+}
+
 /** La page compétitive d'un ami (`/v1/friends/{id}/competitive`). */
 export interface ApiFriendCompetitive {
   account: { uuid: string; name: string; main: boolean } | null

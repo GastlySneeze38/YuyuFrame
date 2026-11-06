@@ -20,7 +20,8 @@ import { SNAP } from '@/lib/motion'
 import { useT } from '@/i18n'
 import { useIsMobile } from '@/mobile/useIsMobile'
 import { MobileCompetitive } from '@/mobile/competitive/MobileCompetitive'
-import { readCache, writeCache } from '@/lib/persistentCache'
+import { playerSkinSrc, preloadHeads } from '@/lib/heads'
+import { cachedCompetitive, fetchMyCompetitive, fromSummary } from '@/lib/competitiveLoad'
 import {
   MODES,
   bestMode,
@@ -28,14 +29,8 @@ import {
   emptyStanding,
   readBoard,
   readDuel,
-  readSeasons,
-  readStandings,
-  readStats,
-  readSummaryStandings,
   serverStats,
-  type ApiSummary,
   type CompetitiveData,
-  type DuelRow,
   type ModeKey,
   type Standing,
 } from '@/lib/competitive'
@@ -78,21 +73,6 @@ type Status =
   | { kind: 'friendHidden' }
   | { kind: 'friendNoAccount' }
   | { kind: 'error'; message: string }
-
-/** Les données de l'onglet à partir du résumé du serveur (le mien ou celui d'un ami). */
-function fromSummary(s: ApiSummary, duels: DuelRow[] | null, leaderboard: CompetitiveData['leaderboard']): CompetitiveData {
-  return {
-    standings: readSummaryStandings(s),
-    leaderboard,
-    duels,
-    stats: readStats(s),
-    challenges: null,
-    seasons: readSeasons(s),
-    battlePass: null,
-    seasonWins: Object.fromEntries(s.modes.map((m) => [m.mode, m.season_wins])),
-    seasonWinCount: Object.fromEntries(s.modes.map((m) => [m.mode, m.season_win_count])),
-  }
-}
 
 export default function Competitive() {
   const t = useT()
@@ -153,41 +133,10 @@ export default function Competitive() {
     // Les dernières données connues d'abord (2026-11-06) : l'onglet s'ouvre
     // rempli, puis se met à jour — au lieu d'un écran de chargement à chaque
     // lancement. Préfixe `user:` : effacé à la déconnexion.
-    const cacheKey = `user:competitive:${uuid}`
-    const cached = readCache<CompetitiveData>(cacheKey, 7 * 24 * 3600_000)?.value
+    const cached = cachedCompetitive(uuid)?.value
     setStatus(cached ? { kind: 'ready', data: cached } : { kind: 'loading' })
     try {
-      const answer = await api.ranked.state(uuid)
-      // Le reste à part : une API qui ne connaît pas encore ces routes laisse
-      // leurs écrans sur « bientôt » sans empêcher d'afficher le rang.
-      const [summary, mace, sword, boardMace, boardSword, friendsMace, friendsSword] = await Promise.allSettled([
-        api.ranked.summary(uuid),
-        api.ranked.history(uuid, 'mace'),
-        api.ranked.history(uuid, 'sword'),
-        api.ranked.leaderboard('mace', uuid),
-        api.ranked.leaderboard('sword', uuid),
-        api.ranked.friendsLeaderboard('mace', uuid),
-        api.ranked.friendsLeaderboard('sword', uuid),
-      ])
-      const s = summary.status === 'fulfilled' ? summary.value : null
-      const duels =
-        mace.status === 'fulfilled' && sword.status === 'fulfilled'
-          ? [...mace.value.duels, ...sword.value.duels].map(readDuel).sort((a, b) => b.at - a.at)
-          : null
-      const leaderboard =
-        boardMace.status === 'fulfilled' && boardSword.status === 'fulfilled'
-          ? { mace: readBoard(boardMace.value, uuid), sword: readBoard(boardSword.value, uuid) }
-          : null
-      const friendsLeaderboard =
-        friendsMace.status === 'fulfilled' && friendsSword.status === 'fulfilled'
-          ? { mace: readBoard(friendsMace.value, uuid, true), sword: readBoard(friendsSword.value, uuid, true) }
-          : null
-      const base = s
-        ? fromSummary(s, duels, leaderboard)
-        : { standings: readStandings(answer), leaderboard, duels, stats: null, challenges: null, seasons: null, battlePass: null, seasonWins: null }
-      const fresh = { ...base, friendsLeaderboard }
-      writeCache(cacheKey, fresh)
-      setStatus({ kind: 'ready', data: fresh })
+      setStatus({ kind: 'ready', data: await fetchMyCompetitive(uuid) })
     } catch (e) {
       const code = errorCode(e)
       if (code === 'ranked_unavailable') setStatus({ kind: 'unavailable' })
@@ -202,6 +151,19 @@ export default function Competitive() {
   }, [load])
 
   const data = status.kind === 'ready' ? status.data : null
+  // Les têtes des autres vues (l'autre mode, le classement, les adversaires)
+  // se résolvent en arrière-plan : changer d'écran ne montre plus de carrés vides.
+  useEffect(() => {
+    if (!data) return
+    const rows = [
+      ...Object.values(data.leaderboard ?? {}).flat(),
+      ...Object.values(data.friendsLeaderboard ?? {}).flat(),
+    ]
+    preloadHeads([
+      ...rows.map((r) => playerSkinSrc(r.uuid, r.name)),
+      ...(data.duels ?? []).slice(0, 60).map((d) => playerSkinSrc(d.opponentUuid, d.opponent)),
+    ])
+  }, [data])
   // Le mode montré d'abord : celui où l'on est le plus avancé.
   const shown: ModeKey = mode ?? (data ? bestMode(data.standings) : 'mace')
   const standing = data?.standings.find((s) => s.mode === shown) ?? emptyStanding(shown)

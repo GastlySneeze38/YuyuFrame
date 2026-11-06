@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '@/api/client'
+import { background, isQuiet } from '@/lib/netQueue'
 
 /**
  * Les têtes de joueurs du launcher (classement, amis, historique des duels,
@@ -20,6 +21,16 @@ import { api } from '@/api/client'
  *   se partagent la même promesse ;
  * - côté Rust, le lien joueur → texture tient une demi-heure et la texture
  *   est sur le disque : relancer le launcher ne retélécharge rien.
+ * - (2026-11-06) **préchargement paresseux** : dès le lancement, les têtes
+ *   que l'interface affichera (amis, classement, adversaires, comptes —
+ *   `lib/headPreload.ts`) sont résolues en arrière-plan par `preloadHeads`,
+ *   par petits lots, une à la fois, et seulement quand le navigateur est au
+ *   repos — jamais au détriment de ce que l'écran charge. Ouvrir un écran
+ *   montre alors ses têtes tout de suite. Une tête qu'un écran demande passe
+ *   devant la file (`headOf` direct).
+ * - Les têtes restent **en mémoire seulement**, le temps de la session :
+ *   rien n'est écrit sur le disque, rien ne s'accumule d'un lancement à
+ *   l'autre (décision du 2026-11-06).
  *
  * ── Le rendu ─────────────────────────────────────────────────────────────
  * La tête est découpée une fois en une image de 8 × 8 (visage puis couche du
@@ -121,22 +132,96 @@ async function resolveHead(src: string): Promise<string | null> {
   }
 }
 
+// ── En mémoire, pour la session ────────────────────────────────────────────
+
+/** Têtes résolues pendant cette session, lisibles sans attendre. */
+const ready = new Map<string, string>()
+
 /** La tête 8 × 8 d'un skin (data URI ou adresse), découpée une fois par session. */
 export function headOf(src: string): Promise<string | null> {
   const known = heads.get(src)
   if (known) return known
-  const promise = resolveHead(src)
+  const promise = resolveHead(src).then((head) => {
+    if (head) ready.set(src, head)
+    // Échec (Mojang muet…) : on retentera au prochain affichage.
+    else heads.delete(src)
+    return head
+  })
   heads.set(src, promise)
   return promise
 }
 
-/** La tête d'un skin pour un composant : `null` tant qu'elle n'est pas prête. */
+// ── Préchargement paresseux ────────────────────────────────────────────────
+//
+// Une file, vidée par petits lots (`LOT`, qui partent en un seul appel au
+// Rust), un lot à la fois, chacun attendant que le navigateur soit au repos
+// (`requestIdleCallback`). Rien ne part pendant le démarrage (porte ouverte
+// par `background`), ni fenêtre cachée ou partie en cours (`isQuiet`).
+
+const LOT = 8
+const queue: string[] = []
+const queued = new Set<string>()
+let gateOpen = false
+let gateAsked = false
+let pumping = false
+
+function whenIdle(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof requestIdleCallback === 'function') requestIdleCallback(() => resolve(), { timeout: 3000 })
+    else setTimeout(resolve, 200)
+  })
+}
+
+async function pump() {
+  if (pumping || !gateOpen) return
+  pumping = true
+  try {
+    while (queue.length > 0) {
+      await whenIdle()
+      if (isQuiet()) {
+        await new Promise((r) => setTimeout(r, 5000))
+        continue
+      }
+      const lot = queue.splice(0, LOT)
+      lot.forEach((src) => queued.delete(src))
+      await Promise.all(lot.filter((src) => !ready.has(src)).map(headOf))
+    }
+  } finally {
+    pumping = false
+  }
+}
+
+/**
+ * Met de côté les têtes que l'interface affichera (amis, classement,
+ * adversaires, comptes) : elles se résolvent en arrière-plan, sans gêner le
+ * reste, et l'écran qui les montre les trouve prêtes.
+ */
+export function preloadHeads(srcs: Iterable<string>): void {
+  for (const src of srcs) {
+    if (ready.has(src) || heads.has(src) || queued.has(src)) continue
+    queued.add(src)
+    queue.push(src)
+  }
+  if (queue.length === 0) return
+  if (!gateAsked) {
+    gateAsked = true
+    background(() => {
+      gateOpen = true
+      void pump()
+    })
+  }
+  void pump()
+}
+
+/** La tête d'un skin pour un composant : tout de suite si elle est déjà
+ *  prête (préchargée), sinon `null` le temps de la résoudre. */
 export function useHead(src: string): string | null {
-  const [head, setHead] = useState<string | null>(null)
+  const [head, setHead] = useState<string | null>(() => ready.get(src) ?? null)
   useEffect(() => {
     let alive = true
-    setHead(null)
-    headOf(src).then((h) => alive && setHead(h))
+    const now = ready.get(src) ?? null
+    setHead(now)
+    if (!now) headOf(src).then((h) => alive && setHead(h))
     return () => {
       alive = false
     }

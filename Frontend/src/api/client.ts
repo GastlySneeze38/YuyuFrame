@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
 import type { SupportCategory, TicketDetail, TicketSummary } from '@/types/support'
 import type { ApiReceivedInvite, DiscordLink, FriendEvent, FriendList, FriendSettings, LookupResult, MyProfile, MyStatus, MyStatusKind, PublicProfile, ReportReason, RequestSent } from '@/types/friends'
 import type { LocalCrashReport, LocalCrashSummary, RemoteCrashSummary } from '@/types/crash'
-import type { ApiBoard, ApiFriendCompetitive, ApiHistoryPage, ApiPass, ApiSummary, ModeKey } from '@/lib/competitive'
+import type { ApiBoard, ApiFriendCompetitive, ApiHistoryPage, ApiOverview, ApiPass, ApiSummary, ModeKey } from '@/lib/competitive'
 import type { BackupDetail, BackupOverview, BackupSettings, BackupSummary, InstanceBackupSettings } from '@/types/backup'
 import type { AuthStatus, CompatResult, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, HealthCheck, JavaReport, JavaStatus, JvmProfile, LoaderVersion, McOption, OptionsSummary, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PackInfo, PackKind, PollResponse, SaveInfo, OptionsLinkInfo, ScanResult, SharedOptionsStatus, ShareExport, ShareLinkStatus, ShareImport, SharePreview, ShareScan, ShareSource, StatsData, StatsQuery, ReferencedMod, SyncDiff, SyncInstance, SyncManifest, SystemMemoryInfo, Version } from '@/types'
 
@@ -885,6 +885,8 @@ export const api = {
     summary: (uuid: string) => invoke<ApiSummary>('ranked_summary', { uuid }),
     leaderboard: (mode: ModeKey, uuid?: string) => invoke<ApiBoard>('ranked_leaderboard', { mode, uuid: uuid ?? null }),
     friendsLeaderboard: (mode: ModeKey, uuid?: string) => invoke<ApiBoard>('ranked_friends_leaderboard', { mode, uuid: uuid ?? null }),
+    /** Tout l'écran en une requête ; `ranked_unavailable` sur une API d'avant. */
+    overview: (uuid: string) => invoke<ApiOverview>('ranked_overview', { uuid }),
   },
 
   /** Amis (`/v1/friends`). Les changements arrivent aussi en direct par

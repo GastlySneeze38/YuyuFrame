@@ -100,3 +100,13 @@ pub async fn ranked_leaderboard(state: tauri::State<'_, SharedState>, mode: Stri
     }
     api::get(&state, "/ranked/leaderboard", &query).await.map_err(|e| String::from(explain(e)))
 }
+
+/// Tout l'écran compétitif en une requête (`/ranked/overview`, 2026-11-06) :
+/// `{ state, summary?, history?: {mace, sword}, leaderboard?: {mace, sword},
+/// friends_leaderboard?: {mace, sword} }`. Sur une API d'avant cette route,
+/// `ranked_unavailable` : l'interface retombe alors sur les appels séparés.
+#[tauri::command]
+pub async fn ranked_overview(state: tauri::State<'_, SharedState>, uuid: String) -> Result<Value, String> {
+    let uuid = clean_uuid(&uuid)?;
+    api::get(&state, &format!("/ranked/overview/{uuid}"), &[]).await.map_err(|e| String::from(explain(e)))
+}
