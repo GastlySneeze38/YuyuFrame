@@ -76,7 +76,8 @@ export function ModalShell({
         dismissible={closeOnEscape}
         label={title}
         full={cardStyle?.height !== undefined}
-        bodyClassName={bare ? 'flex flex-col' : 'flex flex-col gap-5 px-5 pb-5'}
+        // `sheet-touch` : plancher de lecture et de toucher (index.css).
+        bodyClassName={bare ? 'sheet-touch flex flex-col' : 'sheet-touch flex flex-col gap-5 px-5 pb-5'}
         header={title !== undefined && (
           <SheetTitle
             action={counter && counter.total > 1 && (

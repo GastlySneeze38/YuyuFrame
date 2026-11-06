@@ -65,7 +65,7 @@ export function AccountMenu() {
         title={yuyuUsername}
         aria-label={yuyuUsername}
         aria-expanded={open}
-        className={`flex h-7 w-7 items-center justify-center rounded-full text-[12px] font-black ring-2 transition-transform duration-150 hover:scale-105 ${PLAN_COLORS[plan]}`}
+        className={`flex h-7 w-7 items-center justify-center rounded-full text-[12px] font-black ring-2 transition-transform duration-150 hover:scale-105 max-sm:h-10 max-sm:w-10 max-sm:text-[15px] ${PLAN_COLORS[plan]}`}
       >
         {yuyuUsername.charAt(0).toUpperCase()}
       </button>

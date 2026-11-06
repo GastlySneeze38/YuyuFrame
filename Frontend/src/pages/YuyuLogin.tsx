@@ -253,7 +253,9 @@ export default function YuyuLogin() {
           : !!username && !!password
 
   return (
-    <div className="relative flex h-full flex-col items-center justify-center overflow-hidden bg-[#09090D]">
+    // Téléphone : une colonne qui défile au lieu d'un bloc centré — le clavier
+    // ouvert prend la moitié de l'écran, le formulaire doit rester atteignable.
+    <div className="relative flex h-full flex-col items-center justify-center overflow-hidden bg-[#09090D] max-sm:justify-start max-sm:overflow-y-auto max-sm:overscroll-contain max-sm:pb-[max(32px,env(safe-area-inset-bottom))] max-sm:pt-[max(64px,calc(env(safe-area-inset-top)+56px))]">
       <BackButton onClick={() => navigate('/home')} />
 
       {/* Background glow */}
@@ -261,7 +263,7 @@ export default function YuyuLogin() {
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_60%,rgba(75,63,207,0.07)_0%,transparent_65%)]"
       />
 
-      <div className="relative z-10 flex w-full max-w-sm flex-col gap-6 px-6">
+      <div className="relative z-10 flex w-full max-w-sm flex-col gap-6 px-6 max-sm:px-4">
 
         {/* Branding */}
         <div className="flex flex-col items-center gap-2">
@@ -271,7 +273,7 @@ export default function YuyuLogin() {
               YuyuFrame
             </span>
           </div>
-          <p className="text-[11px] text-[rgba(255,255,255,0.3)] text-center">
+          <p className="text-[11px] text-[rgba(255,255,255,0.3)] text-center max-sm:text-[15px] max-sm:text-white/60">
             {isRegister
               ? t('yuyuLogin.registerTagline')
               : t('yuyuLogin.loginTagline')}
@@ -280,11 +282,11 @@ export default function YuyuLogin() {
 
         {/* Card */}
         <div
-          className="flex flex-col gap-5 rounded-2xl p-6 bg-[rgba(255,255,255,0.025)] border border-[rgba(255,255,255,0.07)]"
+          className="flex flex-col gap-5 rounded-2xl p-6 bg-[rgba(255,255,255,0.025)] border border-[rgba(255,255,255,0.07)] max-sm:p-5"
         >
           <div>
-            <h2 className="font-bold text-white text-[15px]">{title}</h2>
-            <p className="text-[11px] text-[rgba(255,255,255,0.3)] mt-0.5">{subtitle}</p>
+            <h2 className="font-bold text-white text-[15px] max-sm:text-[18px]">{title}</h2>
+            <p className="text-[11px] text-[rgba(255,255,255,0.3)] mt-0.5 max-sm:text-[13px] max-sm:text-white/55">{subtitle}</p>
           </div>
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-3">
@@ -300,7 +302,7 @@ export default function YuyuLogin() {
                   <button
                     type="button"
                     onClick={resendMfa}
-                    className="self-end text-[11px] text-[#7B6EE8] bg-transparent border-0 cursor-pointer p-0"
+                    className="self-end text-[11px] text-[#7B6EE8] bg-transparent border-0 cursor-pointer p-0 max-sm:min-h-[44px] max-sm:text-[15px]"
                   >
                     {t('mfa.resend')}
                   </button>
@@ -355,12 +357,12 @@ export default function YuyuLogin() {
               />
             )}
             {isRegister && (
-              <label className="flex cursor-pointer items-start gap-2.5 text-[11.5px] leading-relaxed text-[rgba(255,255,255,0.55)]">
+              <label className="flex cursor-pointer items-start gap-2.5 text-[11.5px] leading-relaxed text-[rgba(255,255,255,0.55)] max-sm:gap-3 max-sm:py-1 max-sm:text-[15px] max-sm:text-white/70">
                 <input
                   type="checkbox"
                   checked={acceptPrivacy}
                   onChange={(e) => setAcceptPrivacy(e.target.checked)}
-                  className="mt-[3px] h-3.5 w-3.5 shrink-0 cursor-pointer accent-[#4B3FCF]"
+                  className="mt-[3px] h-3.5 w-3.5 shrink-0 cursor-pointer accent-[#4B3FCF] max-sm:h-5 max-sm:w-5"
                 />
                 <span>
                   {t('yuyuLogin.privacyAccept')}{' '}
@@ -381,7 +383,7 @@ export default function YuyuLogin() {
               <button
                 type="button"
                 onClick={() => { setMode('forgot'); setPassword('') }}
-                className="self-end text-[11px] text-[#7B6EE8] bg-transparent border-0 cursor-pointer p-0"
+                className="self-end text-[11px] text-[#7B6EE8] bg-transparent border-0 cursor-pointer p-0 max-sm:min-h-[44px] max-sm:text-[15px]"
               >
                 {t('yuyuLogin.forgot')}
               </button>
@@ -390,7 +392,7 @@ export default function YuyuLogin() {
             <button
               type="submit"
               disabled={loading || !canSubmit}
-              className="mt-1 w-full rounded-xl py-3 font-bold text-white transition-all duration-150 active:scale-95 text-[14px] bg-[#4B3FCF] shadow-[0_4px_24px_rgba(75,63,207,0.38)] cursor-pointer enabled:hover:bg-[#6155e8] disabled:bg-[rgba(40,38,65,0.7)] disabled:shadow-none disabled:cursor-not-allowed"
+              className="mt-1 w-full rounded-xl py-3 font-bold text-white transition-all duration-150 active:scale-95 text-[14px] max-sm:h-12 max-sm:rounded-2xl max-sm:py-0 max-sm:text-[16px] bg-[#4B3FCF] shadow-[0_4px_24px_rgba(75,63,207,0.38)] cursor-pointer enabled:hover:bg-[#6155e8] disabled:bg-[rgba(40,38,65,0.7)] disabled:shadow-none disabled:cursor-not-allowed"
             >
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
@@ -407,16 +409,16 @@ export default function YuyuLogin() {
         </div>
 
         {/* Toggle login / register — ou retour, depuis le mot de passe oublié */}
-        <div className="flex items-center justify-center gap-1.5">
+        <div className="flex flex-wrap items-center justify-center gap-x-1.5">
           {!isRecovery && (
-            <span className="text-[11px] text-[rgba(255,255,255,0.3)]">
+            <span className="text-[11px] text-[rgba(255,255,255,0.3)] max-sm:text-[15px] max-sm:text-white/55">
               {isRegister ? t('yuyuLogin.alreadyHaveAccount') : t('yuyuLogin.noAccountYet')}
             </span>
           )}
           <button
             type="button"
             onClick={() => { setMode(isRegister || isRecovery ? 'login' : 'register'); setConfirm(''); setPassword(''); setCode(''); setMfa(null) }}
-            className="text-[11px] text-[#7B6EE8] bg-transparent border-0 cursor-pointer p-0"
+            className="text-[11px] text-[#7B6EE8] bg-transparent border-0 cursor-pointer p-0 max-sm:min-h-[44px] max-sm:text-[15px] max-sm:font-semibold"
           >
             {isRecovery ? t('yuyuLogin.backToLogin') : isRegister ? t('yuyuLogin.signIn') : t('yuyuLogin.createAccount')}
           </button>
@@ -434,7 +436,7 @@ export default function YuyuLogin() {
             <rect x="3" y="11" width="18" height="11" rx="2" />
             <path d="M7 11V7a5 5 0 0 1 10 0v4" />
           </svg>
-          <span className="text-[10px] text-[rgba(255,255,255,0.18)]">
+          <span className="text-[10px] text-[rgba(255,255,255,0.18)] max-sm:text-[13px] max-sm:text-white/45">
             {t('yuyuLogin.securityNote')}
           </span>
         </div>
@@ -448,7 +450,8 @@ function BackButton({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="absolute left-5 top-5 flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-semibold text-[rgba(255,255,255,0.4)] transition-all duration-150 hover:bg-[rgba(255,255,255,0.05)] hover:text-white"
+      // Téléphone : sous la barre d'état, 44 px de haut, la couleur des retours des autres écrans.
+      className="absolute left-5 top-5 z-20 flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-semibold text-[rgba(255,255,255,0.4)] transition-all duration-150 hover:bg-[rgba(255,255,255,0.05)] hover:text-white max-sm:left-2 max-sm:top-[max(8px,env(safe-area-inset-top))] max-sm:h-11 max-sm:text-[15px] max-sm:text-[#a29bfe] max-sm:[&>svg]:h-5 max-sm:[&>svg]:w-5"
     >
       <svg viewBox="0 0 24 24" fill="currentColor" width={11} height={11}><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" /></svg>
       {t('yuyuLogin.back')}
@@ -469,7 +472,7 @@ function YuyuInput({
   return (
     <div>
       <label
-        className="mb-1.5 block text-[10px] text-[rgba(255,255,255,0.4)] font-semibold tracking-[0.08em] uppercase"
+        className="mb-1.5 block text-[10px] text-[rgba(255,255,255,0.4)] font-semibold tracking-[0.08em] uppercase max-sm:text-[13px] max-sm:tracking-[0.05em] max-sm:text-white/55"
       >
         {label}
       </label>
@@ -479,7 +482,10 @@ function YuyuInput({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         autoFocus={autoFocus}
-        className="w-full rounded-xl px-4 py-3 text-sm text-white outline-none transition-all duration-150 bg-[rgba(0,0,0,0.4)] border border-[rgba(255,255,255,0.08)] focus:border-[rgba(75,63,207,0.55)]"
+        // 16 px sur téléphone : en dessous, iOS agrandit la page à la saisie.
+        autoCapitalize={type === 'text' || type === 'email' ? 'none' : undefined}
+        autoCorrect="off"
+        className="w-full rounded-xl px-4 py-3 text-sm text-white outline-none transition-all duration-150 bg-[rgba(0,0,0,0.4)] border border-[rgba(255,255,255,0.08)] focus:border-[rgba(75,63,207,0.55)] max-sm:h-12 max-sm:py-0 max-sm:text-[16px]"
       />
     </div>
   )

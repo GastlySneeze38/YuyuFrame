@@ -15,7 +15,8 @@ export function PageBackButton({ to = '/home' }: { to?: string | number }) {
   return (
     <button
       onClick={go}
-      className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg transition-all duration-150 text-[rgba(255,255,255,0.35)] bg-[rgba(255,255,255,0.04)] hover:text-[rgba(255,255,255,0.7)] hover:bg-[rgba(255,255,255,0.08)]"
+      // Téléphone : 44 px, sans fond, la couleur des retours des écrans poussés.
+      className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg transition-all duration-150 text-[rgba(255,255,255,0.35)] bg-[rgba(255,255,255,0.04)] hover:text-[rgba(255,255,255,0.7)] hover:bg-[rgba(255,255,255,0.08)] max-sm:h-11 max-sm:w-11 max-sm:rounded-full max-sm:bg-transparent max-sm:text-[#a29bfe] max-sm:[&_svg]:h-5 max-sm:[&_svg]:w-5"
     >
       <BackArrowIcon />
     </button>

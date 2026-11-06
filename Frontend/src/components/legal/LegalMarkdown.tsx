@@ -26,7 +26,7 @@ export function LegalMarkdown({ source }: { source: string }) {
         }
         if (lines.every((l) => l.trim().startsWith('- '))) {
           return (
-            <ul key={i} className="text-[12.5px] leading-[1.7] text-white/50 pl-[18px] list-disc flex flex-col gap-1">
+            <ul key={i} className="text-[12.5px] leading-[1.7] text-white/50 pl-[18px] list-disc flex flex-col gap-1 max-sm:text-[15px] max-sm:leading-[1.6] max-sm:text-white/70">
               {lines.map((l, j) => <li key={j}>{inlineBold(l.trim().slice(2))}</li>)}
             </ul>
           )
@@ -47,8 +47,10 @@ function inlineBold(text: string): React.ReactNode {
   )
 }
 
-const h2Classes = 'text-[20px] font-extrabold text-white mt-1'
-const h3Classes = 'text-[14px] font-bold text-white/85 mt-1.5'
-const h4Classes = 'text-[13px] font-bold text-white/70'
-const metaClasses = 'text-[11px] text-white/25'
-const pClasses = 'text-[12.5px] leading-[1.7] text-white/50'
+// Téléphone : texte courant à 15 px et plus contrasté, titres au-dessus,
+// mention de date à 13 px — le plancher de lecture.
+const h2Classes = 'text-[20px] font-extrabold text-white mt-1 max-sm:text-[22px]'
+const h3Classes = 'text-[14px] font-bold text-white/85 mt-1.5 max-sm:text-[17px]'
+const h4Classes = 'text-[13px] font-bold text-white/70 max-sm:text-[15px]'
+const metaClasses = 'text-[11px] text-white/25 max-sm:text-[13px] max-sm:text-white/50'
+const pClasses = 'text-[12.5px] leading-[1.7] text-white/50 max-sm:text-[15px] max-sm:leading-[1.6] max-sm:text-white/70'

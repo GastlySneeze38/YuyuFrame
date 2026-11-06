@@ -28,9 +28,14 @@ const VARIANTS: Record<ButtonVariant, string> = {
   danger: 'bg-danger/15 border-danger/40 text-danger hover:bg-danger/25',
 }
 
+/**
+ * Sur téléphone, plancher de toucher et de lecture : 44 px (petit) et 48 px
+ * (normal), texte de 15 px. Posé ici une fois plutôt qu'écran par écran : les
+ * fenêtres et les panneaux partagés avec le PC en profitent tous.
+ */
 const SIZES: Record<ButtonSize, string> = {
-  sm: 'h-8 px-3.5 text-[12.5px] rounded-lg gap-1.5',
-  md: 'h-11 px-5 text-[13.5px] rounded-xl gap-2',
+  sm: 'h-8 px-3.5 text-[12.5px] rounded-lg gap-1.5 max-sm:h-11 max-sm:px-4 max-sm:text-[15px] max-sm:rounded-xl',
+  md: 'h-11 px-5 text-[13.5px] rounded-xl gap-2 max-sm:h-12 max-sm:text-[15px] max-sm:rounded-2xl',
 }
 
 export function Button({

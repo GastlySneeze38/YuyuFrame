@@ -47,7 +47,8 @@ export function DrawerPanel({ open, onClose, label, children }: {
             onClick={onClose}
           />
           <motion.aside
-            className="relative flex h-[85dvh] flex-col overflow-hidden rounded-t-[22px] border-t border-line bg-[#111116] pb-[env(safe-area-inset-bottom,0px)] text-txt-primary"
+            // `sheet-touch` : plancher de lecture et de toucher pour le contenu partagé avec le PC (index.css).
+            className="sheet-touch relative flex h-[85dvh] flex-col overflow-hidden rounded-t-[22px] border-t border-line bg-[#111116] pb-[env(safe-area-inset-bottom,0px)] text-txt-primary"
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
             // Fermer est une réponse : plus vif qu'ouvrir, courbe de tiroir iOS.

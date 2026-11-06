@@ -459,6 +459,8 @@ export const fr = {
     termsTab: "Conditions d'utilisation",
     privacyTab: 'Confidentialité',
     licenceTab: 'Licence',
+    termsShort: 'Conditions',
+    privacyShort: 'Vie privée',
   },
 
   instancesPage: {

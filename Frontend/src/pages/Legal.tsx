@@ -6,6 +6,7 @@ import licenseTxt from '@/assets/legal/LICENSE.txt?raw'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { LegalMarkdown } from '@/components/legal/LegalMarkdown'
 import { useT } from '@/i18n'
+import { Segmented } from '@/mobile/ui/kit'
 
 type TabId = 'conditions' | 'confidentialite' | 'licence'
 
@@ -20,10 +21,12 @@ type TabId = 'conditions' | 'confidentialite' | 'licence'
 
 export default function Legal() {
   const t = useT()
-  const TABS: { id: TabId; label: string }[] = [
-    { id: 'conditions', label: t('legal.termsTab') },
-    { id: 'confidentialite', label: t('legal.privacyTab') },
-    { id: 'licence', label: t('legal.licenceTab') },
+  // `short` : libellé du commutateur sur téléphone, où trois cases égales
+  // tronquaient « Conditions d'utilisation » dans toutes les langues.
+  const TABS: { id: TabId; label: string; short: string }[] = [
+    { id: 'conditions', label: t('legal.termsTab'), short: t('legal.termsShort') },
+    { id: 'confidentialite', label: t('legal.privacyTab'), short: t('legal.privacyShort') },
+    { id: 'licence', label: t('legal.licenceTab'), short: t('legal.licenceTab') },
   ]
   const [searchParams, setSearchParams] = useSearchParams()
   const initialTab = (searchParams.get('tab') as TabId) || 'conditions'
@@ -41,9 +44,12 @@ export default function Legal() {
         <h1 className="font-black text-white text-[18px] tracking-[-0.01em]">{t('legal.title')}</h1>
       </PageHeader>
 
-      {/* Tabs */}
+      {/* Tabs — sur téléphone, un commutateur à trois cases égales. */}
+      <div className="hidden shrink-0 px-4 pb-1 pt-3 max-sm:block">
+        <Segmented value={tab} onChange={selectTab} options={TABS.map((tb) => ({ value: tb.id, label: tb.short }))} />
+      </div>
       <div
-        className="flex flex-shrink-0 items-center gap-1 px-6 pt-4 border-b border-[rgba(255,255,255,0.06)]"
+        className="flex flex-shrink-0 items-center gap-1 px-6 pt-4 border-b border-[rgba(255,255,255,0.06)] max-sm:hidden"
       >
         {TABS.map((tb) => (
           <button
@@ -57,7 +63,7 @@ export default function Legal() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto px-6 py-6">
+      <div className="flex-1 overflow-y-auto overscroll-contain px-6 py-6 max-sm:px-4 max-sm:pb-[max(32px,env(safe-area-inset-bottom))]">
         <div className="mx-auto flex max-w-2xl flex-col gap-5">
           {tab === 'conditions' && <LegalMarkdown source={termsMd} />}
           {tab === 'confidentialite' && <LegalMarkdown source={privacyMd} />}
@@ -71,7 +77,7 @@ export default function Legal() {
 /** Texte préformaté (LICENSE) — une licence se lit toujours telle quelle, jamais reformatée (convention universelle, voir GitHub/gnu.org). */
 function PlainText({ source }: { source: string }) {
   return (
-    <pre className="font-[ui-monospace,SFMono-Regular,Menlo,monospace] text-[11px] leading-[1.6] text-white/50 whitespace-pre-wrap [word-break:break-word]">
+    <pre className="font-[ui-monospace,SFMono-Regular,Menlo,monospace] text-[11px] leading-[1.6] text-white/50 whitespace-pre-wrap [word-break:break-word] max-sm:text-[13px] max-sm:text-white/65">
       {source}
     </pre>
   )

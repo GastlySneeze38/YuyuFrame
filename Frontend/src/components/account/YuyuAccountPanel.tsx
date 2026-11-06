@@ -78,18 +78,18 @@ export function YuyuAccountPanel() {
       >
         {/* En-tête : qui est connecté, et avec quel abonnement */}
         <motion.div variants={listItemVariants} className="flex items-center gap-3">
-          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-accent/25 text-[15px] font-black text-white">
+          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-accent/25 text-[15px] font-black text-white max-sm:h-12 max-sm:w-12 max-sm:text-[18px]">
             {(yuyuUsername ?? '?')[0].toUpperCase()}
           </div>
           <div className="flex min-w-0 flex-1 flex-col">
             <div className="flex items-center gap-2">
-              <p className="truncate text-[13px] font-semibold text-txt-primary">{yuyuUsername}</p>
+              <p className="truncate text-[13px] font-semibold text-txt-primary max-sm:text-[16px]">{yuyuUsername}</p>
               <PlanBadge plan={yuyuPlan} />
             </div>
             {yuyuEmail ? (
-              <MaskedEmail email={yuyuEmail} className="text-[11px] text-txt-muted" />
+              <MaskedEmail email={yuyuEmail} className="text-[11px] text-txt-muted max-sm:text-[13px]" />
             ) : (
-              <p className="truncate text-[11px] text-txt-muted">{t('account.noEmail')}</p>
+              <p className="truncate text-[11px] text-txt-muted max-sm:text-[13px]">{t('account.noEmail')}</p>
             )}
           </div>
           <Button variant="ghost" size="sm" onClick={handleLogout}>
@@ -125,7 +125,7 @@ export function YuyuAccountPanel() {
               initial="initial"
               animate="animate"
               exit="exit"
-              className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-[11px] text-warning"
+              className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-[11px] text-warning max-sm:rounded-xl max-sm:px-4 max-sm:py-3 max-sm:text-[15px]"
             >
               {t('fleet.licenseGrace')}
             </motion.p>
@@ -142,9 +142,9 @@ export function YuyuAccountPanel() {
               initial="initial"
               animate="animate"
               exit="exit"
-              className="flex items-center gap-3 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2"
+              className="flex items-center gap-3 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 max-sm:flex-col max-sm:items-stretch max-sm:rounded-xl max-sm:p-4"
             >
-              <p className="min-w-0 flex-1 text-[11px] leading-relaxed text-warning">{t('account.unverifiedWarning')}</p>
+              <p className="min-w-0 flex-1 text-[11px] leading-relaxed text-warning max-sm:text-[15px]">{t('account.unverifiedWarning')}</p>
               <Button size="sm" variant="primary" onClick={() => setShowVerify(true)}>
                 {t('account.verifyEmail')}
               </Button>
@@ -240,10 +240,10 @@ export function YuyuAccountPanel() {
 
 function Row({ label, value, action }: { label: string; value: React.ReactNode; action?: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-line bg-surface-1 px-3 py-2.5">
+    <div className="flex items-center gap-3 rounded-xl border border-line bg-surface-1 px-3 py-2.5 max-sm:min-h-[64px] max-sm:px-4">
       <div className="flex min-w-0 flex-1 flex-col">
-        <span className="text-[11px] text-txt-muted">{label}</span>
-        <span className="truncate text-[12px] text-txt-primary">{value}</span>
+        <span className="text-[11px] text-txt-muted max-sm:text-[13px]">{label}</span>
+        <span className="truncate text-[12px] text-txt-primary max-sm:text-[15px]">{value}</span>
       </div>
       {action}
     </div>
@@ -315,7 +315,7 @@ function EmailForm({ onDone, onPending }: { onDone: () => void; onPending: () =>
         error={error}
       />
       <StepUpField value={mfaCode} onChange={setMfaCode} onFactor={(f) => setNeedsCode(f !== 'none')} />
-      <div className="flex justify-end gap-2">
+      <div className="flex justify-end gap-2 max-sm:[&>button]:flex-1">
         <Button size="sm" variant="ghost" onClick={onDone}>
           {t('common.cancel')}
         </Button>
@@ -357,10 +357,10 @@ function DeviceList() {
   }
 
   if (devices === null) {
-    return <p className="px-3 py-2 text-[11px] text-txt-muted">{t('common.loading')}</p>
+    return <p className="px-3 py-2 text-[11px] text-txt-muted max-sm:text-[15px]">{t('common.loading')}</p>
   }
   if (!devices.length) {
-    return <p className="px-3 py-2 text-[11px] text-txt-muted">{t('account.noDevice')}</p>
+    return <p className="px-3 py-2 text-[11px] text-txt-muted max-sm:text-[15px]">{t('account.noDevice')}</p>
   }
 
   return (
@@ -372,14 +372,14 @@ function DeviceList() {
             layout
             variants={listItemVariants}
             exit={{ opacity: 0, x: -8, transition }}
-            className="flex items-center gap-3 rounded-xl border border-line bg-surface-2 px-3 py-2"
+            className="flex items-center gap-3 rounded-xl border border-line bg-surface-2 px-3 py-2 max-sm:min-h-[64px] max-sm:px-4"
           >
             <div className="flex min-w-0 flex-1 flex-col">
-              <span className="truncate text-[12px] text-txt-primary">
+              <span className="truncate text-[12px] text-txt-primary max-sm:text-[15px]">
                 {d.device_name ?? t('account.unknownDevice')}
-                {d.current && <span className="ml-2 text-[10px] text-success">{t('account.thisDevice')}</span>}
+                {d.current && <span className="ml-2 text-[10px] text-success max-sm:text-[13px]">{t('account.thisDevice')}</span>}
               </span>
-              <span className="truncate text-[10px] text-txt-muted">
+              <span className="truncate text-[10px] text-txt-muted max-sm:text-[13px]">
                 {[d.os, d.launcher_version && `v${d.launcher_version}`, d.last_used_at && new Date(d.last_used_at).toLocaleDateString()]
                   .filter(Boolean)
                   .join(' · ')}
@@ -412,8 +412,8 @@ function SignedOutCard({ onSignIn }: { onSignIn: () => void }) {
         </svg>
       </div>
       <div className="flex min-w-0 flex-1 flex-col">
-        <p className="text-[13px] font-semibold text-txt-primary">{t('account.signedOutTitle')}</p>
-        <p className="text-[11px] text-txt-secondary">{t('account.signedOutDescription')}</p>
+        <p className="text-[13px] font-semibold text-txt-primary max-sm:text-[15px]">{t('account.signedOutTitle')}</p>
+        <p className="text-[11px] text-txt-secondary max-sm:text-[13px]">{t('account.signedOutDescription')}</p>
       </div>
       <Button variant="primary" size="sm" onClick={onSignIn}>
         {t('account.signIn')}

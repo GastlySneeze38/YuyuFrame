@@ -19,7 +19,7 @@ export function HeaderFriendsShortcut() {
     return (
       <button
         onClick={() => navigate('/yuyu')}
-        className="ml-auto rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-all duration-150 bg-[rgba(75,63,207,0.18)] border border-[rgba(75,63,207,0.35)] text-[rgba(180,170,255,0.9)] hover:bg-[rgba(75,63,207,0.3)]"
+        className="press ml-auto rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-colors duration-150 bg-[rgba(75,63,207,0.18)] border border-[rgba(75,63,207,0.35)] text-[rgba(180,170,255,0.9)] hover:bg-[rgba(75,63,207,0.3)] max-sm:flex max-sm:h-11 max-sm:shrink-0 max-sm:items-center max-sm:rounded-full max-sm:px-4 max-sm:text-[15px]"
       >
         {t('plans.loginCta')}
       </button>

@@ -460,6 +460,8 @@ export const en: TranslationSchema = {
     termsTab: 'Terms of use',
     privacyTab: 'Privacy',
     licenceTab: 'License',
+    termsShort: 'Terms',
+    privacyShort: 'Privacy',
   },
 
   instancesPage: {

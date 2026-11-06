@@ -460,6 +460,8 @@ export const ru: TranslationSchema = {
     termsTab: 'Условия использования',
     privacyTab: 'Конфиденциальность',
     licenceTab: 'Лицензия',
+    termsShort: 'Условия',
+    privacyShort: 'Данные',
   },
 
   instancesPage: {

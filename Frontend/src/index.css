@@ -108,6 +108,30 @@ option {
   transform: scale(0.97);
 }
 
+/* Fenêtres sur téléphone (`ModalShell` → feuille du bas). Leur contenu est
+ * partagé avec le PC et écrit en 10 à 13,5 px ; sur téléphone, deux paliers :
+ * les petites mentions passent à 13 px, le texte courant à 15 px. Les
+ * boutons nus et les champs prennent la taille d'un doigt (les `Button`
+ * l'ont déjà). Les fenêtres réglées à la main pour le téléphone gardent leurs
+ * `max-sm:` : ces règles ne font que poser un plancher. */
+@media (max-width: 640px) {
+  .sheet-touch :is(.text-\[9px\], .text-\[9\.5px\], .text-\[10px\], .text-\[10\.5px\], .text-\[11px\], .text-\[11\.5px\]) {
+    font-size: 13px;
+  }
+  .sheet-touch :is(.text-\[12px\], .text-\[12\.5px\], .text-\[13px\], .text-\[13\.5px\], .text-sm) {
+    font-size: 15px;
+  }
+  .sheet-touch button:not(.no-touch-floor) {
+    min-height: 44px;
+  }
+  .sheet-touch input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  .sheet-touch textarea,
+  .sheet-touch select {
+    min-height: 44px;
+    font-size: 16px;
+  }
+}
+
 /* Configurations JVM sur téléphone. Leur éditeur et ses quatre fenêtres
  * (réglages, jeux de drapeaux, catalogue, import) sont écrits pour le PC, en
  * 9 à 12 px avec des boutons de 22 à 32 px. Sur téléphone, un seul endroit les

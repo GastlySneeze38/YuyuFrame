@@ -44,6 +44,7 @@ export function FriendsPanel({ open, onClose }: { open: boolean; onClose: () => 
 
 function PanelBody({ onClose }: { onClose: () => void }) {
   const t = useT()
+  const mobile = useIsMobile()
   const navigate = useNavigate()
   const signedIn = useStore((s) => s.yuyuSignedIn)
   const list = useFriends((s) => s.list)
@@ -156,7 +157,8 @@ function PanelBody({ onClose }: { onClose: () => void }) {
         <span className="mx-1">
           <AccountMenu />
         </span>
-        <IconButton label={t('common.close')} onClick={onClose} path="M6 6l12 12M18 6L6 18" />
+        {/* Pas de croix sur téléphone : la poignée et le glissé ferment la feuille. */}
+        {!mobile && <IconButton label={t('common.close')} onClick={onClose} path="M6 6l12 12M18 6L6 18" />}
       </div>
 
       {view.kind === 'list' && signedIn && list && (
@@ -584,9 +586,9 @@ function IconButton({ label, onClick, path, active = false }: { label: string; o
       onClick={onClick}
       title={label}
       aria-label={label}
-      className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${active ? 'bg-white/[0.08] text-white' : 'text-txt-muted hover:bg-white/[0.06] hover:text-white'}`}
+      className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors max-sm:h-11 max-sm:w-11 max-sm:rounded-xl ${active ? 'bg-white/[0.08] text-white' : 'text-txt-muted hover:bg-white/[0.06] hover:text-white'}`}
     >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-[17px] w-[17px]">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-[17px] w-[17px] max-sm:h-5 max-sm:w-5">
         <path d={path} />
       </svg>
     </button>
