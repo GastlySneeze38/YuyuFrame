@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from 'react'
+import { forwardRef, memo, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { Instance } from '@/types'
@@ -12,16 +12,7 @@ import { InstanceIcon } from './InstanceIcon'
 /** Mémoïsé : rendu en liste — les callbacks reçoivent l'id/l'instance pour
  * que le parent puisse passer des références stables (useCallback ou setter
  * Zustand/useState direct) au lieu d'une closure par ligne. */
-export const InstanceCard = memo(function InstanceCard({
-  instance,
-  selected,
-  onSelect,
-  onToggleFavorite,
-  onDelete,
-  onSettings,
-  onDuplicate,
-  onOpenFolder,
-}: {
+interface InstanceCardProps {
   instance: Instance
   selected: boolean
   onSelect: (id: string) => void
@@ -31,7 +22,21 @@ export const InstanceCard = memo(function InstanceCard({
   onSettings: (instance: Instance) => void
   onDuplicate: (instance: Instance) => void
   onOpenFolder: (instance: Instance) => void
-}) {
+}
+
+// `forwardRef` : `AnimatePresence mode="popLayout"` (Instances.tsx) mesure la
+// carte qui part par sa ref — sans elle, depuis framer-motion 14, la carte
+// supprimée ne sort plus du flux et React avertit.
+export const InstanceCard = memo(forwardRef<HTMLDivElement, InstanceCardProps>(function InstanceCard({
+  instance,
+  selected,
+  onSelect,
+  onToggleFavorite,
+  onDelete,
+  onSettings,
+  onDuplicate,
+  onOpenFolder,
+}, ref) {
   const t = useT()
   const [hovered, setHovered] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -107,6 +112,7 @@ export const InstanceCard = memo(function InstanceCard({
     // (mise en favori), les voisines glissent à leur nouvelle place au lieu
     // de sauter. `listItemVariants` la fait entrer avec ses sœurs.
     <motion.div
+      ref={ref}
       layout
       variants={listItemVariants}
       initial="initial"
@@ -303,4 +309,4 @@ export const InstanceCard = memo(function InstanceCard({
       )}
     </motion.div>
   )
-})
+}))
