@@ -7,6 +7,7 @@ mod friends;
 mod instances;
 mod integrations;
 mod minecraft;
+mod net;
 mod paths;
 mod play;
 mod security;

@@ -5,6 +5,7 @@ import { PlugIcon } from '@/components/ui/icons/PlugIcon'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { useT } from '@/i18n'
 import type { CurseforgeHit } from './curseforgeUtils'
+import { RemoteImage } from '@/components/ui/RemoteImage'
 
 export function CurseforgeCard({ hit, installed, loading, progress, onInstall, onOpenDetail }: {
   hit: CurseforgeHit
@@ -23,7 +24,7 @@ export function CurseforgeCard({ hit, installed, loading, progress, onInstall, o
       <div className="flex items-center gap-3">
         <div className="w-11 h-11 rounded-xl flex-shrink-0 overflow-hidden bg-[rgba(255,255,255,0.06)] flex items-center justify-center">
           {hit.logoUrl ? (
-            <img src={hit.logoUrl} alt={hit.name} className="w-full h-full object-cover" />
+            <RemoteImage src={hit.logoUrl} alt={hit.name} className="w-full h-full object-cover" />
           ) : (
             <PlugIcon size={20} color="rgba(255,255,255,0.2)" />
           )}

@@ -8,6 +8,7 @@ import { PlugIcon } from '@/components/ui/icons/PlugIcon'
 import { formatDownloadCount } from '@/lib/format'
 import { loaderColor } from '@/lib/loader'
 import { useT } from '@/i18n'
+import { RemoteImage } from '@/components/ui/RemoteImage'
 
 /** Le modpack choisi et la version du pack à installer. */
 export interface PackChoice {
@@ -121,7 +122,7 @@ export function PackPicker({ choice, onChoice }: {
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[rgba(255,255,255,0.06)]">
                   {hit.icon_url
-                    ? <img src={hit.icon_url} alt="" className="h-full w-full object-cover" />
+                    ? <RemoteImage src={hit.icon_url} className="h-full w-full object-cover" />
                     : <PlugIcon size={18} color="rgba(255,255,255,0.2)" />}
                 </div>
                 <div className="min-w-0 flex-1">

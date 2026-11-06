@@ -76,6 +76,10 @@ pub async fn launch(app: tauri::AppHandle, run: HorizonLaunch<'_>, cancel: watch
             .user_agent(concat!("YuyuFrame/", env!("CARGO_PKG_VERSION")))
             .connect_timeout(std::time::Duration::from_secs(10))
             .timeout(std::time::Duration::from_secs(120))
+            // Téléchargement d'Horizon : la barre lit `Content-Length`, donc
+            // pas de compression (voir `crate::net`).
+            .no_gzip()
+            .no_brotli()
             .build()?,
     );
 

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { api } from '@/api/client'
 import type { FleetAnnouncement, FleetConfig } from '@/api/client'
+import { readCache, writeCache } from '@/lib/persistentCache'
 
 /**
  * Pilotage du launcher depuis le back-office (`GET /v1/config`, catégorie
@@ -56,24 +57,35 @@ interface FleetStore {
   flagMessage: (key: string) => string | null
 }
 
+/** La dernière configuration reçue sert au premier rendu (bannière d'accueil,
+ *  interrupteurs) en attendant la nouvelle — une semaine au plus : au-delà,
+ *  une bannière périmée gênerait plus qu'elle n'aide. */
+const CACHE_KEY = 'fleet-config'
+const CACHE_MAX_AGE = 7 * 24 * 3600_000
+
+function keep(config: FleetConfig): FleetConfig {
+  writeCache(CACHE_KEY, config)
+  return config
+}
+
 export const useFleet = create<FleetStore>((set, get) => ({
-  config: EMPTY,
+  config: readCache<FleetConfig>(CACHE_KEY, CACHE_MAX_AGE)?.value ?? EMPTY,
   dismissed: [],
   load: async () => {
     try {
-      set({ config: await api.fleet.config() })
+      set({ config: keep(await api.fleet.config()) })
     } catch {
       // Jamais bloquant : on garde ce qu'on a.
     }
   },
   refresh: async () => {
     try {
-      set({ config: await api.fleet.refresh() })
+      set({ config: keep(await api.fleet.refresh()) })
     } catch {
       /* idem */
     }
   },
-  apply: (config) => set({ config }),
+  apply: (config) => set({ config: keep(config) }),
   dismiss: (id) => set({ dismissed: [...get().dismissed, id] }),
   devHomeBanner: null,
   setDevHomeBanner: (devHomeBanner) => set({ devHomeBanner }),

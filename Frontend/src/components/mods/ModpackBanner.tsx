@@ -7,6 +7,7 @@ import { PlugIcon } from '@/components/ui/icons/PlugIcon'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { useT } from '@/i18n'
 import { useStore } from '@/stores/useStore'
+import { RemoteImage } from '@/components/ui/RemoteImage'
 
 export function ModpackBanner({
   meta, menuOpen, showPackContent, packVersionUpdate, updatingPackVersion, installProgress,
@@ -41,7 +42,7 @@ export function ModpackBanner({
     <div className="relative mb-4 rounded-2xl px-4 py-3.5 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.07)]">
       <div className="flex items-start gap-3">
         <div className="w-12 h-12 rounded-xl flex-shrink-0 overflow-hidden bg-[rgba(255,255,255,0.06)] flex items-center justify-center">
-          {meta.icon_url ? <img src={meta.icon_url} alt="" className="w-full h-full object-cover" /> : <PlugIcon size={22} color="rgba(255,255,255,0.2)" />}
+          {meta.icon_url ? <RemoteImage src={meta.icon_url} eager className="w-full h-full object-cover" /> : <PlugIcon size={22} color="rgba(255,255,255,0.2)" />}
         </div>
         <div className="min-w-0 flex-1">
           <p className="font-bold truncate text-[14px] text-white">{meta.name}</p>

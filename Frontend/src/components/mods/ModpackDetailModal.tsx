@@ -14,6 +14,7 @@ import { CloseButton } from '@/components/ui/CloseButton'
 import { PlugIcon } from '@/components/ui/icons/PlugIcon'
 import { useT } from '@/i18n'
 import type { MergedModpackHit } from './ModpackBrowseTab'
+import { RemoteImage } from '@/components/ui/RemoteImage'
 
 /** Aperçu d'un modpack avant install — MC version/loader/liste des mods, résolus
  * depuis le fichier du pack lui-même (voir modpack_fetch_index/_curseforge_index),
@@ -82,7 +83,7 @@ export function ModpackDetailModal({
         {/* Header */}
         <div className="flex flex-shrink-0 items-start gap-3">
           <div className="w-[52px] h-[52px] rounded-[14px] flex-shrink-0 overflow-hidden bg-[rgba(255,255,255,0.06)] flex items-center justify-center">
-            {iconUrl ? <img src={iconUrl} alt="" className="w-full h-full object-cover" /> : <PlugIcon size={24} color="rgba(255,255,255,0.2)" />}
+            {iconUrl ? <RemoteImage src={iconUrl} eager className="w-full h-full object-cover" /> : <PlugIcon size={24} color="rgba(255,255,255,0.2)" />}
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">

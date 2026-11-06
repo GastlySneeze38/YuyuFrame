@@ -149,16 +149,34 @@ export function formatGameVersions(gvs: string[]): string {
 
 // ── Modrinth fetch helpers ───────────────────────────────────────────────────
 
-export async function fetchProjectDetail(projectId: string): Promise<ModrinthProjectDetail | null> {
-  try {
-    const res = await fetch(`https://api.modrinth.com/v2/project/${projectId}`, {
-      headers: { 'User-Agent': 'YuyuFrame/1.0' },
-    })
-    if (!res.ok) return null
-    return await res.json()
-  } catch {
-    return null
-  }
+/** Fiches déjà demandées (5 min) : le survol d'une carte précharge la fiche
+ *  (`prefetchProjectDetail`), le clic la retrouve ici au lieu de la redemander. */
+const DETAIL_TTL_MS = 5 * 60_000
+const detailCache = new Map<string, { at: number; p: Promise<ModrinthProjectDetail | null> }>()
+
+export function fetchProjectDetail(projectId: string): Promise<ModrinthProjectDetail | null> {
+  const hit = detailCache.get(projectId)
+  if (hit && Date.now() - hit.at < DETAIL_TTL_MS) return hit.p
+  const p = (async () => {
+    try {
+      const res = await fetch(`https://api.modrinth.com/v2/project/${projectId}`, {
+        headers: { 'User-Agent': 'YuyuFrame/1.0' },
+      })
+      if (!res.ok) return null
+      return (await res.json()) as ModrinthProjectDetail
+    } catch {
+      return null
+    }
+  })()
+  detailCache.set(projectId, { at: Date.now(), p })
+  // Un échec n'est pas gardé : le prochain clic réessaie.
+  void p.then((d) => d === null && detailCache.delete(projectId))
+  return p
+}
+
+/** Précharge la fiche d'un projet (survol d'une carte). */
+export function prefetchProjectDetail(projectId: string): void {
+  void fetchProjectDetail(projectId)
 }
 
 export async function fetchProjectVersions(

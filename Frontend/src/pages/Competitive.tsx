@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useFriends } from '@/stores/useFriends'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { PageGlow } from '@/components/PageGlow'
-import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
+import { Skeleton, SkeletonRows } from '@/components/ui/Skeleton'
 import { Button } from '@/components/ui/Button'
 import { RankCard, RankTile, useRankName } from '@/components/competitive/RankCard'
 import { Leaderboard } from '@/components/competitive/Leaderboard'
@@ -20,6 +20,7 @@ import { SNAP } from '@/lib/motion'
 import { useT } from '@/i18n'
 import { useIsMobile } from '@/mobile/useIsMobile'
 import { MobileCompetitive } from '@/mobile/competitive/MobileCompetitive'
+import { readCache, writeCache } from '@/lib/persistentCache'
 import {
   MODES,
   bestMode,
@@ -149,7 +150,12 @@ export default function Competitive() {
       return
     }
     if (!uuid) return setStatus({ kind: 'noAccount' })
-    setStatus({ kind: 'loading' })
+    // Les dernières données connues d'abord (2026-11-06) : l'onglet s'ouvre
+    // rempli, puis se met à jour — au lieu d'un écran de chargement à chaque
+    // lancement. Préfixe `user:` : effacé à la déconnexion.
+    const cacheKey = `user:competitive:${uuid}`
+    const cached = readCache<CompetitiveData>(cacheKey, 7 * 24 * 3600_000)?.value
+    setStatus(cached ? { kind: 'ready', data: cached } : { kind: 'loading' })
     try {
       const answer = await api.ranked.state(uuid)
       // Le reste à part : une API qui ne connaît pas encore ces routes laisse
@@ -179,12 +185,15 @@ export default function Competitive() {
       const base = s
         ? fromSummary(s, duels, leaderboard)
         : { standings: readStandings(answer), leaderboard, duels, stats: null, challenges: null, seasons: null, battlePass: null, seasonWins: null }
-      setStatus({ kind: 'ready', data: { ...base, friendsLeaderboard } })
+      const fresh = { ...base, friendsLeaderboard }
+      writeCache(cacheKey, fresh)
+      setStatus({ kind: 'ready', data: fresh })
     } catch (e) {
       const code = errorCode(e)
       if (code === 'ranked_unavailable') setStatus({ kind: 'unavailable' })
       else if (code === 'ranked_unproven') setStatus({ kind: 'unproven' })
-      else setStatus({ kind: 'error', message: errorMessage(e) })
+      // Réseau en panne : les dernières données valent mieux qu'une erreur.
+      else if (!cached) setStatus({ kind: 'error', message: errorMessage(e) })
     }
   }, [demo, signedIn, uuid, isOffline, username, friendId, friendName])
 
@@ -279,8 +288,15 @@ export default function Competitive() {
       <div className="min-h-0 flex-1 overflow-hidden">
         <div className="mx-auto flex h-full w-full max-w-6xl flex-col gap-4 px-6 py-5">
           {status.kind === 'loading' ? (
-            <div className="flex items-center justify-center py-24">
-              <ButtonSpinner size={32} color="rgb(var(--accent-text))" trackColor="rgba(255,255,255,0.08)" />
+            // Silhouette de l'historique : carte du rang, trois serveurs, duels.
+            <div aria-busy className="flex flex-col gap-4">
+              <Skeleton className="h-44 rounded-2xl" />
+              <div className="grid grid-cols-3 gap-3">
+                <Skeleton className="h-20 rounded-2xl" />
+                <Skeleton className="h-20 rounded-2xl" />
+                <Skeleton className="h-20 rounded-2xl" />
+              </div>
+              <SkeletonRows count={5} rowClassName="h-14" />
             </div>
           ) : !data ? (
             statusCard

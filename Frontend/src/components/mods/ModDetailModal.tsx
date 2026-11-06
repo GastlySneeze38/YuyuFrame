@@ -10,6 +10,7 @@ import { CloseButton } from '@/components/ui/CloseButton'
 import { Toggle } from '@/components/ui/Toggle'
 import { RichDescription } from '@/components/ui/RichDescription'
 import { PlugIcon } from '@/components/ui/icons/PlugIcon'
+import { RemoteImage } from '@/components/ui/RemoteImage'
 import { showError } from '@/stores/useErrorToast'
 import { useStore } from '@/stores/useStore'
 import { useT } from '@/i18n'
@@ -110,7 +111,7 @@ export function ModDetailModal({
         {/* En-tête */}
         <div className="flex flex-shrink-0 items-start gap-4 px-6 pb-4 pt-6">
           <div className="flex h-[60px] w-[60px] flex-shrink-0 items-center justify-center overflow-hidden rounded-[16px] bg-[rgba(255,255,255,0.06)]">
-            {hit.icon_url ? <img src={hit.icon_url} alt="" className="h-full w-full object-cover" /> : <PlugIcon size={26} color="rgba(255,255,255,0.2)" />}
+            {hit.icon_url ? <RemoteImage src={hit.icon_url} eager className="h-full w-full object-cover" /> : <PlugIcon size={26} color="rgba(255,255,255,0.2)" />}
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-[18px] font-black text-white">{hit.title}</p>

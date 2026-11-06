@@ -51,16 +51,8 @@ const HISTORY: &str = "30";
 /// Les notes les plus récentes d'abord. Liste vide si le site n'a pas
 /// répondu — un écran sans historique vaut mieux qu'un écran en erreur.
 async fn fetch(limit: &str) -> Vec<PatchNote> {
-    let client = match reqwest::Client::builder().timeout(TIMEOUT).build() {
-        Ok(c) => c,
-        Err(e) => {
-            tracing::warn!("client HTTP indisponible pour les notes de version : {e}");
-            return Vec::new();
-        }
-    };
-
     let url = format!("{}/api/patch-notes", site_base());
-    match client.get(&url).query(&[("limit", limit)]).send().await {
+    match crate::net::api().get(&url).timeout(TIMEOUT).query(&[("limit", limit)]).send().await {
         Ok(resp) => match resp.json().await {
             Ok(notes) => notes,
             Err(e) => {

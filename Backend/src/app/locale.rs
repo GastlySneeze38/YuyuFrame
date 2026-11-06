@@ -75,8 +75,7 @@ fn parse_country(body: &str) -> Option<String> {
 /// posée. Appelée une seule fois, au premier démarrage.
 #[tauri::command]
 pub async fn detect_country() -> Option<String> {
-    let client = reqwest::Client::builder().timeout(TIMEOUT).build().ok()?;
-    let body = client.get(TRACE_URL).send().await.ok()?.text().await.ok()?;
+    let body = crate::net::api().get(TRACE_URL).timeout(TIMEOUT).send().await.ok()?.text().await.ok()?;
     let country = parse_country(&body);
     match &country {
         Some(code) => tracing::info!("Pays détecté pour la langue : {}", code),

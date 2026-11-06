@@ -10,6 +10,7 @@ import { displayName, type ModUpdate } from './modUtils'
 import { useT } from '@/i18n'
 import { useIsMobile } from '@/mobile/useIsMobile'
 import { ActionSheet, SHEET_ICONS, type SheetAction } from '@/mobile/ui/ActionSheet'
+import { RemoteImage } from '@/components/ui/RemoteImage'
 
 /** Mémoïsé : rendu en liste (potentiellement des dizaines de mods) — les
  * callbacks reçoivent l'identifiant du mod pour que le parent puisse passer
@@ -79,7 +80,7 @@ export const ModRow = memo(function ModRow({
       <div className={`flex h-[68px] items-center gap-1 rounded-2xl border border-white/[0.06] pl-3 pr-1 ${mod.enabled ? 'bg-white/[0.04]' : 'bg-white/[0.02] opacity-60'}`}>
         <div className={`flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl ${mod.enabled ? 'bg-[rgb(var(--accent)/0.15)]' : 'bg-white/[0.05]'}`}>
           {logoUrl
-            ? <img src={logoUrl} alt="" className="h-full w-full object-cover" />
+            ? <RemoteImage src={logoUrl} className="h-full w-full object-cover" />
             : <PlugIcon size={20} color={mod.enabled ? 'rgb(var(--accent-hover)/0.8)' : 'rgba(255,255,255,0.2)'} />}
         </div>
         <div className="ml-2 flex min-w-0 flex-1 flex-col gap-0.5">
@@ -111,7 +112,7 @@ export const ModRow = memo(function ModRow({
           header={
             <>
               <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[rgb(var(--accent)/0.15)]">
-                {logoUrl ? <img src={logoUrl} alt="" className="h-full w-full object-cover" /> : <PlugIcon size={18} color="rgb(var(--accent-hover)/0.8)" />}
+                {logoUrl ? <RemoteImage src={logoUrl} className="h-full w-full object-cover" /> : <PlugIcon size={18} color="rgb(var(--accent-hover)/0.8)" />}
               </div>
               <span className="min-w-0 flex-1 truncate text-[15px] font-bold text-txt-primary">{modrinthName || displayName(mod.name)}</span>
             </>
@@ -152,7 +153,7 @@ export const ModRow = memo(function ModRow({
           mod.enabled ? 'bg-[rgb(var(--accent)/0.15)]' : 'bg-[rgba(255,255,255,0.05)]'
         }`}>
           {logoUrl
-            ? <img src={logoUrl} alt="" className="w-full h-full object-cover" />
+            ? <RemoteImage src={logoUrl} className="w-full h-full object-cover" />
             : <PlugIcon size={18} color={mod.enabled ? 'rgb(var(--accent-hover)/0.8)' : 'rgba(255,255,255,0.2)'} />
           }
         </motion.div>

@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { useT } from '@/i18n'
-import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
+import { Skeleton, SkeletonRows } from '@/components/ui/Skeleton'
 import { ScreenHeader } from '@/mobile/ui/ScreenHeader'
 import { PushedMoreButton } from '@/mobile/ui/PushedScreen'
 import { ActionSheet, SHEET_ICONS } from '@/mobile/ui/ActionSheet'
@@ -85,7 +85,13 @@ export function MobileStats({ data, loading, rangeDays, onRange, filters, onFilt
 
         <div className="mt-8">
           {loading && data === null ? (
-            <div className="flex justify-center py-16"><ButtonSpinner size={28} color="rgb(var(--accent-text))" trackColor="rgba(255,255,255,0.08)" /></div>
+            <div aria-busy className="flex flex-col gap-3">
+              <div className="grid grid-cols-2 gap-2.5">
+                {Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="h-24 rounded-2xl" />)}
+              </div>
+              <Skeleton className="h-48 rounded-2xl" />
+              <SkeletonRows count={3} rowClassName="h-16 rounded-2xl" />
+            </div>
           ) : !data ? (
             <Note>{t('stats.cannotLoadStats')}</Note>
           ) : empty ? (

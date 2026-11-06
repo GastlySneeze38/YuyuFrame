@@ -65,7 +65,8 @@ pub async fn content_asset(id: String) -> Option<String> {
             return Some(uri);
         }
     }
-    let resp = reqwest::Client::new().get(format!("{}/assets/{id}", api::base())).send().await.ok()?;
+    // Client partagé, avec délais (`Client::new()` n'en avait aucun).
+    let resp = crate::net::files().get(format!("{}/assets/{id}", api::base())).send().await.ok()?;
     if !resp.status().is_success() {
         return None;
     }

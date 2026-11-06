@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
 import { ModalShell } from '@/components/ui/ModalShell'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
+import { Skeleton, SkeletonRows } from '@/components/ui/Skeleton'
 import { api } from '@/api/client'
 import { errorMessage } from '@/lib/apiError'
 import { showError } from '@/stores/useErrorToast'
@@ -212,9 +213,7 @@ export default function Support() {
               <section className="flex flex-col gap-2">
                 <h2 className="px-1 text-[13px] font-semibold uppercase tracking-[0.06em] text-white/55">{t('support.myRequests')}</h2>
                 {tickets === null ? (
-                  <div className="flex justify-center py-8">
-                    <ButtonSpinner size={24} color="rgb(var(--accent-text))" trackColor="rgba(255,255,255,0.08)" />
-                  </div>
+                  <SkeletonRows count={3} rowClassName="h-16 rounded-2xl" />
                 ) : tickets.length === 0 ? (
                   <div className="flex flex-col gap-1 rounded-2xl border border-white/[0.06] bg-white/[0.04] px-4 py-5 text-center">
                     <p className="text-[15px] font-semibold">{t('support.emptyTitle')}</p>
@@ -310,9 +309,7 @@ export default function Support() {
           <KindBar onPick={setComposing} />
 
           {tickets === null ? (
-            <div className="flex flex-1 items-center justify-center">
-              <ButtonSpinner size={28} color="rgb(var(--accent-text))" trackColor="rgba(255,255,255,0.08)" />
-            </div>
+            <SkeletonRows count={6} className="flex flex-col gap-2" rowClassName="h-16" />
           ) : (
             <div className="grid min-h-0 flex-1 grid-cols-[300px_minmax(0,1fr)]">
               <TicketList
@@ -618,9 +615,13 @@ function Conversation({
   useEffect(() => setMessage(''), [ticket?.id])
 
   if (loading) {
+    // Silhouette d'une conversation : en-tête puis messages alternés.
     return (
-      <div className="flex items-center justify-center">
-        <ButtonSpinner size={24} color="rgb(var(--accent-text))" trackColor="rgba(255,255,255,0.08)" />
+      <div aria-busy className="flex flex-col gap-3 p-4">
+        <Skeleton className="h-8 w-1/2 rounded-xl" />
+        <Skeleton className="h-16 w-3/4 rounded-2xl" />
+        <Skeleton className="ml-auto h-12 w-2/3 rounded-2xl" />
+        <Skeleton className="h-20 w-3/4 rounded-2xl" />
       </div>
     )
   }
@@ -785,8 +786,11 @@ function MobileConversation({ ticket, loading, labelOf, onReplied, onBack, onDel
         )}
       >
         {loading && !ticket ? (
-          <div className="flex justify-center py-10">
-            <ButtonSpinner size={24} color="rgb(var(--accent-text))" trackColor="rgba(255,255,255,0.08)" />
+          // Silhouette d'une conversation : messages alternés.
+          <div aria-busy className="flex flex-col gap-3 py-4">
+            <Skeleton className="h-16 w-3/4 rounded-2xl" />
+            <Skeleton className="ml-auto h-12 w-2/3 rounded-2xl" />
+            <Skeleton className="h-20 w-3/4 rounded-2xl" />
           </div>
         ) : shown && (
           <div className="flex flex-col gap-3">

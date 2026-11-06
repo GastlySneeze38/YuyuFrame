@@ -10,6 +10,7 @@ import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { PageGlow } from '@/components/PageGlow'
 import { Button } from '@/components/ui/Button'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
+import { Skeleton, SkeletonGrid, SkeletonRows } from '@/components/ui/Skeleton'
 import { ModalShell } from '@/components/ui/ModalShell'
 import { SkinFace } from '@/components/ui/SkinFace'
 import { showError } from '@/stores/useErrorToast'
@@ -595,7 +596,11 @@ export default function Skins() {
         />
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[max(32px,env(safe-area-inset-bottom))] pt-4">
           {accounts === null ? (
-            <div className="flex justify-center py-16"><ButtonSpinner size={28} color="rgb(var(--accent-text))" trackColor="rgba(255,255,255,0.08)" /></div>
+            <div aria-busy className="flex flex-col gap-3">
+              <Skeleton className="h-16 rounded-2xl" />
+              <Skeleton className="h-[400px] rounded-2xl" />
+              <SkeletonRows count={3} rowClassName="h-14 rounded-2xl" />
+            </div>
           ) : accounts.length === 0 ? (
             <div className={`${CARD} flex flex-col gap-1.5 px-5 py-8 text-center`}>
               <p className="text-[16px] font-semibold text-white">{t('skins.noAccount')}</p>
@@ -810,8 +815,11 @@ export default function Skins() {
           mais une fenêtre réduite à l'extrême doit rester utilisable. */}
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 lg:px-7 lg:py-5">
         {accounts === null ? (
-          <div className="flex h-full items-center justify-center">
-            <ButtonSpinner size={28} color="rgb(var(--accent-text))" trackColor="rgba(255,255,255,0.08)" />
+          // Silhouette des trois colonnes de l'écran (comptes, aperçu, historique).
+          <div aria-busy className="grid h-full grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1fr)] gap-4">
+            <SkeletonRows count={4} className="flex flex-col gap-3" rowClassName="h-20 rounded-2xl" />
+            <Skeleton className="h-full min-h-[320px] rounded-2xl" />
+            <SkeletonGrid count={6} className="grid content-start grid-cols-3 gap-2.5" cardClassName="aspect-square h-auto" />
           </div>
         ) : accounts.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
@@ -2071,6 +2079,8 @@ function AccountAvatar({
           <img
             src={`https://mc-heads.net/avatar/${account.mc_uuid}/${size}`}
             alt=""
+            loading="lazy"
+            decoding="async"
             style={{ width: size, height: size }}
             className="rounded-lg [image-rendering:pixelated]"
             onError={(e) => {

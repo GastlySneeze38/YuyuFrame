@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { check, type Update } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { useStore } from '@/stores/useStore'
+import { background } from '@/lib/netQueue'
 
 export function UpdateChecker() {
   const [update, setUpdate] = useState<Update | null>(null)
@@ -9,11 +10,15 @@ export function UpdateChecker() {
   const [progress, setProgress] = useState(0)
 
   useEffect(() => {
-    check()
-      .then((u) => {
-        if (u?.available) setUpdate(u)
-      })
-      .catch(() => {})
+    // Après le démarrage (`lib/netQueue`) : la mise à jour peut attendre
+    // deux secondes, l'écran d'accueil non.
+    background(() =>
+      check()
+        .then((u) => {
+          if (u?.available) setUpdate(u)
+        })
+        .catch(() => {}),
+    )
   }, [])
 
   if (!update) return null

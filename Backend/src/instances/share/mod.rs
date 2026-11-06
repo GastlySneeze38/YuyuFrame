@@ -61,8 +61,6 @@ use crate::security::safe_paths::{join_relative, safe_relative};
 use crate::minecraft::mod_files::{is_disabled_jar, is_jar_file};
 use crate::state::SharedState;
 
-const USER_AGENT: &str = "YuyuFrame/1.0 (yuyuframe.eu)";
-
 /// Noms de premier niveau jamais proposés (comparés en minuscules). Les noms
 /// commençant par un point sont écartés à part : ce sont des caches.
 const NEVER_SHARED: &[&str] = &[

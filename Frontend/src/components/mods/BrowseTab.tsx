@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { press } from '@/lib/motion'
 import { motion } from 'framer-motion'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { SkeletonRows } from '@/components/ui/Skeleton'
 import { Pagination } from '@/components/ui/Pagination'
 import { SearchIcon } from '@/components/ui/icons/SearchIcon'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
@@ -227,6 +228,11 @@ export function BrowseTab({
             )}
           </div>
         </div>
+      )}
+
+      {/* Première recherche : la liste était vide le temps de la réponse. */}
+      {searching && results.length === 0 && (
+        <SkeletonRows count={6} className="flex flex-col gap-2.5" rowClassName="h-[92px] rounded-2xl" />
       )}
 
       {!searching && results.length === 0 && (

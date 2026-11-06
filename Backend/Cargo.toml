@@ -37,7 +37,9 @@ tauri-plugin-notification = "2"
 tokio = { version = "1", features = ["full"] }
 # `multipart` : envoi d'un PNG de skin à Mojang (voir commands/account/skin.rs
 # — un fichier local devient ainsi un skin hébergé par eux, donc partageable).
-reqwest = { version = "0.12", features = ["json", "stream", "multipart"] }
+# gzip/brotli : réponses des API compressées (`src/net.rs`, −79 % sur une
+# recherche Modrinth). Les téléchargements de fichiers les coupent.
+reqwest = { version = "0.12", features = ["json", "stream", "multipart", "gzip", "brotli"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 anyhow = "1"

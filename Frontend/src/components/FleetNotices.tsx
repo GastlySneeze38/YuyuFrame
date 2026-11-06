@@ -4,6 +4,7 @@ import { useStore } from '@/stores/useStore'
 import { useTauriEvent } from '@/hooks/useTauriEvent'
 import type { FleetConfig } from '@/api/client'
 import { useT } from '@/i18n'
+import { politeInterval } from '@/lib/netQueue'
 
 /**
  * Ce que le back-office impose au launcher : bannières d'information, mise à
@@ -33,8 +34,10 @@ export function FleetNotices() {
 
   useEffect(() => {
     load()
-    const timer = setInterval(load, POLL_MS)
-    return () => clearInterval(timer)
+    // Le backend pousse déjà chaque nouvelle configuration (événement
+    // `fleet_config`) : ce sondage n'est qu'un filet, en pause quand personne
+    // ne regarde (`lib/netQueue`).
+    return politeInterval(load, POLL_MS)
   }, [load])
 
   // La configuration arrive par là au démarrage : le backend l'émet dès que

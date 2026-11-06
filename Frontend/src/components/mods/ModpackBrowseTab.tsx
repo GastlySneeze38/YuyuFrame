@@ -6,12 +6,14 @@ import type { ModpackHit, ModrinthSearchFilters } from '@/lib/modrinthModpacks'
 import type { CurseforgeModpackHit } from '@/lib/curseforgeModpacks'
 import { formatDownloadCount } from '@/lib/format'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { SkeletonRows } from '@/components/ui/Skeleton'
 import { PlugIcon } from '@/components/ui/icons/PlugIcon'
 import { SearchIcon } from '@/components/ui/icons/SearchIcon'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { useT } from '@/i18n'
 import { useIsMobile } from '@/mobile/useIsMobile'
 import { MobileFiltersButton, MobileSearchFilters, activeFilterCount } from './MobileSearchFilters'
+import { RemoteImage } from '@/components/ui/RemoteImage'
 
 /// Résultat de recherche modpack fusionné Modrinth + CurseForge — même principe
 /// que `MergedHit` dans BrowseTab.tsx (mods), pas de dédoublonnage ici : les
@@ -215,6 +217,11 @@ export function ModpackBrowseTab({
         </div>
       )}
 
+      {/* Première recherche : la liste était vide le temps de la réponse. */}
+      {searching && results.length === 0 && (
+        <SkeletonRows count={6} className="flex flex-col gap-2.5" rowClassName="h-[92px] rounded-2xl" />
+      )}
+
       {!searching && results.length === 0 && (
         <EmptyState
           icon={<SearchIcon size={28} color="rgba(255,255,255,0.15)" />}
@@ -244,7 +251,7 @@ export function ModpackBrowseTab({
             >
               <div className="flex items-center gap-3">
                 <div className="w-11 h-11 rounded-xl flex-shrink-0 overflow-hidden bg-[rgba(255,255,255,0.06)] flex items-center justify-center">
-                  {iconUrl ? <img src={iconUrl} alt={title} className="w-full h-full object-cover" /> : <PlugIcon size={20} color="rgba(255,255,255,0.2)" />}
+                  {iconUrl ? <RemoteImage src={iconUrl} alt={title} className="w-full h-full object-cover" /> : <PlugIcon size={20} color="rgba(255,255,255,0.2)" />}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">

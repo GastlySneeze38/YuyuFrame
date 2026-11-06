@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { api } from '@/api/client'
 import type { CatalogQuery, CatalogServer } from '@/api/client'
 import { Pagination, pageCountFor } from '@/components/ui/Pagination'
-import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
+import { Skeleton, SkeletonRows } from '@/components/ui/Skeleton'
 import { errorMessage } from '@/lib/apiError'
 import { useT } from '@/i18n'
 import { CatalogDetail } from './CatalogDetail'
@@ -11,6 +11,9 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useIsMobile } from '@/mobile/useIsMobile'
 import { Sheet, SheetTitle } from '@/mobile/ui/Sheet'
 import { CheckRow, Note, Segmented } from '@/mobile/ui/kit'
+import { readCache, writeCache } from '@/lib/persistentCache'
+import { RemoteImage } from '@/components/ui/RemoteImage'
+import { prefetchServerDetail, useHoverPrefetch } from '@/lib/prefetch'
 import { LANGUAGES, PANEL, REGIONS, Select, categoryLabel, compact, languageName, regionLabel } from './bits'
 
 /**
@@ -51,7 +54,38 @@ function rowsFor(height: number): { rows: number; cardH: number } {
   return { rows, cardH: Math.floor((height - GAP * (rows - 1)) / rows) }
 }
 
-let categoriesCache: { name: string; header: string }[] | null = null
+/** Pages du catalogue déjà vues (5 min, 2026-11-06) : revenir à une page,
+ *  ou passer à la suivante préchargée, ne repart plus sur le réseau. Les
+ *  demandes simultanées d'une même page sont fusionnées ; un échec n'est
+ *  pas gardé. */
+type CatalogPage = { servers: CatalogServer[]; total: number }
+const PAGE_TTL_MS = 5 * 60_000
+const PAGE_MAX = 40
+const pages = new Map<string, { at: number; p: Promise<CatalogPage> }>()
+const pageKey = (q: CatalogQuery) => JSON.stringify(q)
+
+function fetchPage(q: CatalogQuery): Promise<CatalogPage> {
+  const k = pageKey(q)
+  const hit = pages.get(k)
+  if (hit && Date.now() - hit.at < PAGE_TTL_MS) return hit.p
+  const p = api.servers.search(q).then((r) => ({ servers: r.servers, total: r.total }))
+  pages.set(k, { at: Date.now(), p })
+  p.catch(() => pages.delete(k))
+  // Les plus anciennes partent : la mémoire ne grossit pas sans fin.
+  while (pages.size > PAGE_MAX) pages.delete(pages.keys().next().value!)
+  return p
+}
+
+/** La page que tout le monde voit en ouvrant le catalogue. */
+function isFirstPage(q: CatalogQuery): boolean {
+  return q.page === 1 && !q.query && q.categories.length === 0 && !q.region && !q.language && !q.gameVersion && !q.kind && q.sort === 'relevance'
+}
+
+/** Catégories de Modrinth : elles bougent rarement, la dernière liste connue
+ *  (gardée une semaine d'un lancement à l'autre) sert tout de suite. */
+const CATEGORIES_CACHE = 'catalog-categories'
+let categoriesCache: { name: string; header: string }[] | null =
+  readCache<{ name: string; header: string }[]>(CATEGORIES_CACHE, 7 * 24 * 3600_000)?.value ?? null
 
 /** Les catégories montrées d'emblée : les genres les plus cherchés. */
 const MAIN_CATEGORIES = ['pvp', 'smp', 'minigames', 'survival-mode', 'skyblock', 'factions', 'rpg', 'pokemon']
@@ -135,6 +169,7 @@ export function CatalogView({ onAdded }: { onAdded: () => void }) {
       .categories()
       .then((c) => {
         categoriesCache = c
+        writeCache(CATEGORIES_CACHE, c)
         setCategories(c)
       })
       .catch(() => {})
@@ -172,11 +207,20 @@ export function CatalogView({ onAdded }: { onAdded: () => void }) {
     const mine = ++generation.current
     setLoading(true)
     setError(null)
-    api.servers
-      .search(query)
+    // Première page sans filtre : la dernière connue s'affiche tout de suite
+    // (gardée d'un lancement à l'autre), la fraîche la remplace en arrivant.
+    const firstKey = isFirstPage(query) ? `catalog-page1:${query.pageSize}` : null
+    if (firstKey && !pages.has(pageKey(query))) {
+      const stale = readCache<CatalogPage>(firstKey, 3 * 24 * 3600_000)?.value
+      if (stale) setResult(stale)
+    }
+    fetchPage(query)
       .then((r) => {
+        if (firstKey) writeCache(firstKey, r)
         if (mine !== generation.current) return
-        setResult({ servers: r.servers, total: r.total })
+        setResult(r)
+        // La page suivante, d'avance : « Suivant » s'affiche sans attendre.
+        if (query.page * query.pageSize < r.total) fetchPage({ ...query, page: query.page + 1 }).catch(() => {})
       })
       .catch((e) => mine === generation.current && setError(errorMessage(e)))
       .finally(() => mine === generation.current && setLoading(false))
@@ -238,7 +282,7 @@ export function CatalogView({ onAdded }: { onAdded: () => void }) {
               <button onClick={run} className="press h-12 rounded-2xl bg-[rgb(var(--accent))] px-6 text-[15px] font-semibold text-white">{t('servers.page.catalog.retry')}</button>
             </div>
           ) : !result ? (
-            <div className="flex justify-center py-16"><ButtonSpinner size={28} color="rgb(var(--accent-text))" trackColor="rgba(255,255,255,0.08)" /></div>
+            <SkeletonRows count={6} className="flex flex-col gap-3" rowClassName="h-[104px] rounded-2xl" />
           ) : result.servers.length === 0 ? (
             <Note>{t('servers.page.catalog.empty')}</Note>
           ) : (
@@ -419,8 +463,16 @@ export function CatalogView({ onAdded }: { onAdded: () => void }) {
             </button>
           </div>
         ) : !result ? (
-          <div className="flex h-full items-center justify-center">
-            <ButtonSpinner size={30} color="rgb(var(--accent-text))" trackColor="rgba(255,255,255,0.08)" />
+          // Squelettes à la place exacte des cartes (même grille, même
+          // hauteur) : la page arrive sans bouger.
+          <div
+            aria-busy
+            className="grid content-start"
+            style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gridAutoRows: cardH, gap: GAP }}
+          >
+            {Array.from({ length: query.pageSize || cols * 2 }, (_, i) => (
+              <Skeleton key={i} className="rounded-2xl" />
+            ))}
           </div>
         ) : result.servers.length === 0 ? (
           <div className="flex h-full items-center justify-center text-[13px] text-txt-muted">{t('servers.page.catalog.empty')}</div>
@@ -479,10 +531,12 @@ function MobileCatalogCard({ server, onOpen }: { server: CatalogServer; onOpen: 
     ...(server.region ? [{ key: 'region', label: regionLabel(server.region) }] : []),
     ...server.categories.slice(0, 3).map((c) => ({ key: c, label: categoryLabel(c) })),
   ] as { key: string; label: string; warm?: boolean }[]
+  // Au doigt : la fiche part dès l'appui (`lib/prefetch`).
+  const prefetch = useHoverPrefetch(() => prefetchServerDetail(server.id))
   return (
-    <button onClick={onOpen} className="press flex w-full flex-col overflow-hidden rounded-2xl border border-white/[0.07] bg-[rgb(var(--bg-card))] text-left">
-      <div className="relative h-[104px] w-full shrink-0 overflow-hidden" style={{ background: `linear-gradient(135deg, ${accent}55, ${accent}11)` }}>
-        {server.banner_url && <img src={server.banner_url} alt="" loading="lazy" draggable={false} className="h-full w-full object-cover" />}
+    <button {...prefetch} onClick={onOpen} className="press flex w-full flex-col overflow-hidden rounded-2xl border border-white/[0.07] bg-[rgb(var(--bg-card))] text-left">
+      <div className="relative h-[104px] w-full shrink-0 overflow-hidden" style={{ background: `linear-gradient(135deg, color-mix(in srgb, ${accent} 33%, transparent), color-mix(in srgb, ${accent} 7%, transparent))` }}>
+        <RemoteImage src={server.banner_url} className="h-full w-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-t from-[rgb(var(--bg-card))] via-[rgb(var(--bg-card))]/20 to-transparent" />
         {server.ping && (
           <span className="absolute right-2.5 top-2.5 flex items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1 text-[13px] font-bold text-white">
@@ -494,7 +548,7 @@ function MobileCatalogCard({ server, onOpen }: { server: CatalogServer; onOpen: 
       <div className="relative -mt-8 flex flex-col gap-2.5 px-3.5 pb-3.5">
         <div className="flex items-end gap-3">
           <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl border-2 border-[rgb(var(--bg-card))] bg-surface-3">
-            {server.icon_url && <img src={server.icon_url} alt="" loading="lazy" draggable={false} className="h-full w-full object-cover" />}
+            <RemoteImage src={server.icon_url} className="h-full w-full object-cover" />
           </div>
           <div className="flex min-w-0 flex-1 flex-col pb-0.5">
             <span className="truncate text-[16px] font-bold text-white">{server.name}</span>
@@ -521,8 +575,11 @@ function MobileCatalogCard({ server, onOpen }: { server: CatalogServer; onOpen: 
 function CatalogCard({ server, index, bannerH, onOpen }: { server: CatalogServer; index: number; bannerH: number; onOpen: () => void }) {
   const t = useT()
   const accent = server.color ?? 'rgb(var(--accent))'
+  // Fiche préchargée après 150 ms de survol (`lib/prefetch`).
+  const prefetch = useHoverPrefetch(() => prefetchServerDetail(server.id))
   return (
     <motion.button
+      {...prefetch}
       onClick={onOpen}
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
@@ -533,9 +590,9 @@ function CatalogCard({ server, index, bannerH, onOpen }: { server: CatalogServer
       className="group flex h-full flex-col overflow-hidden rounded-2xl border border-white/[0.07] bg-[rgb(var(--bg-card))] text-left transition-colors hover:border-white/30 hover:bg-[rgb(var(--bg-raised))]"
     >
       {/* En-tête : l'image de la galerie, sinon un dégradé de sa couleur */}
-      <div className="relative w-full flex-shrink-0 overflow-hidden" style={{ height: bannerH, background: `linear-gradient(135deg, ${accent}55, ${accent}11)` }}>
+      <div className="relative w-full flex-shrink-0 overflow-hidden" style={{ height: bannerH, background: `linear-gradient(135deg, color-mix(in srgb, ${accent} 33%, transparent), color-mix(in srgb, ${accent} 7%, transparent))` }}>
         {server.banner_url && (
-          <img src={server.banner_url} alt="" loading="lazy" draggable={false} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]" />
+          <RemoteImage src={server.banner_url} className="h-full w-full object-cover transition-[opacity,transform] duration-300 group-hover:scale-[1.04]" />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-[rgb(var(--bg-card))] via-[rgb(var(--bg-card))]/20 to-transparent" />
         {server.ping && (
@@ -550,7 +607,7 @@ function CatalogCard({ server, index, bannerH, onOpen }: { server: CatalogServer
       <div className="relative -mt-7 flex flex-1 flex-col gap-2 px-3 pb-3">
         <div className="flex items-end gap-2.5">
           <div className="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded-xl border-2 border-[rgb(var(--bg-card))] bg-surface-3">
-            {server.icon_url && <img src={server.icon_url} alt="" loading="lazy" draggable={false} className="h-full w-full object-cover" />}
+            <RemoteImage src={server.icon_url} className="h-full w-full object-cover" />
           </div>
           <div className="flex min-w-0 flex-1 flex-col pb-0.5">
             <span className="truncate text-[13.5px] font-black text-white">{server.name}</span>

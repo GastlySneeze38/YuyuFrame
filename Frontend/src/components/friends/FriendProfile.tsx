@@ -19,6 +19,7 @@ import { FriendAvatar, GameTile, activityText } from './FriendBits'
 import { ProfileLayout } from './ProfileLayout'
 import { ProfileShowcase } from './ProfileShowcase'
 import { DiscordMark } from './FriendSettingsView'
+import { RemoteImage } from '@/components/ui/RemoteImage'
 
 /**
  * Le profil d'un ami, dans le panneau.
@@ -323,10 +324,8 @@ function MinecraftAccounts({ accounts }: { accounts: Friend['minecraft'] }) {
       <div className="flex flex-col gap-1">
         {accounts.map((m) => (
           <div key={m.uuid} className="group flex items-center gap-3 rounded-lg px-1.5 py-1.5 transition-colors hover:bg-white/[0.04]">
-            <img
+            <RemoteImage
               src={`https://mc-heads.net/body/${m.uuid}/60`}
-              alt=""
-              draggable={false}
               className="h-[46px] w-auto shrink-0 select-none [image-rendering:pixelated]"
             />
             <div className="flex min-w-0 flex-1 flex-col">

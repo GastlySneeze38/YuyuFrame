@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { useT } from '@/i18n'
-import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
+import { Skeleton, SkeletonRows } from '@/components/ui/Skeleton'
 import { RankTile, useRankName } from '@/components/competitive/RankCard'
 import { MenuButton } from '@/mobile/ui/NavDrawer'
 import { Sheet, SheetTitle } from '@/mobile/ui/Sheet'
@@ -115,8 +115,15 @@ export function MobileCompetitive({
       )}
 
       {loading ? (
-        <div className="flex flex-1 items-center justify-center">
-          <ButtonSpinner size={28} color="rgb(var(--accent-text))" trackColor="rgba(255,255,255,0.08)" />
+        // Silhouette de l'historique : carte du rang, trois serveurs, duels.
+        <div aria-busy className="flex flex-col gap-3 px-4 pt-2">
+          <Skeleton className="h-40 rounded-2xl" />
+          <div className="grid grid-cols-3 gap-2.5">
+            <Skeleton className="h-24 rounded-2xl" />
+            <Skeleton className="h-24 rounded-2xl" />
+            <Skeleton className="h-24 rounded-2xl" />
+          </div>
+          <SkeletonRows count={4} rowClassName="h-16 rounded-2xl" />
         </div>
       ) : !data ? (
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-6">{empty}</div>

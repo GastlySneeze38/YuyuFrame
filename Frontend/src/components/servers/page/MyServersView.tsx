@@ -3,6 +3,7 @@ import { api } from '@/api/client'
 import type { InstanceServers, SavedServer } from '@/api/client'
 import { Button } from '@/components/ui/Button'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
+import { SkeletonGrid, SkeletonRows } from '@/components/ui/Skeleton'
 import { Pagination, pageCountFor } from '@/components/ui/Pagination'
 import { InstanceIcon } from '@/components/instances/InstanceIcon'
 import { useStore } from '@/stores/useStore'
@@ -136,8 +137,11 @@ export function MyServersView({
 
   if (loading && !data) {
     return (
-      <div className="flex flex-1 items-center justify-center">
-        <ButtonSpinner size={30} color="rgb(var(--accent-text))" trackColor="rgba(255,255,255,0.08)" />
+      // Silhouette de l'écran (instances à gauche, cartes à droite ; une
+      // liste sur téléphone) plutôt qu'un rond au milieu du vide.
+      <div aria-busy className="flex min-h-0 flex-1 gap-4 max-sm:px-4">
+        <SkeletonRows count={5} className="flex w-64 shrink-0 flex-col gap-2 max-sm:hidden" rowClassName="h-14" />
+        <SkeletonGrid count={6} className="grid flex-1 content-start grid-cols-3 gap-3 max-lg:grid-cols-2 max-sm:grid-cols-1" cardClassName="h-40 max-sm:h-[88px]" />
       </div>
     )
   }

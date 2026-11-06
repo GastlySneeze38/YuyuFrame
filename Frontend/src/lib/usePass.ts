@@ -4,6 +4,10 @@ import { demoData, readPass, type BattlePass, type Challenge, type MissionsMeta,
 import { showError } from '@/stores/useErrorToast'
 import { useDemo } from '@/stores/useDevFlags'
 import { useStore } from '@/stores/useStore'
+import { readCache, writeCache } from './persistentCache'
+
+/** Préfixe `user:` : effacé à la déconnexion. */
+const PASS_CACHE = 'user:pass-state'
 
 export interface PassData {
   loading: boolean
@@ -41,10 +45,17 @@ export function usePass(): PassData {
       return
     }
     let alive = true
+    // Dernier état connu d'abord (2026-11-06), puis le frais ; une panne
+    // garde l'ancien plutôt que de vider l'écran.
+    const cached = readCache<Parameters<typeof readPass>[0]>(PASS_CACHE, 2 * 24 * 3600_000)?.value
+    if (cached) setLive({ loading: false, ...readPass(cached) })
     api.pass
       .state()
-      .then((answer) => alive && setLive({ loading: false, ...readPass(answer) }))
-      .catch(() => alive && setLive(EMPTY))
+      .then((answer) => {
+        writeCache(PASS_CACHE, answer)
+        if (alive) setLive({ loading: false, ...readPass(answer) })
+      })
+      .catch(() => alive && !cached && setLive(EMPTY))
     return () => {
       alive = false
     }

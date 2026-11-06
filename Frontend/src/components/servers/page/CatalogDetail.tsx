@@ -18,6 +18,8 @@ import { SNAP } from '@/lib/motion'
 import { createInstanceFromPack } from '@/lib/modpackInstance'
 import { useT } from '@/i18n'
 import { Select, categoryLabel, compact, languageName, regionLabel, useJoinServer } from './bits'
+import { RemoteImage } from '@/components/ui/RemoteImage'
+import { serverDetail } from '@/lib/prefetch'
 
 /**
  * La fiche d'un serveur du catalogue, en grand par-dessus la grille.
@@ -64,8 +66,8 @@ export function CatalogDetail({ server, onClose, onAdded }: { server: CatalogSer
 
   useEffect(() => {
     let alive = true
-    api.servers
-      .get(server.id)
+    // Souvent déjà là : la carte l'a préchargée au survol (`lib/prefetch`).
+    serverDetail(server.id)
       .then((d) => alive && setDetail(d))
       .catch(() => alive && setDetailFailed(true))
     return () => {
@@ -229,14 +231,14 @@ export function CatalogDetail({ server, onClose, onAdded }: { server: CatalogSer
           </header>
 
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[max(32px,env(safe-area-inset-bottom))]">
-            <div className="relative h-[150px] overflow-hidden" style={{ background: `linear-gradient(135deg, ${accent}66, ${accent}10)` }}>
-              {server.banner_url && <img src={server.banner_url} alt="" className="h-full w-full object-cover" draggable={false} />}
+            <div className="relative h-[150px] overflow-hidden" style={{ background: `linear-gradient(135deg, color-mix(in srgb, ${accent} 40%, transparent), color-mix(in srgb, ${accent} 6%, transparent))` }}>
+              <RemoteImage src={server.banner_url} eager className="h-full w-full object-cover" />
               <div className="absolute inset-0 bg-gradient-to-t from-[rgb(var(--bg-primary))] via-[rgb(var(--bg-primary))]/30 to-transparent" />
             </div>
             <div className="relative -mt-12 flex flex-col gap-4 px-4">
               <div className="flex items-end gap-3.5">
                 <div className="h-[80px] w-[80px] shrink-0 overflow-hidden rounded-[20px] border-4 border-[rgb(var(--bg-primary))] bg-surface-3">
-                  {server.icon_url && <img src={server.icon_url} alt="" className="h-full w-full object-cover" draggable={false} />}
+                  <RemoteImage src={server.icon_url} eager className="h-full w-full object-cover" />
                 </div>
                 <div className="flex min-w-0 flex-1 flex-col gap-1 pb-1">
                   <h3 className="break-words text-[22px] font-black leading-tight text-white">{server.name}</h3>
@@ -290,7 +292,7 @@ export function CatalogDetail({ server, onClose, onAdded }: { server: CatalogSer
                       <h4 className="px-1 text-[13px] font-semibold uppercase tracking-[0.06em] text-white/55">{t('servers.page.detail.tabs.gallery')}</h4>
                       {gallery.map((g) => (
                         <button key={g} onClick={() => setZoomed(g)} className="press overflow-hidden rounded-xl border border-white/[0.07]">
-                          <img src={g} alt="" loading="lazy" draggable={false} className="aspect-video w-full object-cover" />
+                          <RemoteImage src={g} className="aspect-video w-full object-cover" />
                         </button>
                       ))}
                     </section>
@@ -404,8 +406,8 @@ export function CatalogDetail({ server, onClose, onAdded }: { server: CatalogSer
               description a toute la hauteur pour elle ── */}
           {tab === 'info' && (
           <header className="relative flex-shrink-0">
-            <div className="relative h-[140px] overflow-hidden" style={{ background: `linear-gradient(135deg, ${accent}66, ${accent}10)` }}>
-              {server.banner_url && <img src={server.banner_url} alt="" className="h-full w-full object-cover" draggable={false} />}
+            <div className="relative h-[140px] overflow-hidden" style={{ background: `linear-gradient(135deg, color-mix(in srgb, ${accent} 40%, transparent), color-mix(in srgb, ${accent} 6%, transparent))` }}>
+              <RemoteImage src={server.banner_url} eager className="h-full w-full object-cover" />
               <div className="absolute inset-0 bg-gradient-to-t from-[rgb(var(--bg-card))] via-[rgb(var(--bg-card))]/40 to-black/10" />
               <button
                 onClick={onClose}
@@ -420,7 +422,7 @@ export function CatalogDetail({ server, onClose, onAdded }: { server: CatalogSer
 
             <div className="relative -mt-16 flex items-end gap-5 px-7">
               <div className="h-[104px] w-[104px] flex-shrink-0 overflow-hidden rounded-[22px] border-4 border-[rgb(var(--bg-card))] bg-surface-3 shadow-xl">
-                {server.icon_url && <img src={server.icon_url} alt="" className="h-full w-full object-cover" draggable={false} />}
+                <RemoteImage src={server.icon_url} eager className="h-full w-full object-cover" />
               </div>
               <div className="flex min-w-0 flex-1 flex-col gap-1.5 pb-1">
                 <div className="flex items-center gap-2.5">
@@ -554,7 +556,7 @@ export function CatalogDetail({ server, onClose, onAdded }: { server: CatalogSer
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                       {gallery.map((g) => (
                         <button key={g} onClick={() => setZoomed(g)} className="overflow-hidden rounded-xl border border-white/[0.07] transition hover:border-white/25">
-                          <img src={g} alt="" loading="lazy" draggable={false} className="aspect-video w-full object-cover transition-transform duration-300 hover:scale-[1.03]" />
+                          <RemoteImage src={g} className="aspect-video w-full object-cover transition-[opacity,transform] duration-300 hover:scale-[1.03]" />
                         </button>
                       ))}
                     </div>

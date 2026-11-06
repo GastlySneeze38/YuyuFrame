@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '@/api/client'
 import type { ServerPingInfo } from '@/api/client'
+import { readCache, writeCache } from './persistentCache'
 
 /**
  * Pings de serveurs mémorisés pour la session, et fusionnés quand plusieurs
@@ -37,23 +38,38 @@ export function pingServer(address: string, force = false): Promise<ServerPingIn
     .then((result) => {
       done.set(k, { at: Date.now(), result })
       pending.delete(k)
+      if (result) writeCache(persistKey(k), result)
       return result
     })
   pending.set(k, p)
   return p
 }
 
-export type PingState = { status: 'loading' } | { status: 'ok'; info: ServerPingInfo } | { status: 'offline' }
+/** Dernière réponse d'un serveur, gardée d'un lancement à l'autre
+ *  (2026-11-06) : la carte montre tout de suite son icône, son MOTD et son
+ *  dernier nombre de joueurs (`stale`) pendant que le nouveau ping court, au
+ *  lieu d'une carte vide. Un jour au plus ; un serveur hors ligne n'est
+ *  jamais gardé. */
+const persistKey = (k: string) => `ping:${k}`
+const PERSIST_MAX_AGE = 24 * 3600_000
+
+function lastKnown(address: string): PingState {
+  const saved = readCache<ServerPingInfo>(persistKey(key(address)), PERSIST_MAX_AGE)?.value
+  return saved ? { status: 'ok', info: saved, stale: true } : { status: 'loading' }
+}
+
+/** `stale` : réponse d'un lancement précédent, en attendant la nouvelle. */
+export type PingState = { status: 'loading' } | { status: 'ok'; info: ServerPingInfo; stale?: boolean } | { status: 'offline' }
 
 /** Le ping d'une adresse, et de quoi le relancer. Adresse vide = rien. */
 export function useServerPing(address: string | null) {
-  const [state, setState] = useState<PingState>({ status: 'loading' })
+  const [state, setState] = useState<PingState>(() => (address ? lastKnown(address) : { status: 'loading' }))
   const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
     if (!address) return
     let alive = true
-    setState({ status: 'loading' })
+    setState(lastKnown(address))
     void pingServer(address).then((info) => {
       if (alive) setState(info ? { status: 'ok', info } : { status: 'offline' })
     })
@@ -84,7 +100,7 @@ export function useServerPings(addresses: string[]) {
   useEffect(() => {
     let alive = true
     const list = signature ? signature.split('|') : []
-    setStates(Object.fromEntries(list.map((a) => [a, { status: 'loading' } as PingState])))
+    setStates(Object.fromEntries(list.map((a) => [a, lastKnown(a)])))
     for (const a of list) {
       void pingServer(a).then((info) => {
         if (alive) setStates((s) => ({ ...s, [a]: info ? { status: 'ok', info } : { status: 'offline' } }))
@@ -106,7 +122,7 @@ export function useServerPings(addresses: string[]) {
     [signature],
   )
 
-  const stateOf = useCallback((address: string): PingState => states[key(address)] ?? { status: 'loading' }, [states])
+  const stateOf = useCallback((address: string): PingState => states[key(address)] ?? lastKnown(address), [states])
   return { stateOf, refresh }
 }
 

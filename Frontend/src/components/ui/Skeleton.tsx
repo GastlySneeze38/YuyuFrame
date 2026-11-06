@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion'
+import type { CSSProperties } from 'react'
 
 /**
  * Formes grises en attendant le contenu.
@@ -8,20 +8,13 @@ import { motion } from 'framer-motion'
  * sauter quand les données tombent. Un rond de chargement au milieu du vide,
  * lui, ne dit rien de ce qui va apparaître et laisse l'écran bouger.
  *
- * L'onde qui traverse est un dégradé déplacé : pas d'opacité clignotante,
- * qui attire l'œil sur une zone dont il n'y a justement rien à lire.
+ * L'onde est une animation CSS (`.skeleton` dans index.css, 2026-11-06) et
+ * non plus un `motion.div` par bloc : une page de squelettes en lançait des
+ * dizaines côté JavaScript. Le compositeur la joue seul, et « Animations
+ * réduites » l'arrête comme le reste.
  */
-export function Skeleton({ className = '' }: { className?: string }) {
-  return (
-    <div className={`relative overflow-hidden rounded-md bg-white/[0.06] ${className}`}>
-      <motion.div
-        initial={{ x: '-100%' }}
-        animate={{ x: '100%' }}
-        transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut', repeatDelay: 0.3 }}
-        className="absolute inset-y-0 w-full bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.07),transparent)]"
-      />
-    </div>
-  )
+export function Skeleton({ className = '', style }: { className?: string; style?: CSSProperties }) {
+  return <div aria-hidden className={`skeleton rounded-md ${className}`} style={style} />
 }
 
 /** Silhouette d'une carte d'instance, aux mêmes dimensions que la vraie. */
@@ -33,6 +26,39 @@ export function InstanceCardSkeleton() {
         <Skeleton className="h-3 w-2/3" />
         <Skeleton className="h-2.5 w-2/5" />
       </div>
+    </div>
+  )
+}
+
+/** Une grille de cartes squelettes, pour les écrans en grille (catalogue,
+ *  serveurs, skins). `count` cartes de la hauteur donnée. */
+export function SkeletonGrid({ count, className = '', cardClassName = 'h-40' }: {
+  count: number
+  className?: string
+  cardClassName?: string
+}) {
+  return (
+    <div aria-busy className={className}>
+      {Array.from({ length: count }, (_, i) => (
+        <Skeleton key={i} className={`rounded-2xl ${cardClassName}`} />
+      ))}
+    </div>
+  )
+}
+
+/** Des lignes squelettes (listes : tickets, notes, profils JVM…). */
+export function SkeletonRows({ count, className = 'flex flex-col gap-2', rowClassName = 'h-14' }: {
+  count: number
+  className?: string
+  rowClassName?: string
+}) {
+  return (
+    <div aria-busy className={className}>
+      {Array.from({ length: count }, (_, i) => (
+        // Dernières lignes plus pâles : la liste « s'efface » au lieu de
+        // s'arrêter net, sans promettre un nombre exact de lignes.
+        <Skeleton key={i} className={`rounded-xl ${rowClassName}`} style={{ opacity: 1 - i * (0.6 / count) }} />
+      ))}
     </div>
   )
 }

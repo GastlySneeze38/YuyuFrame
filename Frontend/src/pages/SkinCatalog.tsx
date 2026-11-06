@@ -8,6 +8,7 @@ import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { PageGlow } from '@/components/PageGlow'
 import { Button } from '@/components/ui/Button'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
+import { Skeleton } from '@/components/ui/Skeleton'
 import { showError } from '@/stores/useErrorToast'
 import { BAKE_HEIGHT, BAKE_VIEW, BAKE_WIDTH, bakeSkin } from '@/lib/skinBake'
 import { fadeVariants, fastTransition } from '@/lib/motion'
@@ -417,9 +418,19 @@ export default function SkinCatalog() {
     <div ref={gridRef} onMouseLeave={() => setHovered(null)} className="relative min-h-0 flex-1">
       <AnimatePresence mode="wait">
         {visible.length === 0 && loading ? (
-          <Layer key="loading">
-            <ButtonSpinner size={28} color="rgb(var(--accent-text))" trackColor="rgba(255,255,255,0.08)" />
-          </Layer>
+          // Squelettes à la place exacte des cases (même pavage, même hauteur).
+          <motion.div
+            key="loading"
+            aria-busy
+            exit={{ opacity: 0 }}
+            transition={fastTransition}
+            className="absolute inset-0 grid content-start"
+            style={{ gridTemplateColumns: `repeat(${tiling.columns}, minmax(0, 1fr))`, gap: `${GRID_GAP}px` }}
+          >
+            {Array.from({ length: slots }, (_, i) => (
+              <Skeleton key={i} className="rounded-2xl" style={{ height: tiling.tileHeight }} />
+            ))}
+          </motion.div>
         ) : visible.length === 0 ? (
           <Layer key="empty">
             <div className="flex flex-col items-center gap-2 text-center">

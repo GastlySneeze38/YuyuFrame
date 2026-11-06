@@ -119,11 +119,9 @@ pub async fn mods_search_advanced(input: ModrinthAdvancedSearchInput) -> Result<
         }
     }
 
-    let client = reqwest::Client::builder()
-        .user_agent("YuyuFrame/1.0")
-        .build()
-        .map_err(|e| e.to_string())?;
-    let resp = client
+    // Client partagé : connexion réutilisée d'une recherche à l'autre,
+    // réponse compressée (`crate::net`).
+    let resp = crate::net::api()
         .get(format!("{}/search", MODRINTH_API))
         .query(&params)
         .send()

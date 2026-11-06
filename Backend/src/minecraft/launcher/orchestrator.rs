@@ -157,6 +157,11 @@ pub async fn download_and_launch(
     // message et seul recours l'annulation manuelle.
     let client = Arc::new(reqwest::Client::builder()
         .pool_max_idle_per_host(32)
+        // Fichiers du jeu : pas de compression (activée par défaut depuis
+        // que reqwest a gzip/brotli, voir `crate::net`) — comportement
+        // inchangé, tailles et empreintes vérifiées octet pour octet.
+        .no_gzip()
+        .no_brotli()
         .connect_timeout(std::time::Duration::from_secs(10))
         .timeout(std::time::Duration::from_secs(60)) // large : le client jar fait ~25 Mo
         .build()?);

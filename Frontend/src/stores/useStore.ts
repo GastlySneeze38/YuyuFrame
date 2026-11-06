@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { useShallow } from 'zustand/react/shallow'
+import { clearPersistentCache } from '@/lib/persistentCache'
 import type { Instance, JvmVendor, Version, Account } from '@/types'
 import { AUTH_SYSTEM_VERSION } from '@/config/authVersion'
 
@@ -323,7 +324,10 @@ export const useStore = create<Store>()(
         set({ yuyuPlan: plan, yuyuPlanExpiresAt: planExpiresAt }),
       // Les comptes Minecraft appartiennent au PC (voir db::mc_account côté
       // backend) : quitter YuyuFrame ne les retire pas.
-      clearYuyuSession: () =>
+      clearYuyuSession: () => {
+        // Les dernières données personnelles gardées (rang, passe, amis…)
+        // partent avec la session : le compte suivant ne doit pas les voir.
+        clearPersistentCache('user:')
         set({
           yuyuSignedIn: false,
           yuyuUsername: null,
@@ -334,7 +338,8 @@ export const useStore = create<Store>()(
           yuyuPasswordResetRequired: false,
           yuyuEmailVerificationRequired: false,
           yuyuPendingEmail: null,
-        }),
+        })
+      },
       isPremium: () => {
         const { yuyuPlan, yuyuPlanExpiresAt } = get()
         const active = yuyuPlan === 'premium' || yuyuPlan === 'ultimate'

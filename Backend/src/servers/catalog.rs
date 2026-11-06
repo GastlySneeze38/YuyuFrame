@@ -300,16 +300,10 @@ fn normalize(v: &Value) -> Option<CatalogServer> {
 
 // ── Appels ───────────────────────────────────────────────────────────────────
 
-fn client() -> Result<reqwest::Client, String> {
-    reqwest::Client::builder()
-        .user_agent(concat!("YuyuFrame/", env!("CARGO_PKG_VERSION"), " (yuyuframe.eu)"))
-        .timeout(TIMEOUT)
-        .build()
-        .map_err(|e| e.to_string())
-}
-
 async fn get_json(url: &str, query: &[(&str, String)]) -> Result<Value, String> {
-    let resp = client()?.get(url).query(query).send().await.map_err(|e| format!("Modrinth injoignable : {e}"))?;
+    // Client partagé (`crate::net`) : avant, un client neuf par appel refaisait
+    // la connexion TLS à chaque page du catalogue.
+    let resp = crate::net::api().get(url).timeout(TIMEOUT).query(query).send().await.map_err(|e| format!("Modrinth injoignable : {e}"))?;
     if resp.status() == reqwest::StatusCode::NOT_FOUND {
         return Err("Serveur introuvable sur Modrinth".into());
     }

@@ -730,6 +730,8 @@ function AccountRow({
             <img
               src={`https://mc-heads.net/avatar/${acc.uuid}/44`}
               alt={acc.username}
+              loading="lazy"
+              decoding="async"
               className="rounded-lg w-11 h-11 [image-rendering:pixelated]"
               onError={(e) => {
                 e.currentTarget.style.display = 'none'

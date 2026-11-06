@@ -164,10 +164,7 @@ pub async fn packs_install(
     let dir = packs_dir(&instance_id, kind);
     tokio::fs::create_dir_all(&dir).await.map_err(|e| e.to_string())?;
 
-    let client = reqwest::Client::builder()
-        .user_agent("YuyuFrame/1.0")
-        .build()
-        .map_err(|e| e.to_string())?;
+    let client = crate::net::files();
 
     let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;
     if !resp.status().is_success() {

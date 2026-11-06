@@ -1,7 +1,7 @@
 import type { Mod, ModpackMeta } from '@/types'
 import { listVariants, press } from '@/lib/motion'
 import { motion } from 'framer-motion'
-import { Spinner } from '@/components/ui/Spinner'
+import { SkeletonRows } from '@/components/ui/Skeleton'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { PlugIcon } from '@/components/ui/icons/PlugIcon'
@@ -46,7 +46,8 @@ export function InstalledTab({
 }) {
   const t = useT()
   const mobile = useIsMobile()
-  if (loading) return <Spinner />
+  // Silhouette de la liste des mods (lignes d'une icône + deux textes).
+  if (loading) return <SkeletonRows count={7} className="flex flex-col gap-2" rowClassName="h-[60px]" />
   if (error) return <ErrorState message={error} onRetry={onReload} />
 
   const filtered = mods.filter((m) =>

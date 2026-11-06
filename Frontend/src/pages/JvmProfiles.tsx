@@ -7,6 +7,7 @@ import { formatRam } from '@/lib/format'
 import { autoVendorFor, effectiveGc, familyFor, parseJvmArgs, type JvmFamily } from '@/lib/jvmFlags'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
+import { SkeletonRows } from '@/components/ui/Skeleton'
 import type { Instance, JvmProfile } from '@/types'
 import { jvmLinkBlock } from '@/lib/loader'
 import { useIsMobile } from '@/mobile/useIsMobile'
@@ -291,7 +292,7 @@ export default function JvmProfiles() {
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-28 pt-1">
           <div className="flex flex-col gap-3">
-            {profiles === null && <div className="flex justify-center py-12"><ButtonSpinner size={24} /></div>}
+            {profiles === null && <SkeletonRows count={4} className="flex flex-col gap-3" rowClassName="h-[120px] rounded-2xl" />}
             {profiles?.length === 0 && (
               <div className={`${CARD} flex flex-col gap-2 px-5 py-8 text-center`}>
                 <p className="text-[16px] font-semibold text-white/85">Aucune configuration</p>
@@ -520,9 +521,7 @@ export default function JvmProfiles() {
             dernière carte une fois la liste assez longue pour défiler. */}
         <div className="mx-auto flex w-full max-w-4xl flex-col gap-3 px-6 pb-24 pt-5">
 
-          {profiles === null && (
-            <div className="flex justify-center py-12"><ButtonSpinner size={20} /></div>
-          )}
+          {profiles === null && <SkeletonRows count={4} className="flex flex-col gap-3" rowClassName="h-28 rounded-2xl" />}
 
           {profiles?.length === 0 && (
             <div className="flex flex-col items-center gap-2 rounded-2xl border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] px-6 py-12 text-center">

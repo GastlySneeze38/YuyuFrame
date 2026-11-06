@@ -19,6 +19,7 @@ import { SettingsLinkModal } from '@/components/settings/SettingsShare'
 import { shareLinkKind, type ShareLinkKind } from '@/lib/shareLink'
 import { pushPendingSkinLink } from '@/lib/skinLink'
 import { useStore, type Lang } from '@/stores/useStore'
+import { background, politeInterval } from '@/lib/netQueue'
 import { ipLanguage, systemLanguage } from '@/i18n/detect'
 import { useModalQueue } from '@/stores/useModalQueue'
 import { useSupportWatch, POLL_MS as SUPPORT_POLL_MS } from '@/stores/useSupportWatch'
@@ -520,8 +521,8 @@ export default function App() {
     if (isConsoleWindow) return
     const ping = () => api.yuyu.ping().then(setApiOnline)
     ping()
-    const interval = setInterval(ping, 45 * 1000)
-    return () => clearInterval(interval)
+    // En pause fenêtre cachée ou partie en cours (`lib/netQueue`).
+    return politeInterval(ping, 45 * 1000)
   }, [])
 
   /**
@@ -540,16 +541,20 @@ export default function App() {
    */
   useEffect(() => {
     if (isConsoleWindow) return
-    api.patchNotes.latest()
-      .then((note) => {
-        if (!note) return
-        pushModal({
-          kind: 'patchNotes',
-          key: `patch-note-${note.id}`,
-          data: { title: note.title, version: note.version, body: note.body, publishedAt: note.published_at },
+    // Après le premier affichage (`lib/netQueue`) : la modale n'est pas
+    // l'écran, elle peut attendre que l'accueil ait reçu ses données.
+    background(() =>
+      api.patchNotes.latest()
+        .then((note) => {
+          if (!note) return
+          pushModal({
+            kind: 'patchNotes',
+            key: `patch-note-${note.id}`,
+            data: { title: note.title, version: note.version, body: note.body, publishedAt: note.published_at },
+          })
         })
-      })
-      .catch(() => {})
+        .catch(() => {}),
+    )
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -573,8 +578,11 @@ export default function App() {
       refreshSupportWatch()
       refreshCrashWatch()
     }
-    refresh()
-    const timer = setInterval(refresh, SUPPORT_POLL_MS)
+    // Première lecture après le démarrage, sondage en pause quand personne
+    // ne regarde (`lib/netQueue`) — le retour sur le launcher relit de
+    // toute façon, juste en dessous.
+    background(refresh)
+    const stop = politeInterval(refresh, SUPPORT_POLL_MS)
     // Revenir sur le launcher (au retour d'une partie, d'un autre programme)
     // relit aussi, au plus une fois toutes les 15 s.
     let lastFocus = 0
@@ -585,7 +593,7 @@ export default function App() {
     }
     window.addEventListener('focus', onFocus)
     return () => {
-      clearInterval(timer)
+      stop()
       window.removeEventListener('focus', onFocus)
     }
   }, [yuyuSignedIn])
@@ -653,7 +661,7 @@ export default function App() {
   // le refait donc à chaque démarrage et dès que la confirmation tombe.
   useEffect(() => {
     if (isConsoleWindow || !yuyuSignedIn || emailVerificationRequired) return
-    api.yuyu.syncMinecraftAccounts().catch(() => {})
+    background(() => api.yuyu.syncMinecraftAccounts().catch(() => {}))
   }, [yuyuSignedIn, emailVerificationRequired])
 
   // Ctrl+Maj+M → atelier des modales. Une fenêtre Tauri n'a pas de barre

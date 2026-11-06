@@ -43,12 +43,10 @@ pub(super) struct MrHashes {
     pub(super) sha512: Option<String>,
 }
 
+/// Client partagé des API (`crate::net`, délai total de 30 s comme avant) —
+/// un `Client` se clone sans frais, il partage ses connexions.
 pub(super) fn http() -> Result<reqwest::Client, String> {
-    reqwest::Client::builder()
-        .user_agent(USER_AGENT)
-        .timeout(std::time::Duration::from_secs(30))
-        .build()
-        .map_err(|e| e.to_string())
+    Ok(crate::net::api().clone())
 }
 
 /// Cherche chez Modrinth, puis chez CurseForge pour ce qui reste. Rend vrai

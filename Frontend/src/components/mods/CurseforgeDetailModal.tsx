@@ -13,6 +13,7 @@ import { useStore } from '@/stores/useStore'
 import { useT } from '@/i18n'
 import { versionTypeBadge, formatGameVersions } from './modUtils'
 import { fetchCurseforgeFiles, filterFilesForLoader, type CurseforgeHit, type CurseforgeFile } from './curseforgeUtils'
+import { RemoteImage } from '@/components/ui/RemoteImage'
 
 const RELEASE_TYPE_LABEL: Record<number, string> = { 1: 'release', 2: 'beta', 3: 'alpha' }
 
@@ -93,7 +94,7 @@ export function CurseforgeDetailModal({
         {/* Header */}
         <div className="flex flex-shrink-0 items-start gap-3">
           <div className="w-[52px] h-[52px] rounded-[14px] flex-shrink-0 overflow-hidden bg-[rgba(255,255,255,0.06)] flex items-center justify-center">
-            {hit.logoUrl ? <img src={hit.logoUrl} alt="" className="w-full h-full object-cover" /> : <PlugIcon size={24} color="rgba(255,255,255,0.2)" />}
+            {hit.logoUrl ? <RemoteImage src={hit.logoUrl} eager className="w-full h-full object-cover" /> : <PlugIcon size={24} color="rgba(255,255,255,0.2)" />}
           </div>
           <div className="min-w-0 flex-1">
             <p className="font-bold text-white text-[16px]">{hit.name}</p>

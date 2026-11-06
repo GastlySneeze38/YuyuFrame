@@ -155,10 +155,7 @@ fn check_modrinth_url(url: &str) -> Result<(), String> {
 
 async fn download_mrpack(url: &str) -> Result<Vec<u8>, String> {
     check_modrinth_url(url)?;
-    let client = reqwest::Client::builder()
-        .user_agent("YuyuFrame/1.0")
-        .build()
-        .map_err(|e| e.to_string())?;
+    let client = crate::net::files();
     let resp = client.get(url).send().await.map_err(|e| e.to_string())?;
     if !resp.status().is_success() {
         return Err(format!("Téléchargement échoué: {}", resp.status()));
@@ -459,10 +456,7 @@ async fn install_curseforge_pack(
     let by_file_id: std::collections::HashMap<u64, CfFileMeta> =
         resolved.into_iter().map(|f| (f.id, f)).collect();
 
-    let client = reqwest::Client::builder()
-        .user_agent("YuyuFrame/1.0")
-        .build()
-        .map_err(|e| e.to_string())?;
+    let client = crate::net::files();
 
     let mut mod_files: Vec<String> = Vec::new();
     let mut failed_files: Vec<String> = Vec::new();
@@ -594,10 +588,7 @@ pub async fn modpack_fetch_curseforge_index(
     file_url: String,
 ) -> Result<ModpackIndexInfo, String> {
     check_cf_cdn_url(&file_url)?;
-    let client = reqwest::Client::builder()
-        .user_agent("YuyuFrame/1.0")
-        .build()
-        .map_err(|e| e.to_string())?;
+    let client = crate::net::files();
     let resp = client.get(&file_url).send().await.map_err(|e| e.to_string())?;
     if !resp.status().is_success() {
         return Err(format!("Téléchargement échoué: {}", resp.status()));
@@ -648,10 +639,7 @@ pub async fn modpack_install_curseforge(
     input: ModpackInstallCurseforgeInput,
 ) -> Result<ModpackMeta, String> {
     check_cf_cdn_url(&input.file_url)?;
-    let client = reqwest::Client::builder()
-        .user_agent("YuyuFrame/1.0")
-        .build()
-        .map_err(|e| e.to_string())?;
+    let client = crate::net::files();
     let resp = client.get(&input.file_url).send().await.map_err(|e| e.to_string())?;
     if !resp.status().is_success() {
         return Err(format!("Téléchargement échoué: {}", resp.status()));
@@ -987,10 +975,7 @@ async fn install_pack(
     let existing_ids = collect_mod_ids(&mods_dir);
 
     // Téléchargement des fichiers référencés (mods, resourcepacks, shaderpacks...).
-    let client = reqwest::Client::builder()
-        .user_agent("YuyuFrame/1.0")
-        .build()
-        .map_err(|e| e.to_string())?;
+    let client = crate::net::files();
     let mut backed_up: Vec<String> = Vec::new();
     let mut failed_files: Vec<String> = Vec::new();
     let total_files = index.files.len();

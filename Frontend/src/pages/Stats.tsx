@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { PageGlow } from '@/components/PageGlow'
-import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
+import { Skeleton } from '@/components/ui/Skeleton'
 import { Button } from '@/components/ui/Button'
 import { ModalShell } from '@/components/ui/ModalShell'
 import { StatsToolbar, EMPTY_FILTERS, toQuery, type StatsFilters } from '@/components/stats/StatsToolbar'
@@ -21,6 +21,7 @@ import { useT } from '@/i18n'
 import type { StatsData } from '@/types/stats'
 import { useIsMobile } from '@/mobile/useIsMobile'
 import { MobileStats } from '@/mobile/tools/MobileStats'
+import { visibleInterval } from '@/lib/netQueue'
 
 /**
  * Statistiques de jeu.
@@ -83,8 +84,9 @@ export default function Stats() {
   const live = (data?.running.length ?? 0) > 0
   useEffect(() => {
     if (!live) return
-    const timer = setInterval(() => load(true), LIVE_REFRESH_MS)
-    return () => clearInterval(timer)
+    // Fenêtre cachée : pas besoin de rafraîchir un écran que personne ne voit.
+    // (Pas `politeInterval` : ce rafraîchissement sert justement pendant une partie.)
+    return visibleInterval(() => load(true), LIVE_REFRESH_MS)
   }, [live, load])
 
   function toggleCard(id: StatCardId) {
@@ -150,8 +152,16 @@ export default function Stats() {
           />
 
           {loading && data === null ? (
-            <div className="flex items-center justify-center py-24">
-              <ButtonSpinner size={32} color="rgb(var(--accent-text))" trackColor="rgba(255,255,255,0.08)" />
+            // Silhouette de l'écran : cartes de chiffres, calendrier, deux panneaux.
+            <div aria-busy className="flex flex-col gap-4">
+              <div className="grid grid-cols-4 gap-3">
+                {Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="h-24 rounded-2xl" />)}
+              </div>
+              <Skeleton className="h-44 rounded-2xl" />
+              <div className="grid grid-cols-2 gap-4">
+                <Skeleton className="h-64 rounded-2xl" />
+                <Skeleton className="h-64 rounded-2xl" />
+              </div>
             </div>
           ) : !data ? (
             <p className="py-24 text-center text-[13px] text-txt-muted">{t('stats.cannotLoadStats')}</p>

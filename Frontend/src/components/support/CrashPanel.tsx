@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { crashUnseen, useCrashWatch } from '@/stores/useCrashWatch'
 import { Button } from '@/components/ui/Button'
-import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
+import { SkeletonRows } from '@/components/ui/Skeleton'
 import { api } from '@/api/client'
 import { errorMessage } from '@/lib/apiError'
 import { showError } from '@/stores/useErrorToast'
@@ -122,9 +122,7 @@ export function CrashPanel({ signedIn }: { signedIn: boolean }) {
 
   if (entries === null) {
     return (
-      <div className="flex flex-1 items-center justify-center">
-        <ButtonSpinner size={28} color="rgb(var(--accent-text))" trackColor="rgba(255,255,255,0.08)" />
-      </div>
+      <SkeletonRows count={5} className="flex flex-1 flex-col gap-2" rowClassName="h-16" />
     )
   }
 

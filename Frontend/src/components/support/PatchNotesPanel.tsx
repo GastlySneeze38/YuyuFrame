@@ -2,11 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { api } from '@/api/client'
 import type { PatchNote } from '@/api/client'
-import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
+import { Skeleton, SkeletonRows } from '@/components/ui/Skeleton'
 import Markdown, { LAUNCHER_THEME } from '@/components/ui/Markdown'
 import { useT } from '@/i18n'
 import { useIsMobile } from '@/mobile/useIsMobile'
 import { Sheet, SheetTitle } from '@/mobile/ui/Sheet'
+import { readCache, writeCache } from '@/lib/persistentCache'
+
+const NOTES_CACHE = 'patch-notes'
 
 /**
  * Notes de version, dans l'onglet Support.
@@ -25,17 +28,28 @@ import { Sheet, SheetTitle } from '@/mobile/ui/Sheet'
  */
 export function PatchNotesPanel() {
   const t = useT()
-  const [notes, setNotes] = useState<PatchNote[] | null>(null)
+  // Les dernières notes connues s'affichent tout de suite (2026-11-06) ; une
+  // panne du site garde celles-ci au lieu d'un écran vide.
+  const [notes, setNotes] = useState<PatchNote[] | null>(() => readCache<PatchNote[]>(NOTES_CACHE)?.value ?? null)
   const [chosen, setChosen] = useState<string | null>(null)
 
   useEffect(() => {
-    api.patchNotes.list().then(setNotes).catch(() => setNotes([]))
+    api.patchNotes
+      .list()
+      .then((list) => {
+        if (list.length > 0) writeCache(NOTES_CACHE, list)
+        setNotes((old) => (list.length > 0 || !old ? list : old))
+      })
+      .catch(() => setNotes((old) => old ?? []))
   }, [])
 
   if (notes === null) {
     return (
-      <div className="flex flex-1 items-center justify-center">
-        <ButtonSpinner size={28} color="rgb(var(--accent-text))" trackColor="rgba(255,255,255,0.08)" />
+      // Silhouette d'une note : titre, date, paragraphes.
+      <div aria-busy className="flex flex-1 flex-col gap-3 p-1">
+        <Skeleton className="h-9 w-2/3 rounded-xl" />
+        <Skeleton className="h-4 w-40" />
+        <SkeletonRows count={6} className="mt-3 flex flex-col gap-2.5" rowClassName="h-4 rounded-md" />
       </div>
     )
   }

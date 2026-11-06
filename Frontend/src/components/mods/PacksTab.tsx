@@ -7,6 +7,7 @@ import { api } from '@/api/client'
 import { formatBytes } from '@/lib/format'
 import { showError } from '@/stores/useErrorToast'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { SkeletonRows } from '@/components/ui/Skeleton'
 import { SearchIcon } from '@/components/ui/icons/SearchIcon'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { useT } from '@/i18n'
@@ -15,6 +16,7 @@ import { MobileFiltersButton, MobileSearchFilters } from './MobileSearchFilters'
 import { ActionSheet, SHEET_ICONS } from '@/mobile/ui/ActionSheet'
 import { fetchVersionsByHash, type ModrinthHit } from './modUtils'
 import type { ModInstallProgress, PackInfo, PackKind } from '@/types'
+import { RemoteImage } from '@/components/ui/RemoteImage'
 
 /**
  * Packs de ressources et shaders : recherche, installation, gestion.
@@ -383,7 +385,10 @@ export function PacksTab({
         })}
       </div>
 
-      {!searching && results.length === 0 ? (
+      {searching && results.length === 0 ? (
+        // Première recherche : squelettes au lieu d'une liste vide.
+        <SkeletonRows count={6} className="flex flex-col gap-2.5" rowClassName="h-[76px] rounded-2xl" />
+      ) : !searching && results.length === 0 ? (
         <EmptyState
           icon={<svg viewBox="0 0 24 24" fill="rgba(255,255,255,0.18)" width={26} height={26}><path d={KIND_ICON[kind]} /></svg>}
           title={t('packs.noResult')}
@@ -407,7 +412,7 @@ export function PacksTab({
                     className="flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.04] p-3"
                   >
                     {hit.icon_url ? (
-                      <img src={hit.icon_url} alt="" className="h-12 w-12 shrink-0 rounded-xl object-cover" />
+                      <RemoteImage src={hit.icon_url} className="h-12 w-12 shrink-0 rounded-xl object-cover" />
                     ) : (
                       <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[rgb(var(--accent)/0.2)]">
                         <svg viewBox="0 0 24 24" fill="rgba(255,255,255,0.45)" className="h-[22px] w-[22px]"><path d={KIND_ICON[kind]} /></svg>
@@ -450,7 +455,7 @@ export function PacksTab({
                   className="flex gap-2.5 rounded-xl border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] p-2.5"
                 >
                   {hit.icon_url ? (
-                    <img src={hit.icon_url} alt="" className="h-10 w-10 flex-shrink-0 rounded-lg object-cover" />
+                    <RemoteImage src={hit.icon_url} className="h-10 w-10 flex-shrink-0 rounded-lg object-cover" />
                   ) : (
                     <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-[rgb(var(--accent)/0.2)]">
                       <svg viewBox="0 0 24 24" fill="rgba(255,255,255,0.35)" width={16} height={16}><path d={KIND_ICON[kind]} /></svg>

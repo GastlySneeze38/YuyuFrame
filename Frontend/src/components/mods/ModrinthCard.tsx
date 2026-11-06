@@ -5,6 +5,9 @@ import { PlugIcon } from '@/components/ui/icons/PlugIcon'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { useT } from '@/i18n'
 import type { ModrinthHit } from './modUtils'
+import { RemoteImage } from '@/components/ui/RemoteImage'
+import { useHoverPrefetch } from '@/lib/prefetch'
+import { prefetchProjectDetail } from './modUtils'
 
 export function ModrinthCard({ hit, installed, loading, progress, onInstall, onOpenDetail }: {
   hit: ModrinthHit
@@ -15,15 +18,19 @@ export function ModrinthCard({ hit, installed, loading, progress, onInstall, onO
   onOpenDetail: () => void
 }) {
   const t = useT()
+  // La fiche du mod est demandée après 150 ms de survol (`lib/prefetch`) :
+  // le clic la trouve déjà chargée.
+  const prefetch = useHoverPrefetch(() => prefetchProjectDetail(hit.project_id))
   return (
     <div
+      {...prefetch}
       onClick={onOpenDetail}
       className="flex cursor-pointer flex-col gap-2.5 rounded-2xl px-4 py-3 transition-all duration-150 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] hover:bg-[rgba(255,255,255,0.05)]"
     >
       <div className="flex items-center gap-3">
         <div className="w-11 h-11 rounded-xl flex-shrink-0 overflow-hidden bg-[rgba(255,255,255,0.06)] flex items-center justify-center">
           {hit.icon_url ? (
-            <img src={hit.icon_url} alt={hit.title} className="w-full h-full object-cover" />
+            <RemoteImage src={hit.icon_url} alt={hit.title} className="w-full h-full object-cover" />
           ) : (
             <PlugIcon size={20} color="rgba(255,255,255,0.2)" />
           )}
