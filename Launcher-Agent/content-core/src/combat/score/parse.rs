@@ -243,9 +243,15 @@ fn int(value: &Value) -> Option<i32> {
 /// Les nombres d'une ligne `s`. Un journal plus ancien en porte moins
 /// (`min`, la longueur de la version 1) : ceux qui manquent valent −1,
 /// « inconnu », comme Java les écrit quand il ne sait pas.
+///
+/// Un journal plus RÉCENT en porte plus (2026-11-07) : les nombres en trop
+/// sont ignorés, ils ne servent qu'à ce qui les connaît. Avant, la ligne
+/// entière était rejetée — un serveur qui n'avait pas été mis à jour aurait
+/// perdu tous les échantillons d'un journal plus récent, donc refusé de
+/// vérifier ses duels classés.
 fn numbers<const N: usize>(value: &Value, min: usize) -> Option<[f64; N]> {
     let list = value.as_array()?;
-    if list.len() < min || list.len() > N {
+    if list.len() < min {
         return None;
     }
     let mut out = [-1.0; N];
@@ -638,7 +644,12 @@ mod tests {
         assert_eq!(read_v1[ME_LEN - 1], -1.0, "les mesures absentes d'un journal de version 1 sont inconnues");
         assert_eq!(numbers::<ME_LEN>(&serde_json::json!(v2), ME_LEN_V1).unwrap(), v2);
         assert!(numbers::<ME_LEN>(&serde_json::json!(vec![0.5; 3]), ME_LEN_V1).is_none(), "trop court");
-        assert!(numbers::<ME_LEN>(&serde_json::json!(vec![0.5; ME_LEN + 1]), ME_LEN_V1).is_none(), "trop long");
+        // Un journal plus récent : les nombres en trop sont ignorés, pas la ligne.
+        let newer = numbers::<ME_LEN>(&serde_json::json!(vec![0.5; ME_LEN + 3]), ME_LEN_V1).expect("plus long");
+        assert_eq!(newer, [0.5; ME_LEN]);
+        // Un journal de version 4 (21 nombres) se lit avec la longueur de la version 5.
+        let v4 = numbers::<ME_LEN>(&serde_json::json!(vec![0.5; 21]), ME_LEN_V1).expect("version 4");
+        assert_eq!((v4[20], v4[crate::combat::record::ME_INPUT]), (0.5, -1.0));
         let other = numbers::<OTHER_LEN>(&serde_json::json!(vec![7.0; OTHER_LEN_V1]), OTHER_LEN_V1).unwrap();
         assert_eq!((other[0], other[OTHER_LEN - 1]), (7.0, -1.0));
     }

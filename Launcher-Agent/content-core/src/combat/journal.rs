@@ -56,7 +56,17 @@ use super::record::*;
 /// sprinté, barre au-dessus de 0,9), `.strong` (barre pleine), `.weak`
 /// (barre pas pleine), `.sweep`, `.nodamage` (coup sans effet). Ce sont les
 /// seules traces de la charge et du sprint de l'adversaire à son coup.
-pub const TELEMETRY_VERSION: u32 = 4;
+///
+/// Version 5 (2026-11-07, données de la refonte de la note,
+/// docs/scoring/refonte/donnees-a-capturer.md) : quatre nombres de plus pour
+/// notre joueur dans les lignes `s` (touches tenues, entité sous le réticule,
+/// swing, absorption) et deux pour les autres (regard vertical, swing) ; la
+/// vitesse des autres est calculée depuis leurs positions, et leurs drapeaux
+/// portent le sprint et l'accroupi ; une sorte de ligne de plus, `i`
+/// (inventaire de notre joueur, à chaque changement et à l'ouverture d'un
+/// duel). Rien de tout cela n'entre dans la note actuelle : ce sont des
+/// données pour la refonte. Un journal de version 4 se lit toujours.
+pub const TELEMETRY_VERSION: u32 = 5;
 /// Un autre joueur à moins de cette distance : on est engagé.
 const ENGAGE_BLOCKS: f64 = 16.0;
 /// Lignes gardées avant l'ouverture du duel (10 s d'échantillons).
@@ -116,6 +126,10 @@ pub struct Journal {
     /// Ce qui a déjà été écrit dans le fichier ouvert.
     written_players: HashMap<i32, (u128, String)>,
     written_equipment: HashMap<i32, String>,
+    /// L'inventaire de notre joueur, tel que Java le donne (`EVENT_INVENTORY`).
+    inventory: Option<String>,
+    /// Ce qui en a déjà été écrit dans le fichier ouvert.
+    written_inventory: Option<String>,
     /// Tick où Java a parlé pour la dernière fois de chaque joueur.
     seen: HashMap<i32, u64>,
     /// Les dernières lignes hors duel, avec leur tick.
@@ -162,6 +176,8 @@ impl Journal {
             equipment: HashMap::new(),
             written_players: HashMap::new(),
             written_equipment: HashMap::new(),
+            inventory: None,
+            written_inventory: None,
             seen: HashMap::new(),
             preroll: VecDeque::new(),
             recording: false,
@@ -261,6 +277,14 @@ impl Journal {
                 // le duel s'est arrêté sans que le serveur ne désigne de perdant.
                 if self.last_exchange.is_some_and(|(at, _)| self.tick - at.max(self.foe_near) >= COMBAT_TICKS) {
                     self.finish("unknown", "timeout", &mut out);
+                }
+            }
+            // L'inventaire suit le même chemin que l'équipement : gardé, puis
+            // écrit à l'ouverture d'un duel et à chaque changement pendant.
+            Record::Event { kind: EVENT_INVENTORY, text, .. } => {
+                self.inventory = Some(text);
+                if self.recording {
+                    self.write_identities(&mut out);
                 }
             }
             Record::Event { kind, a, b, c, text } => {
@@ -432,6 +456,7 @@ impl Journal {
         self.last_exchange = None;
         self.written_players.clear();
         self.written_equipment.clear();
+        self.written_inventory = None;
     }
 
     /// Hors duel, la ligne attend dans le pré-enregistrement. Pendant un
@@ -466,6 +491,11 @@ impl Journal {
                 self.written_equipment.insert(*id, text.clone());
             }
         }
+        if self.inventory.is_some() && self.written_inventory != self.inventory {
+            let text = self.inventory.clone().unwrap_or_default();
+            out.push(Out::Line(inventory_line(self.tick, &text).to_string()));
+            self.written_inventory = Some(text);
+        }
     }
 
     /// Fin du monde courant : le duel en cours se ferme, et les identifiants
@@ -478,8 +508,27 @@ impl Journal {
         self.preroll.clear();
         self.players.clear();
         self.equipment.clear();
+        self.inventory = None;
         self.seen.clear();
     }
+}
+
+/// La ligne `i` d'un inventaire donné par Java (`EVENT_INVENTORY`) :
+/// `{"k":"i","t":…,"hotbar":[9 identifiants, "" pour une case vide],
+/// "count":{"identifiant":nombre,…}}`. Un texte mal formé donne une barre et
+/// des comptes vides plutôt qu'une ligne perdue.
+fn inventory_line(tick: u64, text: &str) -> Value {
+    let (bar, counts) = text.split_once(';').unwrap_or((text, ""));
+    let hotbar: Vec<&str> = bar.split(',').take(9).collect();
+    let mut count = serde_json::Map::new();
+    for entry in counts.split(',').filter(|e| !e.is_empty()) {
+        if let Some((item, n)) = entry.split_once('=') {
+            if let Ok(n) = n.parse::<u32>() {
+                count.insert(item.to_string(), Value::from(n));
+            }
+        }
+    }
+    json!({ "k": "i", "t": tick, "hotbar": hotbar, "count": count })
 }
 
 /// Un vrai joueur, et non un personnage posé par le serveur (vendeur, file
@@ -583,6 +632,45 @@ mod tests {
         journal.feed(equip(FOE, ARMOR), 2000);
         journal.feed(hit(FOE, ME), 3000);
         journal
+    }
+
+    fn inventory(text: &str) -> Record {
+        Record::Event { kind: EVENT_INVENTORY, a: 0, b: 0, c: 0, text: text.into() }
+    }
+
+    /// Les lignes `i` d'une sortie.
+    fn inventories(out: &[Out]) -> Vec<Value> {
+        out.iter()
+            .filter_map(|o| match o {
+                Out::Line(line) => serde_json::from_str::<Value>(line).ok().filter(|v| v["k"] == "i"),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn l_inventaire_s_ecrit_a_l_ouverture_puis_a_chaque_changement() {
+        let mut journal = started();
+        journal.feed(tick(3.0), 2000);
+        // Hors duel : gardé, rien d'écrit.
+        assert!(inventories(&journal.feed(inventory("mace,netherite_sword,,,,,,,;totem_of_undying=3,wind_charge=64"), 2000)).is_empty());
+        let opened = journal.feed(START, 2000);
+        let lines = inventories(&opened);
+        assert_eq!(lines.len(), 1, "écrit à l'ouverture");
+        assert_eq!(lines[0]["hotbar"][0], "mace");
+        assert_eq!(lines[0]["hotbar"].as_array().unwrap().len(), 9);
+        assert_eq!(lines[0]["count"]["totem_of_undying"], 3);
+        // Le même inventaire n'est pas répété ; un changement s'écrit.
+        assert!(inventories(&journal.feed(inventory("mace,netherite_sword,,,,,,,;totem_of_undying=3,wind_charge=64"), 2000)).is_empty());
+        let changed = inventories(&journal.feed(inventory("mace,netherite_sword,,,,,,,;totem_of_undying=2,wind_charge=64"), 2000));
+        assert_eq!(changed[0]["count"]["totem_of_undying"], 2);
+    }
+
+    #[test]
+    fn un_inventaire_mal_forme_donne_une_ligne_vide_et_pas_une_erreur() {
+        let line = inventory_line(5, "n'importe quoi");
+        assert_eq!(line["hotbar"][0], "n'importe quoi");
+        assert!(line["count"].as_object().unwrap().is_empty());
     }
 
     #[test]

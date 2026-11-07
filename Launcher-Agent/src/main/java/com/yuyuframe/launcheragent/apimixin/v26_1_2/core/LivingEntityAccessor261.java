@@ -29,4 +29,13 @@ public interface LivingEntityAccessor261 {
 
     @Invoker("isUsingItem")
     boolean la$isUsingItem();
+
+    // Données de la refonte de la note (2026-11-07) — javap, jar 26.1.2.
+
+    /** Avancement du swing de bras, de 0 à 1. Sur 26.3 la méthode s'appelle {@code getSwingAnimation}. */
+    @Invoker("getAttackAnim")
+    float la$attackAnim(float partialTick);
+
+    @Invoker("getAbsorptionAmount")
+    float la$absorptionAmount();
 }

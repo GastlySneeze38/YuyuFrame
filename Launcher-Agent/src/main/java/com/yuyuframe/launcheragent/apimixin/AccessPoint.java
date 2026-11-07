@@ -703,6 +703,39 @@ public enum AccessPoint {
     ENTITY_IS_GLIDING,
     /** L'entité utilise-t-elle un objet (bouclier levé, nourriture, arc…) ? {@code Boolean}. Receveur : l'entité. */
     ENTITY_IS_USING_ITEM,
+    // ── Données de la refonte de la note (2026-11-07, ABI 22 du combat,
+    //    docs/scoring/refonte/donnees-a-capturer.md). Liées sur 26.1.2 et 26.3,
+    //    les deux versions où le relevé du combat est complet ; ailleurs elles
+    //    rendent leur valeur de repli. ─────────────────────────────────────
+    /** Inclinaison du regard de l'entité, en degrés ({@code Float}, {@code getXRot}). Receveur : l'entité ; {@code null} = notre joueur. */
+    ENTITY_PITCH,
+    /** L'entité sprinte-t-elle ? {@code Boolean} — drapeau partagé par le serveur, donc lisible pour les autres joueurs. Receveur : l'entité. */
+    ENTITY_IS_SPRINTING,
+    /** L'entité est-elle accroupie ({@code isShiftKeyDown}) ? {@code Boolean}. Receveur : l'entité. */
+    ENTITY_IS_SNEAKING,
+    /**
+     * Avancement du swing de bras de l'entité, de 0 à 1 ({@code Float}) —
+     * {@code getAttackAnim(0)} en 26.1.2, {@code getSwingAnimation(0)} en
+     * 26.3. Un swing qui repart de zéro est une attaque lancée, touchée ou
+     * non. Receveur : l'entité ; {@code null} = notre joueur.
+     */
+    ENTITY_SWING_PROGRESS,
+    /** Cœurs d'absorption de l'entité, en points de vie ({@code Float}). Receveur : l'entité ; {@code null} = notre joueur. */
+    ENTITY_ABSORPTION,
+    /**
+     * L'entité sous le réticule, à portée d'interaction ({@code
+     * Minecraft.crosshairPickEntity}) — OPAQUE, à repasser à {@link
+     * #ENTITY_NETWORK_ID} ; {@code null} s'il n'y en a pas. Pas de receveur.
+     */
+    CLIENT_CROSSHAIR_ENTITY,
+    /**
+     * Tout l'inventaire de notre joueur, en {@code ItemInfo[]} dans l'ordre
+     * du jeu : les 9 cases de la barre d'abord, puis le reste, l'armure et la
+     * main gauche ({@code Inventory.getItem(i)} pour i de 0 à
+     * {@code getContainerSize()}). Jamais de case nulle ({@link
+     * com.yuyuframe.launcheragent.apimixin.data.ItemInfo#EMPTY}). Pas de receveur.
+     */
+    PLAYER_INVENTORY_ITEMS,
     /**
      * Le bloc à cette position est-il solide (on se tient dessus) ?
      * {@code Boolean}. Pas de receveur ; arguments : x, y, z entiers. Sert à

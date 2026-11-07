@@ -22,4 +22,12 @@ public abstract class Options {
     public KeyMapping keyLeft;
     public KeyMapping keyRight;
     public KeyMapping keyJump;
+
+    // Raccourcis d'action, pour le relevé des touches du combat (2026-11-07,
+    // docs/scoring/refonte/donnees-a-capturer.md) : public final dans le vrai
+    // jar (javap 26.1.2), lus comme les cinq ci-dessus.
+    public KeyMapping keyAttack;
+    public KeyMapping keyUse;
+    public KeyMapping keyShift;
+    public KeyMapping keySprint;
 }

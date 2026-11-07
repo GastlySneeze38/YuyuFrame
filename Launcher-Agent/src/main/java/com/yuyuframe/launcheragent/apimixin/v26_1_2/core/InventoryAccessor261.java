@@ -1,5 +1,6 @@
 package com.yuyuframe.launcheragent.apimixin.v26_1_2.core;
 
+import net.minecraft.world.item.ItemStack;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Invoker;
 
@@ -9,4 +10,16 @@ public interface InventoryAccessor261 {
 
     @Invoker("getSelectedSlot")
     int la$selectedSlot();
+
+    /**
+     * Toutes les cases, armure et main gauche comprises ({@code
+     * AccessPoint.PLAYER_INVENTORY_ITEMS}, 2026-11-07) — javap, jars 26.1.2 et
+     * 26.3 : {@code getContainerSize()} et {@code getItem(int)} publics,
+     * déclarés sur {@code Inventory}.
+     */
+    @Invoker("getContainerSize")
+    int la$containerSize();
+
+    @Invoker("getItem")
+    ItemStack la$item(int slot);
 }

@@ -29,4 +29,17 @@ public interface LivingEntityAccessor263 {
 
     @Invoker("isUsingItem")
     boolean la$isUsingItem();
+
+    // Données de la refonte de la note (2026-11-07) — javap, jar 26.3.
+
+    /**
+     * Avancement du swing de bras, de 0 à 1. Le champ {@code swingTime} et
+     * {@code getAttackAnim} de la 26.1.2 n'existent plus sur cette version :
+     * l'état du swing est un objet ({@code SwingState}), lu par cette méthode.
+     */
+    @Invoker("getSwingAnimation")
+    float la$swingAnimation(float partialTick);
+
+    @Invoker("getAbsorptionAmount")
+    float la$absorptionAmount();
 }

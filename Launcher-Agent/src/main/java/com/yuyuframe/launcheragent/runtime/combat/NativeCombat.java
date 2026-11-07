@@ -33,7 +33,7 @@ import java.util.UUID;
 public final class NativeCombat {
 
     /** Même valeur que {@code ABI_VERSION} dans combat/bridge.rs. */
-    private static final int ABI_VERSION = 21;
+    private static final int ABI_VERSION = 22;
 
     // Le compétitif est-il possible (combat/ranked_sync.rs, `Readiness`).
     public static final int RANKED_READY_CHECKING = 0;
@@ -184,7 +184,7 @@ public final class NativeCombat {
     public static final int RANKED_STATUS_OFFLINE_SERVER = 7;
 
     /** Nombres décrivant notre joueur à un tick — {@code ME_LEN} dans combat/record.rs, même ordre. */
-    public static final int ME_LEN = 21;
+    public static final int ME_LEN = 25;
     public static final int ME_ID = 0;
     public static final int ME_X = 1;
     public static final int ME_Y = 2;
@@ -210,18 +210,47 @@ public final class NativeCombat {
     /** Niveau des effets de force et de vitesse (amplificateur + 1) ; 0 sans l'effet. */
     public static final int ME_STRENGTH = 19;
     public static final int ME_SPEED = 20;
+    // ABI 22 (2026-11-07) — données de la refonte de la note
+    // (docs/scoring/refonte/donnees-a-capturer.md), −1 quand la version du jeu
+    // ne sait pas les lire. Aucune n'entre dans la note actuelle.
+    /** Touches tenues, bits {@code INPUT_*} : ce que le joueur presse, pas ce que le recul fait. */
+    public static final int ME_INPUT = 21;
+    /** Identifiant réseau de l'entité sous le réticule ; −1 aucune. */
+    public static final int ME_TARGET = 22;
+    /** Avancement du swing de bras, 0 à 1 : un swing qui repart = une attaque lancée, touchée ou non. */
+    public static final int ME_SWING = 23;
+    /** Cœurs d'absorption (pomme dorée), en points de vie. */
+    public static final int ME_ABSORPTION = 24;
+
+    /** Bits de {@link #ME_INPUT} — {@code INPUT_*} dans combat/record.rs. */
+    public static final int INPUT_FORWARD = 1;
+    public static final int INPUT_BACK = 1 << 1;
+    public static final int INPUT_LEFT = 1 << 2;
+    public static final int INPUT_RIGHT = 1 << 3;
+    public static final int INPUT_JUMP = 1 << 4;
+    public static final int INPUT_SNEAK = 1 << 5;
+    public static final int INPUT_SPRINT = 1 << 6;
+    public static final int INPUT_ATTACK = 1 << 7;
+    public static final int INPUT_USE = 1 << 8;
 
     /**
      * Nombres décrivant un autre joueur à un tick — {@code OTHER_LEN} dans
      * combat/record.rs : identifiant, position, vitesse, drapeaux, rotation
-     * de la tête, hauteur au-dessus du sol.
+     * de la tête, hauteur au-dessus du sol, puis (ABI 22) regard vertical et
+     * swing. Depuis l'ABI 22 la vitesse est calculée depuis deux positions
+     * successives : celle que le client tient pour un autre joueur est
+     * souvent nulle.
      */
-    public static final int OTHER_LEN = 10;
+    public static final int OTHER_LEN = 12;
     public static final int OTHER_FLAGS = 7;
     /** Rotation horizontale de la tête, en degrés : de là se lit s'il nous fait face (bouclier). */
     public static final int OTHER_HEAD_YAW = 8;
     /** Comme {@link #ME_GROUND}. */
     public static final int OTHER_GROUND = 9;
+    /** Regard vertical (inclinaison de la tête), en degrés — calibrage seulement. */
+    public static final int OTHER_PITCH = 10;
+    /** Avancement de son swing de bras, 0 à 1 — calibrage seulement. */
+    public static final int OTHER_SWING = 11;
     /** Autres joueurs transmis par tick, au plus — {@code MAX_OTHERS} dans combat/bridge.rs. */
     public static final int MAX_OTHERS = 16;
 
@@ -235,6 +264,8 @@ public final class NativeCombat {
     public static final int FLAG_PASSENGER = 1 << 7;
     /** Objet bloquant levé ET armé (bouclier) — pour notre joueur comme pour les autres. */
     public static final int FLAG_BLOCKING = 1 << 8;
+    /** Accroupi (ABI 22) — pour notre joueur comme pour les autres (drapeau partagé par le serveur). */
+    public static final int FLAG_SNEAKING = 1 << 9;
 
     /**
      * Sortes d'événements — {@code EVENT_*} dans combat/record.rs.
@@ -249,6 +280,13 @@ public final class NativeCombat {
     public static final int EVENT_SOUND = 5;
     /** Recharge d'un groupe de nos objets : a = durée en ticks, texte = groupe ({@code shield}). */
     public static final int EVENT_COOLDOWN = 6;
+    /**
+     * Inventaire de notre joueur (ABI 22), seulement quand il change : texte =
+     * les 9 cases de la barre (identifiants, vide pour une case vide) séparées
+     * par des virgules, un point-virgule, puis {@code identifiant=nombre} pour
+     * chaque objet de tout l'inventaire, séparés par des virgules.
+     */
+    public static final int EVENT_INVENTORY = 7;
 
     private static final byte[] NO_BYTES = new byte[0];
 

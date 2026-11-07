@@ -83,6 +83,23 @@ public final class CombatTracker {
     private static final double[] OTHERS = new double[NativeCombat.MAX_OTHERS * NativeCombat.OTHER_LEN];
     private static final Object[] NEAR = new Object[NativeCombat.MAX_OTHERS];
 
+    /**
+     * Dernière position vue de chaque autre joueur — x, y, z et le tick —, pour
+     * calculer sa vitesse : celle que le client tient pour un autre joueur est
+     * souvent nulle (ABI 22, docs/scoring/refonte/donnees-a-capturer.md).
+     */
+    private static final java.util.HashMap<Integer, double[]> LAST_POS = new java.util.HashMap<>();
+    /** Au-delà, une position vue est trop vieille pour une vitesse. */
+    private static final int VELOCITY_GAP_TICKS = 3;
+
+    /** Les raccourcis lus pour {@link NativeCombat#ME_INPUT}, résolus une fois. */
+    private static Object[] movementKeys;
+    private static Object[] actionKeys;
+
+    /** L'inventaire envoyé en dernier, et sa signature (piles et tailles), pour n'envoyer qu'un changement. */
+    private static String lastInventory;
+    private static long lastInventorySignature;
+
     /** Branche les points d'accroche. Une seule fois, à la construction du module. */
     public static void install() {
         VanillaHookRegistry.register(HookPoint.CLIENT_TICK, ctx -> { guarded(CombatTracker::tick); return false; });
@@ -90,6 +107,11 @@ public final class CombatTracker {
         VanillaHookRegistry.register(HookPoint.CLIENT_LEVEL_LOAD, ctx -> {
             // Le noyau ferme le duel en cours à tout changement de monde.
             if (active) NativeCombat.world();
+            // Les identifiants réseau ne valent plus rien ; l'inventaire est
+            // redit au noyau, qui l'a oublié avec le monde.
+            LAST_POS.clear();
+            lastInventory = null;
+            lastInventorySignature = 0;
             return false;
         });
         VanillaHookRegistry.register(HookPoint.ENTITY_ATTACK, ctx -> {
@@ -142,6 +164,9 @@ public final class CombatTracker {
         }
         active = on;
         contextSent = false;
+        LAST_POS.clear();
+        lastInventory = null;
+        lastInventorySignature = 0;
         if (!on) {
             NativeCombat.close();
         }
@@ -207,6 +232,11 @@ public final class CombatTracker {
         fillSelf(self, selfId, at);
         int count = fillOthers(self, at);
         NativeCombat.tick(ME, OTHERS, count);
+        sendInventory();
+        // Les joueurs qu'on ne voit plus : leur dernière position ne sert plus.
+        if (ticks % IDENTITY_EVERY_TICKS == 0) {
+            LAST_POS.values().removeIf(p -> ticks - p[3] > IDENTITY_EVERY_TICKS);
+        }
 
         boolean everyone = ticks % IDENTITY_EVERY_TICKS == 0;
         boolean closeIdentity = ticks % CLOSE_EVERY_TICKS == 0;
@@ -256,6 +286,101 @@ public final class CombatTracker {
         }
         ME[NativeCombat.ME_STRENGTH] = strength;
         ME[NativeCombat.ME_SPEED] = speedLevel;
+        // ABI 22 — données de la refonte de la note, −1 si la version ne sait pas les lire.
+        ME[NativeCombat.ME_INPUT] = inputBits();
+        Object target = AccessorRegistry.get(AccessPoint.CLIENT_CROSSHAIR_ENTITY, null);
+        ME[NativeCombat.ME_TARGET] = target == null ? -1 : AccessorRegistry.getInt(AccessPoint.ENTITY_NETWORK_ID, target, -1);
+        ME[NativeCombat.ME_SWING] = AccessorRegistry.getFloat(AccessPoint.ENTITY_SWING_PROGRESS, self, -1f);
+        ME[NativeCombat.ME_ABSORPTION] = AccessorRegistry.getFloat(AccessPoint.ENTITY_ABSORPTION, self, -1f);
+    }
+
+    /**
+     * Les touches tenues, bits {@code NativeCombat.INPUT_*}, lues sur les
+     * raccourcis (l'état réel de la touche, même quand un module substitue ce
+     * que voit la logique de déplacement). −1 si la version ne les donne pas.
+     */
+    private static double inputBits() {
+        if (movementKeys == null) {
+            Object keys = AccessorRegistry.get(AccessPoint.OPTIONS_MOVEMENT_KEYS, null);
+            if (keys instanceof Object[] && ((Object[]) keys).length >= 5) movementKeys = (Object[]) keys;
+        }
+        if (actionKeys == null) {
+            Object keys = AccessorRegistry.get(AccessPoint.OPTIONS_ACTION_KEYS, null);
+            if (keys instanceof Object[] && ((Object[]) keys).length >= 4) actionKeys = (Object[]) keys;
+        }
+        if (movementKeys == null || actionKeys == null) {
+            return -1;
+        }
+        // OPTIONS_MOVEMENT_KEYS : avant, gauche, arrière, droite, saut.
+        // OPTIONS_ACTION_KEYS : attaquer, utiliser, s'accroupir, sprinter.
+        int bits = 0;
+        if (down(movementKeys[0])) bits |= NativeCombat.INPUT_FORWARD;
+        if (down(movementKeys[1])) bits |= NativeCombat.INPUT_LEFT;
+        if (down(movementKeys[2])) bits |= NativeCombat.INPUT_BACK;
+        if (down(movementKeys[3])) bits |= NativeCombat.INPUT_RIGHT;
+        if (down(movementKeys[4])) bits |= NativeCombat.INPUT_JUMP;
+        if (down(actionKeys[0])) bits |= NativeCombat.INPUT_ATTACK;
+        if (down(actionKeys[1])) bits |= NativeCombat.INPUT_USE;
+        if (down(actionKeys[2])) bits |= NativeCombat.INPUT_SNEAK;
+        if (down(actionKeys[3])) bits |= NativeCombat.INPUT_SPRINT;
+        return bits;
+    }
+
+    private static boolean down(Object key) {
+        return key != null && AccessorRegistry.getBoolean(AccessPoint.KEYBIND_IS_DOWN, key, false);
+    }
+
+    /**
+     * L'inventaire de notre joueur, seulement s'il a changé
+     * ({@link NativeCombat#EVENT_INVENTORY}). Les identifiants ne sont relus
+     * que si une pile ou une taille a bougé : d'un tick à l'autre, la
+     * signature suffit.
+     */
+    private static void sendInventory() {
+        Object items = AccessorRegistry.get(AccessPoint.PLAYER_INVENTORY_ITEMS, null);
+        if (!(items instanceof ItemInfo[])) {
+            return;
+        }
+        ItemInfo[] slots = (ItemInfo[]) items;
+        long signature = slots.length;
+        for (ItemInfo slot : slots) {
+            signature = signature * 31 + (slot == null || slot.empty ? 0 : System.identityHashCode(slot.handle) * 64L + slot.count);
+        }
+        if (lastInventory != null && signature == lastInventorySignature) {
+            return;
+        }
+        lastInventorySignature = signature;
+        StringBuilder bar = new StringBuilder();
+        java.util.TreeMap<String, Integer> counts = new java.util.TreeMap<>();
+        for (int i = 0; i < slots.length; i++) {
+            String id = itemId(slots[i]);
+            if (i < 9) {
+                if (i > 0) bar.append(',');
+                if (id != null) bar.append(id);
+            }
+            if (id != null) counts.merge(id, slots[i].count, Integer::sum);
+        }
+        StringBuilder text = bar.append(';');
+        boolean first = true;
+        for (java.util.Map.Entry<String, Integer> e : counts.entrySet()) {
+            if (!first) text.append(',');
+            text.append(e.getKey()).append('=').append(e.getValue());
+            first = false;
+        }
+        String inventory = text.toString();
+        if (!inventory.equals(lastInventory)) {
+            lastInventory = inventory;
+            NativeCombat.event(NativeCombat.EVENT_INVENTORY, 0, 0, 0, inventory);
+        }
+    }
+
+    /** L'identifiant d'une pile, sans espace de noms ; {@code null} pour une case vide. */
+    private static String itemId(ItemInfo slot) {
+        if (slot == null || slot.empty || slot.handle == null) {
+            return null;
+        }
+        Object id = AccessorRegistry.get(AccessPoint.ITEM_ID, slot.handle);
+        return id instanceof String ? (String) id : null;
     }
 
     /**
@@ -355,6 +480,7 @@ public final class CombatTracker {
         if (PlayerData.itemUse() != null) flags |= NativeCombat.FLAG_USING_ITEM;
         if (mode[PlayerData.MODE_SPECTATOR]) flags |= NativeCombat.FLAG_SPECTATOR;
         if (mode[PlayerData.MODE_CREATIVE]) flags |= NativeCombat.FLAG_CREATIVE;
+        if (AccessorRegistry.getBoolean(AccessPoint.ENTITY_IS_SNEAKING, self, false)) flags |= NativeCombat.FLAG_SNEAKING;
         return flags;
     }
 
@@ -409,25 +535,45 @@ public final class CombatTracker {
     private static final double[] DIST_SQ = new double[NativeCombat.MAX_OTHERS];
 
     private static void writeOther(int slot, Object other, double[] pos, double distSq) {
-        double[] speed = vector(AccessPoint.ENTITY_DELTA_MOVEMENT, other);
         int base = slot * NativeCombat.OTHER_LEN;
-        OTHERS[base] = AccessorRegistry.getInt(AccessPoint.ENTITY_NETWORK_ID, other, NO_ID);
+        int id = AccessorRegistry.getInt(AccessPoint.ENTITY_NETWORK_ID, other, NO_ID);
+        OTHERS[base] = id;
         OTHERS[base + 1] = pos[0];
         OTHERS[base + 2] = pos[1];
         OTHERS[base + 3] = pos[2];
-        OTHERS[base + 4] = speed == null ? 0 : speed[0];
-        OTHERS[base + 5] = speed == null ? 0 : speed[1];
-        OTHERS[base + 6] = speed == null ? 0 : speed[2];
+        // La vitesse depuis deux positions successives (ABI 22) : celle que le
+        // client tient pour un autre joueur est souvent nulle. Sans position
+        // récente, celle du client, faute de mieux.
+        double[] last = LAST_POS.get(id);
+        if (last != null && ticks > last[3] && ticks - last[3] <= VELOCITY_GAP_TICKS) {
+            double dt = ticks - last[3];
+            OTHERS[base + 4] = (pos[0] - last[0]) / dt;
+            OTHERS[base + 5] = (pos[1] - last[1]) / dt;
+            OTHERS[base + 6] = (pos[2] - last[2]) / dt;
+        } else {
+            double[] speed = vector(AccessPoint.ENTITY_DELTA_MOVEMENT, other);
+            OTHERS[base + 4] = speed == null ? 0 : speed[0];
+            OTHERS[base + 5] = speed == null ? 0 : speed[1];
+            OTHERS[base + 6] = speed == null ? 0 : speed[2];
+        }
+        if (id != NO_ID) {
+            LAST_POS.put(id, new double[]{ pos[0], pos[1], pos[2], ticks });
+        }
         int flags = 0;
         if (AccessorRegistry.getBoolean(AccessPoint.ENTITY_ON_GROUND, other, false)) flags |= NativeCombat.FLAG_ON_GROUND;
         if (AccessorRegistry.getBoolean(AccessPoint.ENTITY_IS_GLIDING, other, false)) flags |= NativeCombat.FLAG_GLIDING;
         if (AccessorRegistry.getBoolean(AccessPoint.ENTITY_IS_USING_ITEM, other, false)) flags |= NativeCombat.FLAG_USING_ITEM;
         if (AccessorRegistry.getBoolean(AccessPoint.ENTITY_IS_BLOCKING, other, false)) flags |= NativeCombat.FLAG_BLOCKING;
+        if (AccessorRegistry.getBoolean(AccessPoint.ENTITY_IS_SPRINTING, other, false)) flags |= NativeCombat.FLAG_SPRINTING;
+        if (AccessorRegistry.getBoolean(AccessPoint.ENTITY_IS_SNEAKING, other, false)) flags |= NativeCombat.FLAG_SNEAKING;
         OTHERS[base + NativeCombat.OTHER_FLAGS] = flags;
         OTHERS[base + NativeCombat.OTHER_HEAD_YAW] = AccessorRegistry.getFloat(AccessPoint.ENTITY_HEAD_YAW, other, 0f);
         // Le terrain sous lui, seulement à portée de combat : au-delà, ça ne
         // sert à rien et la lecture coûte.
         OTHERS[base + NativeCombat.OTHER_GROUND] = distSq <= CLOSE_RANGE * CLOSE_RANGE ? groundHeight(pos) : -1;
+        // ABI 22 — calibrage seulement, −1 si la version ne sait pas les lire.
+        OTHERS[base + NativeCombat.OTHER_PITCH] = AccessorRegistry.getFloat(AccessPoint.ENTITY_PITCH, other, -1f);
+        OTHERS[base + NativeCombat.OTHER_SWING] = AccessorRegistry.getFloat(AccessPoint.ENTITY_SWING_PROGRESS, other, -1f);
         NEAR[slot] = other;
         DIST_SQ[slot] = distSq;
     }

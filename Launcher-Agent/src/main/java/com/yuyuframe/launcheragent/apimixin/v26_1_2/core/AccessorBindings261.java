@@ -180,6 +180,15 @@ public final class AccessorBindings261 {
             Options o = (Options) target;
             return new Object[]{ o.keyUp, o.keyLeft, o.keyDown, o.keyRight, o.keyJump };
         });
+        AccessorRegistry.bind(AccessPoint.OPTIONS_ACTION_KEYS, (r, a) -> {
+            // Même principe : champs publics (final) sur cette version, javap
+            // jar 26.1.2. Ordre de l'AccessPoint : attaquer, utiliser,
+            // s'accroupir, sprinter.
+            Object target = options(r);
+            if (!(target instanceof Options)) return null;
+            Options o = (Options) target;
+            return new Object[]{ o.keyAttack, o.keyUse, o.keyShift, o.keySprint };
+        });
 
         // ── Joueur local : OPÉRATIONS ──────────────────────────────────────
         // Reprises TELLES QUELLES de ce que les modules faisaient en ligne sur
@@ -381,6 +390,41 @@ public final class AccessorBindings261 {
         AccessorRegistry.bind(AccessPoint.ENTITY_IS_USING_ITEM, (r, a) -> {
             LivingEntityAccessor261 e = living(r);
             return e == null ? null : Boolean.valueOf(e.la$isUsingItem());
+        });
+        // Données de la refonte de la note (docs/scoring/refonte/donnees-a-capturer.md).
+        AccessorRegistry.bind(AccessPoint.ENTITY_PITCH, (r, a) -> {
+            EntityAccessor261 e = entity(r);
+            return e == null ? null : Float.valueOf(e.la$xRot());
+        });
+        AccessorRegistry.bind(AccessPoint.ENTITY_IS_SPRINTING, (r, a) -> {
+            EntityAccessor261 e = entity(r);
+            return e == null ? null : Boolean.valueOf(e.la$isSprinting());
+        });
+        AccessorRegistry.bind(AccessPoint.ENTITY_IS_SNEAKING, (r, a) -> {
+            EntityAccessor261 e = entity(r);
+            return e == null ? null : Boolean.valueOf(e.la$isShiftKeyDown());
+        });
+        AccessorRegistry.bind(AccessPoint.ENTITY_SWING_PROGRESS, (r, a) -> {
+            LivingEntityAccessor261 e = living(r);
+            return e == null ? null : Float.valueOf(e.la$attackAnim(0f));
+        });
+        AccessorRegistry.bind(AccessPoint.ENTITY_ABSORPTION, (r, a) -> {
+            LivingEntityAccessor261 e = living(r);
+            return e == null ? null : Float.valueOf(e.la$absorptionAmount());
+        });
+        AccessorRegistry.bind(AccessPoint.CLIENT_CROSSHAIR_ENTITY, (r, a) -> {
+            MinecraftAccessor261 m = mc(null);
+            return m == null ? null : m.la$crosshairPickEntity();
+        });
+        AccessorRegistry.bind(AccessPoint.PLAYER_INVENTORY_ITEMS, (r, a) -> {
+            Object p = player(null);
+            Object inventory = p instanceof PlayerAccessor261 ? ((PlayerAccessor261) p).la$inventory() : null;
+            if (!(inventory instanceof InventoryAccessor261)) return null;
+            InventoryAccessor261 inv = (InventoryAccessor261) inventory;
+            int size = inv.la$containerSize();
+            ItemInfo[] out = new ItemInfo[Math.max(0, size)];
+            for (int i = 0; i < out.length; i++) out[i] = item(inv.la$item(i));
+            return out;
         });
         AccessorRegistry.bind(AccessPoint.LEVEL_SOLID_BLOCK, (r, a) -> {
             if (a.length < 3 || !(a[0] instanceof Number) || !(a[1] instanceof Number) || !(a[2] instanceof Number)) return null;

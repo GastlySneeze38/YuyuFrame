@@ -48,4 +48,18 @@ public interface EntityAccessor263 {
     /** Déclarée sur {@code Entity}, redéfinie par {@code LivingEntity} (javap, jar 26.3, 2026-10-14). */
     @Invoker("getYHeadRot")
     float la$yHeadRot();
+
+    // Données de la refonte de la note (2026-11-07) — javap, jar 26.3 :
+    // publiques et déclarées sur Entity.
+
+    /** Inclinaison du regard, en degrés. */
+    @Invoker("getXRot")
+    float la$xRot();
+
+    /** Drapeau partagé par le serveur : vrai aussi pour les autres joueurs. */
+    @Invoker("isSprinting")
+    boolean la$isSprinting();
+
+    @Invoker("isShiftKeyDown")
+    boolean la$isShiftKeyDown();
 }

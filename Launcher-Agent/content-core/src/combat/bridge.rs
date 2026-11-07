@@ -39,7 +39,11 @@ use super::writer::send;
 /// 21 (2026-11-01) : le serveur est la seule source du classement —
 /// `yf_combat_ranked_ready` ; statut 3 = serveur muet (le duel ne compte
 /// pas), 6 n'existe plus ; ligne `ready` de l'historique.
-const ABI_VERSION: u32 = 21;
+/// 22 (2026-11-07) : les données de la refonte de la note — `ME_LEN` 25
+/// (touches, cible du réticule, swing, absorption), `OTHER_LEN` 12 (regard
+/// vertical, swing ; vitesse calculée depuis les positions ; sprint et
+/// accroupi dans les drapeaux), événement `EVENT_INVENTORY`.
+const ABI_VERSION: u32 = 22;
 
 /// Autres joueurs transmis par tick, au plus.
 const MAX_OTHERS: usize = 16;

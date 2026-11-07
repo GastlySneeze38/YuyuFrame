@@ -135,4 +135,13 @@ public interface MinecraftAccessor261 {
 
     @Accessor("services")
     net.minecraft.server.Services la$services();
+
+    /**
+     * L'entité sous le réticule, à portée d'interaction ({@code
+     * AccessPoint.CLIENT_CROSSHAIR_ENTITY}, 2026-11-07) — champ public
+     * {@code crosshairPickEntity} de type {@code Entity}, javap, jars 26.1.2
+     * et 26.3.
+     */
+    @Accessor("crosshairPickEntity")
+    net.minecraft.world.entity.Entity la$crosshairPickEntity();
 }
