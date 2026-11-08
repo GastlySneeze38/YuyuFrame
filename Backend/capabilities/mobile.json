@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/mobile-schema.json",
+  "identifier": "mobile",
+  "description": "Téléphone : le plugin de notifications de Tauri y remplace `window.Notification` et demande au démarrage si l'appli peut en afficher ; sans cette autorisation la question était refusée (erreur dans la console).",
+  "platforms": ["android", "iOS"],
+  "windows": ["main"],
+  "permissions": [
+    "notification:allow-is-permission-granted"
+  ]
+}

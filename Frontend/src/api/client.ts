@@ -693,6 +693,11 @@ export const api = {
     startDevice: () => invoke<DeviceAuthResponse>('auth_start_device'),
     poll: () => invoke<PollResponse>('auth_poll'),
     logout: () => invoke<void>('auth_logout'),
+    /** Page de connexion Microsoft dans l'appli (téléphone) ; `false` là où
+     *  l'appli n'en a pas (ordinateur) : ouvrir alors le navigateur. */
+    openSignInPage: (url: string, code: string, title: string, close: string) =>
+      invoke<boolean>('sign_in_page_open', { url, code, title, close }),
+    closeSignInPage: () => invoke<void>('sign_in_page_close'),
   },
 
   mc: {

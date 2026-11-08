@@ -2,6 +2,7 @@ pub mod accounts;
 pub mod microsoft;
 pub mod oauth;
 pub mod offline;
+pub mod sign_in_page;
 pub mod store;
 
 

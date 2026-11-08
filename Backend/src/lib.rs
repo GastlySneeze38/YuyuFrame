@@ -81,7 +81,10 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build());
     // Le pont vers l'écran du jeu Horizon (Kotlin `GamePlugin`).
     #[cfg(target_os = "android")]
-    let builder = builder.plugin(minecraft::launcher::horizon::android::init());
+    let builder = builder
+        .plugin(minecraft::launcher::horizon::android::init())
+        // La page de connexion Microsoft dans l'appli (Kotlin `SignInPlugin`).
+        .plugin(account::minecraft::sign_in_page::android::init());
     builder
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_shell::init())
@@ -253,6 +256,9 @@ pub fn run() {
             // reste du démarrage si Discord met du temps à répondre ou n'est
             // pas lancé du tout sur la machine.
             integrations::discord::bind(app.state::<state::SharedState>().inner().clone());
+            // Ordinateur seulement : sur téléphone, l'appli Discord n'expose pas
+            // de canal local, et la connexion réessayait toutes les 30 s pour rien.
+            #[cfg(desktop)]
             std::thread::spawn(integrations::discord::connect_and_announce);
 
             Ok(())

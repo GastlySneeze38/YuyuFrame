@@ -104,6 +104,8 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         crate::account::minecraft::microsoft::auth_poll,
         crate::account::minecraft::microsoft::auth_status,
         crate::account::minecraft::microsoft::auth_logout,
+        crate::account::minecraft::sign_in_page::sign_in_page_open,
+        crate::account::minecraft::sign_in_page::sign_in_page_close,
         crate::account::minecraft::accounts::mc_list_accounts,
         crate::account::minecraft::accounts::mc_switch,
         crate::account::minecraft::accounts::mc_delete,

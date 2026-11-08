@@ -199,8 +199,20 @@ export default function Login() {
     loadLatestSkin(viewer, source, { model: 'auto-detect' }).catch(() => {})
   }, [uuid, previewUuid, skins])
 
+  // La connexion s'arrête (réussie, ratée ou annulée) : la page Microsoft
+  // ouverte dans l'appli sur téléphone se ferme avec elle. Rien sur ordinateur.
   const stopPolling = () => {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
+    api.auth.closeSignInPage().catch(() => {})
+  }
+
+  // La page où taper le code : dans l'appli sur téléphone (le code déjà
+  // rempli), dans le navigateur sur ordinateur, où l'appli répond `false`.
+  const openVerify = async (url: string, code: string) => {
+    const inApp = await api.auth
+      .openSignInPage(url, code, t('login.microsoftTitle'), t('common.close'))
+      .catch(() => false)
+    if (!inApp) await open(url)
   }
 
   const startLogin = async () => {
@@ -210,7 +222,7 @@ export default function Login() {
       const resp = await api.auth.startDevice()
       setUserCode(resp.user_code)
       setVerifyUrl(resp.verification_uri)
-      open(resp.verification_uri)
+      void openVerify(resp.verification_uri, resp.user_code)
       setStep('polling')
       enterOverlay()
       pollRef.current = setInterval(async () => {
@@ -304,7 +316,7 @@ if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
           onSelect={handleSelect}
           onRemove={handleRemove}
           onAdd={() => setShowAddModal(true)}
-          onOpenVerify={() => open(verifyUrl)}
+          onOpenVerify={() => void openVerify(verifyUrl, userCode)}
           onCancelLogin={() => { stopPolling(); setStep('idle') }}
           onRetry={() => { setStep('idle'); void startLogin() }}
         />
@@ -357,7 +369,7 @@ if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
             </button>
             <div className="flex gap-2">
               <button
-                onClick={() => open(verifyUrl)}
+                onClick={() => void openVerify(verifyUrl, userCode)}
                 className="flex-1 rounded-xl py-2 text-[12px] font-medium text-white transition-all duration-150 bg-[rgb(var(--accent)/0.15)] border border-[rgb(var(--accent)/0.3)] hover:bg-[rgb(var(--accent)/0.3)]"
               >
                 {t('login.openMicrosoft')}
@@ -573,7 +585,7 @@ if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
                   </button>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => open(verifyUrl)}
+                      onClick={() => void openVerify(verifyUrl, userCode)}
                       className="flex-1 rounded-xl py-2 text-sm font-medium text-white transition-all duration-150 bg-[rgb(var(--accent)/0.15)] border border-[rgb(var(--accent)/0.3)] hover:bg-[rgb(var(--accent)/0.3)]"
                     >
                       {t('login.openMicrosoft')}

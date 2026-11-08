@@ -1,6 +1,10 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Base application theme. -->
     <style name="Theme.yuyuframe_backend" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <!-- Customize your theme here. -->
+        <!-- Le fond de l'interface (bg-primary) dès la première image : sans lui,
+             l'appli s'ouvrait sur un écran blanc le temps que la page charge. -->
+        <item name="android:windowBackground">@color/yuyu_background</item>
+        <item name="android:statusBarColor">@color/yuyu_background</item>
+        <item name="android:navigationBarColor">@color/yuyu_background</item>
     </style>
 </resources>
