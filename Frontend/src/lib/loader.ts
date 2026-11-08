@@ -19,6 +19,15 @@ export function offeredLoaders(available: string[] | null | undefined): Loader[]
 }
 
 /**
+ * Le loader à prendre quand celui choisi n'existe pas pour la version : vanilla
+ * s'il est proposé, sinon le premier qui l'est (téléphone : Horizon seul).
+ */
+export function fallbackLoader(available: string[]): Loader {
+  if (available.includes('vanilla')) return 'vanilla'
+  return offeredLoaders(available)[0] ?? 'vanilla'
+}
+
+/**
  * Un vrai loader de mods Java : il a des versions à choisir et charge le
  * dossier `mods/`. Ni vanilla ni Horizon (le jeu réécrit en Rust, qui ne
  * charge aucun mod Java).

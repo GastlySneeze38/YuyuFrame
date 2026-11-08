@@ -13,7 +13,7 @@ import { CloseButton } from '@/components/ui/CloseButton'
 import { RamPicker, type RamStatus } from '@/components/ui/RamPicker'
 import { Toggle } from '@/components/ui/Toggle'
 import { showError } from '@/stores/useErrorToast'
-import { isModLoader, loaderColor, offeredLoaders } from '@/lib/loader'
+import { fallbackLoader, isModLoader, loaderColor, offeredLoaders } from '@/lib/loader'
 import { useAgentAvailable } from '@/lib/agentStatus'
 import { useLoadersFor } from '@/lib/loaderCompat'
 import { formatRam } from '@/lib/format'
@@ -1495,7 +1495,7 @@ function InstallationTab({
   // proposé.
   useEffect(() => {
     if (!editing || !available) return
-    if (!available.includes(loader)) setLoader('vanilla')
+    if (!available.includes(loader)) setLoader(fallbackLoader(available))
   }, [editing, available, loader])
 
   // Une version épinglée pour un autre couple n'existerait pas ici : on la

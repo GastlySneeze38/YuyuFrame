@@ -18,7 +18,6 @@
     "core:window:allow-outer-position",
     "core:window:allow-current-monitor",
     "core:window:allow-set-focus",
-    "updater:default",
     "process:allow-restart",
     "dialog:default",
     "deep-link:default"

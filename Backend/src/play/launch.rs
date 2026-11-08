@@ -188,6 +188,9 @@ pub async fn launch_game(
         // le registre — voir launcher::register_console_waiter.
         let ready = launcher::register_console_waiter(&window_label);
 
+        // Une fenêtre à part n'existe que sur ordinateur : un téléphone n'en
+        // affiche qu'une, et la Console y est une fenêtre de bureau.
+        #[cfg(desktop)]
         let _ = tauri::WebviewWindowBuilder::new(
             &app,
             &window_label,
@@ -299,7 +302,14 @@ pub async fn launch_game(
         // propre préparation et son propre client (`launcher::horizon`). Tout
         // le reste de cette fonction — console, statistiques, fin de partie —
         // vaut pour lui aussi.
-        let launched = if instance.loader == launcher::horizon::LOADER {
+        // Sur téléphone il n'y a pas de Java : seules les instances Horizon
+        // s'y jouent.
+        let launched = if cfg!(target_os = "android") && instance.loader != launcher::horizon::LOADER {
+            Err(anyhow::anyhow!(
+                "Sur téléphone, seules les instances Horizon (Minecraft {}) se lancent",
+                launcher::horizon::GAME_VERSION
+            ))
+        } else if instance.loader == launcher::horizon::LOADER {
             launcher::horizon::launch(
                 app.clone(),
                 launcher::horizon::HorizonLaunch {

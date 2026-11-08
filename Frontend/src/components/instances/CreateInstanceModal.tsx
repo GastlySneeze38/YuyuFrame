@@ -5,6 +5,7 @@ import { motion } from 'framer-motion'
 import { api } from '@/api/client'
 import type { Instance, JvmVendor, Loader } from '@/types'
 import { useLoadersFor } from '@/lib/loaderCompat'
+import { fallbackLoader } from '@/lib/loader'
 import { createInstanceFromPack } from '@/lib/modpackInstance'
 import { ModalShell } from '@/components/ui/ModalShell'
 import { RamPicker, type RamStatus } from '@/components/ui/RamPicker'
@@ -91,11 +92,12 @@ export function CreateInstanceModal({
 
   // En « vierge », la version du jeu est choisie en premier et c'est la liste
   // des loaders qui s'y adapte ; le loader choisi peut disparaître en changeant
-  // de version (NeoForge avant 1.20.2) : on retombe sur vanilla.
+  // de version (NeoForge avant 1.20.2) : on retombe sur vanilla, ou sur le
+  // premier proposé là où vanilla n'existe pas (téléphone : Horizon seul).
   const availableLoaders = useLoadersFor(mcVersion)
   useEffect(() => {
     if (mode !== 'blank' || !availableLoaders) return
-    if (!availableLoaders.includes(loader)) setLoader('vanilla')
+    if (!availableLoaders.includes(loader)) setLoader(fallbackLoader(availableLoaders))
   }, [mode, availableLoaders, loader])
 
   const handleSwitchMode = (m: 'blank' | 'modpack') => {

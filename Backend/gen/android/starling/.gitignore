@@ -1,0 +1,6 @@
+# Produits par horizon-android/yuyu/build_engine.py à chaque compilation du moteur.
+/build
+/src/main/jniLibs
+/src/main/assets
+/src/main/res/values/starling-colors.xml
+/src/main/res/values/yuyu-engine.xml

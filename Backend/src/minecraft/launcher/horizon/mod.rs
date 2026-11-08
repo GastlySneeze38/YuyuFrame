@@ -13,20 +13,34 @@
 //! `horizon-mods`) ne sont pas gérés : presque tous doivent être recompilés
 //! avec le jeu, ce que seul leur launcher sait faire aujourd'hui.
 
+#[cfg(target_os = "android")]
+pub mod android;
+#[cfg(not(target_os = "android"))]
 mod prepare;
+#[cfg(not(target_os = "android"))]
 mod release;
 
-use anyhow::{anyhow, Result};
-use std::process::Stdio;
+use anyhow::Result;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use tauri::{Emitter, Manager};
-use tokio::io::{AsyncWriteExt, BufReader};
+use tauri::Manager;
 use tokio::sync::watch;
 
-use super::orchestrator::LAUNCH_CANCELLED_MSG;
-use super::progress::{log_to_console, set_progress_monotonic, spawn_game_output_pump, ProgressFloor};
 use crate::state::MinecraftSession;
+
+// Ce que seule la version ordinateur emploie (un processus lancé, sa sortie lue).
+#[cfg(not(target_os = "android"))]
+use anyhow::anyhow;
+#[cfg(not(target_os = "android"))]
+use std::process::Stdio;
+#[cfg(not(target_os = "android"))]
+use tauri::Emitter;
+#[cfg(not(target_os = "android"))]
+use tokio::io::{AsyncWriteExt, BufReader};
+#[cfg(not(target_os = "android"))]
+use super::orchestrator::LAUNCH_CANCELLED_MSG;
+#[cfg(not(target_os = "android"))]
+use super::progress::{log_to_console, set_progress_monotonic, spawn_game_output_pump, ProgressFloor};
 
 /// La valeur de `instances.loader` d'une instance Horizon.
 pub const LOADER: &str = "horizon";
@@ -36,9 +50,10 @@ pub const LOADER: &str = "horizon";
 /// version est refusée au lancement plutôt que de démarrer autre chose.
 pub const GAME_VERSION: &str = "26.3";
 
-/// Si Horizon peut être proposé pour cette version du jeu.
+/// Si Horizon peut être proposé pour cette version du jeu : sur Windows (ses
+/// versions publiées) et sur Android (le moteur rangé dans l'APK, `android.rs`).
 pub fn available_for(mc_version: &str) -> bool {
-    cfg!(target_os = "windows") && mc_version == GAME_VERSION
+    cfg!(any(target_os = "windows", target_os = "android")) && mc_version == GAME_VERSION
 }
 
 /// Ce que `play::launch` sait de la partie, et qu'Horizon utilise.
@@ -50,13 +65,25 @@ pub struct HorizonLaunch<'a> {
     pub instance_id: &'a str,
     pub session_id: Option<i64>,
     pub connect_server: Option<&'a str>,
+    /// Taille de la fenêtre ; sans objet sur téléphone, où le jeu prend l'écran.
+    #[cfg_attr(target_os = "android", allow(dead_code))]
     pub window_size: Option<(u32, u32)>,
     /// Version d'Horizon épinglée sur l'instance (`instances.loader_version`),
     /// vide = la recommandée.
+    /// Sans objet sur téléphone : le moteur est celui de l'APK.
+    #[cfg_attr(target_os = "android", allow(dead_code))]
     pub pinned: &'a str,
 }
 
 /// Les versions stables d'Horizon, pour le choix de l'onglet Installation.
+/// Aucune sur Android : le moteur est celui de l'APK, il n'y a rien à choisir.
+#[cfg(target_os = "android")]
+pub async fn list_versions() -> Vec<crate::minecraft::loaders::LoaderVersion> {
+    Vec::new()
+}
+
+/// Les versions stables d'Horizon, pour le choix de l'onglet Installation.
+#[cfg(not(target_os = "android"))]
 pub async fn list_versions() -> Vec<crate::minecraft::loaders::LoaderVersion> {
     let client = reqwest::Client::builder()
         .user_agent(concat!("YuyuFrame/", env!("CARGO_PKG_VERSION")))
@@ -68,8 +95,19 @@ pub async fn list_versions() -> Vec<crate::minecraft::loaders::LoaderVersion> {
     }
 }
 
-/// Installe et prépare Horizon si besoin, puis joue jusqu'à la fermeture du jeu.
+/// Joue jusqu'à la fermeture du jeu. Sur ordinateur, installe et prépare
+/// Horizon d'abord ; sur Android le moteur est dans l'APK et se prépare seul
+/// au premier démarrage (`android.rs`).
 pub async fn launch(app: tauri::AppHandle, run: HorizonLaunch<'_>, cancel: watch::Receiver<bool>) -> Result<()> {
+    #[cfg(target_os = "android")]
+    return android::launch(app, run, cancel).await;
+    #[cfg(not(target_os = "android"))]
+    desktop_launch(app, run, cancel).await
+}
+
+/// Installe et prépare Horizon si besoin, puis joue jusqu'à la fermeture du jeu.
+#[cfg(not(target_os = "android"))]
+async fn desktop_launch(app: tauri::AppHandle, run: HorizonLaunch<'_>, cancel: watch::Receiver<bool>) -> Result<()> {
     let floor = Arc::new(ProgressFloor::new(run.instance_id));
     let client = Arc::new(
         reqwest::Client::builder()
@@ -255,6 +293,7 @@ pub async fn launch(app: tauri::AppHandle, run: HorizonLaunch<'_>, cancel: watch
 /// (jamais par-dessus un fichier existant), dans le dossier Horizon de
 /// l'instance. Format d'Horizon (`auth.rs`) : `name`, `uuid`,
 /// `access_token`, `user_type`, `xuid`.
+#[cfg(not(target_os = "android"))]
 async fn write_session_file(home: &std::path::Path, session: &MinecraftSession) -> Result<std::path::PathBuf> {
     let dir = home.join("sessions");
     tokio::fs::create_dir_all(&dir).await?;

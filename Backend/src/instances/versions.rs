@@ -16,6 +16,9 @@ pub async fn list_versions() -> Result<Vec<VersionEntry>, String> {
         .await
         .map(|list| {
             list.into_iter()
+                // Sur téléphone, seule la version que recrée Horizon se joue :
+                // proposer les autres ne mènerait qu'à un lancement refusé.
+                .filter(|v| !cfg!(target_os = "android") || v.id == crate::minecraft::launcher::horizon::GAME_VERSION)
                 .map(|v| VersionEntry { id: v.id, version_type: v.version_type, url: v.url })
                 .collect()
         })
@@ -64,6 +67,12 @@ pub async fn loader_versions(loader: String, mc_version: String) -> Result<Vec<L
 #[tauri::command]
 pub async fn loader_availability(mc_version: String) -> Result<Vec<String>, String> {
     use crate::minecraft::loaders::{fabric, forge, neoforge, quilt};
+
+    // Sur téléphone il n'y a pas de Java : Horizon est la seule plateforme.
+    if cfg!(target_os = "android") {
+        let horizon = crate::minecraft::launcher::horizon::available_for(&mc_version);
+        return Ok(horizon.then(|| crate::minecraft::launcher::horizon::LOADER.to_string()).into_iter().collect());
+    }
 
     let (fab, qui, forg, neo) = tokio::join!(
         fabric::supports(&mc_version),

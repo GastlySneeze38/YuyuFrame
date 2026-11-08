@@ -10,8 +10,50 @@
 
 use std::path::{Path, PathBuf};
 
+#[cfg(not(target_os = "android"))]
 fn app_data_base() -> PathBuf {
     dirs::data_dir().unwrap_or_else(|| PathBuf::from("."))
+}
+
+/// Android : les fichiers privés de l'appli (`Context.getFilesDir()`), que
+/// `dirs` ne connaît pas. C'est aussi le dossier que le jeu Horizon lit
+/// (`horizon-args.txt`, ses ressources préparées) : le launcher et le jeu sont
+/// deux processus de la même appli, ils voient les mêmes fichiers.
+#[cfg(target_os = "android")]
+fn app_data_base() -> PathBuf {
+    static FILES: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+    FILES
+        .get_or_init(|| {
+            android_files_dir().unwrap_or_else(|| {
+                tracing::error!("dossier des fichiers de l'appli introuvable");
+                PathBuf::from("/data/local/tmp/yuyuframe")
+            })
+        })
+        .clone()
+}
+
+/// Les fichiers privés de l'appli, là où le jeu Horizon lit `horizon-args.txt`.
+#[cfg(target_os = "android")]
+pub fn app_files_dir() -> PathBuf {
+    app_data_base()
+}
+
+/// `getFilesDir()` par JNI, sur le contexte que l'activité de Tauri a posé
+/// avant d'appeler `run`. Pas de chemin écrit en dur (`/data/data/<paquet>`) :
+/// il est faux pour un second utilisateur ou un profil professionnel.
+#[cfg(target_os = "android")]
+fn android_files_dir() -> Option<PathBuf> {
+    let context = ndk_context::android_context();
+    // SAFETY: la machine virtuelle et le contexte posés par l'activité, vivants
+    // tant que l'appli tourne ; le contexte est une référence globale qu'on ne
+    // libère pas.
+    let vm = unsafe { jni::JavaVM::from_raw(context.vm().cast()) }.ok()?;
+    let mut env = vm.attach_current_thread().ok()?;
+    let context = unsafe { jni::objects::JObject::from_raw(context.context().cast()) };
+    let dir = env.call_method(&context, "getFilesDir", "()Ljava/io/File;", &[]).ok()?.l().ok()?;
+    let path = env.call_method(&dir, "getAbsolutePath", "()Ljava/lang/String;", &[]).ok()?.l().ok()?;
+    let path: String = env.get_string(&path.into()).ok()?.into();
+    Some(PathBuf::from(path))
 }
 
 fn default_root() -> PathBuf {

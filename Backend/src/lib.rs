@@ -18,11 +18,16 @@ mod state;
 mod sync;
 
 use std::sync::Arc;
-use tauri::{Emitter, Manager};
+#[cfg(desktop)]
+use tauri::Emitter;
+use tauri::Manager;
 use tokio::sync::{Mutex, RwLock};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
+/// Le point d'entrée : `main.rs` sur ordinateur ; sur Android, l'activité de
+/// Tauri l'appelle par ce nom une fois la bibliothèque chargée.
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Le build release tourne en `windows_subsystem = "windows"` (cf.
     // main.rs) — aucune console n'est attachée, donc tous les logs qui
@@ -45,12 +50,15 @@ pub fn run() {
         .with(tracing_subscriber::fmt::layer().with_writer(non_blocking).with_ansi(false))
         .init();
 
-    tauri::Builder::default()
-        // Doit être le tout premier plugin enregistré (contrainte de la crate) :
-        // un clic sur un lien yuyuframe:// alors que l'app tourne déjà relance
-        // un second process côté OS — ce hook capte ses arguments dans le
-        // process déjà ouvert au lieu de laisser un second process inutile se
-        // lancer, et ramène la fenêtre principale au premier plan.
+    let builder = tauri::Builder::default();
+    // Doit être le tout premier plugin enregistré (contrainte de la crate) :
+    // un clic sur un lien yuyuframe:// alors que l'app tourne déjà relance
+    // un second process côté OS — ce hook capte ses arguments dans le
+    // process déjà ouvert au lieu de laisser un second process inutile se
+    // lancer, et ramène la fenêtre principale au premier plan. Ordinateur
+    // seulement : Android n'ouvre qu'une activité et lui passe le lien.
+    #[cfg(desktop)]
+    let builder = builder
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             if let Some(url) = argv.iter().find(|a| a.starts_with("yuyuframe://")) {
                 let _ = app.emit("deep_link_join", url.clone());
@@ -68,9 +76,15 @@ pub fn run() {
                 app::tray::reopen_main_window(app);
             }
         }))
+        // La mise à jour du launcher par lui-même : sur téléphone, c'est le
+        // magasin d'applications qui s'en charge.
+        .plugin(tauri_plugin_updater::Builder::new().build());
+    // Le pont vers l'écran du jeu Horizon (Kotlin `GamePlugin`).
+    #[cfg(target_os = "android")]
+    let builder = builder.plugin(minecraft::launcher::horizon::android::init());
+    builder
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_dialog::init())
         // Notifications Windows des amis et du support (`friends/notify.rs`),

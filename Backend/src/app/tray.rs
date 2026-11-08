@@ -1,7 +1,12 @@
 //! Le launcher sans sa fenêtre : icône de la zone de notification pendant une
 //! partie, retour au premier plan quand elle se termine, extinction quand
 //! l'arrière-plan est refusé.
+//!
+//! Sur téléphone il n'y a ni zone de notification ni fenêtre à reconstruire :
+//! le launcher est une activité qu'Android rouvre seul quand le jeu se ferme.
+//! Les fonctions gardent leur nom et ne font rien de ce qui n'y a pas de sens.
 
+#[cfg(desktop)]
 use tauri::Manager;
 
 use crate::state;
@@ -23,8 +28,12 @@ pub fn restore_after_game(app: &tauri::AppHandle) {
         quit_now(app);
         return;
     }
+    // Téléphone : Android remet le launcher devant quand l'écran du jeu se ferme.
+    #[cfg(mobile)]
+    return;
     // Fenêtre seulement réduite (arrière-plan refusé, ou fermeture jamais
     // demandée) : on la remonte sans la reconstruire.
+    #[cfg(desktop)]
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.unminimize();
         let _ = window.show();
@@ -32,10 +41,13 @@ pub fn restore_after_game(app: &tauri::AppHandle) {
         state::set_window_open(true);
         return;
     }
-    tracing::info!("Partie terminée — le launcher revient au premier plan");
-    // L'icône de notification n'avait de sens que pendant la partie :
-    // `reopen_main_window` la retire en même temps qu'elle rend la fenêtre.
-    reopen_main_window(app);
+    #[cfg(desktop)]
+    {
+        tracing::info!("Partie terminée — le launcher revient au premier plan");
+        // L'icône de notification n'avait de sens que pendant la partie :
+        // `reopen_main_window` la retire en même temps qu'elle rend la fenêtre.
+        reopen_main_window(app);
+    }
 }
 
 /// Éteint le launcher pour de bon.
@@ -44,6 +56,7 @@ pub fn restore_after_game(app: &tauri::AppHandle) {
 /// de sortie, et le garder ici empêcherait celle-ci d'aboutir.
 pub fn quit_now(app: &tauri::AppHandle) {
     state::set_exit_when_ready(false);
+    #[cfg(desktop)]
     if let Some(tray) = TRAY.get() {
         let _ = tray.set_visible(false);
     }
@@ -53,11 +66,17 @@ pub fn quit_now(app: &tauri::AppHandle) {
 
 /// L'icône reste en mémoire après sa création : la recréer à chaque fermeture
 /// en empilerait plusieurs dans la zone de notification.
+#[cfg(desktop)]
 static TRAY: std::sync::OnceLock<tauri::tray::TrayIcon> = std::sync::OnceLock::new();
+
+/// Téléphone : rien à poser, Android garde le launcher et le rouvre.
+#[cfg(mobile)]
+pub fn install_tray(_app: &tauri::AppHandle) {}
 
 /// Pose l'icône dans la zone de notification. C'est le seul moyen de revenir
 /// dans le launcher une fois sa fenêtre fermée — sans elle, un processus
 /// tournerait sans que personne puisse ni le voir ni l'arrêter.
+#[cfg(desktop)]
 pub fn install_tray(app: &tauri::AppHandle) {
     use tauri::menu::{Menu, MenuItem};
     use tauri::tray::TrayIconBuilder;
@@ -113,9 +132,11 @@ pub fn install_tray(app: &tauri::AppHandle) {
 ///
 /// Un drapeau et non un verrou : la construction passe par le fil principal,
 /// qui est parfois celui qui demande — l'y faire attendre le bloquerait.
+#[cfg(desktop)]
 static REOPENING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// Reconstruit la fenêtre principale à l'identique de `tauri.conf.json`.
+#[cfg(desktop)]
 pub fn reopen_main_window(app: &tauri::AppHandle) {
     use std::sync::atomic::Ordering;
 
@@ -132,6 +153,7 @@ pub fn reopen_main_window(app: &tauri::AppHandle) {
     REOPENING.store(false, Ordering::SeqCst);
 }
 
+#[cfg(desktop)]
 fn build_main_window(app: &tauri::AppHandle) {
     let built = tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::App("index.html".into()))
         .title("YuyuFrame")

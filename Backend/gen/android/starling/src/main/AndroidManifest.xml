@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ce que le moteur Horizon (Starling) ajoute au manifeste de l'appli. Repris de
+     horizon-android/packaging/android/AndroidManifest.xml, avec ces différences :
+
+     - L'écran de jeu est le nôtre (YuyuGameActivity) et vit dans le processus « :game » :
+       le jeu termine tout son processus à la fin d'une partie, ce qui fermerait le launcher
+       s'ils partageaient le même. Il n'est pas exporté : seul le launcher l'ouvre.
+     - Pas de LauncherActivity (l'entrée de Starling, son ouverture de fichiers) : l'entrée de
+       l'appli est le launcher. Le redémarrage du jeu dans un build avec mods natifs passe par
+       elle, il n'est donc pas disponible.
+     - Pas de MANAGE_EXTERNAL_STORAGE ni de dossier « Starling » partagé (le jeu reste dans les
+       fichiers de l'appli et chaque instance a son dossier), pas de REQUEST_INSTALL_PACKAGES
+       (pas de mise à jour de Starling), pas de RECORD_AUDIO (mods de chat vocal) : trois
+       permissions que le Play Store n'accorde qu'avec une justification. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Les serveurs DNS du réseau actif, pour les serveurs nommés par un enregistrement SRV. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- WorkService : le jeu reste au premier plan pendant une connexion dans le navigateur ou
+         le téléchargement des fichiers du jeu. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Les moteurs d'une manette. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-feature android:name="android.hardware.vulkan.version" android:version="0x400003" android:required="true" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+
+    <application>
+        <activity
+            android:name="fr.yuyuframe.game.YuyuGameActivity"
+            android:exported="false"
+            android:process=":game"
+            android:screenOrientation="sensorLandscape"
+            android:resizeableActivity="false"
+            android:theme="@style/Starling.Game"
+            android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|screenLayout|fontScale|uiMode|orientation|density|screenSize|smallestScreenSize|layoutDirection|colorMode|fontWeightAdjustment|grammaticalGender">
+            <meta-data android:name="android.app.lib_name" android:value="horizon_android" />
+            <meta-data android:name="android.app.func_name" android:value="starling_on_create" />
+        </activity>
+        <activity
+            android:name="io.github.juanluci.starling.DiagnosticsActivity"
+            android:exported="false"
+            android:process=":diagnostics"
+            android:theme="@style/Starling.Game"
+            android:hardwareAccelerated="false" />
+        <service
+            android:name="io.github.juanluci.starling.WorkService"
+            android:exported="false"
+            android:process=":game"
+            android:foregroundServiceType="dataSync" />
+        <!-- Le rapport de diagnostic, partagé depuis le jeu. -->
+        <provider
+            android:name="io.github.juanluci.starling.UpdateProvider"
+            android:authorities="${applicationId}.updates"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+    </application>
+</manifest>

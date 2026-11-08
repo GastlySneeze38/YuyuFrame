@@ -1,0 +1,5 @@
+include ':app'
+// Le moteur Horizon (Starling) : voir starling/build.gradle.kts.
+include ':starling'
+
+apply from: 'tauri.settings.gradle'

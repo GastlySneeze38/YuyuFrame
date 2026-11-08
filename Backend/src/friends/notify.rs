@@ -293,10 +293,13 @@ pub fn set_unread_badge(app: tauri::AppHandle, count: u32) {
             tracing::debug!("pastille de la barre des tâches impossible : {e}");
         }
     }
-    #[cfg(not(windows))]
+    #[cfg(all(desktop, not(windows)))]
     {
         let _ = window.set_badge_count((count > 0).then_some(i64::from(count)));
     }
+    // Téléphone : pas de barre des tâches où poser une pastille.
+    #[cfg(mobile)]
+    let _ = (window, count);
 }
 
 /// Côté de la pastille, en pixels (Windows la pose en bas à droite de l'icône).

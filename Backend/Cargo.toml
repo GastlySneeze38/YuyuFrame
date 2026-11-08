@@ -28,18 +28,11 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-shell = "2"
-tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-deep-link = "2"
-tauri-plugin-single-instance = "2"
 tauri-plugin-notification = "2"
 tokio = { version = "1", features = ["full"] }
-# `multipart` : envoi d'un PNG de skin à Mojang (voir commands/account/skin.rs
-# — un fichier local devient ainsi un skin hébergé par eux, donc partageable).
-# gzip/brotli : réponses des API compressées (`src/net.rs`, −79 % sur une
-# recherche Modrinth). Les téléchargements de fichiers les coupent.
-reqwest = { version = "0.12", features = ["json", "stream", "multipart", "gzip", "brotli"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 anyhow = "1"
@@ -72,6 +65,29 @@ sysinfo = "0.31"
 discord-rich-presence = "1"
 fastnbt = "2"
 md-5 = "0.10"
+
+# `multipart` : envoi d'un PNG de skin à Mojang (voir commands/account/skin.rs
+# — un fichier local devient ainsi un skin hébergé par eux, donc partageable).
+# gzip/brotli : réponses des API compressées (`src/net.rs`, −79 % sur une
+# recherche Modrinth). Les téléchargements de fichiers les coupent.
+#
+# Deux déclarations parce que le TLS change : celui du système (native-tls)
+# sur ordinateur, rustls sur Android, où OpenSSL n'existe pas. Mêmes
+# fonctionnalités des deux côtés, sinon le code compilerait différemment.
+[target.'cfg(not(target_os = "android"))'.dependencies]
+reqwest = { version = "0.12", features = ["json", "stream", "multipart", "gzip", "brotli"] }
+# Ordinateur seulement : mise à jour du launcher par lui-même (le téléphone
+# passe par son magasin) et une seule fenêtre à la fois (Android n'ouvre de
+# toute façon qu'une activité).
+tauri-plugin-updater = "2"
+tauri-plugin-single-instance = "2"
+
+[target.'cfg(target_os = "android")'.dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "multipart", "gzip", "brotli", "rustls-tls", "charset", "http2"] }
+# Le dossier des fichiers de l'appli, demandé à Android (paths.rs). Les deux
+# sont déjà tirés par Tauri sur Android.
+jni = "0.21"
+ndk-context = "0.1"
 
 # Coffre du système pour le refresh token (src/security/vault.rs) : Windows Credential
 # Manager, trousseau macOS. Pas de dépendance ailleurs : sans coffre natif, la
