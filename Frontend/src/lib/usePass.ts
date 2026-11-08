@@ -9,6 +9,14 @@ import { readCache, writeCache } from './persistentCache'
 /** Préfixe `user:` : effacé à la déconnexion. */
 const PASS_CACHE = 'user:pass-state'
 
+/**
+ * Durée pendant laquelle le dernier état reçu suffit. Les raccourcis de
+ * l'accueil montent ce hook à chaque retour sur l'écran : sans ce délai, chaque
+ * retour redemandait le serveur (~330 ms sur téléphone, mesuré le 2026-11-08).
+ */
+const FRESH_MS = 60_000
+let fetchedAt = 0
+
 export interface PassData {
   loading: boolean
   /** `null` : rien à montrer (« bientôt ») — pas de route, pas de mission, pas de saison. */
@@ -49,9 +57,11 @@ export function usePass(): PassData {
     // garde l'ancien plutôt que de vider l'écran.
     const cached = readCache<Parameters<typeof readPass>[0]>(PASS_CACHE, 2 * 24 * 3600_000)?.value
     if (cached) setLive({ loading: false, ...readPass(cached) })
+    if (cached && Date.now() - fetchedAt < FRESH_MS) return
     api.pass
       .state()
       .then((answer) => {
+        fetchedAt = Date.now()
         writeCache(PASS_CACHE, answer)
         if (alive) setLive({ loading: false, ...readPass(answer) })
       })
@@ -68,8 +78,12 @@ export function usePass(): PassData {
         return
       }
       try {
-        // Le serveur remplace la mission et rend l'état à jour.
-        setLive({ loading: false, ...readPass(await api.pass.reroll(Number(id))) })
+        // Le serveur remplace la mission et rend l'état à jour. Rangé aussi,
+        // sinon un retour dans la minute (`FRESH_MS`) montrerait l'ancien.
+        const answer = await api.pass.reroll(Number(id))
+        writeCache(PASS_CACHE, answer)
+        fetchedAt = Date.now()
+        setLive({ loading: false, ...readPass(answer) })
       } catch (e) {
         showError(e)
       }

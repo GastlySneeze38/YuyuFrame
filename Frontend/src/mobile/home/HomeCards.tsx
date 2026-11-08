@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { api, type SavedServer, type ServerPingInfo } from '@/api/client'
+import type { SavedServer, ServerPingInfo } from '@/api/client'
+import { pingServer } from '@/lib/serverPing'
 import { useT } from '@/i18n'
 
 /**
@@ -64,9 +65,10 @@ export function MobileServerCard({ server, badge, onClick }: {
     setPing(null)
     setIconShown(false)
     setFailed(false)
-    api.launch.pingServer(server.ip)
-      .then((info) => alive && setPing(info))
-      .catch(() => alive && setFailed(true))
+    // Par `lib/serverPing` : une réponse vaut une minute, donc revenir sur
+    // l'accueil ne repingue pas le serveur (~300 à 600 ms sur téléphone).
+    pingServer(server.ip)
+      .then((info) => { if (!alive) return; if (info) setPing(info); else setFailed(true) })
     return () => { alive = false }
   }, [server.ip])
 

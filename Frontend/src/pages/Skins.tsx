@@ -2166,6 +2166,36 @@ function VariantPicker({
  * hauteur fixe : c'est elle qui absorbe les écarts de taille de fenêtre, pour
  * que le reste de l'écran n'ait jamais à défiler.
  */
+/**
+ * La 3D de l'aperçu, gardée d'une visite à l'autre.
+ *
+ * En créer une coûte ~500 ms où l'interface est bloquée sur un téléphone
+ * milieu de gamme (contexte WebGL, compilation des shaders, premier rendu :
+ * mesuré le 2026-11-08 sur un Galaxy A32). On la crée donc une fois, et la
+ * page l'emprunte à chaque visite. Le skin, la pose et la rotation sont
+ * réappliqués par les effets de `SkinPreview` au montage.
+ */
+let keptPreview: { viewer: SkinViewer; inUse: boolean } | null = null
+
+function createPreviewViewer(width: number, height: number): SkinViewer {
+  const canvas = document.createElement('canvas')
+  // Fond transparent : `skinview3d` crée son contexte WebGL sans `alpha`,
+  // et three.js le laisse alors à `false` — son effacement peindrait donc du
+  // noir. Créer le contexte avant lui impose nos attributs, la spécification
+  // WebGL exigeant que les `getContext` suivants du même type rendent le
+  // contexte déjà créé. Même raisonnement que SkinBust.
+  canvas.getContext('webgl2', { alpha: true, premultipliedAlpha: true })
+    ?? canvas.getContext('webgl', { alpha: true, premultipliedAlpha: true })
+  const viewer = new SkinViewer({ canvas, width: width || 260, height: height || 360 })
+  viewer.background = null
+  // La rotation est pilotée par son propre effet, et part éteinte.
+  viewer.autoRotate = false
+  viewer.autoRotateSpeed = 0.6
+  viewer.zoom = 0.82
+  viewer.fov = 55
+  return viewer
+}
+
 function SkinPreview({
   dataUri,
   fallbackUrl,
@@ -2205,7 +2235,6 @@ function SkinPreview({
   pending: boolean
 }) {
   const t = useT()
-  const canvasRef = useRef<HTMLCanvasElement>(null)
   const boxRef = useRef<HTMLDivElement>(null)
   const viewerRef = useRef<SkinViewer | null>(null)
 
@@ -2229,29 +2258,31 @@ function SkinPreview({
   }, [])
 
   useEffect(() => {
-    if (!canvasRef.current || !boxRef.current) return
+    if (!boxRef.current) return
     const box = boxRef.current
     const { width, height } = box.getBoundingClientRect()
 
-    // Fond transparent : `skinview3d` crée son contexte WebGL sans `alpha`,
-    // et three.js le laisse alors à `false` — son effacement peindrait donc du
-    // noir. Créer le contexte avant lui impose nos attributs, la spécification
-    // WebGL exigeant que les `getContext` suivants du même type rendent le
-    // contexte déjà créé. Même raisonnement que SkinBust.
-    canvasRef.current.getContext('webgl2', { alpha: true, premultipliedAlpha: true })
-      ?? canvasRef.current.getContext('webgl', { alpha: true, premultipliedAlpha: true })
-
-    const viewer = new SkinViewer({
-      canvas: canvasRef.current,
-      width: width || 260,
-      height: height || 360,
-    })
-    viewer.background = null
-    // La rotation est pilotée par son propre effet, et part éteinte.
-    viewer.autoRotate = false
-    viewer.autoRotateSpeed = 0.6
-    viewer.zoom = 0.82
-    viewer.fov = 55
+    // La 3D de la session si elle est libre, sinon une neuve (deux aperçus
+    // affichés en même temps : ne devrait pas arriver, mais ne doit rien
+    // casser). Voir `keptPreview`.
+    const kept = keptPreview && !keptPreview.inUse ? keptPreview : null
+    const viewer = kept?.viewer ?? createPreviewViewer(width, height)
+    if (kept) {
+      kept.inUse = true
+      // On revient sur l'écran : la caméra repart de face, comme à la
+      // première visite, quel que soit l'endroit où on l'avait laissée.
+      viewer.resetCameraPose()
+      viewer.zoom = 0.82
+    } else if (!keptPreview) {
+      keptPreview = { viewer, inUse: true }
+    }
+    const isKept = keptPreview?.viewer === viewer
+    // Le canevas n'appartient pas à React : il passe d'une visite à l'autre,
+    // et le déplacer dans la page garde son contexte WebGL.
+    viewer.canvas.className = 'h-full w-full'
+    box.prepend(viewer.canvas)
+    if (width > 0 && height > 0) viewer.setSize(width, height)
+    viewer.renderPaused = false
     viewerRef.current = viewer
 
     const ro = new ResizeObserver(() => {
@@ -2262,8 +2293,16 @@ function SkinPreview({
 
     return () => {
       ro.disconnect()
-      viewer.dispose()
       viewerRef.current = null
+      if (isKept && keptPreview) {
+        // Gardée pour la prochaine visite : on arrête seulement sa boucle de
+        // rendu, qui tournerait sinon sur un canevas que personne ne voit.
+        viewer.renderPaused = true
+        viewer.canvas.remove()
+        keptPreview.inUse = false
+      } else {
+        viewer.dispose()
+      }
     }
   }, [])
 
@@ -2290,8 +2329,8 @@ function SkinPreview({
           manque, le libellé en dessous étant l'information, pas le décor. Un
           plancher à 200 px poussait la carte hors de son cadre en fenêtre
           courte. */}
+      {/* Le canevas de la 3D est posé ici par l'effet de montage. */}
       <div ref={boxRef} className="relative min-h-[120px] w-full flex-1">
-        <canvas ref={canvasRef} className="h-full w-full" />
 
         {/* En ligne ou non, d'un coup d'œil : le détail (la commande, de quoi
             réessayer) est sous l'aperçu. Décalé quand le bouton des positions

@@ -31,6 +31,13 @@ const STARS = Array.from({ length: 40 }, (_, i) => ({
   o: 0.15 + (i % 5) * 0.08,
 }))
 
+// Retenus pour la session, pour ne pas tout redemander au Rust à chaque retour
+// sur l'accueil (un appel coûte ~40 ms sur téléphone, mesuré le 2026-11-08).
+/** Client intégré bloqué, par « version|loader ». */
+const agentMemo = new Map<string, boolean>()
+/** Dernière liste de serveurs connue, par instance. */
+const savedMemo = new Map<string, SavedServer[]>()
+
 /**
  * L'accueil sur téléphone : celui du PC, en réduit, aux normes d'une appli
  * mobile (iOS et Material).
@@ -79,7 +86,7 @@ export default function MobileHome() {
   const [agentBlocked, setAgentBlocked] = useState(false)
   const [skin, setSkin] = useState<string | null>(null)
   const [skinKnown, setSkinKnown] = useState(false)
-  const [savedServers, setSavedServers] = useState<SavedServer[]>([])
+  const [savedServers, setSavedServers] = useState<SavedServer[]>(() => (selectedId ? savedMemo.get(selectedId) ?? [] : []))
   const [suggestions, setSuggestions] = useState<CatalogServer[]>([])
   const [pendingServer, setPendingServer] = useState<SavedServer | null>(null)
   const [joinRequest, setJoinRequest] = useState<JoinRequest | null>(null)
@@ -184,20 +191,28 @@ export default function MobileHome() {
   }, [uuid])
 
   // Le client intégré ne se charge pas partout : même pastille que sur PC.
+  // La réponse ne dépend que du couple version / loader : retenue pour la
+  // session (`agentMemo`), elle ne se redemande pas à chaque retour ici.
   useEffect(() => {
     if (!instance) { setAgentBlocked(false); return }
+    const key = `${instance.mc_version}|${instance.loader}`
+    const known = agentMemo.get(key)
+    if (known !== undefined) { setAgentBlocked(known); return }
     let alive = true
     api.launch.agentStatus(instance.mc_version, instance.loader)
-      .then((s) => alive && setAgentBlocked(!s.available))
+      .then((s) => { agentMemo.set(key, !s.available); if (alive) setAgentBlocked(!s.available) })
       .catch(() => alive && setAgentBlocked(false))
     return () => { alive = false }
   }, [instance?.mc_version, instance?.loader])
 
+  // Dernière liste connue tout de suite, puis la liste fraîche : le jeu peut
+  // l'avoir changée depuis, mais la carte ne clignote plus à chaque retour.
   useEffect(() => {
     if (!showHomeServers || !selectedId) { setSavedServers([]); return }
+    setSavedServers(savedMemo.get(selectedId) ?? [])
     let alive = true
     api.launch.listSavedServers(selectedId)
-      .then((list) => alive && setSavedServers(list))
+      .then((list) => { savedMemo.set(selectedId, list); if (alive) setSavedServers(list) })
       .catch(() => alive && setSavedServers([]))
     return () => { alive = false }
   }, [showHomeServers, selectedId])

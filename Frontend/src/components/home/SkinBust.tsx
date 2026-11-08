@@ -290,6 +290,145 @@ const HIT_HEIGHT = `${((9 + SHOULDERS) / TOTAL_UNITS) * 100}%`
  *  boîte serait plus étroite que le rendu. */
 const HIT_RATIO = `${16 * STRETCH} / ${9 + SHOULDERS}`
 
+// ── Une seule 3D pour toute la session ─────────────────────────────────────
+//
+// Créer un `SkinViewer` coûte cher : mesuré le 2026-11-08 sur un Galaxy A32,
+// ~480 ms où l'interface est bloquée (contexte WebGL 117 ms, compilation des
+// shaders ~190 ms, premier rendu ~250 ms). Le buste en créait un à chaque
+// retour sur l'accueil ou sur l'écran des comptes, puis le détruisait.
+//
+// Il n'y en a donc plus qu'un, créé à la première demande et jamais détruit,
+// dessiné sur un canevas qui n'est pas dans la page. Chaque buste affiché a
+// son propre canevas 2D et y recopie le rendu (`paint`). Comme le buste est
+// immobile, cette copie n'a lieu que quand quelque chose change : taille,
+// skin, survol.
+
+interface Shared {
+  viewer: SkinViewer
+  /** Skin chargé ou en cours de chargement (`undefined` : aucun encore). */
+  source: string | null | undefined
+}
+
+let shared: Shared | null = null
+/** Bustes affichés : chacun se redessine quand le skin partagé change. */
+const painters = new Set<() => void>()
+
+function sharedViewer(): Shared {
+  if (shared) return shared
+  const canvas = document.createElement('canvas')
+  // ── Fond transparent ──────────────────────────────────────────────────
+  // On ne peut pas passer d'options de rendu à `skinview3d`, mais on peut
+  // créer le contexte avant lui : la spécification WebGL impose que les
+  // appels suivants à `getContext` du même type rendent le contexte déjà
+  // créé, en ignorant leurs attributs. Les nôtres l'emportent donc.
+  canvas.getContext('webgl2', { alpha: true, premultipliedAlpha: true })
+    ?? canvas.getContext('webgl', { alpha: true, premultipliedAlpha: true })
+
+  const viewer = new SkinViewer({
+    canvas,
+    width: 220,
+    height: 220,
+    // Pas de boucle de rendu : skinview3d redessine sinon la scène à chaque
+    // image, 60 fois par seconde, pour un buste qui ne bouge pas. Chaque
+    // changement appelle `render()` lui-même (`paint`).
+    renderPaused: true,
+  })
+  viewer.background = null
+  // Aucun mouvement : le buste reste face à nous, toujours au même endroit.
+  // `autoRotate` ne tourne pas la caméra mais le modèle lui-même
+  // (`playerWrapper.rotation.y`), donc le laisser actif faisait dériver le
+  // cadrage en continu — un repère qui bouge n'est plus un repère.
+  viewer.autoRotate = false
+  viewer.fov = BUST_FOV
+  viewer.playerWrapper.rotation.y = BODY_TURN
+  viewer.playerObject.skin.head.rotation.y = HEAD_TURN
+  // Le canevas n'est pas dans la page : rien à piloter à la souris.
+  viewer.controls.enabled = false
+  viewer.controls.enableRotate = false
+  viewer.controls.enableZoom = false
+  viewer.controls.enablePan = false
+  addLights(viewer)
+  shared = { viewer, source: undefined }
+  return shared
+}
+
+/** Charge le skin dans la 3D partagée, sauf s'il y est déjà. */
+function loadSharedSkin(source: string | null) {
+  const s = sharedViewer()
+  if (s.source === source) return
+  s.source = source
+  const viewer = s.viewer
+  // `auto-detect` distingue les modèles fins (Alex) des classiques d'après
+  // la texture. Un skin injoignable laisse le modèle précédent plutôt que
+  // de vider la bannière. `loadLatestSkin` : le repli vient du réseau et peut
+  // finir après le skin enregistré, qu'il recouvrait alors (voir
+  // `lib/skinLoad.ts`).
+  const loading = source
+    ? loadLatestSkin(viewer, source, { model: 'auto-detect' })
+    : loadLatestSkin(viewer, null)
+  loading
+    .then(() => {
+      // Un modèle fin n'a pas tout à fait les mêmes dimensions : chaque buste
+      // recadre en se redessinant.
+      light(viewer)
+      painters.forEach((paint) => paint())
+    })
+    .catch(() => {})
+}
+
+// ── Le halo ────────────────────────────────────────────────────────────────
+//
+// `drop-shadow` suit le canal alpha, donc le contour épouse la vraie
+// silhouette du modèle. Deux passes : une serrée qui souligne l'arête, une
+// large qui pose le halo.
+//
+// Il était posé en CSS (`filter`) sur le canevas WebGL. Le navigateur le
+// recalculait alors à chaque image où quelque chose bougeait par-dessus :
+// tiroir et panneaux tombaient à ~40 images/s sur l'accueil, contre 60 sans
+// le filtre (mesuré sur le même téléphone). Il est maintenant appliqué une
+// seule fois, en recopiant le rendu (`ctx.filter`) : l'image affichée le
+// contient déjà, il n'y a plus rien à recalculer.
+//
+// Valeurs en pixels CSS, multipliées par la densité de l'écran : le canevas
+// compte en pixels réels.
+function halo(hover: boolean, dpr: number) {
+  const px = (v: number) => `${v * dpr}px`
+  return hover
+    ? `drop-shadow(0 0 ${px(3)} rgba(200,224,255,0.8)) drop-shadow(0 0 ${px(18)} rgba(100,150,255,0.65))`
+    : `drop-shadow(0 0 ${px(2)} rgba(172,205,255,0.55)) drop-shadow(0 0 ${px(14)} rgba(72,118,240,0.5))`
+}
+
+/**
+ * Rend le buste à la taille de `box` et le recopie, halo compris, dans
+ * `display`. Synchrone : la recopie suit le rendu dans la même tâche, avant
+ * que le tampon WebGL ne soit vidé.
+ */
+function paint(box: HTMLElement, display: HTMLCanvasElement, hover: boolean) {
+  const { width, height } = layoutSize(box)
+  if (width <= 0 || height <= 0) return
+  const { viewer } = sharedViewer()
+  if (viewer.width !== width || viewer.height !== height) viewer.setSize(width, height)
+  // Toujours recadrer : la 3D est partagée, un autre buste a pu la régler à
+  // sa taille, et `setSize` remet `camera.aspect` au rapport réel, sans
+  // l'étirement.
+  frame(viewer, box)
+  viewer.render()
+
+  const source = viewer.canvas
+  if (display.width !== source.width || display.height !== source.height) {
+    display.width = source.width
+    display.height = source.height
+  }
+  display.style.width = `${width}px`
+  display.style.height = `${height}px`
+  const ctx = display.getContext('2d')
+  if (!ctx) return
+  ctx.clearRect(0, 0, display.width, display.height)
+  ctx.filter = halo(hover, source.width / width)
+  ctx.drawImage(source, 0, 0)
+  ctx.filter = 'none'
+}
+
 export function SkinBust({ uuid, localSkin, className = '', onClick, title }: {
   /** UUID du compte, pour aller chercher sa texture. */
   uuid: string | null
@@ -302,7 +441,7 @@ export function SkinBust({ uuid, localSkin, className = '', onClick, title }: {
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const boxRef = useRef<HTMLDivElement>(null)
-  const viewerRef = useRef<SkinViewer | null>(null)
+  const hoverRef = useRef(false)
 
   // Le skin enregistré l'emporte : c'est la source la plus fraîche, le cache
   // du service mettant du temps à refléter un changement. À défaut, le
@@ -310,100 +449,34 @@ export function SkinBust({ uuid, localSkin, className = '', onClick, title }: {
   // Steve plutôt qu'un vide pour un compte hors ligne sans skin.
   const source = localSkin ?? (uuid ? `https://mc-heads.net/skin/${uuid}` : null)
 
-  // Le buste est immobile : on ne le dessine que quand quelque chose change
-  // (taille, skin, lumière), jamais en boucle. Voir `renderPaused` plus bas.
-  const reframe = useCallback(() => {
-    if (viewerRef.current && boxRef.current) {
-      frame(viewerRef.current, boxRef.current)
-      viewerRef.current.render()
-    }
+  const repaint = useCallback(() => {
+    if (canvasRef.current && boxRef.current) paint(boxRef.current, canvasRef.current, hoverRef.current)
   }, [])
 
   useEffect(() => {
-    if (!canvasRef.current || !boxRef.current) return
     const box = boxRef.current
-    const { width, height } = layoutSize(box)
-
-    // ── Fond transparent ──────────────────────────────────────────────────
-    // On ne peut pas passer d'options de rendu à `skinview3d`, mais on peut
-    // créer le contexte avant lui : la spécification WebGL impose que les
-    // appels suivants à `getContext` du même type rendent le contexte déjà
-    // créé, en ignorant leurs attributs. Les nôtres l'emportent donc.
-    canvasRef.current.getContext('webgl2', { alpha: true, premultipliedAlpha: true })
-      ?? canvasRef.current.getContext('webgl', { alpha: true, premultipliedAlpha: true })
-
-    const viewer = new SkinViewer({
-      canvas: canvasRef.current,
-      width: width || 220,
-      height: height || 220,
-      // Pas de boucle de rendu : skinview3d redessine sinon la scène à chaque
-      // image, 60 fois par seconde, pour un buste qui ne bouge pas — le plus
-      // gros poste de l'accueil sur téléphone (batterie, chauffe, défilement
-      // qui saccade). Chaque changement appelle `render()` lui-même.
-      renderPaused: true,
-    })
-    viewer.background = null
-    // Aucun mouvement : le buste reste face à nous, toujours au même endroit.
-    // `autoRotate` ne tourne pas la caméra mais le modèle lui-même
-    // (`playerWrapper.rotation.y`), donc le laisser actif faisait dériver le
-    // cadrage en continu — un repère qui bouge n'est plus un repère.
-    viewer.autoRotate = false
-    viewer.fov = BUST_FOV
-    viewer.playerWrapper.rotation.y = BODY_TURN
-    viewer.playerObject.skin.head.rotation.y = HEAD_TURN
-    // La bannière n'est pas une visionneuse : un clic dessus ouvre les
-    // comptes, il ne fait pas tourner le modèle.
-    viewer.controls.enabled = false
-    viewer.controls.enableRotate = false
-    viewer.controls.enableZoom = false
-    viewer.controls.enablePan = false
-    addLights(viewer)
-    viewerRef.current = viewer
-    // Le premier cadrage n'a lieu que si la zone est déjà mesurable : sinon
-    // `camera.aspect` vaut n'importe quoi et le cadrage serait faux le temps
-    // d'une image. L'observateur ci-dessous s'en charge dès que la taille est
-    // connue.
-    if (width > 0 && height > 0) {
-      frame(viewer, box)
-      viewer.render()
-    }
-
-    const ro = new ResizeObserver(() => {
-      const r = layoutSize(box)
-      if (r.width > 0 && r.height > 0) {
-        viewer.setSize(r.width, r.height)
-        // `setSize` a remis `camera.aspect` au rapport réel : il faut rejouer
-        // le cadrage pour y réappliquer l'étirement, en plus de recalculer la
-        // largeur visible.
-        frame(viewer, box)
-        viewer.render()
-      }
-    })
+    if (!box) return
+    painters.add(repaint)
+    repaint()
+    const ro = new ResizeObserver(repaint)
     ro.observe(box)
-
     return () => {
       ro.disconnect()
-      viewer.dispose()
-      viewerRef.current = null
+      painters.delete(repaint)
     }
-  }, [])
+  }, [repaint])
 
   useEffect(() => {
-    const viewer = viewerRef.current
-    if (!viewer) return
-    if (!source) {
-      void loadLatestSkin(viewer, null).then(() => viewer.render())
-      return
-    }
-    // `auto-detect` distingue les modèles fins (Alex) des classiques d'après
-    // la texture. Un skin injoignable laisse le modèle précédent plutôt que
-    // de vider la bannière. On recadre après coup : un modèle fin n'a pas
-    // tout à fait les mêmes dimensions.
-    // `loadLatestSkin` : le repli vient du réseau et peut finir après le skin
-    // enregistré, qu'il recouvrait alors (voir `lib/skinLoad.ts`).
-    const after = () => { light(viewer); reframe() }
-    loadLatestSkin(viewer, source, { model: 'auto-detect' }).then(after).catch(() => {})
-  }, [source, reframe])
+    // Skin déjà chargé : on redessine tout de suite, sinon le chargement
+    // redessinera tous les bustes en finissant.
+    loadSharedSkin(source)
+    repaint()
+  }, [source, repaint])
+
+  const setHover = (on: boolean) => {
+    hoverRef.current = on
+    repaint()
+  }
 
   // Centré en bas plutôt qu'en flux normal : le canevas porte sa propre
   // taille en pixels, posée par three.js, et celle-ci peut retarder d'une
@@ -421,24 +494,20 @@ export function SkinBust({ uuid, localSkin, className = '', onClick, title }: {
         aria-hidden
         className="pointer-events-none absolute bottom-0 left-1/2 h-[85%] w-[52%] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse_at_50%_60%,rgba(84,124,235,0.42)_0%,rgba(56,84,182,0.18)_45%,transparent_72%)] blur-[2px]"
       />
-      {/* Le bouton précède le canevas pour que `peer-hover` l'atteigne — la
-          règle CSS ne porte que sur les frères SUIVANTS. Son `z-10` le
-          maintient malgré tout au-dessus pour recevoir les clics. */}
+      {/* Le survol renforce le halo : il est dessiné dans l'image (`halo`),
+          donc c'est un nouveau dessin et non une règle CSS. */}
       <button
         onClick={onClick}
+        onPointerEnter={(e) => { if (e.pointerType === 'mouse') setHover(true) }}
+        onPointerLeave={() => { if (hoverRef.current) setHover(false) }}
         title={title}
         aria-label={title}
         style={{ top: HIT_TOP, height: HIT_HEIGHT, aspectRatio: HIT_RATIO }}
-        className="peer pointer-events-auto absolute left-1/2 z-10 -translate-x-1/2"
+        className="pointer-events-auto absolute left-1/2 z-10 -translate-x-1/2"
       />
 
-      {/* `drop-shadow` suit le canal alpha, donc le contour épouse la vraie
-          silhouette du modèle — pas la boîte du canevas. Deux passes : une
-          serrée qui souligne l'arête, une large qui pose le halo. */}
-      <canvas
-        ref={canvasRef}
-        className="relative transition-[filter] duration-200 [filter:drop-shadow(0_0_2px_rgba(172,205,255,0.55))_drop-shadow(0_0_14px_rgba(72,118,240,0.5))] peer-hover:[filter:drop-shadow(0_0_3px_rgba(200,224,255,0.8))_drop-shadow(0_0_18px_rgba(100,150,255,0.65))]"
-      />
+      {/* Image 2D du buste, halo compris, recopiée depuis la 3D partagée. */}
+      <canvas ref={canvasRef} className="relative" />
     </div>
   )
 }
