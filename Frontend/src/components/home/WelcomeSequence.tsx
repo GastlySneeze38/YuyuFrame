@@ -1,8 +1,12 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { markIntroPlayed } from '@/lib/greeting'
-import { SkinBust } from './SkinBust'
 import { useT } from '@/i18n'
+
+// Chargé à part : le buste tire la 3D (skinview3d + three, ~500 Ko). Importé
+// d'office, l'accueil attendait ce morceau avant de s'afficher, ce qui se
+// voyait sur téléphone. La bannière s'affiche, le personnage la rejoint.
+const SkinBust = lazy(() => import('./SkinBust').then((m) => ({ default: m.SkinBust })))
 
 /**
  * Séquence d'accueil de la bannière.
@@ -138,13 +142,15 @@ export function WelcomeSequence({
               // `SkinBust` qui pose sa propre zone, calculée sur le buste.
               className="absolute inset-0"
             >
-              <SkinBust
-                uuid={uuid}
-                localSkin={localSkin}
-                onClick={onAvatarClick}
-                title={t('home.manageAccounts')}
-                className="h-full w-full"
-              />
+              <Suspense fallback={null}>
+                <SkinBust
+                  uuid={uuid}
+                  localSkin={localSkin}
+                  onClick={onAvatarClick}
+                  title={t('home.manageAccounts')}
+                  className="h-full w-full"
+                />
+              </Suspense>
             </motion.div>
           )}
         </AnimatePresence>

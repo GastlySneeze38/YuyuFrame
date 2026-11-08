@@ -8,12 +8,14 @@
 //!   deep_link    lien `yuyuframe://` reçu avant que l'interface soit prête
 //!   pending      événements émis pendant que la fenêtre est fermée
 //!   locale       pays deviné au premier démarrage
+//!   logging      journal : console et `yuyuframe.log`, filtrés
 //!   storage      dossier de données, déplaçable
 //!   system_info  mémoire de la machine
 //!   process      lancement de processus sans console
 
 pub mod deep_link;
 pub mod locale;
+pub mod logging;
 pub mod pending;
 pub mod process;
 pub mod startup;

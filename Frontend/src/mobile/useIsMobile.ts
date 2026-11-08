@@ -10,7 +10,8 @@ import { useEffect, useState } from 'react'
  */
 const QUERY = '(max-width: 640px)'
 
-function matches(): boolean {
+/** La même règle lue une fois, hors d'un composant. */
+export function matches(): boolean {
   return typeof window !== 'undefined' && window.matchMedia(QUERY).matches
 }
 

@@ -35,7 +35,7 @@ import { useTauriEvent } from '@/hooks/useTauriEvent'
 import { parseFriendUrl, parseInviteUrl, parseJoinUrl } from '@/lib/joinLink'
 import { inTauri } from '@/lib/platform'
 import { startHeadPreload } from '@/lib/headPreload'
-import { useIsMobile } from '@/mobile/useIsMobile'
+import { matches as isMobileNow, useIsMobile } from '@/mobile/useIsMobile'
 import { DRAWER_ROOTS, NavDrawer } from '@/mobile/ui/NavDrawer'
 
 // Chargées à la demande — évite de tout regrouper dans un seul chunk JS au
@@ -79,9 +79,24 @@ const REVIEW_MIN_SESSIONS = 10
 /** Délai après un plantage pendant lequel on ne demande rien à personne. */
 const REVIEW_CRASH_GRACE_MS = 20_000
 
+// Sur téléphone, seulement les onglets de la barre du bas (`MOBILE_TABS`). Tout
+// précharger, comme sur PC, demandait 64 fichiers d'un coup, dont l'éditeur de
+// skin et la 3D : mesuré le 2026-11-08 sur un Galaxy A32, ils passaient avant
+// l'écran d'accueil. Les autres pages se chargent à la première visite.
+const MOBILE_PAGE_IMPORTS = [
+  () => import('@/mobile/MobileInstances'),
+  () => import('@/mobile/MobilePlans'),
+  () => import('@/pages/Settings'),
+  () => import('@/pages/Login'),
+]
+
 /** Charge les pages restantes quand le navigateur n'a rien de mieux à faire. */
 function preloadPages() {
-  const run = () => PAGE_IMPORTS.forEach((load) => void load().catch(() => {}))
+  const run = isMobileNow()
+    // Une à la fois : le téléphone sert chaque fichier par le Rust, et un écran
+    // ouvert entre-temps passe devant au lieu d'attendre la file.
+    ? () => void MOBILE_PAGE_IMPORTS.reduce<Promise<unknown>>((prev, load) => prev.then(() => load().catch(() => {})), Promise.resolve())
+    : () => PAGE_IMPORTS.forEach((load) => void load().catch(() => {}))
   if ('requestIdleCallback' in window) window.requestIdleCallback(run, { timeout: 3000 })
   else setTimeout(run, 1500)
 }

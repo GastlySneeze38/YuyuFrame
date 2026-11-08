@@ -22,8 +22,6 @@ use std::sync::Arc;
 use tauri::Emitter;
 use tauri::Manager;
 use tokio::sync::{Mutex, RwLock};
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
 
 /// Le point d'entrée : `main.rs` sur ordinateur ; sur Android, l'activité de
 /// Tauri l'appelle par ce nom une fois la bibliothèque chargée.
@@ -39,16 +37,9 @@ pub fn run() {
     // watch`, donc chaque écriture de log déclenchait un rebuild en boucle.
     // `paths::root()` respecte un éventuel déplacement (Settings.tsx, section
     // Stockage) — lu directement depuis le fichier ancre, pas de state Tauri
-    // disponible à ce stade, avant même `tauri::Builder`.
-    let log_dir = paths::root().join(".minecraft");
-    std::fs::create_dir_all(&log_dir).ok();
-    let file_appender = tracing_appender::rolling::never(&log_dir, "yuyuframe.log");
-    let (non_blocking, _log_guard) = tracing_appender::non_blocking(file_appender);
-
-    tracing_subscriber::registry()
-        .with(tracing_subscriber::fmt::layer())
-        .with(tracing_subscriber::fmt::layer().with_writer(non_blocking).with_ansi(false))
-        .init();
+    // disponible à ce stade, avant même `tauri::Builder`. Filtre et taille du
+    // fichier : `app/logging.rs`.
+    let _log_guard = app::logging::init(&paths::root().join(".minecraft"));
 
     let builder = tauri::Builder::default();
     // Doit être le tout premier plugin enregistré (contrainte de la crate) :
