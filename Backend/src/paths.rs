@@ -38,22 +38,31 @@ pub fn app_files_dir() -> PathBuf {
     app_data_base()
 }
 
-/// `getFilesDir()` par JNI, sur le contexte que l'activité de Tauri a posé
-/// avant d'appeler `run`. Pas de chemin écrit en dur (`/data/data/<paquet>`) :
-/// il est faux pour un second utilisateur ou un profil professionnel.
+/// Ce que rend `getFilesDir()`, calculé sans le demander à Android :
+/// `/data/user/<utilisateur>/<paquet>/files`.
+///
+/// Pas par JNI : `run` (donc `root()`, pour le journal) est appelé avant que
+/// l'activité de Tauri ait donné son contexte au Rust — `ndk_context` y
+/// panique (« android context was not initialized »), vu sur un vrai
+/// téléphone le 2026-11-08. Pas non plus `/data/data/<paquet>` écrit en dur :
+/// il ne vaut que pour le premier utilisateur, pas pour un second ni pour un
+/// profil professionnel.
+///
+/// L'utilisateur Android est l'UID du processus divisé par 100 000 ; le paquet
+/// est le nom du processus (`/proc/self/cmdline`), sans le `:suffixe` d'un
+/// processus secondaire.
 #[cfg(target_os = "android")]
 fn android_files_dir() -> Option<PathBuf> {
-    let context = ndk_context::android_context();
-    // SAFETY: la machine virtuelle et le contexte posés par l'activité, vivants
-    // tant que l'appli tourne ; le contexte est une référence globale qu'on ne
-    // libère pas.
-    let vm = unsafe { jni::JavaVM::from_raw(context.vm().cast()) }.ok()?;
-    let mut env = vm.attach_current_thread().ok()?;
-    let context = unsafe { jni::objects::JObject::from_raw(context.context().cast()) };
-    let dir = env.call_method(&context, "getFilesDir", "()Ljava/io/File;", &[]).ok()?.l().ok()?;
-    let path = env.call_method(&dir, "getAbsolutePath", "()Ljava/lang/String;", &[]).ok()?.l().ok()?;
-    let path: String = env.get_string(&path.into()).ok()?.into();
-    Some(PathBuf::from(path))
+    use std::os::unix::fs::MetadataExt;
+
+    let uid = std::fs::metadata("/proc/self").ok()?.uid();
+    let cmdline = std::fs::read("/proc/self/cmdline").ok()?;
+    let name = cmdline.split(|b| *b == 0).next()?;
+    let package = std::str::from_utf8(name).ok()?.split(':').next()?.trim();
+    if package.is_empty() || package.contains('/') {
+        return None;
+    }
+    Some(PathBuf::from(format!("/data/user/{}/{}/files", uid / 100_000, package)))
 }
 
 fn default_root() -> PathBuf {

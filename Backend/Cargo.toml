@@ -84,11 +84,6 @@ tauri-plugin-single-instance = "2"
 
 [target.'cfg(target_os = "android")'.dependencies]
 reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "multipart", "gzip", "brotli", "rustls-tls", "charset", "http2"] }
-# Le dossier des fichiers de l'appli, demandé à Android (paths.rs). Les deux
-# sont déjà tirés par Tauri sur Android.
-jni = "0.21"
-ndk-context = "0.1"
-
 # Coffre du système pour le refresh token (src/security/vault.rs) : Windows Credential
 # Manager, trousseau macOS. Pas de dépendance ailleurs : sans coffre natif, la
 # crate retomberait sur un coffre en mémoire, vide à chaque démarrage.
