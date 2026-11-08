@@ -224,6 +224,10 @@ async fn write_args(files: &Path, args: &[String]) -> Result<()> {
         return Err(anyhow!("option de lancement invalide (saut de ligne)"));
     }
     let mut text = String::from("# Écrit par YuyuFrame à chaque lancement : la ligne de commande du jeu.\n");
+    // Une variable d'environnement (forme `NOM=valeur`) : le jeu sait qu'il est
+    // lancé par YuyuFrame et prépare ses fichiers sans demander de compte
+    // Starling (notre patch dans `horizon-android`, game/setup.rs).
+    text.push_str("YUYUFRAME=1\n");
     for arg in args {
         text.push_str(arg);
         text.push('\n');

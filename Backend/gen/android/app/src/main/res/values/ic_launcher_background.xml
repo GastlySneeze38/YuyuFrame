@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-  <color name="ic_launcher_background">#fff</color>
+  <!-- Le fond du logo, pour que la découpe du lanceur ne laisse pas de bord clair. -->
+  <color name="ic_launcher_background">#08080D</color>
 </resources>

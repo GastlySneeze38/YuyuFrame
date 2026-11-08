@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Icône adaptative (Android 8+) : le lanceur découpe l'icône à sa forme et n'en
+     montre que le centre (66 dp sur 108). Le logo dessine déjà son propre carré
+     arrondi : il est réduit dans la zone visible (19 % de marge de chaque côté),
+     sur un fond de sa couleur, sinon il était rogné et trop grand. -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-  <foreground android:drawable="@mipmap/ic_launcher_foreground"/>
   <background android:drawable="@color/ic_launcher_background"/>
+  <foreground>
+    <inset android:drawable="@mipmap/ic_launcher_foreground" android:inset="19%"/>
+  </foreground>
 </adaptive-icon>
