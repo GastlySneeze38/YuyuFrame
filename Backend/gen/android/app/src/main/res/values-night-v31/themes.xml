@@ -1,0 +1,11 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Le même que values-v31 : le launcher n'a pas de thème clair. -->
+    <style name="Theme.yuyuframe_backend" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:windowBackground">@color/yuyu_background</item>
+        <item name="android:statusBarColor">@color/yuyu_background</item>
+        <item name="android:navigationBarColor">@color/yuyu_background</item>
+        <item name="android:windowSplashScreenBackground">@color/yuyu_background</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/yuyu_splash_anim</item>
+        <item name="android:windowSplashScreenAnimationDuration">1200</item>
+    </style>
+</resources>

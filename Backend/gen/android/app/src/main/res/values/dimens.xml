@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Taille du cadre de Yuyu (son repère de 600 unités) dans le fond de la
+         fenêtre, avant Android 12 : la même que la variable CSS yuyu-size de
+         Frontend/index.html, pour que la page se pose dessus sans saut. Depuis
+         Android 12, c'est la page qui se cale sur l'icône du système. -->
+    <dimen name="yuyu_splash_size">150dp</dimen>
+</resources>

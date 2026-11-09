@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Fond de la fenêtre : le noir de l'interface et Yuyu au centre. Il se voit
+  entre l'écran de démarrage d'Android et le premier dessin de la page (la
+  WebView est transparente sur Android, tauri.android.conf.json), et la page
+  pose son propre Yuyu au même endroit, à la même taille : on ne voit pas le
+  relais. Sous Android 12, c'est lui le seul écran de démarrage.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/yuyu_background" />
+    <item
+        android:width="@dimen/yuyu_splash_size"
+        android:height="@dimen/yuyu_splash_size"
+        android:drawable="@drawable/yuyu"
+        android:gravity="center" />
+</layer-list>

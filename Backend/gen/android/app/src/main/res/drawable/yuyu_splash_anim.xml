@@ -1,0 +1,421 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Yuyu animé : l'icône de l'écran de démarrage d'Android 12 et plus.
+
+  C'est la MÊME boucle que l'écran de démarrage de la page
+  (Frontend/index.html, #yuyu-splash) : mêmes images clés, mêmes courbes
+  (res/interpolator/ys_*.xml), mêmes points de pivot. La page reprend la main
+  en se calant sur l'instant où celle-ci a démarré (MainActivity, YuyuBoot),
+  donc la moindre différence se verrait au relais : une valeur qui change se
+  change aux deux endroits. Correspondance : 1 px de la page = 4 unités ici
+  (cadre de 150 px pour 600 unités).
+
+  Le dessin de Yuyu occupe 600 unités sur 900 (marge de 150 autour) : Android
+  ne montre de l'icône que son cercle central (diamètre : les deux tiers de
+  l'icône, soit 600 unités), et l'antenne en sortait pendant le saut avec une
+  marge plus petite. Android dessine l'icône animée 1,5 fois plus grande que
+  la boîte qu'il annonce (mesuré le 2026-11-09 sur un Galaxy A32) : le cadre
+  de Yuyu fait donc la largeur de cette boîte, et c'est ce que la page en
+  prend (index.html).
+
+  Une image clé porte la courbe de l'intervalle qui la PRÉCÈDE, alors qu'en
+  CSS une courbe vaut pour l'intervalle qui la SUIT : chaque courbe est donc
+  décalée d'une image clé par rapport à index.html.
+-->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt">
+    <aapt:attr name="android:drawable">
+        <vector
+            android:width="288dp"
+            android:height="288dp"
+            android:viewportWidth="900"
+            android:viewportHeight="900">
+            <group android:translateX="150" android:translateY="150">
+                <group android:name="ring" android:pivotX="300" android:pivotY="305">
+                    <group android:name="tl" android:pivotX="192" android:pivotY="206">
+                        <path android:fillColor="#6656E4" android:pathData="M126,196 L172,142 L256,136 L258,186 L195,188 L178,207 L181,273 L131,277 Z" />
+                    </group>
+                    <group android:name="tr" android:pivotX="392" android:pivotY="192">
+                        <path android:fillColor="#2E8EF0" android:pathData="M322,127 L404,126 L457,172 L462,254 L413,257 L409,192 L389,176 L325,180 Z" />
+                    </group>
+                    <group android:name="br" android:pivotX="408" android:pivotY="410">
+                        <path android:fillColor="#2E8EF0" android:pathData="M420,326 L469,322 L474,404 L428,458 L377,461 L347,497 L345,463 L342,414 L404,410 L424,389 Z" />
+                    </group>
+                    <group android:name="bl" android:pivotX="207" android:pivotY="407">
+                        <path android:fillColor="#6656E4" android:pathData="M136,345 L186,342 L189,402 L210,421 L273,418 L278,467 L195,473 L142,428 Z" />
+                    </group>
+                </group>
+                <group android:name="face" android:pivotX="300" android:pivotY="381">
+                    <group android:name="antenna" android:pivotX="300" android:pivotY="132">
+                        <path android:fillColor="#FFFFFF" android:pathData="M258,74 L282,74 L300,102 L318,74 L341,74 L320,132 L281,132 Z" />
+                    </group>
+                    <group android:name="eyes" android:pivotX="298" android:pivotY="276">
+                        <path android:fillColor="#FFFFFF" android:pathData="M214,248 L264,245 L267,310 L217,313 Z M330,240 L379,237 L383,301 L333,304 Z" />
+                        <group android:name="pupils">
+                            <path android:fillColor="#0B0B10" android:pathData="M236,270 L259,268 L260,302 L238,303 Z M353,262 L375,261 L377,295 L355,296 Z" />
+                        </group>
+                    </group>
+                    <group android:name="cheekL" android:pivotX="210" android:pivotY="344">
+                        <path android:name="cheekLPath" android:fillColor="#EC6FA9" android:pathData="M198,337 L222,336 L223,351 L199,352 Z" />
+                    </group>
+                    <group android:name="cheekR" android:pivotX="393" android:pivotY="330">
+                        <path android:name="cheekRPath" android:fillColor="#EC6FA9" android:pathData="M380,323 L405,322 L406,338 L381,339 Z" />
+                    </group>
+                    <group android:name="smile" android:pivotX="303" android:pivotY="361">
+                        <path android:fillColor="#FFFFFF" android:pathData="M268,355 L281,342 L304,361 L327,341 L338,353 L305,381 Z" />
+                    </group>
+                </group>
+            </group>
+        </vector>
+    </aapt:attr>
+
+    <!-- Le cadre : élan, tour avec dépassement, retour, respiration (ys-ring). -->
+    <target android:name="ring">
+        <aapt:attr name="android:animation">
+            <objectAnimator android:duration="1200" android:repeatCount="infinite">
+                <propertyValuesHolder android:propertyName="rotation" android:valueType="floatType">
+                    <keyframe android:fraction="0" android:value="0" />
+                    <keyframe android:fraction="0.1" android:value="-14" android:interpolator="@interpolator/ys_wind" />
+                    <keyframe android:fraction="0.45" android:value="372" android:interpolator="@interpolator/ys_spin" />
+                    <keyframe android:fraction="0.55" android:value="360" android:interpolator="@interpolator/ys_ease_in_out" />
+                    <keyframe android:fraction="0.7" android:value="360" android:interpolator="@interpolator/ys_ease_out" />
+                    <keyframe android:fraction="0.85" android:value="360" android:interpolator="@interpolator/ys_ease_in_out" />
+                    <keyframe android:fraction="1" android:value="360" android:interpolator="@interpolator/ys_ease" />
+                </propertyValuesHolder>
+                <propertyValuesHolder android:propertyName="scaleX" android:valueType="floatType">
+                    <keyframe android:fraction="0" android:value="1" />
+                    <keyframe android:fraction="0.1" android:value="0.9" android:interpolator="@interpolator/ys_wind" />
+                    <keyframe android:fraction="0.45" android:value="1.1" android:interpolator="@interpolator/ys_spin" />
+                    <keyframe android:fraction="0.55" android:value="0.98" android:interpolator="@interpolator/ys_ease_in_out" />
+                    <keyframe android:fraction="0.7" android:value="1.06" android:interpolator="@interpolator/ys_ease_out" />
+                    <keyframe android:fraction="0.85" android:value="1" android:interpolator="@interpolator/ys_ease_in_out" />
+                    <keyframe android:fraction="1" android:value="1" android:interpolator="@interpolator/ys_ease" />
+                </propertyValuesHolder>
+                <propertyValuesHolder android:propertyName="scaleY" android:valueType="floatType">
+                    <keyframe android:fraction="0" android:value="1" />
+                    <keyframe android:fraction="0.1" android:value="0.9" android:interpolator="@interpolator/ys_wind" />
+                    <keyframe android:fraction="0.45" android:value="1.1" android:interpolator="@interpolator/ys_spin" />
+                    <keyframe android:fraction="0.55" android:value="0.98" android:interpolator="@interpolator/ys_ease_in_out" />
+                    <keyframe android:fraction="0.7" android:value="1.06" android:interpolator="@interpolator/ys_ease_out" />
+                    <keyframe android:fraction="0.85" android:value="1" android:interpolator="@interpolator/ys_ease_in_out" />
+                    <keyframe android:fraction="1" android:value="1" android:interpolator="@interpolator/ys_ease" />
+                </propertyValuesHolder>
+            </objectAnimator>
+        </aapt:attr>
+    </target>
+
+    <!-- Les quatre crochets (ys-push-*), courbe « ease » partout. -->
+    <target android:name="tl">
+        <aapt:attr name="android:animation">
+            <objectAnimator android:duration="1200" android:repeatCount="infinite">
+                <propertyValuesHolder android:propertyName="translateX" android:valueType="floatType">
+                    <keyframe android:fraction="0" android:value="0" />
+                    <keyframe android:fraction="0.1" android:value="8" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.3" android:value="-30" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.55" android:value="0" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.7" android:value="-8" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.85" android:value="0" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="1" android:value="0" android:interpolator="@interpolator/ys_ease" />
+                </propertyValuesHolder>
+                <propertyValuesHolder android:propertyName="translateY" android:valueType="floatType">
+                    <keyframe android:fraction="0" android:value="0" />
+                    <keyframe android:fraction="0.1" android:value="8" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.3" android:value="-30" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.55" android:value="0" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.7" android:value="-8" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.85" android:value="0" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="1" android:value="0" android:interpolator="@interpolator/ys_ease" />
+                </propertyValuesHolder>
+                <propertyValuesHolder android:propertyName="rotation" android:valueType="floatType">
+                    <keyframe android:fraction="0" android:value="0" />
+                    <keyframe android:fraction="0.1" android:value="0" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.3" android:value="8" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.55" android:value="0" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="1" android:value="0" android:interpolator="@interpolator/ys_ease" />
+                </propertyValuesHolder>
+            </objectAnimator>
+        </aapt:attr>
+    </target>
+
+    <target android:name="tr">
+        <aapt:attr name="android:animation">
+            <objectAnimator android:duration="1200" android:repeatCount="infinite">
+                <propertyValuesHolder android:propertyName="translateX" android:valueType="floatType">
+                    <keyframe android:fraction="0" android:value="0" />
+                    <keyframe android:fraction="0.1" android:value="-8" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.3" android:value="30" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.55" android:value="0" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.7" android:value="8" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.85" android:value="0" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="1" android:value="0" android:interpolator="@interpolator/ys_ease" />
+                </propertyValuesHolder>
+                <propertyValuesHolder android:propertyName="translateY" android:valueType="floatType">
+                    <keyframe android:fraction="0" android:value="0" />
+                    <keyframe android:fraction="0.1" android:value="8" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.3" android:value="-30" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.55" android:value="0" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.7" android:value="-8" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.85" android:value="0" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="1" android:value="0" android:interpolator="@interpolator/ys_ease" />
+                </propertyValuesHolder>
+                <propertyValuesHolder android:propertyName="rotation" android:valueType="floatType">
+                    <keyframe android:fraction="0" android:value="0" />
+                    <keyframe android:fraction="0.1" android:value="0" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.3" android:value="-8" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.55" android:value="0" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="1" android:value="0" android:interpolator="@interpolator/ys_ease" />
+                </propertyValuesHolder>
+            </objectAnimator>
+        </aapt:attr>
+    </target>
+
+    <target android:name="br">
+        <aapt:attr name="android:animation">
+            <objectAnimator android:duration="1200" android:repeatCount="infinite">
+                <propertyValuesHolder android:propertyName="translateX" android:valueType="floatType">
+                    <keyframe android:fraction="0" android:value="0" />
+                    <keyframe android:fraction="0.1" android:value="-8" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.3" android:value="30" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.55" android:value="0" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.7" android:value="8" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.85" android:value="0" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="1" android:value="0" android:interpolator="@interpolator/ys_ease" />
+                </propertyValuesHolder>
+                <propertyValuesHolder android:propertyName="translateY" android:valueType="floatType">
+                    <keyframe android:fraction="0" android:value="0" />
+                    <keyframe android:fraction="0.1" android:value="-8" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.3" android:value="30" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.55" android:value="0" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.7" android:value="8" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.85" android:value="0" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="1" android:value="0" android:interpolator="@interpolator/ys_ease" />
+                </propertyValuesHolder>
+                <propertyValuesHolder android:propertyName="rotation" android:valueType="floatType">
+                    <keyframe android:fraction="0" android:value="0" />
+                    <keyframe android:fraction="0.1" android:value="0" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.3" android:value="8" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.55" android:value="0" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="1" android:value="0" android:interpolator="@interpolator/ys_ease" />
+                </propertyValuesHolder>
+            </objectAnimator>
+        </aapt:attr>
+    </target>
+
+    <target android:name="bl">
+        <aapt:attr name="android:animation">
+            <objectAnimator android:duration="1200" android:repeatCount="infinite">
+                <propertyValuesHolder android:propertyName="translateX" android:valueType="floatType">
+                    <keyframe android:fraction="0" android:value="0" />
+                    <keyframe android:fraction="0.1" android:value="8" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.3" android:value="-30" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.55" android:value="0" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.7" android:value="-8" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.85" android:value="0" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="1" android:value="0" android:interpolator="@interpolator/ys_ease" />
+                </propertyValuesHolder>
+                <propertyValuesHolder android:propertyName="translateY" android:valueType="floatType">
+                    <keyframe android:fraction="0" android:value="0" />
+                    <keyframe android:fraction="0.1" android:value="-8" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.3" android:value="30" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.55" android:value="0" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.7" android:value="8" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.85" android:value="0" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="1" android:value="0" android:interpolator="@interpolator/ys_ease" />
+                </propertyValuesHolder>
+                <propertyValuesHolder android:propertyName="rotation" android:valueType="floatType">
+                    <keyframe android:fraction="0" android:value="0" />
+                    <keyframe android:fraction="0.1" android:value="0" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.3" android:value="-8" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.55" android:value="0" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="1" android:value="0" android:interpolator="@interpolator/ys_ease" />
+                </propertyValuesHolder>
+            </objectAnimator>
+        </aapt:attr>
+    </target>
+
+    <!-- Le visage : écrasé, saut, réception, petit rebond (ys-hop). -->
+    <target android:name="face">
+        <aapt:attr name="android:animation">
+            <objectAnimator android:duration="1200" android:repeatCount="infinite">
+                <propertyValuesHolder android:propertyName="translateY" android:valueType="floatType">
+                    <keyframe android:fraction="0" android:value="0" />
+                    <keyframe android:fraction="0.1" android:value="8" android:interpolator="@interpolator/ys_ease_in" />
+                    <keyframe android:fraction="0.3" android:value="-56" android:interpolator="@interpolator/ys_jump" />
+                    <keyframe android:fraction="0.48" android:value="4" android:interpolator="@interpolator/ys_fall" />
+                    <keyframe android:fraction="0.6" android:value="-12" android:interpolator="@interpolator/ys_ease_out" />
+                    <keyframe android:fraction="0.72" android:value="0" android:interpolator="@interpolator/ys_ease_in_out" />
+                    <keyframe android:fraction="1" android:value="0" android:interpolator="@interpolator/ys_ease" />
+                </propertyValuesHolder>
+                <propertyValuesHolder android:propertyName="scaleX" android:valueType="floatType">
+                    <keyframe android:fraction="0" android:value="1" />
+                    <keyframe android:fraction="0.1" android:value="1.08" android:interpolator="@interpolator/ys_ease_in" />
+                    <keyframe android:fraction="0.3" android:value="0.95" android:interpolator="@interpolator/ys_jump" />
+                    <keyframe android:fraction="0.48" android:value="1.08" android:interpolator="@interpolator/ys_fall" />
+                    <keyframe android:fraction="0.6" android:value="0.98" android:interpolator="@interpolator/ys_ease_out" />
+                    <keyframe android:fraction="0.72" android:value="1" android:interpolator="@interpolator/ys_ease_in_out" />
+                    <keyframe android:fraction="1" android:value="1" android:interpolator="@interpolator/ys_ease" />
+                </propertyValuesHolder>
+                <propertyValuesHolder android:propertyName="scaleY" android:valueType="floatType">
+                    <keyframe android:fraction="0" android:value="1" />
+                    <keyframe android:fraction="0.1" android:value="0.9" android:interpolator="@interpolator/ys_ease_in" />
+                    <keyframe android:fraction="0.3" android:value="1.07" android:interpolator="@interpolator/ys_jump" />
+                    <keyframe android:fraction="0.48" android:value="0.92" android:interpolator="@interpolator/ys_fall" />
+                    <keyframe android:fraction="0.6" android:value="1.02" android:interpolator="@interpolator/ys_ease_out" />
+                    <keyframe android:fraction="0.72" android:value="1" android:interpolator="@interpolator/ys_ease_in_out" />
+                    <keyframe android:fraction="1" android:value="1" android:interpolator="@interpolator/ys_ease" />
+                </propertyValuesHolder>
+            </objectAnimator>
+        </aapt:attr>
+    </target>
+
+    <!-- L'antenne gigote sans arrêt, trois fois par cycle (ys-wiggle). -->
+    <target android:name="antenna">
+        <aapt:attr name="android:animation">
+            <objectAnimator android:duration="400" android:repeatCount="infinite">
+                <propertyValuesHolder android:propertyName="rotation" android:valueType="floatType">
+                    <keyframe android:fraction="0" android:value="0" />
+                    <keyframe android:fraction="0.25" android:value="14" android:interpolator="@interpolator/ys_ease_in_out" />
+                    <keyframe android:fraction="0.75" android:value="-14" android:interpolator="@interpolator/ys_ease_in_out" />
+                    <keyframe android:fraction="1" android:value="0" android:interpolator="@interpolator/ys_ease_in_out" />
+                </propertyValuesHolder>
+            </objectAnimator>
+        </aapt:attr>
+    </target>
+
+    <!-- Les yeux s'ouvrent grand pendant le saut, puis clignent (ys-blink). -->
+    <target android:name="eyes">
+        <aapt:attr name="android:animation">
+            <objectAnimator android:duration="1200" android:repeatCount="infinite">
+                <propertyValuesHolder android:propertyName="scaleX" android:valueType="floatType">
+                    <keyframe android:fraction="0" android:value="1" />
+                    <keyframe android:fraction="0.3" android:value="1.12" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.45" android:value="1" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.78" android:value="1" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.84" android:value="1.05" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.9" android:value="1" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="1" android:value="1" android:interpolator="@interpolator/ys_ease" />
+                </propertyValuesHolder>
+                <propertyValuesHolder android:propertyName="scaleY" android:valueType="floatType">
+                    <keyframe android:fraction="0" android:value="1" />
+                    <keyframe android:fraction="0.3" android:value="1.12" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.45" android:value="1" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.78" android:value="1" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.84" android:value="0.1" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.9" android:value="1" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="1" android:value="1" android:interpolator="@interpolator/ys_ease" />
+                </propertyValuesHolder>
+            </objectAnimator>
+        </aapt:attr>
+    </target>
+
+    <!-- Les pupilles font le tour avec le cadre (ys-look). -->
+    <target android:name="pupils">
+        <aapt:attr name="android:animation">
+            <objectAnimator android:duration="1200" android:repeatCount="infinite">
+                <propertyValuesHolder android:propertyName="translateX" android:valueType="floatType">
+                    <keyframe android:fraction="0" android:value="0" />
+                    <keyframe android:fraction="0.1" android:value="0" android:interpolator="@interpolator/ys_ease_in_out" />
+                    <keyframe android:fraction="0.18" android:value="-14" android:interpolator="@interpolator/ys_ease_in_out" />
+                    <keyframe android:fraction="0.26" android:value="-10" android:interpolator="@interpolator/ys_ease_in_out" />
+                    <keyframe android:fraction="0.34" android:value="0" android:interpolator="@interpolator/ys_ease_in_out" />
+                    <keyframe android:fraction="0.42" android:value="3" android:interpolator="@interpolator/ys_ease_in_out" />
+                    <keyframe android:fraction="0.55" android:value="0" android:interpolator="@interpolator/ys_ease_in_out" />
+                    <keyframe android:fraction="1" android:value="0" android:interpolator="@interpolator/ys_ease_in_out" />
+                </propertyValuesHolder>
+                <propertyValuesHolder android:propertyName="translateY" android:valueType="floatType">
+                    <keyframe android:fraction="0" android:value="0" />
+                    <keyframe android:fraction="0.1" android:value="0" android:interpolator="@interpolator/ys_ease_in_out" />
+                    <keyframe android:fraction="0.18" android:value="2" android:interpolator="@interpolator/ys_ease_in_out" />
+                    <keyframe android:fraction="0.26" android:value="-14" android:interpolator="@interpolator/ys_ease_in_out" />
+                    <keyframe android:fraction="0.34" android:value="-18" android:interpolator="@interpolator/ys_ease_in_out" />
+                    <keyframe android:fraction="0.42" android:value="4" android:interpolator="@interpolator/ys_ease_in_out" />
+                    <keyframe android:fraction="0.55" android:value="0" android:interpolator="@interpolator/ys_ease_in_out" />
+                    <keyframe android:fraction="1" android:value="0" android:interpolator="@interpolator/ys_ease_in_out" />
+                </propertyValuesHolder>
+            </objectAnimator>
+        </aapt:attr>
+    </target>
+
+    <!-- Les joues palpitent deux fois par cycle (ys-cheek). -->
+    <target android:name="cheekL">
+        <aapt:attr name="android:animation">
+            <objectAnimator android:duration="600" android:repeatCount="infinite">
+                <propertyValuesHolder android:propertyName="scaleX" android:valueType="floatType">
+                    <keyframe android:fraction="0" android:value="1" />
+                    <keyframe android:fraction="0.5" android:value="1.35" android:interpolator="@interpolator/ys_ease_in_out" />
+                    <keyframe android:fraction="1" android:value="1" android:interpolator="@interpolator/ys_ease_in_out" />
+                </propertyValuesHolder>
+                <propertyValuesHolder android:propertyName="scaleY" android:valueType="floatType">
+                    <keyframe android:fraction="0" android:value="1" />
+                    <keyframe android:fraction="0.5" android:value="1.35" android:interpolator="@interpolator/ys_ease_in_out" />
+                    <keyframe android:fraction="1" android:value="1" android:interpolator="@interpolator/ys_ease_in_out" />
+                </propertyValuesHolder>
+            </objectAnimator>
+        </aapt:attr>
+    </target>
+
+    <target android:name="cheekR">
+        <aapt:attr name="android:animation">
+            <objectAnimator android:duration="600" android:repeatCount="infinite">
+                <propertyValuesHolder android:propertyName="scaleX" android:valueType="floatType">
+                    <keyframe android:fraction="0" android:value="1" />
+                    <keyframe android:fraction="0.5" android:value="1.35" android:interpolator="@interpolator/ys_ease_in_out" />
+                    <keyframe android:fraction="1" android:value="1" android:interpolator="@interpolator/ys_ease_in_out" />
+                </propertyValuesHolder>
+                <propertyValuesHolder android:propertyName="scaleY" android:valueType="floatType">
+                    <keyframe android:fraction="0" android:value="1" />
+                    <keyframe android:fraction="0.5" android:value="1.35" android:interpolator="@interpolator/ys_ease_in_out" />
+                    <keyframe android:fraction="1" android:value="1" android:interpolator="@interpolator/ys_ease_in_out" />
+                </propertyValuesHolder>
+            </objectAnimator>
+        </aapt:attr>
+    </target>
+
+    <target android:name="cheekLPath">
+        <aapt:attr name="android:animation">
+            <objectAnimator android:duration="600" android:repeatCount="infinite">
+                <propertyValuesHolder android:propertyName="fillAlpha" android:valueType="floatType">
+                    <keyframe android:fraction="0" android:value="1" />
+                    <keyframe android:fraction="0.5" android:value="0.75" android:interpolator="@interpolator/ys_ease_in_out" />
+                    <keyframe android:fraction="1" android:value="1" android:interpolator="@interpolator/ys_ease_in_out" />
+                </propertyValuesHolder>
+            </objectAnimator>
+        </aapt:attr>
+    </target>
+
+    <target android:name="cheekRPath">
+        <aapt:attr name="android:animation">
+            <objectAnimator android:duration="600" android:repeatCount="infinite">
+                <propertyValuesHolder android:propertyName="fillAlpha" android:valueType="floatType">
+                    <keyframe android:fraction="0" android:value="1" />
+                    <keyframe android:fraction="0.5" android:value="0.75" android:interpolator="@interpolator/ys_ease_in_out" />
+                    <keyframe android:fraction="1" android:value="1" android:interpolator="@interpolator/ys_ease_in_out" />
+                </propertyValuesHolder>
+            </objectAnimator>
+        </aapt:attr>
+    </target>
+
+    <!-- Le sourire s'ouvre en l'air et se pince à la réception (ys-smile). -->
+    <target android:name="smile">
+        <aapt:attr name="android:animation">
+            <objectAnimator android:duration="1200" android:repeatCount="infinite">
+                <propertyValuesHolder android:propertyName="scaleX" android:valueType="floatType">
+                    <keyframe android:fraction="0" android:value="1" />
+                    <keyframe android:fraction="0.12" android:value="1" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.28" android:value="1.2" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.45" android:value="0.9" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.55" android:value="1" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="1" android:value="1" android:interpolator="@interpolator/ys_ease" />
+                </propertyValuesHolder>
+                <propertyValuesHolder android:propertyName="scaleY" android:valueType="floatType">
+                    <keyframe android:fraction="0" android:value="1" />
+                    <keyframe android:fraction="0.12" android:value="1" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.28" android:value="1.4" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.45" android:value="0.8" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="0.55" android:value="1" android:interpolator="@interpolator/ys_ease" />
+                    <keyframe android:fraction="1" android:value="1" android:interpolator="@interpolator/ys_ease" />
+                </propertyValuesHolder>
+            </objectAnimator>
+        </aapt:attr>
+    </target>
+</animated-vector>

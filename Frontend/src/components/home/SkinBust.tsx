@@ -352,6 +352,18 @@ function sharedViewer(): Shared {
   return shared
 }
 
+/**
+ * Crée la 3D partagée et la dessine une fois, pour que les shaders soient
+ * compilés : à appeler pendant l'écran de démarrage (`App.tsx`,
+ * `FIRST_SCREENS`). Sinon ces ~0,5 s tombaient à l'arrivée sur l'accueil, et
+ * le personnage apparaissait plusieurs secondes après le reste. Yuyu, lui,
+ * continue de bouger pendant ce temps : ses animations ne passent pas par le
+ * fil principal (index.html).
+ */
+export function prewarmSkinBust(): void {
+  sharedViewer().viewer.render()
+}
+
 /** Charge le skin dans la 3D partagée, sauf s'il y est déjà. */
 function loadSharedSkin(source: string | null) {
   const s = sharedViewer()

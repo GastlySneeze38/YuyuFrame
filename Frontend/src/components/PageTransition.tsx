@@ -19,11 +19,14 @@ import { pageVariants } from '@/lib/motion'
  * personne ne voyait vraiment puisqu'elle durait 120 ms derrière l'entrée de
  * la suivante.
  */
-export function PageTransition({ children, instantBetween }: {
+export function PageTransition({ children, instantBetween, hold = false }: {
   children: ReactNode
   /** Écrans entre lesquels on passe sans transition — les onglets du
    *  téléphone : changer d'onglet est instantané sur iOS et Android. */
   instantBetween?: string[]
+  /** Page montée mais pas encore montrée (sous l'écran de démarrage) : elle
+   *  reste à son état de départ et entre quand on la relâche. */
+  hold?: boolean
 }) {
   const { pathname } = useLocation()
   const previous = useRef(pathname)
@@ -36,7 +39,7 @@ export function PageTransition({ children, instantBetween }: {
       key={pathname}
       variants={pageVariants}
       initial={instant ? false : 'initial'}
-      animate="animate"
+      animate={hold ? 'initial' : 'animate'}
       className="h-full w-full"
     >
       {children}

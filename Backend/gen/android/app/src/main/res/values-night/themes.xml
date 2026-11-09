@@ -2,7 +2,7 @@
     <!-- Base application theme : le même qu'en mode clair (values/themes.xml), le
          launcher n'a pas de thème clair. -->
     <style name="Theme.yuyuframe_backend" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <item name="android:windowBackground">@color/yuyu_background</item>
+        <item name="android:windowBackground">@drawable/yuyu_window</item>
         <item name="android:statusBarColor">@color/yuyu_background</item>
         <item name="android:navigationBarColor">@color/yuyu_background</item>
     </style>

@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- CSS ease (animation de Yuyu, drawable/yuyu_splash_anim.xml) -->
+<pathInterpolator xmlns:android="http://schemas.android.com/apk/res/android"
+    android:controlX1="0.25" android:controlY1="0.1" android:controlX2="0.25" android:controlY2="1" />

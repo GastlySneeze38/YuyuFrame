@@ -124,9 +124,387 @@
           animation: none;
         }
       }
+
+      /* ── Yuyu, l'écran de démarrage du téléphone ───────────────────────
+         Il prend le relais du Yuyu animé de l'écran de démarrage d'Android
+         (gen/android/.../drawable/yuyu_splash_anim.xml, même boucle ; le
+         script en bas de page s'y cale) ou, avant Android 12, du Yuyu fixe du
+         fond de la fenêtre (drawable/yuyu.xml). Les formes sont dans le même
+         repère de 600 unités : une forme ou une image clé qui change se
+         change aux trois endroits. Détail : docs/launcher/android.md.
+
+         Un cycle de 1,2 s qui se répète tant que l'application charge, où
+         tout bouge à la fois : élan, saut avec le cadre de crochets qui fait
+         un tour, réception, clignement ; l'antenne gigote sans arrêt et les
+         yeux suivent le tour. Quand l'application est prête,
+         `lib/bootSplash.ts` interrompt le cycle où il en est et joue la
+         fin (yeux rieurs, crochets qui éclatent, fondu).
+
+         Chaque morceau est une couche HTML à part (un petit SVG plein cadre
+         dans un élément positionné), et non un groupe dans un seul SVG : les
+         animations de `transform` d'une couche HTML tournent sur la carte
+         graphique, celles d'un élément interne à un SVG sur le fil principal
+         — celui-là même qu'occupe le chargement de l'application. Yuyu
+         ramerait au moment exact où il doit distraire.
+
+         Le cadre fait --yuyu-size pour 600 unités du dessin : 150 px, donc
+         une unité = 0,25 px. Les déplacements ci-dessous sont en pixels à
+         cette échelle (écrits en dur : une variable dans une image clé peut
+         empêcher la carte graphique de s'en charger).
+
+         Téléphone seulement : sur PC, c'est #boot (plus haut) qui sert. */
+      #yuyu-splash {
+        --yuyu-size: 150px;
+        position: fixed;
+        inset: 0;
+        z-index: 2147483647;
+        display: none;
+        place-items: center;
+        background: #09090d;
+      }
+
+      @media (max-width: 640px) {
+        #yuyu-splash {
+          display: grid;
+        }
+
+        #boot {
+          display: none;
+        }
+
+        /* Tant que Yuyu boucle, la page est transparente : avant qu'il soit
+           peint, c'est le Yuyu d'Android (fond de la fenêtre) qu'on voit, et
+           non un fond noir uni qui le ferait disparaître un instant. */
+        html:has(#yuyu-splash:not(.leaving):not(.out)),
+        html:has(#yuyu-splash:not(.leaving):not(.out)) body {
+          background: transparent;
+        }
+      }
+
+      #yuyu-splash .ys-yuyu {
+        position: relative;
+        width: var(--yuyu-size);
+        height: var(--yuyu-size);
+      }
+
+      #yuyu-splash .ys-yuyu div,
+      #yuyu-splash .ys-yuyu i {
+        position: absolute;
+        inset: 0;
+        display: block;
+        will-change: transform;
+      }
+
+      #yuyu-splash svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+      }
+
+      /* La lueur n'existe pas sur l'icône d'Android : elle apparaît en fondu
+         une fois le relais pris (.live, posé par le script plus bas). */
+      #yuyu-splash .ys-glowwrap {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        transition: opacity 0.35s ease-out;
+      }
+
+      #yuyu-splash.live .ys-glowwrap {
+        opacity: 1;
+      }
+
+      #yuyu-splash .ys-glow {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: calc(var(--yuyu-size) * 2);
+        height: calc(var(--yuyu-size) * 2);
+        margin: calc(var(--yuyu-size) * -1) 0 0 calc(var(--yuyu-size) * -1);
+        border-radius: 50%;
+        background: radial-gradient(closest-side, rgba(102, 86, 228, 0.32), rgba(46, 142, 240, 0.12) 55%, transparent);
+        opacity: 0;
+        animation: ys-glow 1.2s ease-in-out infinite;
+      }
+
+      /* Points de pivot en pourcentage du cadre (unité / 600) : chaque
+         morceau tourne ou s'écrase autour de son propre centre. */
+
+      /* Le cadre de crochets tourne autour du centre du visage (300, 305). */
+      #yuyu-splash .ys-ring {
+        transform-origin: 50% 50.8%;
+        animation: ys-ring 1.2s infinite;
+      }
+
+      #yuyu-splash .ys-tl { transform-origin: 32% 34.3%; animation: ys-push-tl 1.2s infinite; }
+      #yuyu-splash .ys-tr { transform-origin: 65.3% 32%; animation: ys-push-tr 1.2s infinite; }
+      #yuyu-splash .ys-brr { transform-origin: 68% 68.3%; animation: ys-push-br 1.2s infinite; }
+      #yuyu-splash .ys-bl { transform-origin: 34.5% 67.8%; animation: ys-push-bl 1.2s infinite; }
+
+      /* Le visage s'écrase sur sa base (le bas du sourire, y = 381). */
+      #yuyu-splash .ys-face {
+        transform-origin: 50% 63.5%;
+        animation: ys-hop 1.2s infinite;
+      }
+
+      /* L'antenne pivote sur son pied (300, 132). */
+      #yuyu-splash .ys-antenna {
+        transform-origin: 50% 22%;
+        animation: ys-wiggle 0.4s ease-in-out infinite;
+      }
+
+      #yuyu-splash .ys-eyes {
+        transform-origin: 49.7% 46%;
+        animation: ys-blink 1.2s infinite;
+      }
+
+      #yuyu-splash .ys-pupil {
+        animation: ys-look 1.2s ease-in-out infinite;
+      }
+
+      #yuyu-splash .ys-cheek-l { transform-origin: 35% 57.3%; animation: ys-cheek 0.6s ease-in-out infinite; }
+      #yuyu-splash .ys-cheek-r { transform-origin: 65.5% 55%; animation: ys-cheek 0.6s ease-in-out infinite; }
+
+      #yuyu-splash .ys-smile {
+        transform-origin: 50.5% 60.2%;
+        animation: ys-smile 1.2s infinite;
+      }
+
+      /* Les yeux rieurs « ^ ^ » de la fin : cachés pendant le cycle. */
+      #yuyu-splash .ys-joy {
+        opacity: 0;
+      }
+
+      #yuyu-splash.happy .ys-eyes {
+        opacity: 0;
+      }
+
+      #yuyu-splash.happy .ys-joy {
+        opacity: 1;
+      }
+
+      #yuyu-splash.out {
+        opacity: 0;
+        transition: opacity 0.26s ease-out;
+        pointer-events: none;
+      }
+
+      /* Élan (0-10 %), tour et écart (10-45 %), retour avec rebond (45-55 %),
+         respiration (60-80 %). 100 % = un tour complet, donc identique à 0 % :
+         la boucle ne saute pas. */
+      @keyframes ys-ring {
+        0% { transform: rotate(0deg) scale(1); animation-timing-function: cubic-bezier(0.3, 0, 0.6, 1); }
+        10% { transform: rotate(-14deg) scale(0.9); animation-timing-function: cubic-bezier(0.2, 0.7, 0.3, 1); }
+        45% { transform: rotate(372deg) scale(1.1); animation-timing-function: ease-in-out; }
+        55% { transform: rotate(360deg) scale(0.98); animation-timing-function: ease-out; }
+        70% { transform: rotate(360deg) scale(1.06); animation-timing-function: ease-in-out; }
+        85%, 100% { transform: rotate(360deg) scale(1); }
+      }
+
+      /* Chaque crochet : rentre pendant l'élan, s'écarte pendant le tour,
+         revient, ressort un peu à la respiration. Une image clé par coin,
+         la direction écrite en dur (voir plus haut). */
+      @keyframes ys-push-tl {
+        0%, 55%, 85%, 100% { transform: translate(0, 0); }
+        10% { transform: translate(2px, 2px); }
+        30% { transform: translate(-7.5px, -7.5px) rotate(8deg); }
+        70% { transform: translate(-2px, -2px); }
+      }
+
+      @keyframes ys-push-tr {
+        0%, 55%, 85%, 100% { transform: translate(0, 0); }
+        10% { transform: translate(-2px, 2px); }
+        30% { transform: translate(7.5px, -7.5px) rotate(-8deg); }
+        70% { transform: translate(2px, -2px); }
+      }
+
+      @keyframes ys-push-br {
+        0%, 55%, 85%, 100% { transform: translate(0, 0); }
+        10% { transform: translate(-2px, -2px); }
+        30% { transform: translate(7.5px, 7.5px) rotate(8deg); }
+        70% { transform: translate(2px, 2px); }
+      }
+
+      @keyframes ys-push-bl {
+        0%, 55%, 85%, 100% { transform: translate(0, 0); }
+        10% { transform: translate(2px, -2px); }
+        30% { transform: translate(-7.5px, 7.5px) rotate(-8deg); }
+        70% { transform: translate(-2px, 2px); }
+      }
+
+      /* Écrasé avant le saut, étiré en l'air, écrasé à la réception. */
+      @keyframes ys-hop {
+        0% { transform: translateY(0) scale(1, 1); animation-timing-function: ease-in; }
+        10% { transform: translateY(2px) scale(1.08, 0.9); animation-timing-function: cubic-bezier(0.2, 0.8, 0.4, 1); }
+        30% { transform: translateY(-14px) scale(0.95, 1.07); animation-timing-function: cubic-bezier(0.6, 0, 0.8, 0.4); }
+        48% { transform: translateY(1px) scale(1.08, 0.92); animation-timing-function: ease-out; }
+        60% { transform: translateY(-3px) scale(0.98, 1.02); animation-timing-function: ease-in-out; }
+        72%, 100% { transform: translateY(0) scale(1, 1); }
+      }
+
+      @keyframes ys-wiggle {
+        0%, 100% { transform: rotate(0deg); }
+        25% { transform: rotate(14deg); }
+        75% { transform: rotate(-14deg); }
+      }
+
+      @keyframes ys-blink {
+        0%, 78%, 90%, 100% { transform: scale(1, 1); }
+        30% { transform: scale(1.12, 1.12); }
+        45% { transform: scale(1, 1); }
+        84% { transform: scale(1.05, 0.1); }
+      }
+
+      /* Les pupilles font le tour avec les crochets. */
+      @keyframes ys-look {
+        0%, 10% { transform: translate(0, 0); }
+        18% { transform: translate(-3.5px, 0.5px); }
+        26% { transform: translate(-2.5px, -3.5px); }
+        34% { transform: translate(0, -4.5px); }
+        42% { transform: translate(0.75px, 1px); }
+        55%, 100% { transform: translate(0, 0); }
+      }
+
+      @keyframes ys-cheek {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.35); opacity: 0.75; }
+      }
+
+      @keyframes ys-smile {
+        0%, 12%, 55%, 100% { transform: scale(1, 1); }
+        28% { transform: scale(1.2, 1.4); }
+        45% { transform: scale(0.9, 0.8); }
+      }
+
+      @keyframes ys-glow {
+        0%, 100% { opacity: 0.2; transform: scale(0.8); }
+        45% { opacity: 1; transform: scale(1.05); }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        #yuyu-splash *,
+        #yuyu-splash .ys-glow {
+          animation: none !important;
+        }
+      }
+
+      /* Réglage « Animations réduites » du launcher (lib/appearance.ts). */
+      html[data-motion='reduced'] #yuyu-splash *,
+      html[data-motion='reduced'] #yuyu-splash .ys-glow {
+        animation: none !important;
+      }
     </style>
   </head>
   <body>
+    <!-- Hors de #root : React remplace le contenu de #root à son premier
+         rendu, l'écran de démarrage doit lui survivre jusqu'à ce que
+         l'application soit prête (lib/bootSplash.ts). -->
+    <div id="yuyu-splash" aria-hidden="true">
+      <div class="ys-glowwrap"><div class="ys-glow"></div></div>
+      <div class="ys-yuyu">
+        <div class="ys-ring">
+          <i class="ys-br ys-tl"><svg viewBox="0 0 600 600"><path fill="#6656E4" d="M126 196 L172 142 L256 136 L258 186 L195 188 L178 207 L181 273 L131 277 Z" /></svg></i>
+          <i class="ys-br ys-tr"><svg viewBox="0 0 600 600"><path fill="#2E8EF0" d="M322 127 L404 126 L457 172 L462 254 L413 257 L409 192 L389 176 L325 180 Z" /></svg></i>
+          <i class="ys-br ys-brr"><svg viewBox="0 0 600 600"><path fill="#2E8EF0" d="M420 326 L469 322 L474 404 L428 458 L377 461 L347 497 L345 463 L342 414 L404 410 L424 389 Z" /></svg></i>
+          <i class="ys-br ys-bl"><svg viewBox="0 0 600 600"><path fill="#6656E4" d="M136 345 L186 342 L189 402 L210 421 L273 418 L278 467 L195 473 L142 428 Z" /></svg></i>
+        </div>
+        <div class="ys-face">
+          <i class="ys-antenna"><svg viewBox="0 0 600 600"><path fill="#fff" d="M258 74 L282 74 L300 102 L318 74 L341 74 L320 132 L281 132 Z" /></svg></i>
+          <div class="ys-eyes">
+            <i><svg viewBox="0 0 600 600"><path fill="#fff" d="M214 248 L264 245 L267 310 L217 313 Z M330 240 L379 237 L383 301 L333 304 Z" /></svg></i>
+            <i class="ys-pupil"><svg viewBox="0 0 600 600"><path fill="#0b0b10" d="M236 270 L259 268 L260 302 L238 303 Z M353 262 L375 261 L377 295 L355 296 Z" /></svg></i>
+          </div>
+          <i class="ys-joy"><svg viewBox="0 0 600 600"><path fill="#fff" d="M214 292 L240 262 L266 290 L255 300 L240 283 L226 302 Z M330 284 L356 254 L382 282 L371 292 L356 275 L342 294 Z" /></svg></i>
+          <i class="ys-cheek-l"><svg viewBox="0 0 600 600"><path fill="#EC6FA9" d="M198 337 L222 336 L223 351 L199 352 Z" /></svg></i>
+          <i class="ys-cheek-r"><svg viewBox="0 0 600 600"><path fill="#EC6FA9" d="M380 323 L405 322 L406 338 L381 339 Z" /></svg></i>
+          <i class="ys-smile"><svg viewBox="0 0 600 600"><path fill="#fff" d="M268 355 L281 342 L304 361 L327 341 L338 353 L305 381 Z" /></svg></i>
+        </div>
+      </div>
+    </div>
+    <!--
+      Relais avec l'écran de démarrage d'Android 12 et plus, qui montre le même
+      Yuyu animé (gen/android/.../drawable/yuyu_splash_anim.xml) et reste
+      affiché tant qu'on ne l'a pas relayé (MainActivity). Android dit où est
+      son icône, à quelle taille et depuis quand elle s'anime (YuyuBoot) : on
+      pose notre Yuyu exactement là, au même instant de la boucle, puis on lui
+      demande de retirer le sien. Avant Android 12, pas d'écran à relayer : Yuyu part du
+      repos, au centre, sur le Yuyu fixe du fond de la fenêtre.
+
+      Filet : si l'application ne dit jamais qu'elle est prête (erreur au
+      chargement), l'écran s'efface quand même au lieu de tout cacher.
+    -->
+    <script>
+      ;(function () {
+        var s = document.getElementById('yuyu-splash')
+        if (!s) return
+        setTimeout(function () {
+          if (!s.classList.contains('out')) s.classList.add('out')
+        }, 12000)
+
+        var boot = window.YuyuBoot
+        if (!boot || getComputedStyle(s).display === 'none') {
+          s.classList.add('live')
+          return
+        }
+
+        function place(d) {
+          if (d.w > 0) {
+            var y = s.querySelector('.ys-yuyu')
+            var g = s.querySelector('.ys-glow')
+            var cx = d.x + d.w / 2
+            var cy = d.y + d.h / 2
+            // Le cadre de Yuyu fait 150 px ; chez Android il fait la largeur
+            // de la boîte de l'icône (600 unités sur 900, dessinées 1,5 fois
+            // plus grand que la boîte : yuyu_splash_anim.xml).
+            y.style.position = 'fixed'
+            y.style.left = cx - 75 + 'px'
+            y.style.top = cy - 75 + 'px'
+            y.style.transform = 'scale(' + d.w / 150 + ')'
+            g.style.left = cx + 'px'
+            g.style.top = cy + 'px'
+          }
+          if (d.start > 0) {
+            // Chaque animation de Yuyu reprend là où en est celle d'Android
+            // (toutes ont une durée qui divise 1,2 s).
+            var elapsed = Date.now() - d.start
+            document.getAnimations().forEach(function (a) {
+              var t = a.effect && a.effect.target
+              if (t && s.contains(t)) a.currentTime = elapsed
+            })
+          }
+        }
+
+        function handoff() {
+          // Deux images puis un temps de marge : nos couches doivent être
+          // réellement dessinées avant qu'on retire l'autre Yuyu, sinon on
+          // voyait quelques images vides. Celui d'Android bouge pendant ce
+          // temps, l'attente ne se voit pas.
+          requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+              setTimeout(function () {
+                s.classList.add('live')
+                boot.handoff()
+              }, 150)
+            })
+          })
+        }
+
+        var t0 = Date.now()
+        ;(function poll() {
+          var r = boot.splash()
+          // L'écran d'Android couvre tout tant qu'on ne l'a pas relayé :
+          // attendre ses informations ne retarde rien de visible.
+          if (r === 'wait' && Date.now() - t0 < 6000) return void setTimeout(poll, 16)
+          if (r !== 'wait' && r !== 'none') {
+            try {
+              place(JSON.parse(r))
+            } catch (e) {}
+          }
+          handoff()
+        })()
+      })()
+    </script>
     <div id="root">
       <div id="boot">
         <div class="bar">

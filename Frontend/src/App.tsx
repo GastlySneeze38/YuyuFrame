@@ -36,6 +36,7 @@ import { parseFriendUrl, parseInviteUrl, parseJoinUrl } from '@/lib/joinLink'
 import { inTauri } from '@/lib/platform'
 import { startHeadPreload } from '@/lib/headPreload'
 import { matches as isMobileNow, useIsMobile } from '@/mobile/useIsMobile'
+import { finishSplash, splashActive, useSplashGone, useSplashRevealed } from '@/lib/bootSplash'
 import { DRAWER_ROOTS, NavDrawer } from '@/mobile/ui/NavDrawer'
 
 // Chargées à la demande — évite de tout regrouper dans un seul chunk JS au
@@ -89,6 +90,21 @@ const MOBILE_PAGE_IMPORTS = [
   () => import('@/pages/Settings'),
   () => import('@/pages/Login'),
 ]
+
+/** Pages par où le téléphone peut démarrer : attendues avant d'effacer Yuyu,
+ *  pour que la première page s'affiche entière en arrivant. Une autre adresse
+ *  ne fait pas attendre. */
+const FIRST_SCREENS: Record<string, () => Promise<unknown>> = {
+  // L'accueil, et la 3D de son personnage, créée d'avance (`prewarmSkinBust`).
+  '/home': () => Promise.all([
+    import('@/mobile/MobileHome'),
+    import('@/components/home/SkinBust').then((m) => m.prewarmSkinBust()),
+  ]),
+  '/instances': () => import('@/mobile/MobileInstances'),
+  '/plans': () => import('@/mobile/MobilePlans'),
+  '/login': () => import('@/pages/Login'),
+  '/yuyu': () => import('@/pages/YuyuLogin'),
+}
 
 /** Charge les pages restantes quand le navigateur n'a rien de mieux à faire. */
 function preloadPages() {
@@ -702,6 +718,19 @@ export default function App() {
   const location = useLocation()
   const mobile = useIsMobile()
 
+  // L'application est prête quand la première page est chargée : Yuyu peut
+  // jouer sa fin et laisser place à l'entrée de la page (lib/bootSplash.ts).
+  const splashGone = useSplashGone()
+  const splashRevealed = useSplashRevealed()
+  useEffect(() => {
+    if (!splashActive()) return
+    const path = location.pathname === '/' ? '/home' : location.pathname
+    const load = FIRST_SCREENS[path]
+    void (load ? load().then(() => {}, () => {}) : Promise.resolve()).then(finishSplash)
+    // Une seule fois, au démarrage.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   if (isConsoleWindow) {
     return (
       <Suspense fallback={RouteFallback}>
@@ -766,7 +795,13 @@ export default function App() {
             toujours, et plus rien ne s'affichait jusqu'au rechargement.
             C'est le bug de la page blanche quand on enchaîne vite les
             écrans. */}
-        <PageTransition instantBetween={mobile ? DRAWER_ROOTS : undefined}>
+        {/* Rien tant que Yuyu (l'écran de démarrage du téléphone,
+            lib/bootSplash.ts) attend l'application. Puis la page monte sous
+            lui, retenue à son état de départ (`hold`), et fait son entrée
+            quand il s'efface. Sur PC il n'y en a pas : les deux valent vrai
+            d'emblée. */}
+        {splashGone && (
+        <PageTransition instantBetween={mobile ? DRAWER_ROOTS : undefined} hold={!splashRevealed}>
           <ErrorBoundary resetKey={location.pathname}>
           <Suspense fallback={RouteFallback}>
           <Routes>
@@ -821,6 +856,7 @@ export default function App() {
           </Suspense>
           </ErrorBoundary>
         </PageTransition>
+        )}
       </div>
       {/* Le menu latéral du téléphone (remplace la barre d'onglets du bas) :
           posé une fois ici, hors de la transition de page, et ouvert par le

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Yuyu au repos, la mascotte, dans le même repère 600 × 600 que l'écran de
+  démarrage de la page (Frontend/index.html, #yuyu-splash). Les deux doivent
+  rester identiques au point près : Android montre celui-ci, puis la page pose
+  le sien exactement par-dessus et l'anime. Une forme qui change se change aux
+  deux endroits.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="150dp"
+    android:height="150dp"
+    android:viewportWidth="600"
+    android:viewportHeight="600">
+    <path android:fillColor="#FFFFFF" android:pathData="M258,74 L282,74 L300,102 L318,74 L341,74 L320,132 L281,132 Z" />
+    <path android:fillColor="#6656E4" android:pathData="M126,196 L172,142 L256,136 L258,186 L195,188 L178,207 L181,273 L131,277 Z" />
+    <path android:fillColor="#2E8EF0" android:pathData="M322,127 L404,126 L457,172 L462,254 L413,257 L409,192 L389,176 L325,180 Z" />
+    <path android:fillColor="#6656E4" android:pathData="M136,345 L186,342 L189,402 L210,421 L273,418 L278,467 L195,473 L142,428 Z" />
+    <path android:fillColor="#2E8EF0" android:pathData="M420,326 L469,322 L474,404 L428,458 L377,461 L347,497 L345,463 L342,414 L404,410 L424,389 Z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M214,248 L264,245 L267,310 L217,313 Z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M330,240 L379,237 L383,301 L333,304 Z" />
+    <path android:fillColor="#0B0B10" android:pathData="M236,270 L259,268 L260,302 L238,303 Z" />
+    <path android:fillColor="#0B0B10" android:pathData="M353,262 L375,261 L377,295 L355,296 Z" />
+    <path android:fillColor="#EC6FA9" android:pathData="M198,337 L222,336 L223,351 L199,352 Z" />
+    <path android:fillColor="#EC6FA9" android:pathData="M380,323 L405,322 L406,338 L381,339 Z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M268,355 L281,342 L304,361 L327,341 L338,353 L305,381 Z" />
+</vector>

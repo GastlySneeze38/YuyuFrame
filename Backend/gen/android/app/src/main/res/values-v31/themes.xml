@@ -1,0 +1,15 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Android 12 et plus : l'écran de démarrage du système montre Yuyu animé
+         (drawable/yuyu_splash_anim.xml) au lieu du logo de l'appli. Il reste à
+         l'écran jusqu'à ce que la page prenne le relais (MainActivity,
+         YuyuBoot) : le fond de la fenêtre ne se voit jamais, d'où la simple
+         couleur. -->
+    <style name="Theme.yuyuframe_backend" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:windowBackground">@color/yuyu_background</item>
+        <item name="android:statusBarColor">@color/yuyu_background</item>
+        <item name="android:navigationBarColor">@color/yuyu_background</item>
+        <item name="android:windowSplashScreenBackground">@color/yuyu_background</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/yuyu_splash_anim</item>
+        <item name="android:windowSplashScreenAnimationDuration">1200</item>
+    </style>
+</resources>
