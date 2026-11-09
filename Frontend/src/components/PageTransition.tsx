@@ -1,7 +1,6 @@
-import { motion } from 'framer-motion'
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
-import { pageVariants } from '@/lib/motion'
+import { DURATION, EASE_OUT } from '@/lib/motion'
 
 /**
  * Transition entre les écrans : le nouveau monte en apparaissant.
@@ -14,10 +13,9 @@ import { pageVariants } from '@/lib/motion'
  * les zones sensibles sans le rendu, et seul un rechargement s'en sortait.
  *
  * Un simple élément animé, recréé à chaque chemin, n'a pas d'état à perdre :
- * `initial` puis `animate` se rejouent forcément au montage, donc une page
- * affichée est toujours visible. Le prix est l'animation de sortie, que
- * personne ne voyait vraiment puisqu'elle durait 120 ms derrière l'entrée de
- * la suivante.
+ * l'entrée se rejoue forcément au montage, donc une page affichée est
+ * toujours visible. Le prix est l'animation de sortie, que personne ne voyait
+ * vraiment puisqu'elle durait 120 ms derrière l'entrée de la suivante.
  */
 export function PageTransition({ children, instantBetween, hold = false }: {
   children: ReactNode
@@ -35,14 +33,73 @@ export function PageTransition({ children, instantBetween, hold = false }: {
     && instantBetween.includes(previous.current)
   useEffect(() => { previous.current = pathname }, [pathname])
   return (
-    <motion.div
-      key={pathname}
-      variants={pageVariants}
-      initial={instant ? false : 'initial'}
-      animate={hold ? 'initial' : 'animate'}
-      className="h-full w-full"
-    >
+    <PageEnter key={pathname} play={!instant} hold={hold}>
       {children}
-    </motion.div>
+    </PageEnter>
+  )
+}
+
+/**
+ * L'entrée d'une page (fondu et légère montée), jouée par la carte graphique
+ * une fois la page dessinée (2026-11-09).
+ *
+ * Avant, Framer Motion la lançait au montage : sur téléphone, monter la page
+ * bloquait le fil principal 100 à 300 ms, et l'animation en perdait le début
+ * ou saccadait. Ici la page est posée invisible avant son premier dessin,
+ * puis, deux images plus tard — le montage est fini —, une animation
+ * `element.animate` de `opacity` et `transform` la fait entrer. Ces deux
+ * propriétés tournent sur le compositeur : rien de ce qui suit sur le fil
+ * principal (chargements, effets de la page) ne peut plus la gêner.
+ *
+ * `play` à faux : affichée telle quelle. `hold` : retenue invisible jusqu'à ce
+ * qu'il repasse à faux.
+ */
+export function PageEnter({ children, play = true, hold = false }: {
+  children: ReactNode
+  play?: boolean
+  hold?: boolean
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  const played = useRef(false)
+
+  // Invisible avant le premier dessin, sans quoi elle apparaîtrait une image
+  // en entier avant de repartir de zéro.
+  useLayoutEffect(() => {
+    if (play && ref.current) ref.current.style.opacity = '0'
+  }, [])
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el || !play || hold || played.current) return
+    played.current = true
+    const reduced = document.documentElement.dataset.motion === 'reduced'
+      || window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => {
+        el.style.opacity = ''
+        el.animate(
+          reduced
+            ? [{ opacity: 0 }, { opacity: 1 }]
+            : [{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'translateY(0)' }],
+          // Pas de `fill` : à l'arrivée l'animation disparaît, et aucune
+          // transformation ne reste sur l'enveloppe de la page, qui servirait
+          // sinon de repère aux éléments `fixed` qu'elle contient.
+          { duration: DURATION.base * 1000, easing: `cubic-bezier(${EASE_OUT.join(', ')})` },
+        )
+      })
+    })
+    return () => {
+      cancelAnimationFrame(frame)
+      // Démontée ou relancée avant d'avoir joué : la page ne reste pas
+      // invisible.
+      if (el.style.opacity === '0') el.style.opacity = ''
+      played.current = false
+    }
+  }, [play, hold])
+
+  return (
+    <div ref={ref} className="h-full w-full">
+      {children}
+    </div>
   )
 }

@@ -35,20 +35,8 @@ export const fastTransition: Transition = { duration: DURATION.fast, ease: EASE_
  */
 export const SNAP: Transition = { type: 'spring', stiffness: 1100, damping: 30, mass: 0.18 }
 
-/**
- * Changement de page : léger glissement vers le haut.
- *
- * En chaîne `transform` et non en `y` : framer-motion 13 calcule `y` en
- * JavaScript image par image, au moment exact où la page qui arrive se monte
- * — l'animation saccadait. La chaîne est confiée au navigateur. On la retire
- * à l'arrivée (`transitionEnd`) : une transformation laissée sur l'enveloppe
- * de la page servirait de repère aux éléments `fixed` qu'elle contient.
- */
-export const pageVariants: Variants = {
-  initial: { opacity: 0, transform: 'translateY(8px)' },
-  animate: { opacity: 1, transform: 'translateY(0px)', transition, transitionEnd: { transform: 'none' } },
-  exit: { opacity: 0, transform: 'translateY(-6px)', transition: fastTransition },
-}
+// Changement de page : voir `PageEnter` (components/PageTransition.tsx), joué
+// par la carte graphique une fois la page dessinée.
 
 /** Modale : la carte monte pendant que le fond s'assombrit. */
 export const modalVariants: Variants = {

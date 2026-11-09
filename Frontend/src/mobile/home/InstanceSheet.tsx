@@ -5,6 +5,7 @@ import type { Instance } from '@/types'
 import { loaderColor } from '@/lib/loader'
 import { SHEET_EXIT } from '@/components/ui/DrawerPanel'
 import { useT } from '@/i18n'
+import { useTabActive } from '@/mobile/KeptTabs'
 
 /** Distance de glissé vers le bas, ou vitesse, au-delà de laquelle le volet se ferme. */
 const CLOSE_OFFSET = 90
@@ -41,10 +42,13 @@ export function InstanceSheet({ open, instances, selectedId, onSelect, onManage,
 
   // Favoris d'abord, comme partout ailleurs dans le launcher.
   const sorted = [...instances].sort((a, b) => Number(b.favorite) - Number(a.favorite))
+  // Posé dans `body` : masqué avec l'accueil quand on change d'onglet
+  // (mobile/KeptTabs).
+  const tabActive = useTabActive()
 
   return createPortal(
     <AnimatePresence>
-      {open && (
+      {open && tabActive && (
         <div className="fixed inset-0 z-50 flex flex-col justify-end" role="dialog" aria-modal="true" aria-label={t('home.mobile.switchInstance')}>
           <motion.div
             className="absolute inset-0 bg-black/60"

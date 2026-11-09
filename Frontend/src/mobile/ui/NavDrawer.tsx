@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -51,6 +51,12 @@ interface Entry {
  * la gauche et résiste vers la droite (il ne bute pas net). Le défilement
  * vertical de la liste reste au navigateur (`touch-action: pan-y`) : seul un
  * geste horizontal déplace le menu.
+ *
+ * Pas d'ombre portée sur le panneau (retirée le 2026-11-09) : une grande ombre
+ * floue sur un élément qui se déplace est redessinée à chaque image, et sur
+ * un téléphone milieu de gamme le retrait sautait des images de 130 à 170 ms,
+ * soit presque toute sa durée. Sans elle, 33 ms au pire (mesuré sur un Galaxy
+ * A32). Le fond assombri suffit à détacher le panneau.
  */
 export function NavDrawer() {
   const t = useT()
@@ -78,13 +84,26 @@ export function NavDrawer() {
     return () => window.removeEventListener('keydown', onKey)
   }, [open])
 
+  // La navigation attend la fin du retrait du menu (`onExitComplete` plus
+  // bas) : lancée en même temps, le montage de la page suivante occupait le
+  // fil principal pendant les 200 ms du retrait, et l'animation sautait.
+  const pendingGo = useRef<{ path: string; replace: boolean } | null>(null)
+  const flushGo = () => {
+    const next = pendingGo.current
+    if (!next) return
+    pendingGo.current = null
+    navigate(next.path, { replace: next.replace })
+  }
+
   const go = (path: string) => {
     close()
     if (pathname === path) return
     // Entre écrans racines, on remplace au lieu d'empiler : le bouton retour
     // d'Android ramène à l'accueil, il ne repasse pas par chaque écran visité.
     const fromRoot = DRAWER_ROOTS.includes(pathname)
-    navigate(path, { replace: fromRoot && pathname !== '/home' })
+    pendingGo.current = { path, replace: fromRoot && pathname !== '/home' }
+    // Filet : si la fin de l'animation ne venait jamais, on navigue quand même.
+    setTimeout(flushGo, 400)
   }
 
   const main: Entry[] = [
@@ -129,7 +148,7 @@ export function NavDrawer() {
   }
 
   return createPortal(
-    <AnimatePresence>
+    <AnimatePresence onExitComplete={flushGo}>
       {open && (
         <div key="drawer" className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={t('home.mobile.menu')}>
           <motion.div
@@ -140,7 +159,7 @@ export function NavDrawer() {
             onClick={close}
           />
           <motion.nav
-            className="absolute inset-y-0 left-0 flex w-[min(84vw,320px)] flex-col overflow-hidden rounded-r-[22px] border-r border-white/[0.08] bg-bg-secondary pb-[max(12px,env(safe-area-inset-bottom))] pt-[max(16px,env(safe-area-inset-top))] shadow-[12px_0_40px_rgba(0,0,0,0.5)]"
+            className="absolute inset-y-0 left-0 flex w-[min(84vw,320px)] flex-col overflow-hidden rounded-r-[22px] border-r border-white/[0.08] bg-bg-secondary pb-[max(12px,env(safe-area-inset-bottom))] pt-[max(16px,env(safe-area-inset-top))]"
             style={{ touchAction: 'pan-y' }}
             initial={{ x: '-100%' }}
             animate={{ x: 0, transition: { duration: 0.32, ease: DRAWER_EASE } }}

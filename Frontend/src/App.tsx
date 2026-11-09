@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState, type ComponentType } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { TitleBar } from '@/components/TitleBar'
@@ -38,6 +38,7 @@ import { startHeadPreload } from '@/lib/headPreload'
 import { matches as isMobileNow, useIsMobile } from '@/mobile/useIsMobile'
 import { finishSplash, splashActive, useSplashGone, useSplashRevealed } from '@/lib/bootSplash'
 import { DRAWER_ROOTS, NavDrawer } from '@/mobile/ui/NavDrawer'
+import { KeptTabs } from '@/mobile/KeptTabs'
 
 // Chargées à la demande — évite de tout regrouper dans un seul chunk JS au
 // premier chargement (pages secondaires comme Legal/Information/Stats
@@ -150,6 +151,16 @@ const MobileYuyuAccount = lazy(() => import('@/mobile/MobileYuyuAccount'))
 const MobilePlans = lazy(() => import('@/mobile/MobilePlans'))
 const MobileMissions = lazy(() => import('@/mobile/tools/MobileMissions').then((m) => ({ default: m.MobileMissions })))
 const MobileSeasonPass = lazy(() => import('@/mobile/tools/MobileMissions').then((m) => ({ default: m.MobileSeasonPass })))
+/** Onglets du téléphone gardés montés une fois visités (mobile/KeptTabs) : les
+ *  destinations principales du menu, `MOBILE_TABS`. Mêmes pages que leurs
+ *  routes plus bas. */
+const MOBILE_KEPT_TABS: Record<string, ComponentType> = {
+  '/home': MobileHome,
+  '/instances': MobileInstances,
+  '/plans': MobilePlans,
+  '/settings': Settings,
+  '/login': Login,
+}
 // Atelier des modales. Le `import()` est DANS la branche de développement,
 // pas seulement la route : écrit dehors, Vite voyait un module importable et
 // en sortait un morceau de JS livré à tout le monde — mort, mais livré.
@@ -800,7 +811,11 @@ export default function App() {
             lui, retenue à son état de départ (`hold`), et fait son entrée
             quand il s'efface. Sur PC il n'y en a pas : les deux valent vrai
             d'emblée. */}
-        {splashGone && (
+        {/* Téléphone : les onglets visités restent montés et ne font que se
+            masquer (mobile/KeptTabs). La transition ci-dessous ne sert
+            alors qu'aux autres pages. */}
+        {splashGone && mobile && <KeptTabs tabs={MOBILE_KEPT_TABS} hold={!splashRevealed} />}
+        {splashGone && !(mobile && MOBILE_KEPT_TABS[location.pathname]) && (
         <PageTransition instantBetween={mobile ? DRAWER_ROOTS : undefined} hold={!splashRevealed}>
           <ErrorBoundary resetKey={location.pathname}>
           <Suspense fallback={RouteFallback}>

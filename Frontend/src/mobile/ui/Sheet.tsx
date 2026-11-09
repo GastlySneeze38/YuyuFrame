@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useDragControls } from 'framer-motion'
+import { useTabActive } from '@/mobile/KeptTabs'
 
 /** Distance de glissé vers le bas, ou vitesse, au-delà de laquelle la feuille se ferme :
  *  un coup de doigt rapide suffit, même court. */
@@ -42,10 +43,13 @@ export function Sheet({ open, onClose, label, header, footer, children, full = f
   bodyClassName?: string
 }) {
   const drag = useDragControls()
+  // Posée dans `body` : sans ça, elle resterait par-dessus l'onglet suivant
+  // quand on quitte un onglet gardé (mobile/KeptTabs).
+  const tabActive = useTabActive()
 
   return createPortal(
     <AnimatePresence>
-      {open && (
+      {open && tabActive && (
         <div key="sheet" className="fixed inset-0 z-50 flex flex-col justify-end" role="dialog" aria-modal="true" aria-label={label}>
           <motion.div
             className="absolute inset-0 bg-black/60"

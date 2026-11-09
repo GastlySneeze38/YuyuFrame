@@ -18,7 +18,14 @@ function Root() {
   const reduce = useStore((s) => s.reduceMotion)
   return (
     <MotionConfig reducedMotion={reduce ? 'always' : 'user'} transition={transition}>
-      <HashRouter>
+      {/* `v7_startTransition` : chaque changement d'adresse est une transition
+          React. La page suivante se prépare par tranches de quelques
+          millisecondes entre deux images, au lieu d'un bloc qui figeait
+          l'écran 100 à 300 ms sur téléphone, et la page courante reste
+          affichée et réactive jusqu'à ce qu'elle soit prête — y compris
+          pendant le chargement d'une page à la demande, au lieu d'un écran
+          vide (2026-11-09). */}
+      <HashRouter future={{ v7_startTransition: true }}>
         <App />
       </HashRouter>
     </MotionConfig>

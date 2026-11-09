@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useDragControls } from 'framer-motion'
 import { useIsMobile } from '@/mobile/useIsMobile'
+import { useTabActive } from '@/mobile/KeptTabs'
 
 /** Distance de glissé vers le bas, ou vitesse, au-delà de laquelle la feuille se ferme. */
 const CLOSE_OFFSET = 90
@@ -33,10 +34,13 @@ export function DrawerPanel({ open, onClose, label, children }: {
   // La feuille ne se tire que par sa poignée : branché sur tout le panneau,
   // le glissé capterait aussi le doigt qui fait défiler la liste.
   const drag = useDragControls()
+  // Posé dans `body` : masqué avec l'onglet qui l'a ouvert quand on en
+  // change (mobile/KeptTabs). Toujours vrai sur PC.
+  const tabActive = useTabActive()
 
   return createPortal(
     <AnimatePresence>
-      {open && (mobile ? (
+      {open && tabActive && (mobile ? (
         <div key="sheet" className="fixed inset-0 z-50 flex flex-col justify-end" role="dialog" aria-modal="true" aria-label={label}>
           <motion.div
             className="absolute inset-0 bg-black/60"
