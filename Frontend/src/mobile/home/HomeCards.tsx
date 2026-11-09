@@ -3,39 +3,8 @@ import type { SavedServer, ServerPingInfo } from '@/api/client'
 import { pingServer } from '@/lib/serverPing'
 import { useT } from '@/i18n'
 
-/**
- * L'offre Pro, en pleine largeur. Même contenu que `ProCard` du PC (titre,
- * accroche, « Voir les plans -50 % »), mais lisible au téléphone : celle du PC
- * est taillée pour un tiers de rangée, avec des textes de 8 à 11 px.
- * Toute la carte est la cible ; elle ne s'anime pas en boucle.
- */
-export function MobileProCard({ onOpen }: { onOpen: () => void }) {
-  const t = useT()
-  return (
-    <button
-      onClick={onOpen}
-      className="press flex w-full items-center gap-3.5 rounded-2xl border border-[rgb(var(--accent-hover)/0.3)] bg-[rgb(var(--accent)/0.1)] p-4 text-left"
-    >
-      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[rgb(var(--accent-hover)/0.18)] text-[rgb(var(--accent-text))]">
-        <svg viewBox="0 0 24 24" fill="currentColor" className="h-[22px] w-[22px]">
-          <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
-        </svg>
-      </span>
-      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="text-[16px] font-bold text-white">
-          YuyuFrame <span className="text-[rgb(var(--accent-text))]">Pro</span>
-        </span>
-        <span className="line-clamp-2 text-[13px] leading-snug text-white/60">{t('home.proTagline')}</span>
-      </span>
-      <span className="flex shrink-0 flex-col items-end gap-1">
-        <span className="rounded-full bg-[rgb(var(--accent-text)/0.18)] px-2 py-0.5 text-[12px] font-bold text-[rgb(var(--accent-text))]">-50%</span>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 text-white/50">
-          <path d="M9 6l6 6-6 6" />
-        </svg>
-      </span>
-    </button>
-  )
-}
+// L'offre Pro n'est plus sur l'accueil du téléphone (2026-11-09) : l'écran
+// doit tenir sans défiler. Les plans restent dans le menu latéral.
 
 function pingColor(ms: number): string {
   return ms <= 100 ? '#4ade80' : ms <= 300 ? '#facc15' : '#f87171'

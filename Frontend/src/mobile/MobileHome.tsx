@@ -20,7 +20,7 @@ import { useT } from '@/i18n'
 import { NAV_ICONS } from './MobileNav'
 import { MenuButton } from './ui/NavDrawer'
 import { InstanceSheet, loaderName } from './home/InstanceSheet'
-import { MobileProCard, MobileServerCard } from './home/HomeCards'
+import { MobileServerCard } from './home/HomeCards'
 import { useMobileLaunch } from './home/useMobileLaunch'
 
 /** Mêmes étoiles que la bannière du PC (pages/Home.tsx). */
@@ -43,24 +43,22 @@ const savedMemo = new Map<string, SavedServer[]>()
  * mobile (iOS et Material).
  *
  *   1. la bannière (menu ☰, titre, information, annonce, personnage, pseudo
- *      et salut) — sa hauteur s'ajuste pour que le premier écran s'arrête
- *      sous le serveur ;
- *   2. le bloc de lancement (instance, client intégré, Jouer), qui défile
- *      puis reste collé en haut de l'écran une fois atteint, et sous lui les
- *      raccourcis Missions / Amis / Passe / Saison ;
- *   3. un serveur (ou les fonctionnalités, selon le même réglage que sur
- *      PC) — fin du premier écran ;
- *   4. l'offre Pro, en dernier.
+ *      et salut) — sa hauteur s'ajuste pour que tout l'écran tienne sans
+ *      défiler ;
+ *   2. le bloc de lancement (instance, client intégré, Jouer), qui reste
+ *      collé en haut si la page défile (très petit écran) ;
+ *   3. un serveur (ou les fonctionnalités, selon le même réglage que sur PC) ;
+ *   4. en bas de l'écran, les raccourcis Missions / Amis / Passe / Saison.
  *
- * Outils, Support, Compétitif et les mentions légales ne sont plus ici : les
- * trois premiers sont dans le menu latéral, les mentions dans Réglages ›
- * À propos.
+ * Outils, Support, Compétitif, l'offre Pro et les mentions légales ne sont
+ * plus ici : les quatre premiers sont dans le menu latéral, les mentions dans
+ * Réglages › À propos.
  *
  * Règles tenues partout : texte principal à 15 px et plus, secondaire à 13 px
  * minimum et jamais sous 55 % d'opacité, cibles de 44 px au moins, deux
- * espacements seulement (12 px dans une section, 32 px entre deux : assez
- * d'air pour que chaque bloc se lise seul), un retour à l'appui sur tout ce qui se
- * touche, rien qui ne s'anime en boucle.
+ * espacements seulement (12 px dans un bloc, 32 px entre deux, partout le
+ * même depuis le 2026-11-09), un retour à l'appui sur tout ce qui se touche,
+ * rien qui ne s'anime en boucle.
  */
 export default function MobileHome() {
   const t = useT()
@@ -138,38 +136,50 @@ export default function MobileHome() {
     return () => observer.disconnect()
   }, [])
 
-  // ── Un premier écran qui tombe juste ──
-  // La bannière prend la hauteur que laissent le lancement, les raccourcis
-  // et le serveur : le premier écran s'arrête 24 px sous la carte du
-  // serveur, quelle que soit la taille du téléphone, au lieu de la couper en
-  // deux. Bornée : jamais sous 150 px (en dessous le personnage ne tient
-  // plus — un iPhone SE tombe pile dessus, carte du serveur entière), jamais
-  // au-delà de 340 (sur un grand écran, l'air va entre les
-  // sections plutôt que dans une bannière géante). Mesures par
-  // `offsetTop`/`offsetHeight`, qui ignorent la mise à l'échelle de l'entrée ;
-  // ce qui suit la bannière ne dépend pas de sa hauteur, donc pas de
-  // va-et-vient. La section du serveur change de hauteur selon ce qu'elle
-  // montre (carte, suggestion, appel à en ajouter) : elle est observée aussi.
+  // ── Un écran qui tient sans défiler ──
+  // La bannière prend la hauteur que laissent le lancement, le serveur et
+  // les raccourcis : l'écran s'arrête sous les raccourcis, quelle que soit
+  // la taille du téléphone. Bornée : jamais sous 150 px (en dessous le
+  // personnage ne tient plus — sur un très petit écran, la page défile
+  // alors), jamais au-delà de 440 (sur une tablette, l'air va au-dessus
+  // des raccourcis plutôt que dans une bannière géante ; 340 auparavant, ce
+  // qui laissait déjà un trou sur un téléphone de 914 px de haut une fois
+  // l'offre Pro retirée). Mesures par
+  // `offsetTop`/`offsetHeight`, qui ignorent la mise à l'échelle de
+  // l'entrée. L'espace élastique au-dessus des raccourcis est compté à son
+  // minimum (32 px) : il grandit quand la bannière rétrécit, et le compter
+  // tel quel ferait rétrécir la bannière à chaque mesure. Le serveur change
+  // de hauteur selon ce qu'il montre (carte, suggestion, appel à en
+  // ajouter) : la mesure suit le lancement et les raccourcis, qui bougent
+  // avec lui.
   const bannerRef = useRef<HTMLDivElement>(null)
-  const fitRef = useRef<HTMLElement>(null)
+  const fitRef = useRef<HTMLDivElement>(null)
+  const spacerRef = useRef<HTMLDivElement>(null)
   const launchRef = useRef<HTMLDivElement>(null)
+  const serverRef = useRef<HTMLElement>(null)
   const [bannerH, setBannerH] = useState<number | null>(null)
   useLayoutEffect(() => {
     const main = scrollRef.current
     const banner = bannerRef.current
     const end = fitRef.current
-    if (!main || !banner || !end) return
+    const spacer = spacerRef.current
+    if (!main || !banner || !end || !spacer) return
     const fit = () => {
       const bannerBottom = banner.offsetTop + banner.offsetHeight
-      const rest = end.offsetTop + end.offsetHeight - bannerBottom
-      const room = main.clientHeight - banner.offsetTop - rest - 24
-      setBannerH(Math.round(Math.max(150, Math.min(340, room))))
+      const stretch = Math.max(0, spacer.offsetHeight - 32)
+      const rest = end.offsetTop + end.offsetHeight - bannerBottom - stretch
+      const room = main.clientHeight - banner.offsetTop - rest
+      setBannerH(Math.round(Math.max(150, Math.min(440, room))))
     }
     fit()
     const ro = new ResizeObserver(fit)
+    // Tout ce qui est entre la bannière et le bas : un bloc qui change de
+    // hauteur (le serveur à l'arrivée de son ping) déplace les raccourcis
+    // sans changer leur taille.
     ro.observe(main)
     ro.observe(end)
     if (launchRef.current) ro.observe(launchRef.current)
+    if (serverRef.current) ro.observe(serverRef.current)
     return () => ro.disconnect()
   }, [])
 
@@ -336,16 +346,21 @@ export default function MobileHome() {
             reste collé en haut ── */}
         {/* Le repère est remonté de la hauteur de l'encoche, comme le bloc :
             il reste aligné sur son bord haut. */}
-        {/* `mt-4` + le rembourrage du bloc : 28 px entre la bannière et le
-            lancement, pour que les deux ne se lisent pas comme un seul bloc. */}
-        <div ref={markerRef} aria-hidden className="relative top-[calc(env(safe-area-inset-top,0px)*-1)] mt-4 h-px shrink-0" />
+        {/* 19 px + le repère (1 px) + le rembourrage haut du bloc (1 px) + le
+            vide au-dessus du texte du titre (11 px, voir `SectionHeader`) :
+            32 px entre la bannière et « Instance », le même écart visible
+            qu'entre chaque bloc de l'écran (2026-11-09). */}
+        <div ref={markerRef} aria-hidden className="relative top-[calc(env(safe-area-inset-top,0px)*-1)] mt-[19px] h-px shrink-0" />
         {/* Collé, le bloc passerait sous l'encoche : il porte une bande de la
             hauteur de l'encoche au-dessus de son contenu (padding), retirée de
             sa place dans la page (marge négative). Cette bande laisse passer
             les touchers vers ce qui est dessous. Fond plein et non flouté :
             un flou recalculé à chaque image saccade sur un petit téléphone. */}
+        {/* Marge négative en `calc(… * -1)` : `-mt-[env(…)]` ne produisait
+            aucune règle, et le bloc restait 31 px trop bas (corrigé le
+            2026-11-09). */}
         <div
-          className={`pointer-events-none sticky top-0 z-30 -mx-4 -mt-[env(safe-area-inset-top,0px)] shrink-0 border-b pt-[env(safe-area-inset-top,0px)] transition-[background-color,border-color,box-shadow] duration-150 ${
+          className={`pointer-events-none sticky top-0 z-30 -mx-4 mt-[calc(env(safe-area-inset-top,0px)*-1)] shrink-0 border-b pt-[env(safe-area-inset-top,0px)] transition-[background-color,border-color,box-shadow] duration-150 ${
             stuck
               ? 'border-white/[0.06] bg-[rgb(var(--bg-primary))] shadow-[0_8px_24px_rgba(0,0,0,0.5)]'
               : 'border-transparent bg-transparent'
@@ -353,7 +368,9 @@ export default function MobileHome() {
         >
           {/* À l'entrée, c'est le contenu qui monte et non le bloc collé :
               envelopper celui-ci le décollerait du défilement. */}
-          <motion.div ref={launchRef} {...enter(0.48, 16)} className="pointer-events-auto px-4 py-3">
+          {/* 1 px en haut : le titre porte déjà 11 px de vide au-dessus de
+              son texte, ce qui suffit aussi quand le bloc est collé. */}
+          <motion.div ref={launchRef} {...enter(0.48, 16)} className="pointer-events-auto px-4 pb-3 pt-px">
             <SectionHeader
               title={t('home.instance')}
               action={{ label: t('home.manage'), onClick: () => navigate('/instances') }}
@@ -449,17 +466,13 @@ export default function MobileHome() {
           </motion.div>
         </div>
 
-        {/* Les raccourcis Missions / Amis / Passe / Saison, sous le lancement. */}
-        <motion.div {...enter(0.55, 12, 0.45)} className="mt-3">
-          <HomeShortcuts width="w-full" tall />
-        </motion.div>
-
         {/* ── 3. Un serveur (ou les fonctionnalités, selon le réglage
-            « serveurs sur l'accueil ») : la fin du premier écran — la
-            bannière prend la hauteur qui reste au-dessus (voir `bannerH`).
-            Outils, Support et Compétitif ne sont plus ici : ils sont dans le
-            menu latéral. ── */}
-        <motion.section ref={fitRef} {...enter(0.6, 8, 0.4)} className="mt-8">
+            « serveurs sur l'accueil »), sous le lancement. Outils, Support et
+            Compétitif ne sont plus ici : ils sont dans le menu latéral. ── */}
+        {/* Le rembourrage bas du bloc de lancement (12 px) + 9 px + le vide
+            au-dessus du texte du titre (11 px) : 32 px entre « Jouer » et
+            « Serveur », le même écart visible qu'entre chaque bloc. */}
+        <motion.section ref={serverRef} {...enter(0.55, 12, 0.45)} className="mt-[9px] shrink-0">
           {showHomeServers ? (
             <>
               <SectionHeader
@@ -488,12 +501,19 @@ export default function MobileHome() {
           )}
         </motion.section>
 
-        {/* ── 4. L'offre, en dernier, sous le premier écran. ── */}
-        {/* Les mentions légales ne sont plus en bas de l'accueil : elles sont
-            dans Réglages › À propos. */}
-        <div className="mt-8 shrink-0 pb-[max(32px,env(safe-area-inset-bottom))]">
-          <MobileProCard onOpen={() => navigate('/plans')} />
-        </div>
+        {/* ── 4. Les raccourcis Missions / Amis / Passe / Saison, en bas de
+            l'écran : la fin de l'écran — la bannière prend la hauteur qui
+            reste au-dessus (voir `bannerH`). Sur un très grand écran où la
+            bannière est à son maximum, l'air en trop va au-dessus d'eux
+            (`flex-1`), pour qu'ils restent collés en bas. ── */}
+        <div ref={spacerRef} aria-hidden className="min-h-8 flex-1" />
+        <motion.div
+          ref={fitRef}
+          {...enter(0.6, 8, 0.4)}
+          className="shrink-0 pb-[max(16px,env(safe-area-inset-bottom))]"
+        >
+          <HomeShortcuts width="w-full" tall />
+        </motion.div>
       </main>
 
       <InstanceSheet

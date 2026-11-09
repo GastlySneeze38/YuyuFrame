@@ -13,9 +13,11 @@ const SHORTCUT_TILE_BASE =
   'relative flex h-10 w-full min-w-0 items-center gap-2 rounded-xl border border-white/10 bg-black/35 px-3 text-white/85 backdrop-blur-[8px] transition-colors hover:border-white/25 hover:text-white'
 
 /** La même case au doigt (téléphone) : 52 px, fond plein — sous la bannière
- *  il n'y a rien à flouter, et un flou coûte cher au défilement. */
+ *  il n'y a rien à flouter, et un flou coûte cher au défilement. Une demi-
+ *  largeur (moins la moitié de l'écart de 8 px) : les cases se rangent par
+ *  deux, et une case seule sur sa rangée se centre (voir `HomeShortcuts`). */
 const SHORTCUT_TILE_TALL =
-  'press relative flex h-[52px] w-full min-w-0 items-center gap-2.5 overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.04] px-3.5 text-white/90'
+  'press relative flex h-[52px] w-[calc(50%-4px)] min-w-0 items-center gap-2.5 overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.04] px-3.5 text-white/90'
 
 const HOVER = { whileHover: { scale: 1.03 }, whileTap: { scale: 0.97 }, transition: SNAP }
 
@@ -54,7 +56,10 @@ export function HomeShortcuts({ width = 'w-[clamp(250px,24vw,300px)]', tall = fa
   const [missionsOpen, setMissionsOpen] = useState(false)
 
   return (
-    <div className={`grid ${width} grid-cols-2 gap-2`}>
+    // Téléphone : rangées de deux qui se centrent. Sans passe il ne reste que
+    // trois cases, et la troisième se pose au milieu sous les deux autres
+    // (en quinconce) au lieu de rester seule à gauche. Le PC garde sa grille.
+    <div className={tall ? `flex ${width} flex-wrap justify-center gap-2` : `grid ${width} grid-cols-2 gap-2`}>
       <MissionsPanel open={missionsOpen} onClose={() => setMissionsOpen(false)} challenges={challenges} pass={pass} meta={meta} onReroll={reroll} />
 
       <motion.button
