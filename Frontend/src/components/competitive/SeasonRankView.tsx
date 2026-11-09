@@ -247,9 +247,6 @@ export function SeasonGrid({ wins, instant = false }: { wins: number[]; instant?
   const t = useT()
   const rankName = useRankName()
   const [hover, setHover] = useState<number | null>(null)
-  // Dès le premier survol, plus de délai d'apparition : une case qui
-  // reprend sa taille doit le faire tout de suite.
-  const [touched, setTouched] = useState(false)
   const hovered = hover !== null ? wins[hover] : undefined
   const sameRank = hovered !== undefined ? wins.filter((w) => w === hovered).length : 0
 
@@ -269,31 +266,25 @@ export function SeasonGrid({ wins, instant = false }: { wins: number[]; instant?
           const isHover = hover === i
           const dimmed = hovered !== undefined && win !== hovered
           return (
-            <motion.div
+            <div
               key={i}
-              onMouseEnter={() => {
-                setHover(i)
-                setTouched(true)
-              }}
+              onMouseEnter={() => setHover(i)}
               // Au doigt, pas de survol : toucher une case la montre, la
               // toucher encore la relâche. (Le navigateur simule ensuite un
               // survol sur la même case, qui ne change rien.)
               onPointerDown={(e) => {
                 if (e.pointerType === 'mouse') return
                 setHover(isHover ? null : i)
-                setTouched(true)
               }}
-              // Jamais depuis rien : une case qui part de zéro semble sortir de nulle part.
-              initial={{ scale: 0.4, opacity: 0 }}
-              animate={{ scale: isHover ? 1.28 : 1, opacity: 1 }}
-              // L'apparition a son délai ; le survol, non : il doit répondre tout de suite.
-              transition={
-                touched
-                  ? { type: 'spring', stiffness: 500, damping: 26 }
-                  : { delay: instant ? i * 0.006 : 0.15 + i * 0.012, type: 'spring', stiffness: 400, damping: 22 }
-              }
-              className="relative cursor-pointer overflow-hidden rounded-[2px] transition-[filter,box-shadow] duration-150"
+              // Apparition en CSS (`.season-cell`, index.css) : 64 cases
+              // animées par framer-motion coûtaient ~100 ms de montage sur
+              // téléphone. Elle part de 40 % (une case qui part de zéro
+              // semble sortir de nulle part), avec son délai ; le survol,
+              // lui, passe par la transition, sans délai.
+              className="season-cell relative cursor-pointer overflow-hidden rounded-[2px]"
               style={{
+                animationDelay: `${instant ? i * 6 : 150 + i * 12}ms`,
+                transform: isHover ? 'scale(1.28)' : undefined,
                 zIndex: isHover ? 10 : 0,
                 filter: dimmed ? 'brightness(0.35) saturate(0.5)' : 'none',
                 boxShadow: isHover
@@ -302,7 +293,7 @@ export function SeasonGrid({ wins, instant = false }: { wins: number[]; instant?
               }}
             >
               <img src={TIER_TEXTURES[tierOf(win)]} alt="" draggable={false} className="absolute inset-0 h-full w-full [image-rendering:pixelated]" />
-            </motion.div>
+            </div>
           )
         })}
       </div>
@@ -387,9 +378,10 @@ export function SeasonFrame({
   const steel = `steel-${id}`
   const line = 'rgb(226 230 238 / 0.85)'
   const dim = 'rgb(226 230 238 / 0.35)'
-  // Chaque forme apparaît l'une après l'autre, à l'ouverture.
+  // Chaque forme apparaît l'une après l'autre, à l'ouverture (`.frame-part-in`,
+  // index.css : en CSS, sans un composant animé par forme).
   const appear = (step: number) =>
-    still ? {} : { initial: { opacity: 0, scale: 0.96 }, animate: { opacity: 1, scale: 1 }, transition: { delay: 0.2 + step * 0.12, duration: 0.4 } }
+    still ? {} : { className: 'frame-part-in', style: { animationDelay: `${200 + step * 120}ms` } }
 
   return (
     <div className="relative aspect-square shrink-0" style={{ height: size }}>
@@ -407,28 +399,28 @@ export function SeasonFrame({
         </defs>
 
         {/* 1. Le cadre : un anneau d'acier biseauté. */}
-        <motion.g {...appear(0)}>
+        <g {...appear(0)}>
           <path
             fillRule="evenodd"
             fill={`url(#${steel})`}
             d={`M${INNER - 3.5} ${INNER - 3.5} H${103.5 - INNER} V${103.5 - INNER} H${INNER - 3.5} Z M${INNER} ${INNER} V${100 - INNER} H${100 - INNER} V${INNER} Z`}
           />
           <rect x={INNER - 0.4} y={INNER - 0.4} width={100 - 2 * INNER + 0.8} height={100 - 2 * INNER + 0.8} fill="none" stroke="rgb(0 0 0 / 0.55)" strokeWidth="0.8" />
-        </motion.g>
+        </g>
 
         {/* 2. Les équerres des coins. */}
         {level >= 2 && (
-          <motion.g {...appear(1)} fill="none" stroke={line} strokeWidth="1.4" strokeLinecap="square">
+          <g {...appear(1)} fill="none" stroke={line} strokeWidth="1.4" strokeLinecap="square">
             <path d="M10 22 V10 H22" />
             <path d="M78 10 H90 V22" />
             <path d="M90 78 V90 H78" />
             <path d="M22 90 H10 V78" />
-          </motion.g>
+          </g>
         )}
 
         {/* 3. Les ailes des côtés, et leurs crans vers le cadre. */}
         {level >= 3 && (
-          <motion.g {...appear(2)}>
+          <g {...appear(2)}>
             <g fill={`url(#${steel})`}>
               <path d="M4 30 L7 27 V73 L4 70 Z" />
               <path d="M96 30 L93 27 V73 L96 70 Z" />
@@ -441,12 +433,12 @@ export function SeasonFrame({
               <path d="M91.5 36 H88" stroke={dim} />
               <path d="M91.5 64 H88" stroke={dim} />
             </g>
-          </motion.g>
+          </g>
         )}
 
         {/* 4. Le fronton et le socle. */}
         {level >= 4 && (
-          <motion.g {...appear(3)}>
+          <g {...appear(3)}>
             <g fill="none" stroke={line} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
               <path d="M38 11 L50 5 L62 11" />
               <path d="M44 11.5 L50 8.5 L56 11.5" stroke={dim} />
@@ -456,28 +448,36 @@ export function SeasonFrame({
               <rect x="30" y="89.5" width="40" height="2.2" rx="1" />
               <rect x="38" y="93.2" width="24" height="1.6" rx="0.8" />
             </g>
-          </motion.g>
+          </g>
         )}
 
         {/* 5. L'enceinte extérieure, ses circuits, et le joyau. */}
         {level >= 5 && (
-          <motion.g {...appear(4)}>
+          <g {...appear(4)}>
             <path d="M16 1 H84 L99 16 V84 L84 99 H16 L1 84 V16 Z" fill="none" stroke={dim} strokeWidth="0.8" />
             <g fill="none" stroke={dim} strokeWidth="0.6" strokeLinecap="round">
               <path d="M1 30 H3 M1 70 H3 M99 30 H97 M99 70 H97" />
               <path d="M16 1 L20 5 H30 M84 1 L80 5 H70 M16 99 L20 95 H28 M84 99 L80 95 H72" />
               <path d="M3 44 L1 46 M3 56 L1 54 M97 44 L99 46 M97 56 L99 54" />
             </g>
-            <motion.path
-              d="M50 0.5 L53 4 L50 7.5 L47 4 Z"
-              fill={`rgb(${accent})`}
-              style={{ filter: `drop-shadow(0 0 2px rgb(${accent}))` }}
-              animate={still ? undefined : { opacity: [0.75, 1, 0.75] }}
-              transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
-            />
-          </motion.g>
+          </g>
         )}
       </svg>
+
+      {/* Le joyau, hors du SVG : sa pulsation en boucle redessinait toute
+          la bordure (et son ombre) à chaque image ; posé à part, seule son
+          opacité change, sur la carte graphique. Même losange qu'en SVG
+          (de 47 à 53 en largeur, de 0,5 à 7,5 en hauteur). */}
+      {level >= 5 && (
+        <div
+          className={`pointer-events-none absolute ${still ? '' : 'frame-part-in'}`}
+          style={{ left: '47%', top: '0.5%', width: '6%', height: '7%', animationDelay: `${200 + 4 * 120}ms` }}
+        >
+          <div className={`h-full w-full ${still ? '' : 'jewel-pulse'}`} style={{ filter: `drop-shadow(0 0 3px rgb(${accent}))` }}>
+            <div className="h-full w-full" style={{ background: `rgb(${accent})`, clipPath: 'polygon(50% 0, 100% 50%, 50% 100%, 0 50%)' }} />
+          </div>
+        </div>
+      )}
     </div>
   )
 }

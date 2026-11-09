@@ -81,11 +81,14 @@ export function TopoBackdrop({ color, className = '', still: stillProp = false }
     let rows = 0
     let values = new Float32Array(0)
 
-    const resize = () => {
-      const rect = canvas.getBoundingClientRect()
-      const dpr = window.devicePixelRatio || 1
-      width = rect.width
-      height = rect.height
+    // La taille vient de l'observateur, jamais d'un `getBoundingClientRect`
+    // au montage : il forçait une mise en page en plein changement d'onglet.
+    // Densité plafonnée à 2 : des traits fins à 22 % d'opacité ne gagnent rien
+    // à 3, et le canevas pesait plus du double à remplir et à composer.
+    const resize = (w: number, h: number) => {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2)
+      width = w
+      height = h
       canvas.width = Math.max(1, Math.round(width * dpr))
       canvas.height = Math.max(1, Math.round(height * dpr))
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
@@ -145,11 +148,34 @@ export function TopoBackdrop({ color, className = '', still: stillProp = false }
     const start = Math.random() * 100
     let current = start
 
-    resize()
-    // Un redimensionnement vide le canevas : on redessine l'instant en cours.
-    const observer = new ResizeObserver(() => {
-      resize()
+    // Figé : le premier dessin attend que le navigateur soit libre, puis
+    // apparaît en fondu. L'écran qui le porte s'affiche d'abord, sans lui ;
+    // dessiné au montage, il s'ajoutait au changement d'onglet, deux fois
+    // même (au montage, puis au premier relevé de taille).
+    let drawn = false
+    let pending = 0
+    const drawStill = () => {
+      pending = 0
       draw(current)
+      if (!drawn) {
+        drawn = true
+        canvas.style.opacity = '1'
+      }
+    }
+    const later = (fn: () => void) =>
+      typeof requestIdleCallback === 'function' ? requestIdleCallback(fn, { timeout: 400 }) : window.setTimeout(fn, 60)
+    const cancelLater = (handle: number) =>
+      typeof cancelIdleCallback === 'function' ? cancelIdleCallback(handle) : window.clearTimeout(handle)
+
+    // Un redimensionnement vide le canevas : on redessine l'instant en cours.
+    // Le premier relevé arrive juste après la mise en page du montage.
+    const observer = new ResizeObserver(([entry]) => {
+      const { width: w, height: h } = entry.contentRect
+      if (w === width && h === height) return
+      resize(w, h)
+      if (!still) draw(current)
+      else if (drawn) drawStill()
+      else if (!pending) pending = later(drawStill)
     })
     observer.observe(canvas)
 
@@ -157,19 +183,25 @@ export function TopoBackdrop({ color, className = '', still: stillProp = false }
     let last = 0
     const loop = (now: number) => {
       frame = requestAnimationFrame(loop)
-      if (now - last < FRAME_MS) return
+      if (now - last < FRAME_MS || width === 0) return
       last = now
       current = start + (now / 1000) * SPEED
       draw(current)
     }
-    if (still) draw(start)
-    else frame = requestAnimationFrame(loop)
+    if (!still) frame = requestAnimationFrame(loop)
 
     return () => {
       cancelAnimationFrame(frame)
+      if (pending) cancelLater(pending)
       observer.disconnect()
     }
   }, [color, stillProp])
 
-  return <canvas ref={canvasRef} aria-hidden="true" className={`pointer-events-none absolute inset-0 h-full w-full ${className}`} />
+  return (
+    <canvas
+      ref={canvasRef}
+      aria-hidden="true"
+      className={`pointer-events-none absolute inset-0 h-full w-full ${stillProp ? 'opacity-0 transition-opacity duration-300' : ''} ${className}`}
+    />
+  )
 }

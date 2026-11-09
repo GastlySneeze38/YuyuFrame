@@ -3,6 +3,7 @@ import { useT } from '@/i18n'
 import { useStore } from '@/stores/useStore'
 import { SkinFace } from '@/components/ui/SkinFace'
 import { playerSkinSrc } from '@/lib/heads'
+import { formatDate } from '@/lib/format'
 import type { DuelRow } from '@/lib/competitive'
 
 const RESULT_STYLE: Record<DuelRow['result'], string> = {
@@ -13,7 +14,7 @@ const RESULT_STYLE: Record<DuelRow['result'], string> = {
 
 function formatWhen(at: number, language: string): string {
   const locale = language === 'sga' ? 'fr' : language
-  return new Date(at).toLocaleString(locale, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+  return formatDate(at, locale, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
 export function formatLength(secs: number): string {

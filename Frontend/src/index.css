@@ -287,6 +287,71 @@ option {
   opacity: 1;
 }
 
+/* Apparitions de l'onglet Compétitif (2026-11-09) : jauges, barres, cases de
+ * la saison, insigne du rang. En CSS plutôt qu'avec framer-motion : 64 cases
+ * ou 30 barres = autant de composants animés à créer à chaque changement
+ * d'onglet (100 à 200 ms bloqués sur téléphone), là où une animation CSS ne
+ * coûte rien à monter et tourne sur la carte graphique. Seul le départ est
+ * écrit (`backwards`) : l'arrivée est le `transform` posé sur l'élément, donc
+ * une valeur qui change ensuite passe par sa `transition`. Animations réduites :
+ * règles générales plus haut. */
+.grow-in-x {
+  transform-origin: left;
+  animation: grow-in-x 0.6s cubic-bezier(0.23, 1, 0.32, 1) backwards;
+  transition: transform 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+}
+@keyframes grow-in-x {
+  from { transform: scaleX(0); }
+}
+.grow-in-y {
+  transform-origin: bottom;
+  animation: grow-in-y 0.6s cubic-bezier(0.23, 1, 0.32, 1) backwards;
+}
+@keyframes grow-in-y {
+  from { transform: scaleY(0); }
+}
+/* Anneau de progression (SVG) : part de `--ring-from` (le tour complet, donc
+ * vide) jusqu'au `stroke-dashoffset` posé sur l'élément. */
+.ring-fill {
+  animation: ring-fill 0.6s cubic-bezier(0.23, 1, 0.32, 1) backwards;
+}
+@keyframes ring-fill {
+  from { stroke-dashoffset: var(--ring-from); }
+}
+/* Un léger dépassement, comme le ressort qu'il remplace. */
+.pop-in {
+  animation: pop-in 0.5s cubic-bezier(0.34, 1.4, 0.64, 1) backwards;
+}
+@keyframes pop-in {
+  from { transform: scale(0.9); opacity: 0; }
+}
+.season-cell {
+  animation: season-cell-in 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), filter 150ms, box-shadow 150ms;
+}
+@keyframes season-cell-in {
+  from { transform: scale(0.4); opacity: 0; }
+}
+/* Les formes de la bordure de saison (SVG) : centrées sur elles-mêmes. */
+.frame-part-in {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: frame-part-in 0.4s ease-out backwards;
+}
+@keyframes frame-part-in {
+  from { opacity: 0; transform: scale(0.96); }
+}
+/* Le joyau du dernier niveau, hors du SVG : son opacité tourne sur la carte
+ * graphique au lieu de redessiner la bordure à chaque image. */
+.jewel-pulse {
+  will-change: opacity;
+  animation: jewel-pulse 2.4s ease-in-out infinite;
+}
+@keyframes jewel-pulse {
+  0%, 100% { opacity: 0.75; }
+  50% { opacity: 1; }
+}
+
 /* Respect du réglage système « animations réduites » : plus aucun mouvement,
  * mais l'interface reste utilisable (Framer Motion a son propre garde-fou,
  * voir lib/motion.ts). */

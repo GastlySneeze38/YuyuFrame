@@ -5,6 +5,7 @@ import { useStore } from '@/stores/useStore'
 import { SkinFace } from '@/components/ui/SkinFace'
 import { Toggle } from '@/components/ui/Toggle'
 import { playerSkinSrc } from '@/lib/heads'
+import { formatDate } from '@/lib/format'
 import { Sheet, SheetTitle } from '@/mobile/ui/Sheet'
 import { RankTile, useRankName } from '@/components/competitive/RankCard'
 import { TopoBackdrop } from '@/components/competitive/TopoBackdrop'
@@ -43,8 +44,6 @@ import {
 
 const CARD = 'rounded-2xl border border-white/[0.06] bg-white/[0.04]'
 const LIST = `flex flex-col divide-y divide-white/[0.06] overflow-hidden ${CARD}`
-/** Ouverture des barres : une fois, sans rebond. */
-const GROW = { duration: 0.6, ease: [0.23, 1, 0.32, 1] } as const
 
 function Section({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) {
   return (
@@ -62,17 +61,19 @@ function Note({ children }: { children: ReactNode }) {
   return <p className={`${CARD} px-4 py-6 text-center text-[15px] leading-relaxed text-white/60`}>{children}</p>
 }
 
-/** Une jauge qui se remplit une fois, par `scaleX` (le compositeur, pas la mise en page). */
+/**
+ * Une jauge qui se remplit une fois, par `scaleX` (le compositeur, pas la mise
+ * en page). En CSS (`.grow-in-x`, index.css) : rien à monter pour l'animer.
+ */
 function Gauge({ value, color, className = 'h-2' }: { value: number; color: string; className?: string }) {
-  const reduce = useReducedMotion()
   return (
     <div className={`overflow-hidden rounded-full bg-white/[0.08] ${className}`}>
-      <motion.div
-        className="h-full origin-left rounded-full"
-        style={{ background: `linear-gradient(90deg, rgb(${color} / 0.55), rgb(${color}))` }}
-        initial={reduce ? false : { scaleX: 0 }}
-        animate={{ scaleX: Math.min(1, Math.max(0, value)) }}
-        transition={GROW}
+      <div
+        className="grow-in-x h-full rounded-full"
+        style={{
+          background: `linear-gradient(90deg, rgb(${color} / 0.55), rgb(${color}))`,
+          transform: `scaleX(${Math.min(1, Math.max(0, value))})`,
+        }}
       />
     </div>
   )
@@ -164,7 +165,6 @@ export function MobileHistory({ standing, duels, servers, activeServer, onServer
 function RankHero({ standing, onOpen }: { standing: Standing; onOpen: () => void }) {
   const t = useT()
   const rankName = useRankName()
-  const reduce = useReducedMotion()
   const color = standing.placed ? TIER_COLORS[tierOf(standing.division)] : '160 150 190'
   const champion = standing.division >= CHAMPION
 
@@ -178,15 +178,14 @@ function RankHero({ standing, onOpen }: { standing: Standing; onOpen: () => void
         <TopoBackdrop color={color} still />
       </div>
 
-      <motion.div
+      {/* Apparition en CSS (`.pop-in`), rejouée à chaque rang par la clé. */}
+      <div
         key={`${standing.mode}-${standing.division}-${standing.placed}`}
-        initial={reduce ? false : { scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ type: 'spring', duration: 0.5, bounce: 0.2 }}
+        className="pop-in"
         style={{ filter: `drop-shadow(0 0 20px rgb(${color} / 0.5))` }}
       >
         <RankTile division={standing.division} placed={standing.placed} size={88} />
-      </motion.div>
+      </div>
 
       <p className="mt-4 text-[30px] font-black leading-none tracking-[-0.02em]" style={{ color: `rgb(${color})`, textShadow: `0 0 22px rgb(${color} / 0.35)` }}>
         {rankName(standing.division, standing.placed)}
@@ -264,7 +263,7 @@ function DuelDays({ duels, showServer }: { duels: DuelRow[]; showServer: boolean
     const key = at.toDateString()
     const last = days[days.length - 1]
     if (last?.key === key) last.duels.push(d)
-    else days.push({ key, label: at.toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' }), duels: [d] })
+    else days.push({ key, label: formatDate(at, locale, { weekday: 'long', day: 'numeric', month: 'long' }), duels: [d] })
   }
   return (
     <div className="flex flex-col gap-4">
@@ -292,7 +291,9 @@ function DuelLine({ duel: d, locale, showServer }: { duel: DuelRow; locale: stri
         <p className="truncate text-[13px] text-white/55">
           <span className="font-semibold" style={{ color: `rgb(${RESULT_COLOR[d.result]})` }}>{t(`competitive.history.${d.result}`)}</span>
           {' · '}
-          {new Date(d.at).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}
+          {/* Formateur gardé (`formatDate`) : `toLocaleTimeString` coûtait
+              1,2 ms par ligne sur téléphone. */}
+          {formatDate(d.at, locale, { hour: '2-digit', minute: '2-digit' })}
         </p>
         {/* Le serveur sur sa ligne : une adresse est longue, et sur la ligne
             du résultat elle était coupée presque partout. Inutile quand la
@@ -509,18 +510,18 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
+/** L'anneau se remplit en CSS (`.ring-fill`, index.css) : animé par
+ *  framer-motion, il était recalculé en JavaScript à chaque image. */
 function Ring({ value }: { value: number }) {
-  const reduce = useReducedMotion()
   const r = 22
   const c = 2 * Math.PI * r
   return (
     <svg viewBox="0 0 56 56" className="h-[72px] w-[72px] shrink-0 -rotate-90">
       <circle cx="28" cy="28" r={r} fill="none" stroke={`rgb(${LOSS} / 0.35)`} strokeWidth="6" />
-      <motion.circle
+      <circle
         cx="28" cy="28" r={r} fill="none" stroke={`rgb(${WIN})`} strokeWidth="6" strokeLinecap="round" strokeDasharray={c}
-        initial={reduce ? false : { strokeDashoffset: c }}
-        animate={{ strokeDashoffset: c * (1 - Math.min(1, value)) }}
-        transition={GROW}
+        className="ring-fill"
+        style={{ strokeDashoffset: c * (1 - Math.min(1, value)), ['--ring-from' as string]: c }}
       />
     </svg>
   )
@@ -534,7 +535,6 @@ function Ring({ value }: { value: number }) {
  */
 function ScoreChart({ duels, avg }: { duels: DuelRow[]; avg: number }) {
   const t = useT()
-  const reduce = useReducedMotion()
   const recent = duels.slice(0, CHART_DUELS).reverse()
   const form = duels.slice(0, FORM_DUELS).reverse()
   const [picked, setPicked] = useState<number | null>(null)
@@ -584,17 +584,16 @@ function ScoreChart({ duels, avg }: { duels: DuelRow[]; avg: number }) {
               const on = picked === i
               return (
                 <div key={d.id} className="flex h-full min-w-0 flex-1 items-end">
-                  <motion.div
-                    className="w-full origin-bottom rounded-t-[3px] transition-opacity duration-100"
+                  {/* Montée en CSS (`.grow-in-y`) : 30 barres animées par
+                      framer-motion pesaient au changement d'onglet. */}
+                  <div
+                    className="grow-in-y w-full rounded-t-[3px] transition-opacity duration-100"
                     style={{
                       height: `${(d.score / 500) * 100}%`,
                       background: `linear-gradient(180deg, rgb(${c}), rgb(${c} / 0.35))`,
                       opacity: picked !== null ? (on ? 1 : 0.3) : d.result === 'win' ? 1 : 0.55,
                       boxShadow: on ? `0 0 12px rgb(${c} / 0.7)` : undefined,
                     }}
-                    initial={reduce ? false : { scaleY: 0 }}
-                    animate={{ scaleY: 1 }}
-                    transition={GROW}
                   />
                 </div>
               )
