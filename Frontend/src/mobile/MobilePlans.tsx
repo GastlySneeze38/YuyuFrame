@@ -304,7 +304,7 @@ export default function MobilePlans() {
 function FeaturedOffer({ plan, current, buttonRef, onChoose, onCompare }: {
   plan: PlanMeta
   current: boolean
-  buttonRef: React.RefObject<HTMLButtonElement>
+  buttonRef: React.RefObject<HTMLButtonElement | null>
   onChoose: () => void
   onCompare: () => void
 }) {
