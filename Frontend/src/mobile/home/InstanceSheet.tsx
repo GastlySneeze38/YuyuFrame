@@ -1,23 +1,17 @@
 import { useEffect } from 'react'
-import { createPortal } from 'react-dom'
-import { AnimatePresence, motion, useDragControls } from 'framer-motion'
 import type { Instance } from '@/types'
 import { loaderColor } from '@/lib/loader'
-import { SHEET_EXIT } from '@/components/ui/DrawerPanel'
 import { useT } from '@/i18n'
-import { useTabActive } from '@/mobile/KeptTabs'
-
-/** Distance de glissé vers le bas, ou vitesse, au-delà de laquelle le volet se ferme. */
-const CLOSE_OFFSET = 90
-const CLOSE_VELOCITY = 500
+import { SheetFrame } from '@/mobile/ui/SheetFrame'
 
 /**
  * Le choix de l'instance, en volet qui monte du bas de l'écran.
  *
  * C'est la forme attendue sur téléphone pour une liste de choix : elle s'ouvre
- * sous le pouce, se ferme en la glissant vers le bas, en touchant le fond ou
- * par le bouton retour du clavier (Échap). Une ligne fait 60 px de haut, au-delà
- * des 48 px recommandés pour une cible tactile.
+ * sous le pouce, se ferme d'un geste comme toutes les feuilles
+ * (`mobile/ui/SheetFrame`), en touchant le fond ou par le bouton retour du
+ * clavier (Échap). Une ligne fait 60 px de haut, au-delà des 48 px recommandés
+ * pour une cible tactile.
  */
 export function InstanceSheet({ open, instances, selectedId, onSelect, onManage, onClose }: {
   open: boolean
@@ -28,10 +22,6 @@ export function InstanceSheet({ open, instances, selectedId, onSelect, onManage,
   onClose: () => void
 }) {
   const t = useT()
-  // Le volet ne se tire que par sa poignée et son titre : branché sur tout le
-  // panneau, le glissé captait aussi le doigt qui faisait défiler la liste,
-  // et c'est le volet qui descendait au lieu de la liste.
-  const drag = useDragControls()
 
   useEffect(() => {
     if (!open) return
@@ -42,47 +32,16 @@ export function InstanceSheet({ open, instances, selectedId, onSelect, onManage,
 
   // Favoris d'abord, comme partout ailleurs dans le launcher.
   const sorted = [...instances].sort((a, b) => Number(b.favorite) - Number(a.favorite))
-  // Posé dans `body` : masqué avec l'accueil quand on change d'onglet
-  // (mobile/KeptTabs).
-  const tabActive = useTabActive()
 
-  return createPortal(
-    <AnimatePresence>
-      {open && tabActive && (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end" role="dialog" aria-modal="true" aria-label={t('home.mobile.switchInstance')}>
-          <motion.div
-            className="absolute inset-0 bg-black/60"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            onClick={onClose}
-          />
-          <motion.div
-            className="relative flex max-h-[75dvh] flex-col rounded-t-[22px] border-t border-line bg-bg-secondary pb-[max(12px,env(safe-area-inset-bottom))]"
-            initial={{ y: '100%' }}
-            animate={{ y: 0 }}
-            // Fermer est une réponse : plus vif qu'ouvrir.
-            exit={{ y: '100%', transition: SHEET_EXIT }}
-            transition={{ type: 'spring', damping: 32, stiffness: 340 }}
-            drag="y"
-            dragControls={drag}
-            dragListener={false}
-            dragConstraints={{ top: 0, bottom: 0 }}
-            dragElastic={{ top: 0, bottom: 0.6 }}
-            onDragEnd={(_, info) => {
-              if (info.offset.y > CLOSE_OFFSET || info.velocity.y > CLOSE_VELOCITY) onClose()
-            }}
-          >
-            {/* La poignée et le titre : la zone qu'on tire. `touch-none` la
-                laisse entièrement au glissé, le navigateur n'y fait défiler
-                rien. */}
-            <div className="cursor-grab touch-none select-none" onPointerDown={(e) => drag.start(e)}>
-              <div className="flex justify-center pb-1 pt-2.5">
-                <span className="h-1 w-10 rounded-full bg-white/20" />
-              </div>
-              <h2 className="px-5 pb-2 pt-1 text-[15px] font-bold text-txt-primary">{t('home.mobile.switchInstance')}</h2>
-            </div>
+  // Le cadre, la poignée et les gestes sont ceux de toutes les feuilles.
+  return (
+    <SheetFrame
+      open={open}
+      onClose={onClose}
+      label={t('home.mobile.switchInstance')}
+      className="max-h-[75dvh] border-t border-line bg-bg-secondary pb-[max(12px,env(safe-area-inset-bottom))]"
+    >
+            <h2 className="shrink-0 select-none px-5 pb-2 text-[15px] font-bold text-txt-primary">{t('home.mobile.switchInstance')}</h2>
 
             <ul className="flex-1 overflow-y-auto overscroll-contain px-3">
               {sorted.map((inst) => {
@@ -127,11 +86,7 @@ export function InstanceSheet({ open, instances, selectedId, onSelect, onManage,
                 {t('home.mobile.manageInstances')}
               </button>
             </div>
-          </motion.div>
-        </div>
-      )}
-    </AnimatePresence>,
-    document.body,
+    </SheetFrame>
   )
 }
 

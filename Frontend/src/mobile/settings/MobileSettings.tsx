@@ -12,6 +12,7 @@ import { playHalloweenLaunchSound } from '@/components/home/Halloween'
 import { EASE_OUT } from '@/lib/motion'
 import { useT, LANGUAGES } from '@/i18n'
 import type { SharedOptionsStatus } from '@/types'
+import { TouchRange } from '@/mobile/ui/TouchRange'
 
 const CUSTOM_RAM_PRESETS_GO = [9, 10, 12, 16, 24, 32]
 
@@ -566,22 +567,14 @@ function SliderRow({ label, value, min, max, step, current, onChange, ticks }: {
   onChange: (v: number) => void
   ticks?: string[]
 }) {
-  const fill = ((current - min) / (max - min)) * 100
   return (
     <div className="flex flex-col px-4 pt-3">
       <div className="flex items-baseline justify-between gap-3">
         <span className="min-w-0 truncate text-[15px] text-white/90">{label}</span>
         <span className="shrink-0 text-[15px] font-semibold tabular-nums text-[rgb(var(--accent-text))]">{value}</span>
       </div>
-      <input
-        type="range"
-        min={min} max={max} step={step}
-        value={current}
-        onChange={(e) => onChange(Number(e.target.value))}
-        aria-label={label}
-        style={{ '--fill': `${Math.max(0, Math.min(100, fill))}%` } as React.CSSProperties}
-        className="touch-range w-full"
-      />
+      {/* `TouchRange` : faire défiler en passant sur la piste ne change rien. */}
+      <TouchRange min={min} max={max} step={step} value={current} onChange={onChange} label={label} />
       {ticks && (
         <div className="-mt-1 flex justify-between pb-3 text-[13px] text-white/45">
           {ticks.map((tk) => <span key={tk}>{tk}</span>)}

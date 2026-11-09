@@ -16,6 +16,7 @@ import { Flag } from '@/components/ui/Flag'
 import type { SearchCandidate } from './optionSearch'
 import { tIn, useLanguageLoaded, useT } from '@/i18n'
 import type { Instance, McOption } from '@/types'
+import { TouchRange } from '@/mobile/ui/TouchRange'
 
 /**
  * Réglages de l'instance : ceux de Minecraft et ceux de YuyuFrame.
@@ -782,23 +783,21 @@ function MobileOptionRow({ option, value, changed, highlighted, rowRef, onChange
   if (control.type === 'slider') {
     const n = Number(value)
     const current = Number.isFinite(n) ? n : control.min
-    const fill = ((current - control.min) / (control.max - control.min)) * 100
     return (
       <div ref={rowRef} className={`flex flex-col px-4 pt-3 transition-colors duration-300 ${tint}`}>
         <div className="flex items-baseline justify-between gap-3">
           <span className="min-w-0 truncate text-[15px] text-white/90">{label}</span>
           <span className="shrink-0 font-mono text-[15px] tabular-nums text-white/70">{value}{control.suffix ?? ''}</span>
         </div>
-        <input
-          type="range"
+        {/* `TouchRange` : faire défiler la liste en passant le pouce sur un
+            curseur ne change plus sa valeur. */}
+        <TouchRange
           min={control.min}
           max={control.max}
           step={control.step ?? 1}
           value={current}
-          onChange={(e) => onChange(e.target.value)}
-          aria-label={label}
-          style={{ '--fill': `${Math.max(0, Math.min(100, fill))}%` } as React.CSSProperties}
-          className="touch-range w-full"
+          onChange={(v) => onChange(String(v))}
+          label={label}
         />
       </div>
     )

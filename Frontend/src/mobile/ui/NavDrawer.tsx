@@ -1,6 +1,5 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { AnimatePresence, motion } from 'framer-motion'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useStore } from '@/stores/useStore'
 import { useSupportWatch } from '@/stores/useSupportWatch'
@@ -9,11 +8,17 @@ import { SkinFace } from '@/components/ui/SkinFace'
 import { useT } from '@/i18n'
 import { useNavDrawer } from '@/mobile/navDrawer'
 import { MOBILE_TABS, NAV_ICONS } from '@/mobile/MobileNav'
+import { bindTouchDrag, isTouchControl, rubber } from './gesture'
+import { Slide, remaining } from './slide'
 
 /** Distance de glissé vers la gauche, ou vitesse, au-delà de laquelle le menu
  *  se ferme : un coup de doigt rapide suffit, même court. */
 const CLOSE_OFFSET = 80
 const CLOSE_VELOCITY = 500
+/** Entrée 320 ms, sortie 200 ms — fermer est une réponse, plus vive. */
+const OPEN_MS = 320
+const CLOSE_MS = 200
+const SETTLE_MS = 240
 
 /** Les écrans racines du menu : on y arrive par le menu, leur en-tête porte ☰
  *  au lieu d'un retour, et passer de l'un à l'autre est instantané. */
@@ -22,9 +27,6 @@ export const DRAWER_ROOTS = [...MOBILE_TABS, '/features', '/support', '/competit
 /** Noms des offres payantes : des noms propres, non traduits (comme le
  *  badge du PC). L'offre gratuite, elle, se traduit. */
 const PLAN_NAMES: Record<string, string> = { premium: 'Premium', ultimate: 'Ultimate' }
-
-/** Courbe des tiroirs d'iOS (Ionic). */
-const DRAWER_EASE = [0.32, 0.72, 0, 1] as const
 
 interface Entry {
   path: string
@@ -47,10 +49,12 @@ interface Entry {
  * Support et Compétitif, les entrées de la barre du PC qui n'y étaient pas.
  *
  * Mouvement : entrée 320 ms à la courbe des tiroirs d'iOS, sortie 200 ms —
- * fermer est une réponse, plus vive qu'ouvrir. Le panneau suit le doigt vers
- * la gauche et résiste vers la droite (il ne bute pas net). Le défilement
- * vertical de la liste reste au navigateur (`touch-action: pan-y`) : seul un
- * geste horizontal déplace le menu.
+ * fermer est une réponse, plus vive qu'ouvrir — joués sur la carte graphique
+ * (`Slide`). Le panneau suit le doigt vers la gauche et résiste vers la
+ * droite (il ne bute pas net), depuis le panneau comme depuis le fond, et
+ * même pendant son ouverture (`DrawerLayer`, 2026-11-09). Le défilement
+ * vertical de la liste reste au navigateur : seul un geste horizontal
+ * déplace le menu (`gesture.ts`).
  *
  * Pas d'ombre portée sur le panneau (retirée le 2026-11-09) : une grande ombre
  * floue sur un élément qui se déplace est redessinée à chaque image, et sur
@@ -147,32 +151,14 @@ export function NavDrawer() {
     )
   }
 
+  // Monté tant qu'il est ouvert ou en train de se fermer ; démonté à la fin
+  // du retrait, qui lance aussi la navigation en attente.
+  const [mounted, setMounted] = useState(open)
+  useEffect(() => { if (open) setMounted(true) }, [open])
+  if (!mounted) return null
+
   return createPortal(
-    <AnimatePresence onExitComplete={flushGo}>
-      {open && (
-        <div key="drawer" className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={t('home.mobile.menu')}>
-          <motion.div
-            className="absolute inset-0 bg-black/60"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1, transition: { duration: 0.25 } }}
-            exit={{ opacity: 0, transition: { duration: 0.2 } }}
-            onClick={close}
-          />
-          <motion.nav
-            className="absolute inset-y-0 left-0 flex w-[min(84vw,320px)] flex-col overflow-hidden rounded-r-[22px] border-r border-white/[0.08] bg-bg-secondary pb-[max(12px,env(safe-area-inset-bottom))] pt-[max(16px,env(safe-area-inset-top))]"
-            style={{ touchAction: 'pan-y' }}
-            initial={{ x: '-100%' }}
-            animate={{ x: 0, transition: { duration: 0.32, ease: DRAWER_EASE } }}
-            exit={{ x: '-100%', transition: { duration: 0.2, ease: DRAWER_EASE } }}
-            drag="x"
-            dragDirectionLock
-            dragConstraints={{ left: 0, right: 0 }}
-            // Vers la gauche il suit le doigt ; vers la droite il résiste.
-            dragElastic={{ left: 0.6, right: 0.05 }}
-            onDragEnd={(_, info) => {
-              if (info.offset.x < -CLOSE_OFFSET || info.velocity.x < -CLOSE_VELOCITY) close()
-            }}
-          >
+    <DrawerLayer open={open} onClose={close} onClosed={() => { setMounted(false); flushGo() }} label={t('home.mobile.menu')}>
             {/* Le compte, en tête. */}
             <button
               onClick={() => go('/login')}
@@ -239,11 +225,78 @@ export function NavDrawer() {
                 </div>
               )}
             </div>
-          </motion.nav>
-        </div>
-      )}
-    </AnimatePresence>,
+    </DrawerLayer>,
     document.body,
+  )
+}
+
+/**
+ * Le fond et le panneau du menu, et ses gestes : on le balaie vers la gauche
+ * depuis le panneau (hors de la liste qui défile verticalement, le geste est
+ * horizontal) ou depuis le fond assombri, à tout moment — y compris pendant
+ * son ouverture, que le geste reprend là où elle en est (`Slide`). Vers la
+ * droite, il résiste au lieu de buter. Toucher le fond le ferme aussi.
+ */
+function DrawerLayer({ open, onClose, onClosed, label, children }: {
+  open: boolean
+  onClose: () => void
+  onClosed: () => void
+  label: string
+  children: ReactNode
+}) {
+  const panelRef = useRef<HTMLElement>(null)
+  const backdropRef = useRef<HTMLDivElement>(null)
+  const slide = useRef<Slide | null>(null)
+  const width = useRef(0)
+  const latest = useRef({ onClose, onClosed })
+  latest.current = { onClose, onClosed }
+
+  useLayoutEffect(() => {
+    const panel = panelRef.current!
+    width.current = panel.offsetWidth
+    slide.current = new Slide(panel, 'x', backdropRef.current, (v) => 1 + v / Math.max(1, width.current))
+    slide.current.apply(-width.current)
+  }, [])
+
+  useEffect(() => {
+    const s = slide.current!
+    const w = width.current
+    if (open) void s.to(0, OPEN_MS)
+    else void s.to(-w, remaining(s.position(), -w, w, CLOSE_MS)).then((done) => { if (done) latest.current.onClosed() })
+  }, [open])
+
+  useEffect(() => {
+    let base = 0
+    const drag = {
+      axis: 'x' as const,
+      accept: (dx: number, dy: number, target: Element) => Math.abs(dx) > Math.abs(dy) && !isTouchControl(target),
+      onStart: () => { base = slide.current!.stop() },
+      onMove: (d: number) => {
+        const v = base + d
+        slide.current!.apply(v > 0 ? rubber(v, 60) : v)
+      },
+      onEnd: (_d: number, velocity: number) => {
+        const s = slide.current!
+        const pos = s.position()
+        if (velocity < -CLOSE_VELOCITY || (pos < -CLOSE_OFFSET && velocity < CLOSE_VELOCITY / 2)) latest.current.onClose()
+        else void s.to(0, SETTLE_MS)
+      },
+    }
+    const offPanel = bindTouchDrag(panelRef.current!, drag)
+    const offBackdrop = bindTouchDrag(backdropRef.current!, drag)
+    return () => { offPanel(); offBackdrop() }
+  }, [])
+
+  return (
+    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={label}>
+      <div ref={backdropRef} className="absolute inset-0 bg-black/60" style={{ opacity: 0 }} onClick={onClose} />
+      <nav
+        ref={panelRef}
+        className="absolute inset-y-0 left-0 flex w-[min(84vw,320px)] flex-col overflow-hidden rounded-r-[22px] border-r border-white/[0.08] bg-bg-secondary pb-[max(12px,env(safe-area-inset-bottom))] pt-[max(16px,env(safe-area-inset-top))]"
+      >
+        {children}
+      </nav>
+    </div>
   )
 }
 

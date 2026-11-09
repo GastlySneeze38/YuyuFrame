@@ -223,6 +223,14 @@ option {
   background: transparent;
   touch-action: pan-y;
 }
+/* Au doigt, le curseur natif ne reçoit rien : c'est `TouchRange`
+ * (mobile/ui/TouchRange.tsx) qui décide si le geste règle la valeur ou fait
+ * défiler la page. Le natif prenait la valeur dès le premier contact. */
+@media (pointer: coarse) {
+  .touch-range {
+    pointer-events: none;
+  }
+}
 /* La partie remplie suit `--fill` (pourcentage posé par le composant). */
 .touch-range::-webkit-slider-runnable-track {
   height: 4px;

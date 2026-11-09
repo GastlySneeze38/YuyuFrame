@@ -43,6 +43,7 @@ import { ScreenHeader } from '@/mobile/ui/ScreenHeader'
 import { PushedMoreButton } from '@/mobile/ui/PushedScreen'
 import { ActionSheet, SHEET_ICONS } from '@/mobile/ui/ActionSheet'
 import { Segmented as KitSegmented } from '@/mobile/ui/kit'
+import { TouchRange } from '@/mobile/ui/TouchRange'
 
 /**
  * Éditeur de skin 3D.
@@ -1554,16 +1555,13 @@ function SkinEditorScreen({ mobile }: { mobile: boolean }) {
               </div>
               <div className="flex items-center gap-3 px-1">
                 <span className="shrink-0 text-[13px] text-white/55">{t('skinEditor.brush')}</span>
-                <input
-                  type="range"
+                <TouchRange
                   min={MIN_BRUSH}
                   max={MAX_BRUSH}
-                  step={1}
                   value={brush}
-                  aria-label={t('skinEditor.brush')}
-                  onChange={(e) => setBrush(Number(e.target.value))}
-                  className="touch-range min-w-0 flex-1"
-                  style={{ ['--fill' as string]: `${((brush - MIN_BRUSH) / (MAX_BRUSH - MIN_BRUSH)) * 100}%` }}
+                  label={t('skinEditor.brush')}
+                  onChange={setBrush}
+                  className="min-w-0 flex-1"
                 />
                 <span className="w-7 shrink-0 text-right text-[15px] font-semibold tabular-nums text-white">{brush}</span>
               </div>
@@ -2478,16 +2476,26 @@ function JointSlider({
   return (
     <div className="flex items-center gap-3 max-sm:flex-wrap max-sm:gap-y-0">
       <span className="w-[108px] shrink-0 text-[12px] text-txt-secondary max-sm:w-auto max-sm:flex-1 max-sm:text-[15px]">{label}</span>
-      <input
-        type="range"
-        min={-range}
-        max={range}
-        step={1}
-        value={degrees}
-        onChange={(e) => onChange((Number(e.target.value) * Math.PI) / 180)}
-        className={mobile ? 'touch-range order-last basis-full' : 'h-1 min-w-0 flex-1 cursor-pointer appearance-none rounded-full bg-[rgba(255,255,255,0.1)] accent-[rgb(var(--accent))]'}
-        style={mobile ? { ['--fill' as string]: `${((degrees + range) / (2 * range)) * 100}%` } : undefined}
-      />
+      {mobile ? (
+        <TouchRange
+          min={-range}
+          max={range}
+          value={degrees}
+          label={label}
+          onChange={(v) => onChange((v * Math.PI) / 180)}
+          className="order-last basis-full"
+        />
+      ) : (
+        <input
+          type="range"
+          min={-range}
+          max={range}
+          step={1}
+          value={degrees}
+          onChange={(e) => onChange((Number(e.target.value) * Math.PI) / 180)}
+          className="h-1 min-w-0 flex-1 cursor-pointer appearance-none rounded-full bg-[rgba(255,255,255,0.1)] accent-[rgb(var(--accent))]"
+        />
+      )}
       <span className="w-10 shrink-0 text-right font-mono text-[11px] tabular-nums text-txt-muted max-sm:text-[13px]">
         {degrees}°
       </span>

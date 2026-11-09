@@ -9,6 +9,7 @@ import { inTauri } from './lib/platform'
 import { loadLanguage } from './i18n'
 import { useStore } from './stores/useStore'
 import { startAppearance } from './lib/appearance'
+import { installOverscroll } from './lib/overscroll'
 
 /** `reducedMotion` : « user » suit le système (Framer Motion supprime alors
  *  les déplacements et ne garde que les fondus) ; « always » quand le réglage
@@ -43,6 +44,10 @@ function render() {
 // Thème, accent, taille… posés avant le premier rendu : pas d'éclair violet
 // sur fond Nuit au démarrage quand on a choisi autre chose.
 startAppearance()
+
+// L'étirement des zones qui ne peuvent plus défiler : téléphone seulement
+// (pointeur principal au doigt — un PC à écran tactile n'en a pas).
+if (window.matchMedia('(pointer: coarse)').matches) installOverscroll()
 
 // Ouverte dans un navigateur pendant le développement : on simule Tauri avant
 // le premier rendu (voir `dev/browserPreview.ts`). Le `import()` est DANS la
