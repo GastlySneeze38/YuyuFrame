@@ -1,20 +1,17 @@
 /**
  * L'effet élastique du téléphone : quand on tire une zone qui ne peut plus
  * défiler — tout en haut, tout en bas, ou une page qui tient entière à
- * l'écran —, son contenu se tasse d'un côté et s'étire de l'autre, puis
- * revient en place quand on lâche. La WebView ne le fait pas d'elle-même
+ * l'écran —, son contenu suit le doigt en résistant, puis revient en place
+ * quand on lâche. La WebView ne le fait pas d'elle-même
  * (`overscroll-behavior: contain` partout dans l'appli).
  *
- * **Un transfert d'espace, rien ne déborde** (refait le 2026-11-09, la
- * première version agrandissait toute la zone par `scaleY`, ce qui faisait
- * sortir le contenu de son cadre et redessinait la zone à chaque image) :
- * les bords de la zone restent fixes, et chaque élément se décale selon sa
- * place. Tirer vers le bas étire l'espacement en haut et le tasse en bas ;
- * tirer vers le haut, l'inverse. Le décalage d'un élément à la hauteur
- * relative `p` (0 en haut, 1 en bas) vaut `4·A·p·(1−p)` : nul aux deux bords,
- * `A` au milieu ; sa pente est positive au-dessus du milieu (ça s'écarte) et
- * négative en dessous (ça se tasse). `p` est pris au bord de l'élément qui
- * avance (voir `shift`).
+ * **Le « rubber band » d'iOS** : tout le contenu glisse d'un bloc, rien ne se
+ * déforme, et plus on tire, moins il suit (décalage `MAX_PX·(1 − e^(−d/SPAN))`,
+ * qui part à un tiers de la vitesse du doigt et plafonne à 40 px). Ce qui
+ * passe le bord est rogné par la zone elle-même. Troisième version du
+ * 2026-11-09 : un `scaleY` de toute la zone faisait déborder et saccadait ;
+ * puis un « transfert d'espace » laissait immobiles les blocs du bord et
+ * décalait ceux du milieu jusqu'à 26 px, ce qui se lisait comme un bug.
  *
  * **Fluide** : seule la propriété `translate` des éléments change — elle se
  * compose avec leur `transform` sans l'écraser —, posés sur leur propre
@@ -32,10 +29,10 @@
  * - un champ ou `data-no-stretch` l'arrête.
  */
 
-/** Décalage maximal au milieu de la zone, en part de sa hauteur. */
-const MAX = 0.05
+/** Décalage maximal du contenu (px), atteint en tirant franchement. */
+const MAX_PX = 40
 /** Distance de tirage (px) qui donne ~63 % du décalage maximal. */
-const SPAN = 220
+const SPAN = 120
 /** Retour en place au lâcher. */
 const RELEASE_MS = 420
 const RELEASE_EASE = 'cubic-bezier(0.2, 0.9, 0.25, 1)'
@@ -44,9 +41,6 @@ const FLICK_VELOCITY = 500
 
 interface Item {
   el: HTMLElement
-  /** Hauteur relative du haut et du bas de l'élément dans la zone, de 0 à 1. */
-  top: number
-  bottom: number
 }
 
 function scrollerOf(el: Element | null): HTMLElement | null {
@@ -59,40 +53,23 @@ function scrollerOf(el: Element | null): HTMLElement | null {
 }
 
 /**
- * Les éléments à décaler : les enfants de la zone, ou ceux de son unique
- * enfant (une liste enveloppée dans un bloc), sur trois niveaux au plus.
- * Seulement ceux qu'on voit.
+ * Les éléments à décaler : les enfants directs de la zone que l'on voit. Tous
+ * reçoivent le même décalage, donc le contenu bouge d'un bloc.
  */
 function itemsOf(scroller: HTMLElement): Item[] {
-  let parent: HTMLElement = scroller
-  for (let depth = 0; depth < 3; depth++) {
-    const kids = [...parent.children].filter((c): c is HTMLElement => c instanceof HTMLElement && c.getClientRects().length > 0)
-    if (kids.length !== 1) break
-    parent = kids[0]
-  }
   const box = scroller.getBoundingClientRect()
-  const h = Math.max(1, box.height)
   const items: Item[] = []
-  for (const c of parent.children) {
+  for (const c of scroller.children) {
     if (!(c instanceof HTMLElement)) continue
     const r = c.getBoundingClientRect()
     if (r.height === 0 || r.bottom < box.top || r.top > box.bottom) continue
-    const rel = (y: number) => Math.min(1, Math.max(0, (y - box.top) / h))
-    items.push({ el: c, top: rel(r.top), bottom: rel(r.bottom) })
+    items.push({ el: c })
   }
   return items
 }
 
-/**
- * Décalage d'un élément pour un décalage maximal `a` (signé). Il se calcule
- * au bord qui avance vers le bord de la zone — le bas quand on tire vers le
- * bas, le haut quand on tire vers le haut : un élément posé contre ce bord
- * ne bouge pas, donc rien ne sort du cadre (au milieu, il débordait de 7 px).
- */
-const shift = (a: number, it: Item) => {
-  const p = a > 0 ? it.bottom : it.top
-  return 4 * a * p * (1 - p)
-}
+/** Décalage du contenu pour un tirage de `d` px au-delà de la butée (signé). */
+const pull = (d: number) => Math.sign(d) * MAX_PX * (1 - Math.exp(-Math.abs(d) / SPAN))
 
 export function installOverscroll(): void {
   let scroller: HTMLElement | null = null
@@ -108,7 +85,8 @@ export function installOverscroll(): void {
   const paint = () => {
     frame = 0
     if (!items) return
-    for (const it of items) it.el.style.translate = `0 ${shift(amount, it).toFixed(2)}px`
+    const v = `0 ${amount.toFixed(2)}px`
+    for (const it of items) it.el.style.translate = v
   }
   const schedule = () => { if (!frame) frame = requestAnimationFrame(paint) }
 
@@ -143,10 +121,9 @@ export function installOverscroll(): void {
 
   /** Un coup vif contre la butée : un rebond court, sans attendre de tirage. */
   const bounce = (s: HTMLElement, velocity: number) => {
-    const h = s.clientHeight
-    const a = Math.sign(velocity) * Math.min(MAX * h, Math.abs(velocity) * 0.012)
+    // Un rebond discret : 10 à 20 px selon la vivacité du coup.
+    const d = Math.sign(velocity) * Math.min(20, 10 + Math.abs(velocity) * 0.004)
     for (const it of itemsOf(s)) {
-      const d = shift(a, it)
       const anim = it.el.animate(
         [{ translate: '0 0' }, { translate: `0 ${d.toFixed(2)}px`, offset: 0.3 }, { translate: '0 0' }],
         { duration: 380, easing: 'cubic-bezier(0.2, 0.8, 0.3, 1)' },
@@ -197,7 +174,7 @@ export function installOverscroll(): void {
       return
     }
     if (!items) grab(s)
-    amount = Math.sign(over) * MAX * s.clientHeight * (1 - Math.exp(-Math.abs(over) / SPAN))
+    amount = pull(over)
     schedule()
   }, { passive: true })
 
