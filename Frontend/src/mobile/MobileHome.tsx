@@ -21,7 +21,7 @@ import { NAV_ICONS } from './MobileNav'
 import { MenuButton } from './ui/NavDrawer'
 import { InstanceSheet, loaderName } from './home/InstanceSheet'
 import { MobileServerCard } from './home/HomeCards'
-import { useMobileLaunch } from './home/useMobileLaunch'
+import { useLaunchProgress, useMobileLaunch } from './home/useMobileLaunch'
 
 /** Mêmes étoiles que la bannière du PC (pages/Home.tsx). */
 const STARS = Array.from({ length: 40 }, (_, i) => ({
@@ -80,6 +80,13 @@ export default function MobileHome() {
 
   const { steps, cancelling, launch, cancel } = useMobileLaunch()
   const [sheetOpen, setSheetOpen] = useState(false)
+  // « Choisir l'instance » depuis la ligne Jouer du menu : la feuille s'ouvre ici.
+  const pickPending = useLaunchProgress((s) => s.pickPending)
+  useEffect(() => {
+    if (!pickPending) return
+    useLaunchProgress.setState({ pickPending: false })
+    setSheetOpen(true)
+  }, [pickPending])
   const [agentOpen, setAgentOpen] = useState(false)
   const [agentBlocked, setAgentBlocked] = useState(false)
   const [skin, setSkin] = useState<string | null>(null)

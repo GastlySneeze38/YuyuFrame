@@ -10,6 +10,8 @@ import { useNavDrawer } from '@/mobile/navDrawer'
 import { MOBILE_TABS, NAV_ICONS } from '@/mobile/MobileNav'
 import { bindTouchDrag, isTouchControl, rubber } from './gesture'
 import { Slide, remaining } from './slide'
+import { cancelLaunch, launchInstance, requestInstancePick, useLaunchBadge, useLaunchEvents, useLaunchProgress } from '@/mobile/home/useMobileLaunch'
+import { loaderName } from '@/mobile/home/InstanceSheet'
 
 /** Distance de glissé vers la gauche, ou vitesse, au-delà de laquelle le menu
  *  se ferme : un coup de doigt rapide suffit, même court. */
@@ -73,6 +75,9 @@ export function NavDrawer() {
   const yuyuSignedIn = useStore((s) => s.yuyuSignedIn)
   const yuyuUsername = useStore((s) => s.yuyuUsername)
   const yuyuPlan = useStore((s) => s.yuyuPlan)
+  // Les événements du lancement, écoutés ici une fois pour toute
+  // l'appli : ce composant est toujours monté sur téléphone.
+  useLaunchEvents()
   const supportUnread = useSupportWatch((s) => s.unread)
   const crashUpdates = useCrashWatch((s) => s.updates)
 
@@ -189,6 +194,10 @@ export function NavDrawer() {
                 gestion. Pas connecté : se connecter ou créer un compte,
                 directement. */}
             <div className="mx-3 mt-2 shrink-0 border-t border-white/[0.08] pt-3">
+              {/* « Jouer », juste au-dessus du compte, hors de la liste qui
+                  défile (2026-11-10) : en tête du menu, il tombait sous le
+                  pouce à l'ouverture et lançait sans le vouloir. */}
+              <PlayRow go={go} />
               {yuyuSignedIn ? (
                 <button
                   onClick={() => go('/yuyu-account')}
@@ -315,16 +324,100 @@ function DrawerLayer({ open, onClose, onClosed, label, children }: {
 export function MenuButton({ className = '' }: { className?: string }) {
   const t = useT()
   const setOpen = useNavDrawer((s) => s.setOpen)
+  const badge = useLaunchBadge()
+  // Un lancement en cours se lit autour du ☰, sur tous les écrans, sans rien
+  // ajouter à l'en-tête (2026-11-10) : un anneau d'accent qui se remplit, vert
+  // et plein une fois en jeu. Le détail et « Annuler » sont dans le menu.
+  const progress = badge?.kind === 'launching' ? Math.max(0.04, badge.percent / 100) : 1
   return (
     <button
       onClick={() => setOpen(true)}
-      aria-label={t('home.mobile.menu')}
+      aria-label={
+        badge?.kind === 'launching'
+          ? `${t('home.mobile.menu')} · ${t('home.launching')} ${badge.percent}%`
+          : t('home.mobile.menu')
+      }
       aria-haspopup="dialog"
-      className={`press flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/85 active:bg-white/[0.1] ${className}`}
+      className={`press relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/85 active:bg-white/[0.1] ${className}`}
     >
+      <svg
+        viewBox="0 0 44 44"
+        aria-hidden
+        className={`pointer-events-none absolute inset-0 h-full w-full -rotate-90 transition-opacity duration-200 ${badge ? 'opacity-100' : 'opacity-0'}`}
+      >
+        <circle cx="22" cy="22" r="20" fill="none" stroke="rgb(255 255 255 / 0.1)" strokeWidth="2" />
+        <circle
+          cx="22"
+          cy="22"
+          r="20"
+          fill="none"
+          stroke={badge?.kind === 'playing' ? 'rgb(var(--success, 74 222 128))' : 'rgb(var(--accent))'}
+          strokeWidth="2"
+          strokeLinecap="round"
+          pathLength={100}
+          strokeDasharray="100"
+          strokeDashoffset={100 - progress * 100}
+          className="transition-[stroke-dashoffset] duration-300 ease-out"
+        />
+      </svg>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" className="h-6 w-6">
         <path d="M4 7h16M4 12h16M4 17h10" />
       </svg>
     </button>
+  )
+}
+
+/**
+ * « Jouer » en bas du menu, au-dessus du compte YuyuFrame (2026-11-10 ;
+ * d'abord en tête, déplacé le jour même : on lançait sans le vouloir) : l'instance choisie (nom, version,
+ * loader) et ▶. Le ▶ ferme le menu, revient à l'accueil et lance — on y voit
+ * le lancement au bon endroit. Le nom ouvre le choix de l'instance, sur
+ * l'accueil. Pendant un lancement, la ligne montre où il en est et
+ * « Annuler » ; en jeu, elle le dit. Rien sans compte Minecraft ni instance.
+ */
+function PlayRow({ go }: { go: (path: string) => void }) {
+  const t = useT()
+  const username = useStore((s) => s.username)
+  const instance = useStore((s) => s.instances.find((i) => i.id === s.selectedInstanceId) ?? null)
+  const running = useStore((s) => !!instance && s.runningInstances.includes(instance.id))
+  const step = useLaunchProgress((s) => (instance ? s.steps[instance.id] ?? null : null))
+  const cancelling = useLaunchProgress((s) => (instance ? !!s.cancelling[instance.id] : false))
+  if (!username || !instance) return null
+
+  return (
+    <div className="mb-3 flex items-center gap-2 rounded-2xl border border-[rgb(var(--accent)/0.3)] bg-[rgb(var(--accent)/0.12)] p-1.5 pl-3">
+      <button
+        onClick={() => { requestInstancePick(); go('/home') }}
+        className="flex min-w-0 flex-1 flex-col py-1 text-left active:opacity-60"
+      >
+        <span className="truncate text-[15px] font-semibold text-white">{instance.name}</span>
+        <span className="truncate text-[13px] text-white/60">
+          {step
+            ? `${t('home.launching')} ${step.percent}%`
+            : running
+              ? t('friends.sections.inGame')
+              : `${instance.mc_version} · ${loaderName(instance.loader)}`}
+        </span>
+      </button>
+      {step ? (
+        <button
+          onClick={() => void cancelLaunch(instance.id)}
+          disabled={cancelling}
+          className="press h-11 shrink-0 rounded-xl bg-white/[0.08] px-3 text-[14px] font-semibold text-white/85 disabled:opacity-50"
+        >
+          {cancelling ? t('home.cancelling') : t('home.cancel')}
+        </button>
+      ) : running ? (
+        <span aria-hidden className="mr-2 h-2.5 w-2.5 shrink-0 rounded-full bg-success" />
+      ) : (
+        <button
+          onClick={() => { void launchInstance(instance.id); go('/home') }}
+          aria-label={t('home.mobile.play')}
+          className="press flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[rgb(var(--accent))] text-white"
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5"><path d="M8 5.14v13.72a1 1 0 001.52.85l10.6-6.86a1 1 0 000-1.7L9.52 4.29A1 1 0 008 5.14z" /></svg>
+        </button>
+      )}
+    </div>
   )
 }
