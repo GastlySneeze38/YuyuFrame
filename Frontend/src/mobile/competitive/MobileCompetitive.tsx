@@ -103,7 +103,11 @@ export function MobileCompetitive({
 
       {data && (
         <div className="shrink-0 px-4 pb-3">
-          <div className="grid grid-cols-4 gap-1 rounded-2xl bg-white/[0.04] p-1" role="tablist">
+          {/* Largeur selon le texte, pas quatre parts égales : en parts
+              égales « Classement » était coupé pendant que « Duels » et
+              « Stats » gardaient de la place en trop. La place restante se
+              répartit ensuite également (flex-grow 1 sur une base `auto`). */}
+          <div className="flex gap-1 rounded-2xl bg-white/[0.04] p-1" role="tablist">
             {COMPETITIVE_VIEWS.map((v) => (
               <button
                 key={v}
@@ -111,9 +115,7 @@ export function MobileCompetitive({
                 aria-selected={view === v}
                 aria-label={t(`competitive.nav.${v}`)}
                 onClick={() => onView(v)}
-                // Sous 375 px, 13 px et presque sans marge : « Classement »
-                // et « Temporada » tiennent encore sur 360 px.
-                className={`h-10 min-w-0 rounded-xl px-1 text-[14px] font-semibold transition-colors duration-150 max-[374px]:px-0 max-[374px]:text-[13px] ${
+                className={`h-10 min-w-0 flex-[1_1_auto] whitespace-nowrap rounded-xl px-2 text-[14px] font-semibold transition-colors duration-150 max-[374px]:px-1 max-[374px]:text-[13px] ${
                   view === v ? 'bg-[rgb(var(--accent)/0.35)] text-white' : 'text-white/60'
                 }`}
               >

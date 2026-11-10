@@ -192,15 +192,20 @@ export function NavDrawer() {
               {yuyuSignedIn ? (
                 <button
                   onClick={() => go('/yuyu-account')}
-                  className="press flex h-14 w-full items-center gap-3 rounded-2xl px-2.5 text-left active:bg-white/[0.06]"
+                  className="press flex min-h-14 w-full items-center gap-3 rounded-2xl px-2.5 py-2 text-left active:bg-white/[0.06]"
                 >
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent/25 text-[16px] font-black text-white">
                     {(yuyuUsername ?? '?')[0].toUpperCase()}
                   </span>
                   <span className="flex min-w-0 flex-1 flex-col">
                     <span className="truncate text-[15px] font-semibold text-white">{yuyuUsername}</span>
-                    <span className={`truncate text-[13px] ${yuyuPlan === 'free' ? 'text-white/55' : 'font-semibold text-[rgb(var(--accent-text))]'}`}>
-                      {t('account.yuyuAccount')} · {PLAN_NAMES[yuyuPlan] ?? t('account.freePlan')}
+                    {/* « YuyuFrame · offre » et non « Compte YuyuFrame · offre » :
+                        sur 300 px de menu, la phrase longue était coupée. */}
+                    <span className="truncate text-[13px] text-white/55">
+                      YuyuFrame ·{' '}
+                      <span className={yuyuPlan === 'free' ? '' : 'font-semibold text-[rgb(var(--accent-text))]'}>
+                        {PLAN_NAMES[yuyuPlan] ?? t('account.freePlan')}
+                      </span>
                     </span>
                   </span>
                   <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 shrink-0 text-white/35"><path d="M9.3 6.7 10.7 5.3l6.7 6.7-6.7 6.7-1.4-1.4 5.3-5.3z" /></svg>
@@ -208,16 +213,19 @@ export function NavDrawer() {
               ) : (
                 <div className="flex flex-col gap-2.5 px-1">
                   <span className="px-1 text-[13px] text-white/55">{t('account.signedOutTitle')}</span>
-                  <div className="flex gap-2">
+                  {/* L'un sous l'autre : côte à côte, chacun n'avait que 130 px
+                      et « Créer un compte » débordait (plus encore en allemand
+                      ou en polonais). */}
+                  <div className="flex flex-col gap-2">
                     <button
                       onClick={() => go('/yuyu?mode=login')}
-                      className="press h-11 min-w-0 flex-1 rounded-xl bg-[rgb(var(--accent))] px-3 text-[15px] font-bold text-white"
+                      className="press h-11 w-full truncate rounded-xl bg-[rgb(var(--accent))] px-3 text-[15px] font-bold text-white"
                     >
                       {t('account.signIn')}
                     </button>
                     <button
                       onClick={() => go('/yuyu?mode=register')}
-                      className="press h-11 min-w-0 flex-1 rounded-xl bg-white/[0.07] px-3 text-[15px] font-semibold text-white/85"
+                      className="press h-11 w-full truncate rounded-xl bg-white/[0.07] px-3 text-[15px] font-semibold text-white/85"
                     >
                       {t('yuyuLogin.createAccount')}
                     </button>

@@ -36,6 +36,27 @@ const BIG_SCALE = 3.4
 /** Départ, rangement, pseudo — en millisecondes depuis le montage. */
 const PHASE_MS = [320, 2350, 3350]
 
+/**
+ * Le salut coupé en deux lignes à l'espace la plus proche du milieu, quand il
+ * est assez long pour que ça vaille la peine. Coupé dans le texte (un retour à
+ * la ligne forcé) et non par la largeur : le salut grossit pendant son vol, et
+ * une coupure décidée par la largeur ne tomberait pas au même mot en grand et
+ * une fois rangé.
+ */
+function splitInTwo(text: string): string[] {
+  if (text.length < 20) return [text]
+  const middle = text.length / 2
+  let best = -1
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === ' ' && (best < 0 || Math.abs(i - middle) < Math.abs(best - middle))) best = i
+  }
+  return best < 0 ? [text] : [text.slice(0, best), text.slice(best + 1)]
+}
+
+function Lines({ lines }: { lines: string[] }) {
+  return <>{lines.map((l, i) => <span key={i} className="block">{l}</span>)}</>
+}
+
 interface Flight {
   dx: number
   dy: number
@@ -50,6 +71,7 @@ export function WelcomeSequence({
   playIntro,
   onAvatarClick,
   restFontPx = REST_FONT_PX,
+  twoLines = false,
 }: {
   username: string | null
   /** UUID du compte actif. `null` = aucun compte connecté. */
@@ -62,6 +84,8 @@ export function WelcomeSequence({
   /** Taille du salut une fois rangé. 12 px sur PC ; le téléphone passe 13,
    *  le plancher de lecture du texte secondaire. */
   restFontPx?: number
+  /** Téléphone : le salut sur deux lignes, plus lisible une fois rangé. */
+  twoLines?: boolean
 }) {
   const t = useT()
   const [phase, setPhase] = useState(playIntro ? 0 : 3)
@@ -76,7 +100,9 @@ export function WelcomeSequence({
     const board = boardRef.current?.getBoundingClientRect()
     const rest = slotRef.current?.getBoundingClientRect()
     if (!board || !rest || rest.width === 0) return
-    const scale = Math.min(BIG_SCALE, (board.width * 0.7) / rest.width)
+    // Bornée en largeur et en hauteur : sur deux lignes, le salut agrandi
+    // dépasserait d'une bannière basse.
+    const scale = Math.min(BIG_SCALE, (board.width * 0.7) / rest.width, (board.height * 0.6) / rest.height)
     setFlight({
       dx: board.left + board.width / 2 - (rest.left + (rest.width * scale) / 2),
       dy: board.top + board.height / 2 - (rest.top + (rest.height * scale) / 2),
@@ -84,7 +110,8 @@ export function WelcomeSequence({
     })
   }, [])
 
-  useLayoutEffect(measure, [measure, greeting, username])
+  useLayoutEffect(measure, [measure, greeting, username, twoLines])
+  const lines = twoLines ? splitInTwo(greeting) : [greeting]
 
   useEffect(() => {
     if (!boardRef.current || typeof ResizeObserver === 'undefined') return
@@ -175,8 +202,12 @@ export function WelcomeSequence({
         {/* Le salut voyage hors du flux, au-dessus d'une doublure invisible
             qui garde sa place. Sans elle, sortir le texte du flux ferait
             s'effondrer la colonne. */}
-        <div ref={slotRef} className="relative whitespace-nowrap font-medium leading-[1.25]" style={{ fontSize: restFontPx }}>
-          <span className="invisible">{greeting}</span>
+        <div
+          ref={slotRef}
+          className={`relative whitespace-nowrap text-center leading-[1.25] ${twoLines ? 'font-semibold' : 'font-medium'}`}
+          style={{ fontSize: restFontPx }}
+        >
+          <span className="invisible block"><Lines lines={lines} /></span>
           <motion.div
             // Un seul élément du début à la fin : c'est lui qui voyage.
             //
@@ -194,8 +225,10 @@ export function WelcomeSequence({
               y: big ? f.dy : phase === 0 ? f.dy - 340 : 0,
               fontSize: big ? `${(restFontPx * f.scale).toFixed(1)}px` : `${restFontPx}px`,
               opacity: phase === 0 ? 0 : 1,
-              color: parked ? 'rgba(233,231,245,0.6)' : 'rgb(255,255,255)',
-              fontWeight: parked ? 500 : 800,
+              // Sur téléphone, rangé, il reste un vrai texte (85 %) et non
+              // une mention à peine visible.
+              color: parked ? (twoLines ? 'rgba(240,238,250,0.85)' : 'rgba(233,231,245,0.6)') : 'rgb(255,255,255)',
+              fontWeight: parked ? (twoLines ? 600 : 500) : 800,
             }}
             transition={
               phase === 0
@@ -205,9 +238,9 @@ export function WelcomeSequence({
                   : { duration: 1.1, ease: [0.16, 1, 0.3, 1], color: { duration: 0.8 } }
             }
             style={{ transformOrigin: 'left top' }}
-            className="absolute left-0 top-0 whitespace-nowrap leading-[1.25] tracking-[-0.01em]"
+            className="absolute left-0 top-0 whitespace-nowrap text-center leading-[1.25] tracking-[-0.01em]"
           >
-            {greeting}
+            <Lines lines={lines} />
           </motion.div>
         </div>
       </div>

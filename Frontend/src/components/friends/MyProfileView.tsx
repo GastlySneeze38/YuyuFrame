@@ -114,7 +114,7 @@ export function MyProfileView() {
                   onClick={() => void saveStatus()}
                   disabled={savingStatus}
                   title={t('friends.custom.save')}
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-accent text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
+                  className="no-touch-floor flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-accent text-white transition-colors hover:bg-accent-hover disabled:opacity-50 max-sm:h-9 max-sm:w-9"
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
                     <path d="M5 12.5l4.5 4.5L19 7.5" />

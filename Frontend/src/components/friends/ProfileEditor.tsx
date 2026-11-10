@@ -6,7 +6,8 @@ import { SkinFace } from '@/components/ui/SkinFace'
 import { SHOWCASE_MAX, STATUS_COLORS, sameShowcase } from '@/lib/friends'
 import { demoMyShowcase } from '@/lib/friendsDemo'
 import { useContentAsset } from '@/lib/contentAsset'
-import { ACCENTS, BANNER_IDS, BANNERS } from '@/lib/profileBanners'
+import { ACCENTS, BANNER_IDS, BANNERS, bannerBackground } from '@/lib/profileBanners'
+import { useIsMobile } from '@/mobile/useIsMobile'
 import { isDemo } from '@/stores/useDevFlags'
 import { showError, showNotice } from '@/stores/useErrorToast'
 import { useT } from '@/i18n'
@@ -85,6 +86,7 @@ export function ProfileEditor({
   const edit = (patch: Partial<MyProfile>) => setDraft((d) => ({ ...d, ...patch }))
   const main = draft.accounts.find((a) => a.uuid === draft.main_mc_uuid) ?? draft.accounts[0] ?? null
   const color = STATUS_COLORS[status]
+  const mobile = useIsMobile()
 
   async function save() {
     if (isDemo()) {
@@ -103,6 +105,93 @@ export function ProfileEditor({
     } finally {
       setSaving(false)
     }
+  }
+
+  /** La partie choisie, la même sur PC et sur téléphone. */
+  const partPanel = (
+    <>
+      {part === 'banner' && (
+        <BannerLibrary library={library} value={draft.banner} color={color} visibility={draft.banner_visibility} onPick={(banner) => edit({ banner })} onVisibility={(v) => edit({ banner_visibility: v })} />
+      )}
+      {part === 'accent' && <AccentLibrary library={library} value={draft.accent} onPick={(accent) => edit({ accent })} />}
+      {part === 'bio' && (
+        <>
+          <PartHeader title={t('friends.me.parts.bio')} visibility={draft.bio_visibility} onVisibility={(v) => edit({ bio_visibility: v })} />
+          {draft.bio_hidden && <p className="mb-2 text-[12px] text-warning">{t('friends.me.bioHidden')}</p>}
+          <textarea
+            value={draft.bio ?? ''}
+            rows={5}
+            maxLength={BIO_MAX}
+            onChange={(e) => edit({ bio: e.target.value.split('\n').slice(0, BIO_LINES).join('\n') })}
+            placeholder={t('friends.me.bioPlaceholder')}
+            className="w-full resize-none rounded-xl border border-line bg-black/30 px-3 py-2.5 text-[14px] leading-relaxed outline-none placeholder:text-txt-muted focus:border-accent/60"
+          />
+          <p className="mt-1 text-right text-[11px] tabular-nums text-txt-muted">
+            {(draft.bio ?? '').length} / {BIO_MAX}
+          </p>
+        </>
+      )}
+      {part === 'showcase' && (
+        <ShowcaseLibrary
+          library={library}
+          value={draft.showcase}
+          visibility={draft.showcase_visibility}
+          onChange={(showcase) => edit({ showcase })}
+          onVisibility={(v) => edit({ showcase_visibility: v })}
+        />
+      )}
+      {part === 'account' && (
+        <>
+          <PartHeader title={t('friends.me.parts.account')} />
+          {draft.accounts.length === 0 ? (
+            <p className="text-[12.5px] text-txt-muted">{t('friends.me.noAccounts')}</p>
+          ) : (
+            <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+              {draft.accounts.map((a) => {
+                const on = (draft.main_mc_uuid ?? draft.accounts[0]?.uuid) === a.uuid
+                return (
+                  <button
+                    key={a.uuid}
+                    onClick={() => edit({ main_mc_uuid: a.uuid })}
+                    className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors ${
+                      on ? 'border-accent/60 bg-accent/15' : 'border-line hover:border-line-strong'
+                    }`}
+                  >
+                    <SkinFace dataUri={`https://mc-heads.net/skin/${a.uuid}`} size={32} className="rounded-[7px]" />
+                    <span className="flex-1 truncate text-[13.5px] font-semibold">{a.name}</span>
+                    <span className={`h-4 w-4 rounded-full border-2 ${on ? 'border-accent bg-accent' : 'border-line-strong'}`} />
+                  </button>
+                )
+              })}
+            </div>
+          )}
+          <p className="mt-3 text-[12px] text-txt-muted">{t('friends.me.accountHint')}</p>
+        </>
+      )}
+    </>
+  )
+
+  if (mobile) {
+    return createPortal(
+      <ModalShell title={t('friends.me.editTitle')} onClose={onClose} cardStyle={{ padding: 0, height: '100%' }}>
+        <MobileLayout
+          part={part}
+          onPart={setPart}
+          draft={draft}
+          color={color}
+          status={status}
+          username={username}
+          mainUuid={main?.uuid ?? null}
+          dirty={dirty}
+          saving={saving}
+          onSave={() => void save()}
+          onCancel={onClose}
+        >
+          {partPanel}
+        </MobileLayout>
+      </ModalShell>,
+      document.body,
+    )
   }
 
   return createPortal(
@@ -150,64 +239,7 @@ export function ProfileEditor({
             part === 'bio' || part === 'account' ? 'overflow-y-auto' : 'overflow-hidden'
           }`}
         >
-          {part === 'banner' && (
-            <BannerLibrary library={library} value={draft.banner} color={color} visibility={draft.banner_visibility} onPick={(banner) => edit({ banner })} onVisibility={(v) => edit({ banner_visibility: v })} />
-          )}
-          {part === 'accent' && <AccentLibrary library={library} value={draft.accent} onPick={(accent) => edit({ accent })} />}
-          {part === 'bio' && (
-            <>
-              <PartHeader title={t('friends.me.parts.bio')} visibility={draft.bio_visibility} onVisibility={(v) => edit({ bio_visibility: v })} />
-              {draft.bio_hidden && <p className="mb-2 text-[12px] text-warning">{t('friends.me.bioHidden')}</p>}
-              <textarea
-                value={draft.bio ?? ''}
-                rows={5}
-                maxLength={BIO_MAX}
-                onChange={(e) => edit({ bio: e.target.value.split('\n').slice(0, BIO_LINES).join('\n') })}
-                placeholder={t('friends.me.bioPlaceholder')}
-                className="w-full resize-none rounded-xl border border-line bg-black/30 px-3 py-2.5 text-[14px] leading-relaxed outline-none placeholder:text-txt-muted focus:border-accent/60"
-              />
-              <p className="mt-1 text-right text-[11px] tabular-nums text-txt-muted">
-                {(draft.bio ?? '').length} / {BIO_MAX}
-              </p>
-            </>
-          )}
-          {part === 'showcase' && (
-            <ShowcaseLibrary
-              library={library}
-              value={draft.showcase}
-              visibility={draft.showcase_visibility}
-              onChange={(showcase) => edit({ showcase })}
-              onVisibility={(v) => edit({ showcase_visibility: v })}
-            />
-          )}
-          {part === 'account' && (
-            <>
-              <PartHeader title={t('friends.me.parts.account')} />
-              {draft.accounts.length === 0 ? (
-                <p className="text-[12.5px] text-txt-muted">{t('friends.me.noAccounts')}</p>
-              ) : (
-                <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
-                  {draft.accounts.map((a) => {
-                    const on = (draft.main_mc_uuid ?? draft.accounts[0]?.uuid) === a.uuid
-                    return (
-                      <button
-                        key={a.uuid}
-                        onClick={() => edit({ main_mc_uuid: a.uuid })}
-                        className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors ${
-                          on ? 'border-accent/60 bg-accent/15' : 'border-line hover:border-line-strong'
-                        }`}
-                      >
-                        <SkinFace dataUri={`https://mc-heads.net/skin/${a.uuid}`} size={32} className="rounded-[7px]" />
-                        <span className="flex-1 truncate text-[13.5px] font-semibold">{a.name}</span>
-                        <span className={`h-4 w-4 rounded-full border-2 ${on ? 'border-accent bg-accent' : 'border-line-strong'}`} />
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
-              <p className="mt-3 text-[12px] text-txt-muted">{t('friends.me.accountHint')}</p>
-            </>
-          )}
+          {partPanel}
         </div>
 
         {/* La fiche telle que la verront mes amis, en direct. */}
@@ -247,6 +279,83 @@ export function ProfileEditor({
       </div>
     </ModalShell>,
     document.body,
+  )
+}
+
+/**
+ * La modification sur téléphone : les trois colonnes du PC n'y tiennent pas.
+ * En haut, un aperçu réduit (bannière, couleur, tête, pseudo) qui suit chaque
+ * choix ; dessous, les parties en pastilles qu'on fait défiler de côté ; puis
+ * la partie choisie, qui prend toute la hauteur restante ; Annuler et
+ * Enregistrer en bas, à portée du pouce.
+ */
+function MobileLayout({ part, onPart, draft, color, status, username, mainUuid, dirty, saving, onSave, onCancel, children }: {
+  part: Part
+  onPart: (p: Part) => void
+  draft: MyProfile
+  color: string
+  status: MyStatusKind
+  username: string
+  mainUuid: string | null
+  dirty: boolean
+  saving: boolean
+  onSave: () => void
+  onCancel: () => void
+  children: React.ReactNode
+}) {
+  const t = useT()
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      {/* L'aperçu réduit. */}
+      <div className="mx-4 shrink-0 overflow-hidden rounded-2xl border border-line bg-[rgb(var(--bg-card))]">
+        <div className="relative h-14" style={{ background: bannerBackground(draft.banner, color) }}>
+          {draft.accent && <div className="absolute inset-x-0 bottom-0 h-[3px]" style={{ background: draft.accent }} />}
+        </div>
+        <div className="flex items-end gap-3 px-3 pb-3">
+          <div className="-mt-7 shrink-0 rounded-[30%] bg-[rgb(var(--bg-card))] p-1">
+            <FriendAvatar skin={`https://mc-heads.net/skin/${mainUuid ?? 'MHF_Steve'}`} state={status} size={48} />
+          </div>
+          <p className="min-w-0 flex-1 truncate pb-0.5 text-[17px] font-black">{username}</p>
+        </div>
+      </div>
+
+      {/* Les parties, en pastilles. */}
+      <div className="-mb-1 flex shrink-0 gap-2 overflow-x-auto px-4 pb-1 pt-3 [scrollbar-width:none]">
+        {PARTS.map((p) => (
+          <button
+            key={p}
+            onClick={() => onPart(p)}
+            className={`press no-touch-floor flex h-11 shrink-0 items-center gap-2 rounded-full border pl-1.5 pr-4 transition-colors duration-150 ${
+              part === p ? 'border-accent/60 bg-accent/25 text-white' : 'border-line bg-white/[0.04] text-white/70'
+            }`}
+          >
+            <span className="flex scale-[0.85]">
+              <PartSummary part={p} draft={draft} color={color} />
+            </span>
+            <span className="whitespace-nowrap text-[15px] font-semibold">{t(`friends.me.parts.${p}`)}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* La partie choisie : les bibliothèques font défiler leur liste, la
+          bio et le compte défilent en entier. */}
+      <div className={`flex min-h-0 flex-1 flex-col px-4 pt-4 ${part === 'bio' || part === 'account' ? 'overflow-y-auto' : 'overflow-hidden'}`}>
+        {children}
+      </div>
+
+      <div className="flex shrink-0 gap-2 border-t border-line-soft px-4 pt-3">
+        <button onClick={onCancel} disabled={saving} className="press h-12 flex-1 rounded-2xl bg-white/[0.07] text-[16px] font-semibold text-white/85">
+          {t('common.cancel')}
+        </button>
+        <button
+          onClick={onSave}
+          disabled={saving || !dirty}
+          className="press h-12 flex-1 rounded-2xl bg-accent text-[16px] font-bold text-white disabled:opacity-40"
+        >
+          {t('friends.custom.save')}
+        </button>
+      </div>
+    </div>
   )
 }
 

@@ -304,7 +304,8 @@ export default function MobileHome() {
             greeting={username && welcome.phrase ? welcome.phrase : t('home.welcomeNew')}
             playIntro={welcome.playIntro}
             onAvatarClick={() => navigate('/login')}
-            restFontPx={13}
+            restFontPx={16}
+            twoLines
           />
           {halloween && <HalloweenGround />}
         </div>
