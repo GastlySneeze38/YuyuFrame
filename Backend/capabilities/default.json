@@ -5,7 +5,6 @@
   "windows": ["main", "minecraft-console", "mc-console-*"],
   "permissions": [
     "core:default",
-    "shell:allow-open",
     "opener:allow-open-url",
     "opener:allow-default-urls",
     "core:window:allow-close",

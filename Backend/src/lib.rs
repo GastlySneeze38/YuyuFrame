@@ -78,8 +78,11 @@ pub fn run() {
         .plugin(account::minecraft::sign_in_page::android::init());
     builder
         .plugin(tauri_plugin_deep_link::init())
-        .plugin(tauri_plugin_shell::init())
         // Les liens externes, sur PC comme sur téléphone (`lib/openExternal.ts`).
+        // Plus de tauri-plugin-shell (2026-11-10) : il n'était plus appelé,
+        // mais son script interceptait tout clic sur un lien `_blank` pour
+        // l'ouvrir par `shell|open`, qui échoue sur Android — aucun lien
+        // d'un ticket ou d'une note de version ne s'y ouvrait.
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_dialog::init())

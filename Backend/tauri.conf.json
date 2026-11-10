@@ -49,9 +49,6 @@
     }
   },
   "plugins": {
-    "shell": {
-      "open": true
-    },
     "deep-link": {
       "desktop": {
         "schemes": ["yuyuframe"]

@@ -45,6 +45,14 @@ interface SupportWatchStore {
    *  comparaison avec lui qui fait la nouvelle. Sans mémoire, tout serait
    *  neuf à chaque démarrage et la modale reviendrait sans fin. */
   known: Record<string, string>
+  /** Le ticket dont la conversation est à l'écran (`pages/Support.tsx`), ou
+   *  `null`. Pour lui, une nouvelle n'en est pas une : ni modale ni pastille,
+   *  on le relit à la place (`viewedChanged`). */
+  viewing: string | null
+  setViewing: (id: string | null) => void
+  /** Monte quand le ticket à l'écran a bougé côté serveur : l'écran relit
+   *  la conversation (nouveaux messages en direct, lecture marquée). */
+  viewedChanged: number
   refresh: () => Promise<void>
   /** À la déconnexion : la pastille ne parle plus de personne. */
   clear: () => void
@@ -56,6 +64,9 @@ export const useSupportWatch = create<SupportWatchStore>()(
       unread: 0,
       tickets: null,
       known: {},
+      viewing: null,
+      setViewing: (id) => set({ viewing: id }),
+      viewedChanged: 0,
 
       setTickets: (update) => {
         const tickets = update(get().tickets ?? [])
@@ -77,11 +88,21 @@ export const useSupportWatch = create<SupportWatchStore>()(
         const known = get().known
         const seenBefore = Object.keys(known).length > 0
         const next: Record<string, string> = {}
+        const viewing = get().viewing
+        let viewedMoved = false
 
         for (const ticket of tickets) {
           const signature = `${ticket.status}|${ticket.updated_at}`
           next[ticket.id] = signature
           const before = known[ticket.id]
+          // La conversation est déjà à l'écran : on la lit en ce moment. Pas
+          // de modale ni de pastille — l'écran la relit, ce qui marque aussi
+          // la lecture côté serveur.
+          if (ticket.id === viewing) {
+            if (before !== signature || ticket.has_unread) viewedMoved = true
+            ticket.has_unread = false
+            continue
+          }
           // Premier passage : on enregistre sans rien annoncer. Sinon, une
           // installation sur un deuxième PC ouvrirait une modale par ticket
           // de tout l'historique.
@@ -117,10 +138,15 @@ export const useSupportWatch = create<SupportWatchStore>()(
           })
         }
 
-        set({ tickets, unread: tickets.filter((t) => t.has_unread).length, known: next })
+        set({
+          tickets,
+          unread: tickets.filter((t) => t.has_unread).length,
+          known: next,
+          ...(viewedMoved ? { viewedChanged: get().viewedChanged + 1 } : {}),
+        })
       },
 
-      clear: () => set({ unread: 0, tickets: null }),
+      clear: () => set({ unread: 0, tickets: null, viewing: null }),
     }),
     {
       name: 'yuyu-support-watch',

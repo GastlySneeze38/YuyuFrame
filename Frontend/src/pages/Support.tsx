@@ -19,12 +19,15 @@ import { SUPPORT_DRAFT_KEY } from '@/lib/supportDraft'
 import { CrashPanel } from '@/components/support/CrashPanel'
 import { PatchNotesPanel } from '@/components/support/PatchNotesPanel'
 import { SNAP, listItemVariants, listVariants } from '@/lib/motion'
+import { politeInterval } from '@/lib/netQueue'
+import Markdown, { LAUNCHER_THEME } from '@/components/ui/Markdown'
 import { useT } from '@/i18n'
 import { useIsMobile } from '@/mobile/useIsMobile'
 import { MenuButton } from '@/mobile/ui/NavDrawer'
 import { PushedMoreButton, PushedScreen } from '@/mobile/ui/PushedScreen'
 import { ActionSheet, SHEET_ICONS } from '@/mobile/ui/ActionSheet'
-import type { SupportCategory, TicketDetail, TicketStatus, TicketSummary } from '@/types/support'
+import type { SupportCategory, TicketDetail, TicketMessage, TicketStatus, TicketSummary } from '@/types/support'
+import { formatDate } from '@/lib/format'
 import { SwipeTabs } from '@/mobile/ui/SwipeTabs'
 
 /**
@@ -141,6 +144,35 @@ export default function Support() {
     () => (code: string) => categories.find((c) => c.code === code)?.label ?? code,
     [categories],
   )
+
+  // La conversation à l'écran est déclarée à la veille du support : une
+  // réponse qui y arrive n'ouvre ni modale ni pastille, elle s'affiche ici.
+  // Sur PC, elle n'est visible que dans l'onglet « Mes demandes ».
+  const openId = mobile || tab === 'requests' ? openTicket?.id ?? null : null
+  useEffect(() => {
+    useSupportWatch.getState().setViewing(openId)
+    return () => useSupportWatch.getState().setViewing(null)
+  }, [openId])
+
+  // Elle a bougé côté serveur (flux en direct `support_changed`, ou la
+  // relecture ci-dessous) : on la relit sans squelette — les nouveaux
+  // messages apparaissent, et la lecture est marquée.
+  const viewedChanged = useSupportWatch((s) => s.viewedChanged)
+  useEffect(() => {
+    if (!viewedChanged || !openId) return
+    api.support
+      .get(openId)
+      .then((detail) => setOpenTicket((current) => (current?.id === detail.id ? detail : current)))
+      .catch((e) => console.warn('[support] conversation non relue', e))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewedChanged])
+
+  // Filet du flux en direct, seulement pendant qu'une conversation est
+  // ouverte : on attend une réponse, une minute serait trop long.
+  useEffect(() => {
+    if (!openId) return
+    return politeInterval(() => void useSupportWatch.getState().refresh(), 15_000)
+  }, [openId])
 
   async function open(id: string) {
     setLoadingDetail(true)
@@ -602,6 +634,80 @@ function StatusPill({ status }: { status: TicketStatus }) {
 
 // ── Conversation ─────────────────────────────────────────────────────────────
 
+/** Le corps d'un message rendu par le moteur des notes de version
+ *  (`components/ui/Markdown.tsx`, le Markdown de Discord, où l'équipe répond
+ *  aussi) : gras, listes, citations, code, et liens — nus ou [texte](…) —
+ *  ouverts dans le navigateur par l'écouteur commun (`installExternalLinks`).
+ *  Le texte se sélectionne (`selectable`), le reste de l'appli ne l'étant pas. */
+const MESSAGE_THEME = {
+  ...LAUNCHER_THEME,
+  p: 'text-[13px] text-txt-primary leading-relaxed max-sm:text-[15px]',
+  ul: 'list-disc pl-5 text-[13px] text-txt-primary flex flex-col gap-1 max-sm:text-[15px]',
+  quote: 'border-l-2 border-accent/50 pl-3 text-[13px] text-txt-secondary max-sm:text-[15px]',
+  link: 'text-[rgb(var(--accent-text))] underline decoration-[rgb(var(--accent-text)/0.4)] underline-offset-2 hover:decoration-[rgb(var(--accent-text))]',
+}
+
+function MessageBody({ body }: { body: string }) {
+  return (
+    <div className="selectable min-w-0 cursor-text [overflow-wrap:anywhere]">
+      <Markdown text={body} theme={MESSAGE_THEME} />
+    </div>
+  )
+}
+
+/** Des messages qui se suivent, du même auteur, écrits dans la même minute :
+ *  une seule bulle, une seule heure — sinon trois lignes envoyées d'affilée
+ *  font trois bulles et trois fois la même heure. */
+interface MessageGroup {
+  key: string
+  author_kind: TicketMessage['author_kind']
+  author_name: string
+  created_at: string
+  messages: TicketMessage[]
+}
+
+function groupMessages(messages: TicketMessage[]): MessageGroup[] {
+  const groups: MessageGroup[] = []
+  for (const m of messages) {
+    const last = groups[groups.length - 1]
+    const minute = Math.floor(new Date(m.created_at).getTime() / 60_000)
+    if (
+      last &&
+      last.author_kind === m.author_kind &&
+      last.author_name === m.author_name &&
+      Math.floor(new Date(last.created_at).getTime() / 60_000) === minute
+    ) {
+      last.messages.push(m)
+    } else {
+      groups.push({ key: m.id, author_kind: m.author_kind, author_name: m.author_name, created_at: m.created_at, messages: [m] })
+    }
+  }
+  return groups
+}
+
+/** L'heure sous une bulle, du côté de son auteur. Aujourd'hui : l'heure
+ *  seule ; un autre jour : la date devant (l'année seulement si elle diffère). */
+function MessageTime({ at, mine }: { at: string; mine: boolean }) {
+  const language = useStore((s) => s.language)
+  const locale = language === 'sga' ? 'fr' : language
+  const date = new Date(at)
+  const now = new Date()
+  const time = formatDate(date, locale, { hour: '2-digit', minute: '2-digit' })
+  const sameDay = date.toDateString() === now.toDateString()
+  const day = sameDay
+    ? null
+    : formatDate(date, locale, date.getFullYear() === now.getFullYear() ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: 'numeric' })
+  return (
+    <time
+      dateTime={at}
+      title={formatDate(date, locale, { dateStyle: 'full', timeStyle: 'short' })}
+      className={`px-1.5 text-[10.5px] tabular-nums text-txt-muted max-sm:text-[12px] max-sm:text-white/40 ${mine ? 'self-end' : 'self-start'}`}
+    >
+      {day ? `${day} · ${time}` : time}
+    </time>
+  )
+}
+
 function Conversation({
   ticket,
   loading,
@@ -671,22 +777,25 @@ function Conversation({
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-6 py-5">
-        {ticket.messages.map((m, i) => (
+        {groupMessages(ticket.messages).map((g, i) => (
           <motion.div
-            key={m.id}
+            key={g.key}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: Math.min(i * 0.03, 0.2) }}
-            className={`max-w-[80%] rounded-2xl border px-4 py-3 ${
-              m.author_kind === 'staff'
-                ? 'border-accent/25 bg-accent/8'
-                : 'self-end border-line bg-surface-1'
-            }`}
+            className={`flex max-w-[80%] flex-col gap-1.5 ${g.author_kind === 'staff' ? 'self-start' : 'self-end'}`}
           >
-            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-txt-muted">
-              {m.author_kind === 'staff' ? t('support.team') : m.author_name}
-            </p>
-            <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-txt-primary">{m.body}</p>
+            <div
+              className={`flex flex-col gap-2 rounded-2xl border px-4 py-3 ${
+                g.author_kind === 'staff' ? 'border-accent/25 bg-accent/8' : 'border-line bg-surface-1'
+              }`}
+            >
+              <p className="-mb-1 text-[10px] font-semibold uppercase tracking-wider text-txt-muted">
+                {g.author_kind === 'staff' ? t('support.team') : g.author_name}
+              </p>
+              {g.messages.map((m) => <MessageBody key={m.id} body={m.body} />)}
+            </div>
+            <MessageTime at={g.created_at} mine={g.author_kind !== 'staff'} />
           </motion.div>
         ))}
       </div>
@@ -802,17 +911,19 @@ function MobileConversation({ ticket, loading, labelOf, onReplied, onBack, onDel
         ) : shown && (
           <div className="flex flex-col gap-3">
             <div className="flex justify-center"><StatusPill status={shown.status} /></div>
-            {shown.messages.map((m) => (
-              <div
-                key={m.id}
-                className={`max-w-[85%] rounded-2xl border px-4 py-3 ${
-                  m.author_kind === 'staff' ? 'self-start rounded-bl-md border-accent/25 bg-accent/10' : 'self-end rounded-br-md border-white/[0.08] bg-white/[0.06]'
-                }`}
-              >
-                <p className="mb-1 text-[12px] font-semibold uppercase tracking-wide text-white/50">
-                  {m.author_kind === 'staff' ? t('support.team') : m.author_name}
-                </p>
-                <p className="selectable whitespace-pre-wrap text-[15px] leading-relaxed text-white">{m.body}</p>
+            {groupMessages(shown.messages).map((g) => (
+              <div key={g.key} className={`flex max-w-[85%] flex-col gap-1.5 ${g.author_kind === 'staff' ? 'self-start' : 'self-end'}`}>
+                <div
+                  className={`flex flex-col gap-2 rounded-2xl border px-4 py-3 ${
+                    g.author_kind === 'staff' ? 'rounded-bl-md border-accent/25 bg-accent/10' : 'rounded-br-md border-white/[0.08] bg-white/[0.06]'
+                  }`}
+                >
+                  <p className="-mb-1 text-[12px] font-semibold uppercase tracking-wide text-white/50">
+                    {g.author_kind === 'staff' ? t('support.team') : g.author_name}
+                  </p>
+                  {g.messages.map((m) => <MessageBody key={m.id} body={m.body} />)}
+                </div>
+                <MessageTime at={g.created_at} mine={g.author_kind !== 'staff'} />
               </div>
             ))}
             <p className="pt-1 text-center text-[13px] leading-relaxed text-white/45">{t('support.attachmentsNote')}</p>
