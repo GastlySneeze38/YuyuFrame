@@ -12,6 +12,9 @@ import { api } from '@/api/client'
 import { showError } from '@/stores/useErrorToast'
 import { useT } from '@/i18n'
 import type { LookupResult } from '@/types/friends'
+import type { Instance } from '@/types'
+import { withoutDefaultPort } from '@/lib/serverAddress'
+import { compareVersions, probeServer, probeVersion, type ServerProbeInfo, type VersionVerdict } from '@/lib/serverProbe'
 
 export interface JoinRequest {
   ip: string
@@ -35,10 +38,22 @@ export interface JoinRequest {
 
 /**
  * « Rejoindre un ami » : une invitation acceptée, un message privé Discord,
- * ou le bouton « Rejoindre » du statut Discord de quelqu'un. Propose les
- * instances de la même version et du même loader et lance le jeu directement
- * sur le serveur ; sans instance compatible, en crée une (même version, même
- * loader, mémoire par défaut) et la lance.
+ * ou le bouton « Rejoindre » du statut Discord de quelqu'un. Lance le jeu
+ * directement sur le serveur ; sans instance qui convienne, en crée une
+ * (version de l'ami, mémoire par défaut) et la lance.
+ *
+ * **Quelles instances (2026-11-10)** : on ne s'arrête plus à la version et au
+ * loader de l'ami. Le serveur est interrogé (`lib/serverProbe.ts` →
+ * `servers/probe.rs`) : exige-t-il Forge ou NeoForge (sinon n'importe quel
+ * loader entre — on joue en Fabric sur un serveur vanilla), puis, une
+ * version à la fois, accepte-t-il chacune des versions de mes instances.
+ * Chaque instance porte son verdict au fil des réponses : celle de l'ami
+ * d'abord, puis acceptées, en cours, « à essayer » (le serveur ne dit rien),
+ * et refusées, grisées. Serveur injoignable : comme avant, même version et
+ * même loader. Le catalogue, lui, connaît déjà les versions (`versions`).
+ *
+ * L'adresse est rejointe **sans le port par défaut** (`withoutDefaultPort`) :
+ * écrit, il empêcherait le jeu de suivre l'enregistrement SRV du serveur.
  *
  * Venu du statut Discord d'un joueur qui n'est pas encore un ami, la fenêtre
  * reste ouverte une fois le jeu lancé pour proposer de l'ajouter d'un clic.
@@ -57,10 +72,70 @@ export function JoinServerModal({ request, onClose }: { request: JoinRequest; on
   const [step, setStep] = useState<'pick' | 'host'>('pick')
   const [busy, setBusy] = useState(false)
 
-  const versions = request.versions?.length ? request.versions : [request.mcVersion]
-  const compatible = instances.filter(
-    (i) => versions.includes(i.mc_version) && (request.anyLoader || i.loader === request.loader),
-  )
+  const ip = withoutDefaultPort(request.ip)
+  // Le catalogue connaît déjà les versions du serveur ; sinon on le lui demande.
+  const probing = !request.versions?.length
+  const [info, setInfo] = useState<ServerProbeInfo | null>(null)
+  const [verdicts, setVerdicts] = useState<Record<string, VersionVerdict>>({})
+
+  // Le loader exigé : celui du serveur s'il est moddé, aucun s'il ne l'est
+  // pas, celui de l'ami tant qu'on ne peut pas savoir (serveur injoignable).
+  const required = !probing
+    ? request.anyLoader
+      ? null
+      : request.loader
+    : info === null || !info.reachable
+      ? request.loader
+      : info.modded === null
+        ? null
+        : info.modded === 'modded'
+          ? request.loader
+          : info.modded
+  const offline = probing && info !== null && !info.reachable
+  const candidates = instances.filter((i) => {
+    if (required && i.loader !== required) return false
+    if (!probing) return request.versions!.includes(i.mc_version)
+    // Injoignable : seulement la version de l'ami, comme avant.
+    if (offline) return i.mc_version === request.mcVersion
+    return true
+  })
+
+  useEffect(() => {
+    if (!probing) return
+    let alive = true
+    void probeServer(ip).then((found) => {
+      if (!alive) return
+      setInfo(found)
+      if (!found.reachable || found.echoes_all) return
+      // Les versions de mes instances, la plus récente d'abord : une question
+      // à la fois, chaque réponse affichée dès qu'elle arrive.
+      const own = [...new Set(instances.map((i) => i.mc_version))]
+        .filter((v) => v !== request.mcVersion)
+        .sort((a, b) => compareVersions(b, a))
+      for (const v of own) void probeVersion(ip, v).then((r) => alive && setVerdicts((p) => ({ ...p, [v]: r })))
+    })
+    return () => {
+      alive = false
+    }
+    // Les instances sont lues à l'ouverture : une instance créée ici est de la version de l'ami.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ip, probing, request.mcVersion])
+
+  function statusOf(inst: Instance): RowStatus {
+    if (!probing) return 'ok'
+    if (inst.mc_version === request.mcVersion) return 'same'
+    if (info === null) return 'checking'
+    if (info.echoes_all) return 'unsure'
+    if (!(inst.mc_version in verdicts)) return 'checking'
+    const v = verdicts[inst.mc_version]
+    return v === true ? 'ok' : v === false ? 'refused' : 'unsure'
+  }
+
+  const rows = candidates
+    .map((inst) => ({ inst, status: statusOf(inst) }))
+    .sort((a, b) => ORDER[a.status] - ORDER[b.status] || compareVersions(b.inst.mc_version, a.inst.mc_version))
+  const joinable = rows.filter((r) => r.status !== 'refused')
+  const checking = rows.some((r) => r.status === 'checking')
 
   // Le joueur derrière le lien, s'il n'est pas déjà un ami : lu tout de suite,
   // montré une fois la partie lancée.
@@ -76,10 +151,10 @@ export function JoinServerModal({ request, onClose }: { request: JoinRequest; on
 
   const launch = async (instanceId: string) => {
     // Rangé avant le lancement : le jeu relit sa liste en démarrant.
-    if (request.remember) await api.servers.add(instanceId, request.remember, request.ip).catch(() => false)
+    if (request.remember) await api.servers.add(instanceId, request.remember, ip).catch(() => false)
     // Le choix « avec / sans le client intégré » suit l'instance, quel que
     // soit l'endroit d'où on la lance (voir AgentModal).
-    await api.launch.start(instanceId, avoidBetaDependencies, showConsole, request.ip, isAgentEnabled(instanceId))
+    await api.launch.start(instanceId, avoidBetaDependencies, showConsole, ip, isAgentEnabled(instanceId))
     setSelectedInstanceId(instanceId)
     setInstanceRunning(instanceId, true)
     navigate('/home')
@@ -100,7 +175,7 @@ export function JoinServerModal({ request, onClose }: { request: JoinRequest; on
   const handleCreate = async () => {
     setCreating(true)
     try {
-      const loader = request.anyLoader ? 'vanilla' : request.loader
+      const loader = required ?? 'vanilla'
       const loaderName = loader === 'vanilla' ? 'Vanilla' : loader.charAt(0).toUpperCase() + loader.slice(1)
       const name = request.remember ?? t('friends.join.newName', { loader: loaderName, version: request.mcVersion })
       const instance = await api.instances.create(name, request.mcVersion, loader, defaultRam)
@@ -153,14 +228,20 @@ export function JoinServerModal({ request, onClose }: { request: JoinRequest; on
     )
   }
 
-  const loaderLabel = request.anyLoader ? 'vanilla' : request.loader
+  const loaderLabel = required ?? 'vanilla'
+  const nothing = joinable.length === 0 && !checking
   return (
     <ModalShell title={request.inviter ? t('friends.join.titleFrom', { name: request.inviter }) : t('friends.join.title')} onClose={onClose} maxWidth="max-w-lg">
       <p className="-mt-2 text-[12px] text-[rgba(255,255,255,0.4)] max-sm:mt-0 max-sm:text-[13px] max-sm:text-white/55">
-        {t('friends.join.target', { version: request.mcVersion, loader: loaderLabel, server: request.ip })}
+        {t('friends.join.target', { version: request.mcVersion, loader: request.anyLoader ? 'vanilla' : request.loader, server: ip })}
       </p>
+      {probing && info?.modded && (
+        <p className="mt-1 text-[12px] text-warning max-sm:text-[13px]">
+          {t('friends.join.modded', { loader: loaderName(info.modded === 'modded' ? request.loader : info.modded) })}
+        </p>
+      )}
 
-      {compatible.length === 0 ? (
+      {nothing ? (
         <div className="mt-4 flex flex-col items-center gap-3 rounded-2xl border border-line bg-surface-1 px-5 py-6 text-center">
           <p className="text-[14px] font-bold text-white">{t('friends.join.none')}</p>
           <p className="max-w-sm text-[12px] leading-relaxed text-txt-muted max-sm:text-[15px]">{t('friends.join.noneHint', { version: request.mcVersion, loader: loaderLabel })}</p>
@@ -173,39 +254,73 @@ export function JoinServerModal({ request, onClose }: { request: JoinRequest; on
           </button>
         </div>
       ) : (
-        <>
-          <p className="mb-2 mt-3 text-[12px] text-txt-muted max-sm:text-[13px]">{t('friends.join.pick')}</p>
-          {/* Sur téléphone : lignes de 64 px, texte 15/13 ; la feuille défile d'elle-même. */}
-          <div className="flex max-h-[50vh] flex-col gap-2 overflow-y-auto pr-1 max-sm:max-h-none max-sm:overflow-visible max-sm:pr-0 max-sm:[&_p]:text-[15px] max-sm:[&_span]:text-[13px] max-sm:[&>button]:min-h-[64px]">
-            {compatible.map((inst) => (
+        <p className="mb-2 mt-3 text-[12px] text-txt-muted max-sm:text-[13px]">{checking ? t('friends.join.checkingHint') : t('friends.join.pick')}</p>
+      )}
+
+      {rows.length > 0 && (
+        // Sur téléphone : lignes de 64 px, texte 15/13 ; la feuille défile d'elle-même.
+        <div
+          className={`flex max-h-[50vh] flex-col gap-2 overflow-y-auto pr-1 max-sm:max-h-none max-sm:overflow-visible max-sm:pr-0 max-sm:[&_p]:text-[15px] max-sm:[&>button]:min-h-[64px] ${nothing ? 'mt-3' : ''}`}
+        >
+          {rows.map(({ inst, status }) => {
+            const refused = status === 'refused'
+            return (
               <button
                 key={inst.id}
                 onClick={() => void handleJoin(inst.id)}
-                disabled={launchingId !== null}
-                className="flex items-center justify-between gap-3 rounded-2xl border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.03)] px-4 py-3 text-left transition-all duration-150 hover:border-[rgb(var(--accent)/0.4)] hover:bg-[rgb(var(--accent)/0.12)] disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={launchingId !== null || refused}
+                title={refused ? t('friends.join.refusedTitle', { version: inst.mc_version }) : status === 'unsure' ? t('friends.join.unsureTitle') : undefined}
+                className="flex items-center justify-between gap-3 rounded-2xl border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.03)] px-4 py-3 text-left transition-colors duration-150 hover:border-[rgb(var(--accent)/0.4)] hover:bg-[rgb(var(--accent)/0.12)] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-[rgba(255,255,255,0.07)] disabled:hover:bg-[rgba(255,255,255,0.03)]"
               >
                 <div className="flex min-w-0 flex-col gap-1">
                   <p className="truncate text-[13px] font-bold text-white">{inst.name}</p>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] font-semibold" style={{ color: loaderColor(inst.loader) }}>{inst.loader}</span>
-                    <span className="text-[10px] text-[rgba(255,255,255,0.2)]">·</span>
-                    <span className="text-[10px] text-[rgba(255,255,255,0.3)]">{inst.mc_version}</span>
+                  <div className="flex items-center gap-1.5 text-[10px] max-sm:text-[12.5px]">
+                    <span className="font-semibold" style={{ color: loaderColor(inst.loader) }}>{inst.loader}</span>
+                    <span className="text-[rgba(255,255,255,0.2)]">·</span>
+                    <span className="text-[rgba(255,255,255,0.3)]">{inst.mc_version}</span>
+                    {status === 'same' && (
+                      <span className="rounded-full bg-[#3ba55d]/15 px-1.5 py-px font-semibold text-[#5fd38d]">{t('friends.join.sameVersion')}</span>
+                    )}
                     {showsRam(inst) && (
                       <>
-                        <span className="text-[10px] text-[rgba(255,255,255,0.2)]">·</span>
-                        <span className="text-[10px] text-[rgba(255,255,255,0.3)]">{formatRam(inst.ram_mb)}</span>
+                        <span className="text-[rgba(255,255,255,0.2)]">·</span>
+                        <span className="text-[rgba(255,255,255,0.3)]">{formatRam(inst.ram_mb)}</span>
                       </>
                     )}
                   </div>
                 </div>
-                <span className="flex-shrink-0 rounded-xl bg-[rgb(var(--accent))] px-3 py-1.5 text-[11px] font-semibold text-white">
-                  {launchingId === inst.id ? t('friends.join.launching') : t('friends.join.join')}
-                </span>
+                <RowChip status={status} launching={launchingId === inst.id} />
               </button>
-            ))}
-          </div>
-        </>
+            )
+          })}
+        </div>
       )}
     </ModalShell>
   )
+}
+
+type RowStatus = 'same' | 'ok' | 'checking' | 'unsure' | 'refused'
+const ORDER: Record<RowStatus, number> = { same: 0, ok: 1, checking: 2, unsure: 3, refused: 4 }
+
+function loaderName(loader: string): string {
+  return loader === 'neoforge' ? 'NeoForge' : loader.charAt(0).toUpperCase() + loader.slice(1)
+}
+
+/** Ce qu'on peut faire de la ligne : rejoindre, attendre la réponse du
+ *  serveur (on peut quand même rejoindre), essayer, ou rien. */
+function RowChip({ status, launching }: { status: RowStatus; launching: boolean }) {
+  const t = useT()
+  const base = 'flex flex-shrink-0 items-center gap-1.5 rounded-xl px-3 py-1.5 text-[11px] font-semibold max-sm:text-[13px]'
+  if (launching) return <span className={`${base} bg-[rgb(var(--accent))] text-white`}>{t('friends.join.launching')}</span>
+  if (status === 'refused') return <span className={`${base} bg-white/[0.05] text-txt-muted`}>{t('friends.join.refused')}</span>
+  if (status === 'checking')
+    return (
+      <span className={`${base} bg-white/[0.06] text-txt-secondary`}>
+        <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/20 border-t-white/70" />
+        {t('friends.join.checking')}
+      </span>
+    )
+  if (status === 'unsure')
+    return <span className={`${base} border border-[rgb(var(--accent)/0.5)] text-[rgb(var(--accent-text))]`}>{t('friends.join.unsure')}</span>
+  return <span className={`${base} bg-[rgb(var(--accent))] text-white`}>{t('friends.join.join')}</span>
 }

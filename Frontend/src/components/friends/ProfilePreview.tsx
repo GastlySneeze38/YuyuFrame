@@ -20,6 +20,7 @@ export function useMyPresence(): FriendPresence {
   const server = useMyServer(running.length > 0)
   const instance = running.length > 0 ? instances.find((i) => i.id === running[0]) ?? null : null
 
+  const shows = !!settings?.server_visibility && settings.server_visibility !== 'nobody'
   const shown = me?.shown ?? me?.status ?? 'online'
   const state = shown === 'invisible' ? 'offline' : shown
   const custom = me?.custom ?? null
@@ -32,10 +33,10 @@ export function useMyPresence(): FriendPresence {
             mc_version: instance.mc_version,
             loader: instance.loader,
             duel: null,
-            server: settings?.server_visibility && settings.server_visibility !== 'nobody' ? server : null,
+            server: shows ? server : null,
           }
         : { kind: 'launcher' }
-  return { state, custom, activity, last_seen: null }
+  return { state, custom, activity, last_seen: null, server_hidden: activity?.kind === 'game' && !shows && server !== null }
 }
 
 /** Mes comptes Minecraft, le principal en tête (comme les reçoivent mes amis). */

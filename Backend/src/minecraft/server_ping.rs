@@ -439,6 +439,27 @@ fn srv_records(name: &str) -> Vec<(String, u16, u16)> {
 /// `address` — `host` ou `host:port`. Sans port écrit, l'enregistrement SRV
 /// du domaine est suivi s'il existe (comme le fait le jeu), sinon 25565.
 pub async fn ping_server(address: &str) -> Result<ServerPingInfo, String> {
+    let (json, latency_ms) = status(address, -1, true).await?;
+
+    Ok(ServerPingInfo {
+        motd: json.get("description").map(flatten_motd).unwrap_or_default(),
+        motd_spans: json.get("description").map(motd_spans).unwrap_or_default(),
+        players_online: json.pointer("/players/online").and_then(|v| v.as_i64()).unwrap_or(0),
+        players_max: json.pointer("/players/max").and_then(|v| v.as_i64()).unwrap_or(0),
+        version_name: json.pointer("/version/name").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        favicon: json.get("favicon").and_then(|v| v.as_str()).map(|s| s.to_string()),
+        latency_ms,
+    })
+}
+
+/// La réponse de statut brute d'un serveur, en se présentant comme un client
+/// de la version réseau `protocol` (`-1` = « peu importe »), et la latence
+/// mesurée par un aller-retour ping/pong quand `measure` (sinon 0).
+///
+/// Se présenter avec une version précise sert à `servers::probe` : un proxy
+/// (Velocity, BungeeCord) ou ViaVersion répond avec **notre** numéro quand il
+/// l'accepte, avec le sien sinon.
+pub async fn status(address: &str, protocol: i32, measure: bool) -> Result<(Value, u64), String> {
     let (mut host, mut port, explicit) = parse_address(address);
     if !explicit && host.parse::<std::net::IpAddr>().is_err() {
         if let Some((target, srv_port)) = resolve_srv(&host).await {
@@ -453,11 +474,9 @@ pub async fn ping_server(address: &str) -> Result<ServerPingInfo, String> {
         .map_err(|e| format!("Connexion échouée : {}", e))?;
 
     let result: Result<(Value, u64), std::io::Error> = timeout(IO_TIMEOUT, async {
-        // Handshake — protocol_version -1 ("peu importe") accepté par tous
-        // les serveurs modernes pour une simple requête de statut.
         let mut handshake = Vec::new();
         write_varint(&mut handshake, 0x00);
-        write_varint(&mut handshake, -1);
+        write_varint(&mut handshake, protocol);
         write_string(&mut handshake, &host);
         handshake.extend_from_slice(&port.to_be_bytes());
         write_varint(&mut handshake, 1);
@@ -476,6 +495,9 @@ pub async fn ping_server(address: &str) -> Result<ServerPingInfo, String> {
             .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "réponse status tronquée"))?;
         let json: Value = serde_json::from_slice(json_bytes)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?;
+        if !measure {
+            return Ok((json, 0));
+        }
 
         // Ping/Pong — mesure la latence réelle (round-trip), séparément du
         // temps pris par le status request qui inclut le poids du JSON/favicon.
@@ -492,15 +514,5 @@ pub async fn ping_server(address: &str) -> Result<ServerPingInfo, String> {
     .await
     .map_err(|_| "Le serveur n'a pas répondu à temps".to_string())?;
 
-    let (json, latency_ms) = result.map_err(|e| format!("Erreur de protocole : {}", e))?;
-
-    Ok(ServerPingInfo {
-        motd: json.get("description").map(flatten_motd).unwrap_or_default(),
-        motd_spans: json.get("description").map(motd_spans).unwrap_or_default(),
-        players_online: json.pointer("/players/online").and_then(|v| v.as_i64()).unwrap_or(0),
-        players_max: json.pointer("/players/max").and_then(|v| v.as_i64()).unwrap_or(0),
-        version_name: json.pointer("/version/name").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        favicon: json.get("favicon").and_then(|v| v.as_str()).map(|s| s.to_string()),
-        latency_ms,
-    })
+    result.map_err(|e| format!("Erreur de protocole : {}", e))
 }

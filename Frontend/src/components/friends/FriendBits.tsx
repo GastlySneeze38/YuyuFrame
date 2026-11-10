@@ -4,6 +4,7 @@ import { STATUS_COLORS, liveCustom, relativeTime } from '@/lib/friends'
 import { useStore } from '@/stores/useStore'
 import { useT } from '@/i18n'
 import type { Activity, FriendPresence, PresenceState } from '@/types/friends'
+import { withoutDefaultPort } from '@/lib/serverAddress'
 
 /** La tête d'un joueur et sa pastille de statut, posée sur le coin. */
 export function FriendAvatar({ skin, state, size = 36, ring = 'rgb(var(--bg-card))' }: {
@@ -70,7 +71,7 @@ export function PresenceLine({ presence, showServer = false }: { presence: Frien
         {activity.duel ? <SwordsIcon className="h-3 w-3 shrink-0" /> : <PadIcon className="h-3 w-3 shrink-0" />}
         <span className="truncate">
           {activityText(activity, t)}
-          {showServer && activity.server ? ` · ${activity.server}` : ''}
+          {showServer && activity.server ? ` · ${withoutDefaultPort(activity.server)}` : ''}
         </span>
       </span>
     )

@@ -867,6 +867,12 @@ export const api = {
     remove: (instanceId: string, address: string) => invoke<boolean>('server_remove', { instanceId, address }),
     edit: (instanceId: string, address: string, newName: string, newAddress: string, resourcePacks: ResourcePacks = 'prompt') =>
       invoke<boolean>('server_edit', { instanceId, address, newName, newAddress, resourcePacks }),
+    /** Le serveur répond-il, exige-t-il des mods, renvoie-t-il n'importe quel
+     *  numéro de version (`servers/probe.rs`) ? */
+    probe: (address: string) =>
+      invoke<{ reachable: boolean; echoes_all: boolean; modded: string | null; server_version: string }>('server_probe', { address }),
+    /** Le serveur accepte-t-il cette version du jeu ? `null` = on ne sait pas. */
+    probeVersion: (address: string, version: string) => invoke<boolean | null>('server_probe_version', { address, version }),
   },
 
   /** Avis déposés depuis le launcher, sous le compte YuyuFrame. Un seul par

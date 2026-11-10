@@ -15,6 +15,7 @@ const FLOATING_SECONDS = 15
 import { useT } from '@/i18n'
 import type { ReceivedInvite } from '@/types/friends'
 import { FriendAvatar } from './FriendBits'
+import { withoutDefaultPort } from '@/lib/serverAddress'
 
 /**
  * Les invitations d'un ami à le rejoindre sur son serveur (`invited` du flux).
@@ -102,8 +103,8 @@ export function InviteCard({ invite, now, onAccept, onClose, autoHide }: {
         <FriendAvatar skin={friend ? skinOf(friend) : 'https://mc-heads.net/skin/MHF_Steve'} state={null} size={38} />
         <div className="flex min-w-0 flex-1 flex-col">
           <span className="truncate text-[13px] font-bold">{t('friends.invites.from', { name: invite.username })}</span>
-          <span className="truncate text-[11.5px] text-txt-secondary" title={invite.server}>
-            {invite.server}
+          <span className="truncate text-[11.5px] text-txt-secondary" title={withoutDefaultPort(invite.server)}>
+            {withoutDefaultPort(invite.server)}
           </span>
           <span className="truncate text-[10.5px] text-txt-muted">
             Minecraft {invite.mc_version} · <span style={{ color: loaderColor(invite.loader) }}>{invite.loader}</span> · {t('friends.invites.expires', { minutes })}

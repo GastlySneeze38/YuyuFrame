@@ -151,6 +151,8 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         crate::servers::catalog::server_catalog_categories,
         crate::servers::catalog::server_catalog_modpack,
         crate::servers::mine::servers_all,
+        crate::servers::probe::server_probe,
+        crate::servers::probe::server_probe_version,
         crate::servers::mine::server_add,
         crate::servers::mine::server_remove,
         crate::servers::mine::server_edit,

@@ -137,6 +137,8 @@ export function demoFriends(): FriendList {
         custom: { text: 'Speedrun en cours', expires_at: null },
         activity: { kind: 'game', mc_version: '26.1.2', loader: 'vanilla', duel: null, server: null },
         last_seen: null,
+        // En solo : sur aucun serveur, rien de caché.
+        server_hidden: false,
       }),
       friend(3, 'Grian', '5f8eb73b25be4c5aa50fd27d65e30ca0', {
         state: 'online',

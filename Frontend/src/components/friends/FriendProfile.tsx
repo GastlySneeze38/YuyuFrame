@@ -21,6 +21,7 @@ import { ProfileLayout } from './ProfileLayout'
 import { ProfileShowcase } from './ProfileShowcase'
 import { DiscordMark } from './FriendSettingsView'
 import { RemoteImage } from '@/components/ui/RemoteImage'
+import { withoutDefaultPort } from '@/lib/serverAddress'
 
 /**
  * Le profil d'un ami, dans le panneau.
@@ -126,8 +127,16 @@ export function ProfileDetails({ presence, showcase, discord, accounts, since, f
   const navigate = useNavigate()
   const p = presence
   const game = p.activity?.kind === 'game' ? p.activity : null
+  // Sans serveur dans sa partie : il me le cache, ou il n'est sur aucun
+  // (solo, menu). Seul le serveur le sait (`server_hidden`) ; une API plus
+  // ancienne ne le dit pas, on retombe alors sur « caché ».
+  const serverHidden = !!game && !game.server && (p.server_hidden ?? true)
   // Rejoindre : il faut qu'il soit sur un serveur ET qu'il me le montre.
-  const joinBlocked = !game ? t('friends.profile.joinNotPlaying') : !game.server ? t('friends.profile.joinHidden') : null
+  const joinBlocked = !game
+    ? t('friends.profile.joinNotPlaying')
+    : !game.server
+      ? t(serverHidden ? 'friends.profile.joinHidden' : 'friends.profile.joinNoServer')
+      : null
 
   return (
     <div inert={friendId === null} className="contents">
@@ -154,7 +163,7 @@ export function ProfileDetails({ presence, showcase, discord, accounts, since, f
 
       {/* En jeu sans me montrer son serveur : on dit pourquoi « Rejoindre » est
           grisé, et on peut le lui demander (il reçoit une notification). */}
-      {actions && game && !game.server && <AskServer friendId={friendId} />}
+      {actions && serverHidden && <AskServer friendId={friendId} />}
 
       {/* Je joue et il est là : l'inviter sur mon serveur. */}
       {friendId && onPublicServer && p.state !== 'offline' && <InviteFriend friendId={friendId} />}
@@ -182,7 +191,7 @@ export function ProfileDetails({ presence, showcase, discord, accounts, since, f
                 <span className="truncate text-[13px] font-bold text-[#5fd38d]">{activityText(game, t)}</span>
                 {/* En duel, la version passe ici (la ligne du dessus dit le duel). */}
                 <span className="truncate text-[11.5px] text-txt-muted">
-                  {[game.duel ? t('friends.activity.game', { version: game.mc_version }) : null, game.server ?? t('friends.profile.noServer')]
+                  {[game.duel ? t('friends.activity.game', { version: game.mc_version }) : null, game.server ? withoutDefaultPort(game.server) : t(serverHidden ? 'friends.profile.noServer' : 'friends.profile.notOnServer')]
                     .filter(Boolean)
                     .join(' · ')}
                 </span>

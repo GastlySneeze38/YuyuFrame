@@ -33,6 +33,9 @@ export interface FriendPresence {
   activity: Activity | null
   /** Hors ligne seulement (ISO). */
   last_seen: string | null
+  /** Sur un serveur public qu'il ne me montre pas (`server` est alors vide).
+   *  Absent d'une API plus ancienne. */
+  server_hidden?: boolean
 }
 
 /** Un compte Minecraft Microsoft prouvé ; le principal représente le joueur. */
