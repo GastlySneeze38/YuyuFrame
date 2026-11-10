@@ -45,6 +45,7 @@ export function MobileCompetitive({
   standing,
   modeDuels,
   duels,
+  onMoreDuels,
   servers,
   activeServer,
   onServer,
@@ -66,6 +67,8 @@ export function MobileCompetitive({
   modeDuels: DuelRow[] | null
   /** Les duels du mode, filtrés sur le serveur choisi (historique). */
   duels: DuelRow[] | null
+  /** La page suivante de l'historique ; absent quand tout est là. */
+  onMoreDuels?: () => void
   servers: ServerStats[] | null
   activeServer: string | null
   onServer: (server: string | null) => void
@@ -154,6 +157,8 @@ export function MobileCompetitive({
             <MobileHistory
               standing={standing}
               duels={duels}
+              onMore={onMoreDuels}
+              resetKey={`${mode}|${activeServer}`}
               servers={servers}
               activeServer={activeServer}
               onServer={onServer}

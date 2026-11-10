@@ -21,7 +21,7 @@ import { useT } from '@/i18n'
 import { useIsMobile } from '@/mobile/useIsMobile'
 import { MobileCompetitive } from '@/mobile/competitive/MobileCompetitive'
 import { playerSkinSrc, preloadHeads } from '@/lib/heads'
-import { cachedCompetitive, fetchMyCompetitive, fromSummary } from '@/lib/competitiveLoad'
+import { cachedCompetitive, fetchMyCompetitive, fromSummary, loadMoreDuels } from '@/lib/competitiveLoad'
 import {
   MODES,
   bestMode,
@@ -176,6 +176,21 @@ export default function Competitive() {
     [modeDuels, activeServer],
   )
 
+  // La suite de l'historique du mode, page par page, quand on arrive au bout
+  // de ce qui est chargé (`useProgressiveList`). Pas chez un ami ni en démo :
+  // leur historique arrive en une fois.
+  const fetchingMore = useRef(false)
+  const canLoadMore = !!data && !friendId && !demo && !!uuid && data.historyNext?.[shown] != null
+  const onMoreDuels = useCallback(() => {
+    if (!data || !uuid || fetchingMore.current) return
+    fetchingMore.current = true
+    loadMoreDuels(uuid, data, shown)
+      .then((next) => setStatus((s) => (s.kind === 'ready' ? { kind: 'ready', data: next } : s)))
+      .catch(() => {})
+      .finally(() => { fetchingMore.current = false })
+  }, [data, uuid, shown])
+  const moreDuels = canLoadMore ? onMoreDuels : undefined
+
   const mobile = useIsMobile()
   const title = friendId ? t('friends.profile.competitiveTitle', { name: friendName ?? '…' }) : t('competitive.title')
   const statusCard = (
@@ -198,6 +213,7 @@ export default function Competitive() {
         standing={standing}
         modeDuels={modeDuels}
         duels={duels}
+        onMoreDuels={moreDuels}
         servers={servers}
         activeServer={activeServer}
         onServer={setServer}
@@ -295,7 +311,7 @@ export default function Competitive() {
                   <div className="grid h-full grid-cols-[230px_minmax(0,1fr)_164px] gap-3 lg:grid-cols-[270px_minmax(0,1fr)_174px] lg:gap-4">
                     {/* Le rang mène aux statistiques. */}
                     <RankCard standing={standing} onOpen={() => setView('stats')} />
-                    <DuelHistory duels={duels} />
+                    <DuelHistory duels={duels} onMore={moreDuels} resetKey={`${shown}|${activeServer}`} />
                     {/* Un écart plus large que celui de la grille : les icônes
                         n'ont pas de cadre, elles se colleraient à l'historique. */}
                     <div className="h-full min-h-0 pl-3 lg:pl-6">

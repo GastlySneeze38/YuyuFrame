@@ -439,6 +439,9 @@ export interface CompetitiveData {
   /** Le classement entre amis ; absent ou `null` : pas de route. */
   friendsLeaderboard?: Partial<Record<ModeKey, LeaderboardRow[]>> | null
   duels: DuelRow[] | null
+  /** Le curseur de la page suivante de l'historique, par mode (`next` du
+   *  serveur) ; absent ou `null` : rien de plus à charger. */
+  historyNext?: Partial<Record<ModeKey, number | null>>
   stats: Partial<Record<ModeKey, ModeStats>> | null
   challenges: Challenge[] | null
   /** De la plus récente à la plus ancienne ; `null` : pas encore de route. */

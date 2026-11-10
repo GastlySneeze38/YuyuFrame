@@ -15,6 +15,7 @@ import { FriendProfile } from './FriendProfile'
 import { InviteList } from './InviteCards'
 import { FriendSettingsView } from './FriendSettingsView'
 import { prefetchFriendProfile } from '@/lib/friendProfileCache'
+import { useProgressiveList } from '@/hooks/useProgressiveList'
 import { MyStatusBar } from './MyStatusBar'
 import { MyProfileView } from './MyProfileView'
 import { AccountMenu } from '@/components/account/AccountMenu'
@@ -131,8 +132,10 @@ function PanelBody({ onClose }: { onClose: () => void }) {
 
   return (
     <>
-      {/* En-tête */}
-      <div className="flex shrink-0 items-center gap-1 border-b border-line-soft px-3 py-2.5">
+      {/* En-tête. Au-dessus du corps (`z-30`) : le menu du compte s'ouvre
+          vers le bas, et l'en-tête d'une fiche (`z-20` dans `ProfileLayout`)
+          passait par-dessus. */}
+      <div className="relative z-30 flex shrink-0 items-center gap-1 border-b border-line-soft px-3 py-2.5">
         {view.kind !== 'list' ? (
           <IconButton label={t('friends.back')} onClick={() => setView({ kind: 'list' })} path="M15 6l-6 6 6 6" />
         ) : (
@@ -248,23 +251,17 @@ function PanelBody({ onClose }: { onClose: () => void }) {
               <>
             {groups.inGame.length > 0 && (
               <Group label={t('friends.sections.inGame')} count={groups.inGame.length} collapsed={collapsed.has('inGame')} onToggle={() => toggle('inGame')}>
-                {groups.inGame.map((f) => (
-                  <FriendRow key={f.id} friend={f} onOpen={() => setView({ kind: 'profile', userId: f.id })} />
-                ))}
+                <FriendRows friends={groups.inGame} onOpen={(f) => setView({ kind: 'profile', userId: f.id })} />
               </Group>
             )}
             {groups.online.length > 0 && (
               <Group label={t('friends.sections.online')} count={groups.online.length} collapsed={collapsed.has('online')} onToggle={() => toggle('online')}>
-                {groups.online.map((f) => (
-                  <FriendRow key={f.id} friend={f} onOpen={() => setView({ kind: 'profile', userId: f.id })} />
-                ))}
+                <FriendRows friends={groups.online} onOpen={(f) => setView({ kind: 'profile', userId: f.id })} />
               </Group>
             )}
             {groups.offline.length > 0 && (
               <Group label={t('friends.sections.offline')} count={groups.offline.length} collapsed={collapsed.has('offline')} onToggle={() => toggle('offline')}>
-                {groups.offline.map((f) => (
-                  <FriendRow key={f.id} friend={f} onOpen={() => setView({ kind: 'profile', userId: f.id })} dim />
-                ))}
+                <FriendRows friends={groups.offline} onOpen={(f) => setView({ kind: 'profile', userId: f.id })} dim />
               </Group>
             )}
             {list.friends.length === 0 && <Empty text={t('friends.empty')} action={t('friends.add')} onAction={goAdd} />}
@@ -279,6 +276,26 @@ function PanelBody({ onClose }: { onClose: () => void }) {
 
       {view.kind === 'list' && signedIn && list && tab === 'requests' && <AddFriendBar focusSignal={addFocus} prefill={prefill} />}
       {signedIn && list && <MyStatusBar onOpenProfile={() => setView({ kind: 'me' })} />}
+    </>
+  )
+}
+
+/**
+ * Les lignes d'un groupe d'amis, dessinées 30 par 30 en approchant du bas
+ * (`useProgressiveList`) : jusqu'à 200 amis, chacun avec sa tête de joueur,
+ * ne se dessinent plus d'un coup. La liste vient toujours en une réponse du
+ * serveur : elle est triée en groupes (En jeu / En ligne / Hors ligne) et
+ * tenue à jour ami par ami par le flux en direct, ce qu'une liste coupée en
+ * pages ne permettrait pas.
+ */
+function FriendRows({ friends, onOpen, dim = false }: { friends: Friend[]; onOpen: (f: Friend) => void; dim?: boolean }) {
+  const { visible, sentinel } = useProgressiveList(friends.length, { step: 30 })
+  return (
+    <>
+      {friends.slice(0, visible).map((f) => (
+        <FriendRow key={f.id} friend={f} onOpen={() => onOpen(f)} dim={dim} />
+      ))}
+      {visible < friends.length && <div ref={sentinel} aria-hidden className="h-px" />}
     </>
   )
 }

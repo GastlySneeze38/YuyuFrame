@@ -6,6 +6,8 @@ import { SkinFace } from '@/components/ui/SkinFace'
 import { Toggle } from '@/components/ui/Toggle'
 import { playerSkinSrc } from '@/lib/heads'
 import { formatDate } from '@/lib/format'
+import { SkeletonRows } from '@/components/ui/Skeleton'
+import { useProgressiveList } from '@/hooks/useProgressiveList'
 import { Sheet, SheetTitle } from '@/mobile/ui/Sheet'
 import { RankTile, useRankName } from '@/components/competitive/RankCard'
 import { TopoBackdrop } from '@/components/competitive/TopoBackdrop'
@@ -91,9 +93,13 @@ function Chevron({ className = 'h-5 w-5' }: { className?: string }) {
  * lecture. La carte du rang mène aux statistiques, et le dit : au doigt, pas
  * de survol pour le découvrir.
  */
-export function MobileHistory({ standing, duels, servers, activeServer, onServer, onOpenStats }: {
+export function MobileHistory({ standing, duels, onMore, resetKey, servers, activeServer, onServer, onOpenStats }: {
   standing: Standing
   duels: DuelRow[] | null
+  /** La page suivante du serveur ; absent quand tout est chargé. */
+  onMore?: () => void
+  /** Change (mode, serveur filtré) → la liste repart de ses 20 premiers. */
+  resetKey?: string
   servers: ServerStats[] | null
   activeServer: string | null
   onServer: (server: string | null) => void
@@ -143,7 +149,7 @@ export function MobileHistory({ standing, duels, servers, activeServer, onServer
         ) : duels.length === 0 ? (
           <Note>{t('competitive.history.empty')}</Note>
         ) : (
-          <DuelDays duels={duels} showServer={activeServer === null} />
+          <DuelDays duels={duels} showServer={activeServer === null} onMore={onMore} resetKey={resetKey} />
         )}
       </Section>
 
@@ -254,11 +260,14 @@ const RESULT_COLOR: Record<DuelRow['result'], string> = { win: WIN, loss: LOSS, 
  * chaque ligne ne garde que l'heure. Sur une ligne de téléphone, la date
  * entière poussait l'adresse du serveur hors de la largeur.
  */
-function DuelDays({ duels, showServer }: { duels: DuelRow[]; showServer: boolean }) {
+function DuelDays({ duels, showServer, onMore, resetKey }: { duels: DuelRow[]; showServer: boolean; onMore?: () => void; resetKey?: string }) {
   const language = useStore((s) => s.language)
   const locale = language === 'sga' ? 'fr' : language
+  // 20 lignes, puis 20 de plus en approchant du bas, puis la page suivante
+  // du serveur (`useProgressiveList`).
+  const { visible, sentinel } = useProgressiveList(duels.length, { onMore, resetKey })
   const days: { key: string; label: string; duels: DuelRow[] }[] = []
-  for (const d of duels) {
+  for (const d of duels.slice(0, visible)) {
     const at = new Date(d.at)
     const key = at.toDateString()
     const last = days[days.length - 1]
@@ -275,6 +284,10 @@ function DuelDays({ duels, showServer }: { duels: DuelRow[]; showServer: boolean
           </div>
         </div>
       ))}
+      <div ref={sentinel} aria-hidden className="h-px" />
+      {/* La suite est demandée au serveur : des lignes fantômes en bas, à la
+          place de celles qui arrivent. */}
+      {visible >= duels.length && onMore && <SkeletonRows count={2} rowClassName="h-[60px]" />}
     </div>
   )
 }

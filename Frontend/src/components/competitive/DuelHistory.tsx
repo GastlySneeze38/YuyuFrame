@@ -1,10 +1,11 @@
-import { motion } from 'framer-motion'
 import { useT } from '@/i18n'
 import { useStore } from '@/stores/useStore'
 import { SkinFace } from '@/components/ui/SkinFace'
 import { playerSkinSrc } from '@/lib/heads'
 import { formatDate } from '@/lib/format'
 import type { DuelRow } from '@/lib/competitive'
+import { SkeletonRows } from '@/components/ui/Skeleton'
+import { useProgressiveList } from '@/hooks/useProgressiveList'
 
 const RESULT_STYLE: Record<DuelRow['result'], string> = {
   win: 'bg-success/[0.14] text-success',
@@ -29,9 +30,18 @@ export function formatLength(secs: number): string {
  *
  * `duels === null` : le serveur n'a pas encore de route pour ça.
  */
-export function DuelHistory({ duels }: { duels: DuelRow[] | null }) {
+export function DuelHistory({ duels, onMore, resetKey }: {
+  duels: DuelRow[] | null
+  /** La page suivante du serveur ; absent quand tout est chargé. */
+  onMore?: () => void
+  /** Change (mode, serveur filtré) → la liste repart de ses 20 premiers. */
+  resetKey?: string
+}) {
   const t = useT()
   const language = useStore((s) => s.language)
+  // 20 lignes, puis 20 de plus en approchant du bas de la carte, puis la
+  // page suivante du serveur (`useProgressiveList`).
+  const { visible, sentinel } = useProgressiveList(duels?.length ?? 0, { onMore, resetKey })
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col gap-3 rounded-2xl border border-line bg-surface-1 p-5">
@@ -48,13 +58,13 @@ export function DuelHistory({ duels }: { duels: DuelRow[] | null }) {
         // elle s'élargit, plus elle ajoute : la note, puis « Revoir », puis
         // des colonnes plus aérées.
         <div className="-mx-1 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden px-1 [container-type:inline-size]">
-          {duels.map((d, i) => (
-            <motion.div
+          {duels.slice(0, visible).map((d, i) => (
+            // Apparition en CSS (`rise-in`), décalée sur les 12 premières
+            // seulement : un `motion.div` par ligne coûtait à chaque ajout.
+            <div
               key={d.id}
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: Math.min(i, 12) * 0.025 }}
-              className="flex min-w-0 items-center gap-2 rounded-xl px-1.5 py-2 hover:bg-white/[0.03] cw-lg:gap-3 cw-lg:px-2.5"
+              className="rise-in flex min-w-0 shrink-0 items-center gap-2 rounded-xl px-1.5 py-2 hover:bg-white/[0.03] cw-lg:gap-3 cw-lg:px-2.5"
+              style={{ '--rise-delay': `${Math.min(i, 12) * 25}ms` } as React.CSSProperties}
             >
               <span
                 className={`w-[58px] shrink-0 rounded-md py-1 text-center text-[9.5px] font-black uppercase tracking-[0.03em] cw-md:w-[66px] cw-md:text-[10.5px] cw-lg:w-[74px] ${RESULT_STYLE[d.result]}`}
@@ -96,8 +106,10 @@ export function DuelHistory({ duels }: { duels: DuelRow[] | null }) {
                   <span className="hidden cw-lg:inline">{t('competitive.history.replay')}</span>
                 </button>
               </span>
-            </motion.div>
+            </div>
           ))}
+          <div ref={sentinel} aria-hidden className="h-px shrink-0" />
+          {visible >= duels.length && onMore && <SkeletonRows count={2} rowClassName="h-11" />}
         </div>
       )}
     </div>

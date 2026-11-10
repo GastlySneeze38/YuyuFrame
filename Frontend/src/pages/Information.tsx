@@ -14,7 +14,7 @@ interface AppInfo {
 }
 
 const BETA_TESTERS: string[] = [
-  'HYROKY', 'Wiliking', 'SucreNormal', 'SarodayNest', 'Pumba', 'MedicalNew', 'Lpz2903', 'Smiouw',
+  'HYROKY', 'Wiliking', 'SucreNormal', 'SarodayNest', 'Pumba', 'MedicalNew', 'Lpz2903', 'Smiouw', 'Koupa666',
 ]
 
 export default function Information() {

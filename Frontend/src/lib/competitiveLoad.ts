@@ -98,7 +98,26 @@ export async function fetchMyCompetitive(uuid: string): Promise<CompetitiveData>
   const base: CompetitiveData = all.summary
     ? fromSummary(all.summary, duels, leaderboard)
     : { standings: readStandings(all.state), leaderboard, duels, stats: null, challenges: null, seasons: null, battlePass: null, seasonWins: null }
-  const fresh = { ...base, friendsLeaderboard }
+  const historyNext = all.history ? { mace: all.history.mace.next, sword: all.history.sword.next } : undefined
+  const fresh = { ...base, friendsLeaderboard, historyNext }
   writeCache(competitiveCacheKey(uuid), fresh)
   return fresh
+}
+
+/**
+ * La page suivante de l'historique d'un mode, ajoutée aux duels déjà là
+ * (sans doublon, du plus récent au plus ancien). Pas écrite dans le cache :
+ * il ne garde que l'ouverture de l'écran, pour rester léger.
+ */
+export async function loadMoreDuels(uuid: string, data: CompetitiveData, mode: 'mace' | 'sword'): Promise<CompetitiveData> {
+  const before = data.historyNext?.[mode]
+  if (before == null) return data
+  const page = await api.ranked.history(uuid, mode, before)
+  const known = new Set((data.duels ?? []).map((d) => d.id))
+  const added = page.duels.map(readDuel).filter((d) => !known.has(d.id))
+  return {
+    ...data,
+    duels: [...(data.duels ?? []), ...added].sort((a, b) => b.at - a.at),
+    historyNext: { ...data.historyNext, [mode]: page.next },
+  }
 }
