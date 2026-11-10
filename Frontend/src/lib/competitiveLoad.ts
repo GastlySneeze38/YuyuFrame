@@ -2,6 +2,7 @@ import { api } from '@/api/client'
 import { errorCode } from '@/lib/apiError'
 import { readCache, writeCache } from '@/lib/persistentCache'
 import {
+  duelServer,
   readBoard,
   readDuel,
   readSeasons,
@@ -25,7 +26,11 @@ export const competitiveCacheKey = (uuid: string) => `user:competitive:${uuid}`
 
 /** Les dernières données gardées, si elles ont moins d'une semaine. */
 export function cachedCompetitive(uuid: string): { value: CompetitiveData; at: number } | null {
-  return readCache<CompetitiveData>(competitiveCacheKey(uuid), 7 * 24 * 3600_000)
+  const cached = readCache<CompetitiveData>(competitiveCacheKey(uuid), 7 * 24 * 3600_000)
+  // Un cache écrit avant que les adresses ne soient ramenées à une seule
+  // écriture (`duelServer`) : même règle, sinon le doublon revient au lancement.
+  if (cached?.value.duels) cached.value.duels = cached.value.duels.map((d) => ({ ...d, server: duelServer(d.server) }))
+  return cached
 }
 
 /** Les données de l'onglet à partir du résumé du serveur (le mien ou celui d'un ami). */

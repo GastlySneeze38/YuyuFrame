@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getName, getVersion, getTauriVersion } from '@tauri-apps/api/app'
+import { osName } from '@/lib/platform'
 import { openExternal as open } from '@/lib/openExternal'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { useT } from '@/i18n'
@@ -77,7 +78,7 @@ export default function Information() {
             <Section title={t('information.version')}>
               <InfoRow label={t('information.application')} value={`${info.name} v${info.version}`} />
               <InfoRow label={t('information.tauri')} value={`v${info.tauriVersion}`} />
-              <InfoRow label={t('information.platform')} value="Windows" />
+              <InfoRow label={t('information.platform')} value={osName()} />
             </Section>
           )}
 

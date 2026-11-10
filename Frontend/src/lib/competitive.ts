@@ -5,6 +5,7 @@ import or from '@/assets/ranks/or.png'
 import diamant from '@/assets/ranks/diamant.png'
 import netherite from '@/assets/ranks/netherite.png'
 import champion from '@/assets/ranks/champion.png'
+import { withoutDefaultPort } from '@/lib/serverAddress'
 
 /**
  * Le classement compétitif, côté launcher (onglet Compétitif).
@@ -551,8 +552,15 @@ export function readDuel(d: ApiDuel): DuelRow {
     rr: d.rr,
     placement: d.placement,
     durationSecs: Math.round(d.duration_secs),
-    server: d.server ?? '',
+    server: duelServer(d.server ?? ''),
   }
+}
+
+/** Une seule écriture par serveur : sans le port par défaut ni majuscules.
+ *  Le jeu l'envoie tel qu'il a été tapé — `eu.minemen.club` et
+ *  `eu.minemen.club:25565` faisaient deux serveurs dans les statistiques. */
+export function duelServer(raw: string): string {
+  return withoutDefaultPort(raw.trim().toLowerCase())
 }
 
 export function readSummaryStandings(s: ApiSummary): Standing[] {
