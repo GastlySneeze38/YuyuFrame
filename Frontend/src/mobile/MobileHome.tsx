@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { EASE_OUT, fastTransition } from '@/lib/motion'
@@ -138,50 +138,18 @@ export default function MobileHome() {
 
   // ── Un écran qui tient sans défiler ──
   // La bannière prend la hauteur que laissent le lancement, le serveur et
-  // les raccourcis : l'écran s'arrête sous les raccourcis, quelle que soit
-  // la taille du téléphone. Bornée : jamais sous 150 px (en dessous le
-  // personnage ne tient plus — sur un très petit écran, la page défile
-  // alors), jamais au-delà de 440 (sur une tablette, l'air va au-dessus
-  // des raccourcis plutôt que dans une bannière géante ; 340 auparavant, ce
-  // qui laissait déjà un trou sur un téléphone de 914 px de haut une fois
-  // l'offre Pro retirée). Mesures par
-  // `offsetTop`/`offsetHeight`, qui ignorent la mise à l'échelle de
-  // l'entrée. L'espace élastique au-dessus des raccourcis est compté à son
-  // minimum (32 px) : il grandit quand la bannière rétrécit, et le compter
-  // tel quel ferait rétrécir la bannière à chaque mesure. Le serveur change
-  // de hauteur selon ce qu'il montre (carte, suggestion, appel à en
-  // ajouter) : la mesure suit le lancement et les raccourcis, qui bougent
-  // avec lui.
-  const bannerRef = useRef<HTMLDivElement>(null)
-  const fitRef = useRef<HTMLDivElement>(null)
-  const spacerRef = useRef<HTMLDivElement>(null)
-  const launchRef = useRef<HTMLDivElement>(null)
-  const serverRef = useRef<HTMLElement>(null)
-  const [bannerH, setBannerH] = useState<number | null>(null)
-  useLayoutEffect(() => {
-    const main = scrollRef.current
-    const banner = bannerRef.current
-    const end = fitRef.current
-    const spacer = spacerRef.current
-    if (!main || !banner || !end || !spacer) return
-    const fit = () => {
-      const bannerBottom = banner.offsetTop + banner.offsetHeight
-      const stretch = Math.max(0, spacer.offsetHeight - 32)
-      const rest = end.offsetTop + end.offsetHeight - bannerBottom - stretch
-      const room = main.clientHeight - banner.offsetTop - rest
-      setBannerH(Math.round(Math.max(150, Math.min(440, room))))
-    }
-    fit()
-    const ro = new ResizeObserver(fit)
-    // Tout ce qui est entre la bannière et le bas : un bloc qui change de
-    // hauteur (le serveur à l'arrivée de son ping) déplace les raccourcis
-    // sans changer leur taille.
-    ro.observe(main)
-    ro.observe(end)
-    if (launchRef.current) ro.observe(launchRef.current)
-    if (serverRef.current) ro.observe(serverRef.current)
-    return () => ro.disconnect()
-  }, [])
+  // les raccourcis, bornée entre 150 px (en dessous le personnage ne tient
+  // plus : sur un très petit écran la page défile alors) et 440 px (au-delà,
+  // l'air va au-dessus des raccourcis plutôt que dans une bannière géante).
+  // **En CSS, sans rien mesurer** (2026-11-10) : la zone est une colonne
+  // flex, la bannière s'y étire (`flex-grow` 1000) jusqu'à son plafond, et
+  // l'espace au-dessus des raccourcis (`flex-grow` 1) prend le reste. Avant,
+  // un `ResizeObserver` mesurait les blocs et posait la hauteur en JavaScript :
+  // la bannière s'affichait d'abord à une taille provisoire, et chaque bloc
+  // qui changeait de hauteur (la carte du serveur à l'arrivée de son ping,
+  // la fenêtre qu'Android ajuste au démarrage) la faisait sauter une image
+  // plus tard, très visiblement. Le navigateur, lui, recalcule tout dans le
+  // même passage.
 
   useEffect(() => {
     api.instances.list().then((list) => {
@@ -275,9 +243,8 @@ export default function MobileHome() {
         {/* Pas d'entrée propre : la transition de page s'en charge déjà, et
             entre onglets l'accueil doit être là d'un coup. */}
         <div
-          ref={bannerRef}
-          style={bannerH ? { height: bannerH } : undefined}
-          className={`relative mt-[max(12px,env(safe-area-inset-top))] ${bannerH ? '' : 'h-[clamp(240px,34dvh,320px)]'} shrink-0 overflow-hidden rounded-3xl border border-white/[0.06] shadow-[0_8px_32px_rgba(0,0,0,0.6)]`}
+          // Remplit la place libre (voir « Un écran qui tient sans défiler »).
+          className="relative mt-[max(12px,env(safe-area-inset-top))] min-h-[150px] max-h-[440px] flex-[1000_1_0px] overflow-hidden rounded-3xl border border-white/[0.06] shadow-[0_8px_32px_rgba(0,0,0,0.6)]"
         >
           <div className="absolute inset-0 bg-[linear-gradient(180deg,#020208_0%,#06041a_18%,#0e0932_40%,#1c1250_58%,#130d35_76%,#070512_100%)]" />
           <motion.div
@@ -370,7 +337,7 @@ export default function MobileHome() {
               envelopper celui-ci le décollerait du défilement. */}
           {/* 1 px en haut : le titre porte déjà 11 px de vide au-dessus de
               son texte, ce qui suffit aussi quand le bloc est collé. */}
-          <motion.div ref={launchRef} {...enter(0.48, 16)} className="pointer-events-auto px-4 pb-3 pt-px">
+          <motion.div {...enter(0.48, 16)} className="pointer-events-auto px-4 pb-3 pt-px">
             <SectionHeader
               title={t('home.instance')}
               action={{ label: t('home.manage'), onClick: () => navigate('/instances') }}
@@ -472,7 +439,7 @@ export default function MobileHome() {
         {/* Le rembourrage bas du bloc de lancement (12 px) + 9 px + le vide
             au-dessus du texte du titre (11 px) : 32 px entre « Jouer » et
             « Serveur », le même écart visible qu'entre chaque bloc. */}
-        <motion.section ref={serverRef} {...enter(0.55, 12, 0.45)} className="mt-[9px] shrink-0">
+        <motion.section {...enter(0.55, 12, 0.45)} className="mt-[9px] shrink-0">
           {showHomeServers ? (
             <>
               <SectionHeader
@@ -503,12 +470,12 @@ export default function MobileHome() {
 
         {/* ── 4. Les raccourcis Missions / Amis / Passe / Saison, en bas de
             l'écran : la fin de l'écran — la bannière prend la hauteur qui
-            reste au-dessus (voir `bannerH`). Sur un très grand écran où la
-            bannière est à son maximum, l'air en trop va au-dessus d'eux
-            (`flex-1`), pour qu'ils restent collés en bas. ── */}
-        <div ref={spacerRef} aria-hidden className="min-h-8 flex-1" />
+            reste au-dessus (voir « Un écran qui tient sans défiler »). Sur
+            un très grand écran où la bannière est à son maximum, l'air en
+            trop va au-dessus d'eux, pour qu'ils restent collés en bas ; 32 px
+            au moins, l'écart entre deux blocs. ── */}
+        <div aria-hidden className="min-h-8 flex-[1_1_0px]" />
         <motion.div
-          ref={fitRef}
           {...enter(0.6, 8, 0.4)}
           className="shrink-0 pb-[max(16px,env(safe-area-inset-bottom))]"
         >
