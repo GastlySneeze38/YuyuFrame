@@ -5,10 +5,23 @@
     <!-- AndroidTV support -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
 
+    <!-- Une appli de jeu (2026-11-10), comme le manifeste de Starling
+         (horizon-android/packaging/android) que nous avions repris sans ces deux lignes.
+         Sans elles, Android ne sait pas que c'est un jeu : ni mode Performance / Batterie
+         (Game Mode, Android 13+), ni tableau de bord de jeu, et les boosters des
+         constructeurs (Game Booster, Game Turbo) ne la prennent pas en charge d'eux-mêmes.
+         La catégorie vaut pour toute l'appli, le launcher compris.
+
+         Volontairement PAS de game_mode_config.xml : déclarer qu'on gère soi-même les modes
+         Performance et Batterie désactive les ajustements qu'Android et le constructeur y
+         appliquent (résolution, images par seconde). Starling ne lit pas le mode choisi :
+         les déclarer reviendrait à rendre ces deux modes sans effet. -->
     <application
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:theme="@style/Theme.yuyuframe_backend"
+        android:appCategory="game"
+        android:isGame="true"
         android:usesCleartextTraffic="${usesCleartextTraffic}">
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"

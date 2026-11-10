@@ -94,6 +94,16 @@ where
     .map_err(|e| anyhow!("écran du jeu : {e}"))?
 }
 
+/// La version du moteur rangé dans l'APK (`yuyu_engine_version`, écrite par
+/// `horizon-android/yuyu/build_engine.py`) ; `None` si le plugin ne répond pas.
+pub async fn engine_version(app: &tauri::AppHandle) -> Option<String> {
+    bridge(app, |b| b.call::<Engine>("engine"))
+        .await
+        .ok()
+        .map(|e| e.version)
+        .filter(|v| !v.trim().is_empty())
+}
+
 /// Lance l'écran du jeu avec les options de la partie, puis attend qu'il se
 /// ferme. Même contrat que la version ordinateur : `Ok` à une fin normale,
 /// `LAUNCH_CANCELLED_MSG` si on l'a arrêtée.
@@ -111,7 +121,7 @@ pub async fn launch(app: tauri::AppHandle, run: HorizonLaunch<'_>, cancel: watch
     if bridge(&app, |b| b.call::<Running>("running")).await?.running {
         return Err(anyhow!("Une partie est déjà en cours : reviens-y depuis les applis récentes"));
     }
-    let engine = bridge(&app, |b| b.call::<Engine>("engine")).await.map(|e| e.version).unwrap_or_default();
+    let engine = engine_version(&app).await.unwrap_or_default();
 
     let files = crate::paths::app_files_dir();
     let home = run.game_dir.join("horizon");

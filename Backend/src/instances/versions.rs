@@ -35,16 +35,24 @@ pub async fn list_versions() -> Result<Vec<VersionEntry>, String> {
 /// Une liste vide plutôt qu'une erreur pour « vanilla » : il n'y a pas de
 /// loader à versionner, et l'interface n'a rien de spécial à traiter.
 #[tauri::command]
-pub async fn loader_versions(loader: String, mc_version: String) -> Result<Vec<LoaderVersion>, String> {
+pub async fn loader_versions(app: tauri::AppHandle, loader: String, mc_version: String) -> Result<Vec<LoaderVersion>, String> {
+    // Les versions d'Horizon ne dépendent pas de `mc_version` tant qu'il n'en
+    // recrée qu'une ; le lancement vérifie la concordance. Sur Android, c'est
+    // le moteur de l'APK, que seule l'appli sait nommer (d'où `app`).
+    if loader == crate::minecraft::launcher::horizon::LOADER {
+        return Ok(crate::minecraft::launcher::horizon::list_versions(&app).await);
+    }
+    modloader_versions(&loader, &mc_version).await
+}
+
+/// Les builds des quatre loaders de mods (vide pour tout autre nom).
+pub async fn modloader_versions(loader: &str, mc_version: &str) -> Result<Vec<LoaderVersion>, String> {
     use crate::minecraft::loaders::{fabric, forge, neoforge, quilt};
-    match loader.as_str() {
-        "fabric" => fabric::list_versions(&mc_version).await,
-        "quilt" => quilt::list_versions(&mc_version).await,
-        "forge" => forge::list_versions(&mc_version).await,
-        "neoforge" => neoforge::list_versions(&mc_version).await,
-        // Les versions d'Horizon ne dépendent pas de `mc_version` tant qu'il
-        // n'en recrée qu'une ; le lancement vérifie la concordance.
-        "horizon" => Ok(crate::minecraft::launcher::horizon::list_versions().await),
+    match loader {
+        "fabric" => fabric::list_versions(mc_version).await,
+        "quilt" => quilt::list_versions(mc_version).await,
+        "forge" => forge::list_versions(mc_version).await,
+        "neoforge" => neoforge::list_versions(mc_version).await,
         _ => Ok(Vec::new()),
     }
     .map_err(|e| e.to_string())

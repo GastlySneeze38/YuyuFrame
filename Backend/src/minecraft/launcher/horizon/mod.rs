@@ -75,16 +75,21 @@ pub struct HorizonLaunch<'a> {
     pub pinned: &'a str,
 }
 
-/// Les versions stables d'Horizon, pour le choix de l'onglet Installation.
-/// Aucune sur Android : le moteur est celui de l'APK, il n'y a rien à choisir.
+/// Les versions d'Horizon, pour l'onglet Installation. Sur Android, une seule :
+/// le moteur rangé dans l'APK (notre build de Starling, publié nulle part),
+/// dont la version est écrite dans l'APK par `build_engine.py`. Avant le
+/// 2026-11-10 la liste était vide, et l'onglet n'affichait aucune version.
 #[cfg(target_os = "android")]
-pub async fn list_versions() -> Vec<crate::minecraft::loaders::LoaderVersion> {
-    Vec::new()
+pub async fn list_versions(app: &tauri::AppHandle) -> Vec<crate::minecraft::loaders::LoaderVersion> {
+    match android::engine_version(app).await {
+        Some(version) => vec![crate::minecraft::loaders::LoaderVersion { version, stable: true, recommended: true }],
+        None => Vec::new(),
+    }
 }
 
 /// Les versions stables d'Horizon, pour le choix de l'onglet Installation.
 #[cfg(not(target_os = "android"))]
-pub async fn list_versions() -> Vec<crate::minecraft::loaders::LoaderVersion> {
+pub async fn list_versions(_app: &tauri::AppHandle) -> Vec<crate::minecraft::loaders::LoaderVersion> {
     let client = reqwest::Client::builder()
         .user_agent(concat!("YuyuFrame/", env!("CARGO_PKG_VERSION")))
         .timeout(std::time::Duration::from_secs(15))

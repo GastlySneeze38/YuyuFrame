@@ -33,7 +33,7 @@ pub(super) async fn loader_version_of(instance: &Instance) -> Result<String, Str
     if !instance.loader_version.is_empty() {
         return Ok(instance.loader_version.clone());
     }
-    let versions = crate::instances::versions::loader_versions(instance.loader.clone(), instance.mc_version.clone()).await?;
+    let versions = crate::instances::versions::modloader_versions(&instance.loader, &instance.mc_version).await?;
     versions
         .into_iter()
         .find(|v| v.recommended)
