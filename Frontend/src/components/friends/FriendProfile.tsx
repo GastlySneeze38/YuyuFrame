@@ -12,8 +12,9 @@ import { showError, showNotice } from '@/stores/useErrorToast'
 import { useFriends } from '@/stores/useFriends'
 import { useStore } from '@/stores/useStore'
 import { useT } from '@/i18n'
-import { demoProfile } from '@/lib/friendsDemo'
 import { isDemo } from '@/stores/useDevFlags'
+import { cachedFriendProfile, friendProfileStale, loadFriendProfile } from '@/lib/friendProfileCache'
+import { Skeleton } from '@/components/ui/Skeleton'
 import type { Friend, PublicProfile, ReportReason } from '@/types/friends'
 import { FriendAvatar, GameTile, activityText } from './FriendBits'
 import { ProfileLayout } from './ProfileLayout'
@@ -41,7 +42,8 @@ export function FriendProfile({ friend, onDone }: { friend: Friend; onDone: () =
   const onPublicServer = useOnPublicServer(gameRunning)
   const [joining, setJoining] = useState(false)
   const navigate = useNavigate()
-  const [profile, setProfile] = useState<PublicProfile | null>(null)
+  const [profile, setProfile] = useState<PublicProfile | null>(() => cachedFriendProfile(friend.id))
+  const loading = !profile
   const p = friend.presence
   const custom = liveCustom(p)
   const color = STATUS_COLORS[p.state]
@@ -49,11 +51,13 @@ export function FriendProfile({ friend, onDone }: { friend: Friend; onDone: () =
   // Rejoindre : il faut qu'il soit sur un serveur ET qu'il me le montre.
   const joinBlocked = !game ? t('friends.profile.joinNotPlaying') : !game.server ? t('friends.profile.joinHidden') : null
 
-  // Son profil se charge à l'ouverture ; la fiche s'affiche sans l'attendre.
+  // Son profil : celui gardé pour la session s'il y en a un (la fiche
+  // s'affiche alors d'un bloc), relu seulement s'il a plus de 5 minutes ;
+  // sinon squelettes le temps qu'il arrive (lib/friendProfileCache.ts).
   useEffect(() => {
     let alive = true
-    const load = isDemo() ? Promise.resolve(demoProfile(friend.id)) : api.friends.profile(friend.id)
-    load.then((p) => alive && setProfile(p)).catch(() => {})
+    setProfile(cachedFriendProfile(friend.id))
+    if (friendProfileStale(friend.id)) loadFriendProfile(friend.id).then((p) => alive && setProfile(p)).catch(() => {})
     return () => {
       alive = false
     }
@@ -69,6 +73,7 @@ export function FriendProfile({ friend, onDone }: { friend: Friend; onDone: () =
         avatar={<FriendAvatar skin={skinOf(friend)} state={p.state} size={72} />}
         bubble={custom ? <ThoughtBubble accent={profile?.accent ?? null}>{custom}</ThoughtBubble> : null}
         name={friend.username}
+        loading={loading}
         nameExtra={
           profile?.discord ? (
             <span title={t('friends.discord.badge')} className="flex items-center text-[#7983f5]">
@@ -77,10 +82,17 @@ export function FriendProfile({ friend, onDone }: { friend: Friend; onDone: () =
           ) : null
         }
       >
-      {profile?.bio && <p className="whitespace-pre-line px-4 pt-1.5 text-[12.5px] leading-relaxed text-txt-secondary [overflow-wrap:anywhere]">{profile.bio}</p>}
+      {loading ? (
+        <div aria-busy className="flex flex-col gap-1.5 px-4 pt-2.5">
+          <Skeleton className="skeleton-strong h-3 w-11/12 rounded-full" />
+          <Skeleton className="skeleton-strong h-3 w-3/5 rounded-full" />
+        </div>
+      ) : (
+        profile.bio && <p className="rise-in whitespace-pre-line px-4 pt-1.5 text-[12.5px] leading-relaxed text-txt-secondary [overflow-wrap:anywhere]">{profile.bio}</p>
+      )}
 
       {/* Ce qu'on vient faire ici : le rejoindre, voir son onglet compétitif. */}
-      <div className="grid grid-cols-2 gap-2 px-4 pt-3.5">
+      <div className="rise-in grid grid-cols-2 gap-2 px-4 pt-3.5" style={{ '--rise-delay': '50ms' } as React.CSSProperties}>
         <ActionButton
           primary
           disabled={!!joinBlocked}
@@ -102,8 +114,8 @@ export function FriendProfile({ friend, onDone }: { friend: Friend; onDone: () =
       {onPublicServer && p.state !== 'offline' && <InviteFriend friendId={friend.id} />}
 
       {/* Ce qu'il fait, sa vitrine, ses comptes, depuis quand vous êtes amis. */}
-      <div className="flex flex-col gap-2 px-4 pb-4 pt-3">
-        {profile && <ProfileShowcase items={profile.showcase} />}
+      <div className="rise-in flex flex-col gap-2 px-4 pb-4 pt-3" style={{ '--rise-delay': '100ms' } as React.CSSProperties}>
+        {loading ? <Skeleton className="skeleton-strong h-14 rounded-xl" /> : <ProfileShowcase items={profile.showcase} />}
         {/* Son compte Discord lié ; le pseudo seulement s'il le montre. */}
         {profile?.discord && (
           <div className="flex items-center gap-3 rounded-xl border border-line bg-surface-1 px-3 py-2.5">

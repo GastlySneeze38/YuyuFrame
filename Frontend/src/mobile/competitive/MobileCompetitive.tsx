@@ -98,7 +98,7 @@ export function MobileCompetitive({
         {/* 24 px sous 375 px de large : le titre et la pastille du mode
             doivent tenir ensemble (« Rankingowy » + « Buzdygan »). */}
         <h1 className={`min-w-0 flex-1 truncate font-bold tracking-tight text-white ${friend ? 'text-[22px]' : 'text-[28px] max-[374px]:text-[24px]'}`}>{title}</h1>
-        {data && <ModePill mode={mode} onClick={() => setPicking(true)} />}
+        {data && <ModePill mode={mode} open={picking} onClick={() => setPicking(true)} />}
       </header>
 
       {data && (
@@ -265,22 +265,60 @@ function canScrollHorizontally(el: Element, root: Element, dx: number): boolean 
   return false
 }
 
-/** Le mode montré, en pastille d'en-tête : son insigne et son nom. */
-function ModePill({ mode, onClick }: { mode: ModeKey; onClick: () => void }) {
+/** L'icône d'un mode : la masse (manche et tête à pointes) ou l'épée. */
+function ModeGlyph({ mode, className }: { mode: ModeKey; className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      {mode === 'mace' ? (
+        <>
+          <path d="M4 20l7.5-7.5" />
+          <circle cx="15" cy="9" r="4" />
+          <path d="M15 2.5v1.5M15 14v1.5M21.5 9H20M10 9H8.5M19.6 4.4l-1 1M19.6 13.6l-1-1" />
+        </>
+      ) : (
+        <>
+          <path d="M14.5 17.5L3 6V3h3l11.5 11.5" />
+          <path d="M13 19l6-6M16 16l4 4M19 21l2-2" />
+        </>
+      )}
+    </svg>
+  )
+}
+
+/**
+ * Le mode montré, en pastille d'en-tête (refaite le 2026-11-10 : un ovale
+ * gris de la couleur du fond, sans contour, avec un chevron qui flottait —
+ * on ne voyait pas où finissait le bouton). Un contour fin le délimite,
+ * l'icône du mode dans un disque d'accent dit ce qu'on choisit, et le
+ * chevron se retourne tant que la feuille des modes est ouverte.
+ */
+function ModePill({ mode, open, onClick }: { mode: ModeKey; open: boolean; onClick: () => void }) {
   const t = useT()
   return (
     <button
       onClick={onClick}
       aria-haspopup="dialog"
+      aria-expanded={open}
       aria-label={t('competitive.modePicker')}
       data-mode-pill
-      // Le mode seul, en texte : l'insigne de rang y était trop petit pour
-      // lire sa division, et son carré jurait dans une forme ronde. Le rang
-      // reste sur la carte du rang et dans la feuille des modes.
-      className="press flex h-11 min-w-0 max-w-[48%] shrink-0 items-center gap-1 rounded-full bg-white/[0.07] pl-4 pr-3"
+      className="press flex h-11 min-w-0 max-w-[52%] shrink-0 items-center gap-2 rounded-full border border-white/[0.1] bg-white/[0.05] pl-1.5 pr-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
     >
+      {/* Nouveau mode : l'icône arrive en fondu (`key`). */}
+      <span key={mode} className="banner-in flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[rgb(var(--accent)/0.22)] text-[rgb(var(--accent-text))]">
+        <ModeGlyph mode={mode} className="h-[18px] w-[18px]" />
+      </span>
       <span className="min-w-0 truncate text-[15px] font-semibold text-white">{t(`competitive.modes.${mode}`)}</span>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px] shrink-0 text-white/60"><path d="M6 9l6 6 6-6" /></svg>
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2.4}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className={`h-4 w-4 shrink-0 text-white/45 transition-transform duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] ${open ? 'rotate-180' : ''}`}
+      >
+        <path d="M6 9l6 6 6-6" />
+      </svg>
     </button>
   )
 }

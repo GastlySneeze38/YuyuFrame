@@ -286,6 +286,36 @@ option {
   to { transform: translateX(100%); }
 }
 
+/* Squelette plus marqué, là où un bloc gris pourrait passer pour du vrai
+ * contenu (le bandeau d'une fiche d'ami, qui sans ça ressemble à une
+ * bannière grise) : l'onde se voit franchement. */
+.skeleton-strong {
+  background-color: rgb(255 255 255 / 0.08);
+}
+.skeleton-strong::after {
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.16), transparent);
+  animation-duration: 1.3s;
+}
+
+/* La bannière d'une fiche d'ami qui remplace son squelette. */
+.banner-in {
+  animation: banner-in 0.28s cubic-bezier(0.23, 1, 0.32, 1) backwards;
+}
+@keyframes banner-in {
+  from { opacity: 0; }
+}
+
+/* Les blocs d'une fiche d'ami, à son ouverture : une courte vague de haut en
+ * bas (délai posé par `--rise-delay`), qui couvre le temps de chargement au
+ * lieu de laisser voir les blocs tomber un à un. */
+.rise-in {
+  animation: rise-in 0.32s cubic-bezier(0.23, 1, 0.32, 1) backwards;
+  animation-delay: var(--rise-delay, 0ms);
+}
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(8px); }
+}
+
 /* Images distantes (components/ui/RemoteImage.tsx) : fondu à l'arrivée. */
 .img-fade {
   opacity: 0;

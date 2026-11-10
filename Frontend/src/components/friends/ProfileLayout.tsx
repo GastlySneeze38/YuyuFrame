@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion, useScroll, useTransform } from 'framer-motion'
 import { bannerBackground } from '@/lib/profileBanners'
 
@@ -24,7 +24,7 @@ const RANGE = 84
  * sa hauteur change pendant qu'on défile, et s'il poussait le contenu, chaque
  * pixel de défilement redimensionnerait la zone qui défile — elle tremblerait.
  */
-export function ProfileLayout({ banner, accent, color, corner, avatar, bubble, name, nameExtra, beforeName, children }: {
+export function ProfileLayout({ banner, accent, color, corner, avatar, bubble, name, nameExtra, beforeName, loading = false, children }: {
   banner: string | null
   accent: string | null
   /** Couleur du bandeau sans bannière (celle du statut). */
@@ -40,8 +40,24 @@ export function ProfileLayout({ banner, accent, color, corner, avatar, bubble, n
   nameExtra?: React.ReactNode
   /** Entre l'en-tête et le pseudo (le choix de bannière, déplié). */
   beforeName?: React.ReactNode
+  /**
+   * La fiche n'est pas encore arrivée : le bandeau est un squelette, et la
+   * vraie bannière arrivera en fondu. Un squelette qui se voit comme tel —
+   * en retrait des bords, coins arrondis, onde qui passe : une bannière,
+   * elle, va toujours d'un bord à l'autre. Sans ça, la couleur du statut
+   * passait pour la bannière, puis changeait sous les yeux.
+   */
+  loading?: boolean
   children: React.ReactNode
 }) {
+  // Fondu seulement quand la bannière remplace le squelette sous nos yeux :
+  // une fiche déjà connue (gardée pour la session) s'affiche d'un coup.
+  const [fadeBanner, setFadeBanner] = useState(false)
+  const wasLoading = useRef(loading)
+  useEffect(() => {
+    if (wasLoading.current && !loading) setFadeBanner(true)
+    wasLoading.current = loading
+  }, [loading])
   const scroller = useRef<HTMLDivElement>(null)
   const { scrollY } = useScroll({ container: scroller })
   const bannerHeight = useTransform(scrollY, [0, RANGE], [BANNER_OPEN, BANNER_SHUT])
@@ -71,8 +87,15 @@ export function ProfileLayout({ banner, accent, color, corner, avatar, bubble, n
 
       {/* L'en-tête, par-dessus. Seuls ses éléments actifs captent la souris. */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-20" style={{ height: OPEN }}>
-        <motion.div className="absolute inset-x-0 top-0 overflow-hidden" style={{ height: bannerHeight, background: bannerBackground(banner, color) }}>
-          <div className="absolute inset-0 bg-[radial-gradient(70%_100%_at_85%_0%,rgba(255,255,255,0.14),transparent)]" />
+        <motion.div className="absolute inset-x-0 top-0 overflow-hidden" style={{ height: bannerHeight }}>
+          {loading ? (
+            <div className="skeleton skeleton-strong absolute inset-x-2 bottom-1 top-2 !rounded-xl" />
+          ) : (
+            <>
+              <div className={`absolute inset-0 ${fadeBanner ? 'banner-in' : ''}`} style={{ background: bannerBackground(banner, color) }} />
+              <div className="absolute inset-0 bg-[radial-gradient(70%_100%_at_85%_0%,rgba(255,255,255,0.14),transparent)]" />
+            </>
+          )}
           {/* Replié, un voile sombre pour lire le pseudo sur n'importe quelle bannière. */}
           <motion.div className="absolute inset-0 bg-gradient-to-r from-black/55 via-black/25 to-transparent" style={{ opacity: shadow }} />
           {accent && <div className="absolute inset-x-0 bottom-0 h-[3px]" style={{ background: accent }} />}

@@ -5,6 +5,7 @@ import { showError, showNotice, type ToastAction } from '@/stores/useErrorToast'
 import { useStore } from '@/stores/useStore'
 import { t } from '@/i18n'
 import { demoFriends } from '@/lib/friendsDemo'
+import { clearFriendProfiles } from '@/lib/friendProfileCache'
 import { isDemo, useDevFlags } from '@/stores/useDevFlags'
 import { useSupportWatch } from '@/stores/useSupportWatch'
 import { useCrashWatch } from '@/stores/useCrashWatch'
@@ -230,7 +231,10 @@ export const useFriends = create<FriendsStore>((set, get) => ({
     return code || null
   },
 
-  clear: () => set({ list: null, unseenRequests: 0, invites: [], discord: null }),
+  clear: () => {
+    clearFriendProfiles()
+    set({ list: null, unseenRequests: 0, invites: [], discord: null })
+  },
 }))
 
 // L'interrupteur de démo de l'atelier a bougé : on repart de zéro, pour ne pas
@@ -238,6 +242,7 @@ export const useFriends = create<FriendsStore>((set, get) => ({
 if (import.meta.env.DEV) {
   useDevFlags.subscribe((now, before) => {
     if (now.demoData === before.demoData) return
+    clearFriendProfiles()
     useFriends.setState({ list: null })
     void useFriends.getState().refresh()
   })

@@ -14,6 +14,7 @@ import { FriendAvatar, FriendsIcon, GameTile, PresenceLine } from './FriendBits'
 import { FriendProfile } from './FriendProfile'
 import { InviteList } from './InviteCards'
 import { FriendSettingsView } from './FriendSettingsView'
+import { prefetchFriendProfile } from '@/lib/friendProfileCache'
 import { MyStatusBar } from './MyStatusBar'
 import { MyProfileView } from './MyProfileView'
 import { AccountMenu } from '@/components/account/AccountMenu'
@@ -287,6 +288,9 @@ function FriendRow({ friend, onOpen, dim = false }: { friend: Friend; onOpen: ()
   return (
     <button
       onClick={onOpen}
+      // Dès l'appui, la fiche commence à charger : elle a le temps de son
+      // entrée pour arriver (lib/friendProfileCache.ts).
+      onPointerDown={() => prefetchFriendProfile(friend.id)}
       className={`group mx-2 flex items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-white/[0.05] ${dim ? 'opacity-60 hover:opacity-100' : ''}`}
     >
       <FriendAvatar skin={skinOf(friend)} state={friend.presence.state} />
