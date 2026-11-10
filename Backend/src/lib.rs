@@ -79,6 +79,8 @@ pub fn run() {
     builder
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_shell::init())
+        // Les liens externes, sur PC comme sur téléphone (`lib/openExternal.ts`).
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_dialog::init())
         // Notifications Windows des amis et du support (`friends/notify.rs`),

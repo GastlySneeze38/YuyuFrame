@@ -28,6 +28,9 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-shell = "2"
+# Ouvrir un lien dans le navigateur du système, téléphone compris (le `open`
+# de tauri-plugin-shell ne fait rien sur Android) — `Frontend/src/lib/openExternal.ts`.
+tauri-plugin-opener = "2"
 tauri-plugin-process = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-deep-link = "2"
