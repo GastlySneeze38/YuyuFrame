@@ -2173,6 +2173,10 @@ export const fr = {
     attachmentsNote:
       'Captures d’écran, journaux, justificatifs : passe par le salon Discord privé ouvert pour ta demande — on ne peut rien joindre depuis le launcher.',
     team: 'Équipe YuyuFrame',
+    edit: 'Modifier',
+    editSave: 'Enregistrer',
+    editCancel: 'Annuler',
+    edited: 'modifié',
     replyPlaceholder: 'Écris ta réponse…',
     reopenPlaceholder: 'Cette demande est close — écris pour la rouvrir…',
     send: 'Envoyer',

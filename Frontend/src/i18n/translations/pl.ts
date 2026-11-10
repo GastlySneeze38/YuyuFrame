@@ -2166,6 +2166,10 @@ export const pl: TranslationSchema = {
     attachmentsNote:
       'Zrzuty ekranu, logi, potwierdzenia: użyj prywatnego kanału Discord otwartego dla twojego zgłoszenia — z launchera nie da się nic załączyć.',
     team: 'Zespół YuyuFrame',
+    edit: 'Edytuj',
+    editSave: 'Zapisz',
+    editCancel: 'Anuluj',
+    edited: 'edytowano',
     replyPlaceholder: 'Napisz odpowiedź…',
     reopenPlaceholder: 'To zgłoszenie jest zamknięte — napisz, aby je otworzyć ponownie…',
     send: 'Wyślij',

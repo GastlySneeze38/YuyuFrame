@@ -72,6 +72,20 @@ pub async fn support_reply(
         .map_err(String::from)
 }
 
+/// Modifie un de mes messages écrits dans le launcher (le serveur refuse les
+/// autres). Sa copie dans le salon Discord du ticket est refaite par le bot.
+#[tauri::command]
+pub async fn support_edit_message(
+    id: String,
+    message_id: String,
+    message: String,
+    state: tauri::State<'_, SharedState>,
+) -> Result<Value, String> {
+    api::patch(&state, &format!("/support/tickets/{id}/messages/{message_id}"), json!({ "message": message }))
+        .await
+        .map_err(String::from)
+}
+
 /// Retire un ticket clos de la liste. Le serveur refuse si le ticket est
 /// encore ouvert, et ne supprime rien : l'équipe garde la conversation.
 #[tauri::command]

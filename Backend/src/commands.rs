@@ -90,6 +90,7 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         crate::server::support::support_get,
         crate::server::support::support_create,
         crate::server::support::support_reply,
+        crate::server::support::support_edit_message,
         crate::server::support::support_hide,
         crate::server::support::support_diagnostic,
         crate::server::crash_reports::crash_list,

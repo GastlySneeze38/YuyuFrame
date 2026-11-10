@@ -2165,6 +2165,10 @@ export const es: TranslationSchema = {
     attachmentsNote:
       'Capturas, registros, justificantes: usa el canal privado de Discord abierto para tu solicitud — desde el launcher no se puede adjuntar nada.',
     team: 'Equipo YuyuFrame',
+    edit: 'Editar',
+    editSave: 'Guardar',
+    editCancel: 'Cancelar',
+    edited: 'editado',
     replyPlaceholder: 'Escribe tu respuesta…',
     reopenPlaceholder: 'Esta solicitud está cerrada — escribe para reabrirla…',
     send: 'Enviar',

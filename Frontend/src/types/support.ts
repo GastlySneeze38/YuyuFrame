@@ -34,6 +34,10 @@ export interface TicketMessage {
   author_name: string
   body: string
   created_at: string
+  /** Dernière modification (absent d'une API plus ancienne). */
+  edited_at?: string | null
+  /** Un de mes messages écrit dans le launcher : je peux le modifier. */
+  editable?: boolean
 }
 
 /** Le détail reprend les champs du résumé, aplatis, plus la conversation. */

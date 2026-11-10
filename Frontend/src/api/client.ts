@@ -657,6 +657,8 @@ export const api = {
     create: (input: { category: string; subject: string; message: string; diagnostic?: string | null }) =>
       invoke<TicketDetail>('support_create', input),
     reply: (id: string, message: string) => invoke<TicketDetail>('support_reply', { id, message }),
+    editMessage: (id: string, messageId: string, message: string) =>
+      invoke<TicketDetail>('support_edit_message', { id, messageId, message }),
     /** Retire un ticket clos de la liste ; l'équipe garde la conversation. */
     hide: (id: string) => invoke<void>('support_hide', { id }),
     /** Rapport montré à la personne avant l'envoi — jamais joint sans accord. */

@@ -655,6 +655,101 @@ function MessageBody({ body }: { body: string }) {
   )
 }
 
+/**
+ * Un message d'une bulle. Les miens écrits dans le launcher (`editable`) se
+ * modifient sur place : crayon au survol sur PC, toujours là (discret) au
+ * doigt — un appui long y sélectionne déjà le texte. Échap annule,
+ * Ctrl+Entrée enregistre. Le bot refait ensuite sa copie dans le salon
+ * Discord du ticket.
+ */
+function MessageItem({ ticketId, message, onSaved }: { ticketId: string; message: TicketMessage; onSaved: (detail: TicketDetail) => void }) {
+  const t = useT()
+  const [draft, setDraft] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const field = useRef<HTMLTextAreaElement>(null)
+
+  // Le champ prend la hauteur du texte, curseur à la fin.
+  useEffect(() => {
+    const el = field.current
+    if (draft === null || !el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, 240)}px`
+  }, [draft])
+  useEffect(() => {
+    const el = field.current
+    if (!el) return
+    el.focus()
+    el.setSelectionRange(el.value.length, el.value.length)
+  }, [draft === null])
+
+  async function save() {
+    const body = draft?.trim()
+    if (!body) return
+    if (body === message.body) { setDraft(null); return }
+    setSaving(true)
+    try {
+      onSaved(await api.support.editMessage(ticketId, message.id, body))
+      setDraft(null)
+    } catch (e) {
+      showError(errorMessage(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (draft !== null) {
+    return (
+      <div className="flex flex-col gap-2">
+        <textarea
+          ref={field}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') { e.preventDefault(); setDraft(null) }
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void save() }
+          }}
+          maxLength={4000}
+          rows={1}
+          className="w-full min-w-[240px] resize-none rounded-lg border border-line bg-bg-primary/60 px-2.5 py-2 text-[13px] leading-relaxed text-txt-primary outline-none focus:border-[rgb(var(--accent)/0.6)] max-sm:min-w-0 max-sm:text-[16px]"
+        />
+        <div className="flex justify-end gap-1.5">
+          <button
+            onClick={() => setDraft(null)}
+            className="press rounded-lg px-2.5 py-1 text-[11.5px] font-semibold text-txt-secondary hover:bg-white/[0.06] max-sm:min-h-[36px] max-sm:text-[13px]"
+          >
+            {t('support.editCancel')}
+          </button>
+          <button
+            onClick={() => void save()}
+            disabled={saving || !draft.trim()}
+            className="press flex items-center gap-1.5 rounded-lg bg-[rgb(var(--accent))] px-2.5 py-1 text-[11.5px] font-semibold text-white hover:bg-[rgb(var(--accent-hover))] disabled:opacity-50 max-sm:min-h-[36px] max-sm:text-[13px]"
+          >
+            {saving && <ButtonSpinner size={11} trackColor="rgba(255,255,255,0.25)" />}
+            {t('support.editSave')}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!message.editable) return <MessageBody body={message.body} />
+  return (
+    <div className="group/msg relative pr-6">
+      <MessageBody body={message.body} />
+      <button
+        onClick={() => setDraft(message.body)}
+        title={t('support.edit')}
+        aria-label={t('support.edit')}
+        className="absolute -right-1.5 -top-1 flex h-7 w-7 items-center justify-center rounded-md text-txt-muted opacity-0 transition-opacity duration-150 hover:bg-white/[0.06] hover:text-txt-primary focus-visible:opacity-100 group-hover/msg:opacity-100 max-sm:h-9 max-sm:w-9 max-sm:-top-2 max-sm:opacity-60"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 max-sm:h-4 max-sm:w-4">
+          <path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z" />
+        </svg>
+      </button>
+    </div>
+  )
+}
+
 /** Des messages qui se suivent, du même auteur, écrits dans la même minute :
  *  une seule bulle, une seule heure — sinon trois lignes envoyées d'affilée
  *  font trois bulles et trois fois la même heure. */
@@ -685,9 +780,17 @@ function groupMessages(messages: TicketMessage[]): MessageGroup[] {
   return groups
 }
 
+/** La dernière modification d'un message de la bulle, s'il y en a une. */
+function lastEdit(g: MessageGroup): string | null {
+  let last: string | null = null
+  for (const m of g.messages) if (m.edited_at && (!last || m.edited_at > last)) last = m.edited_at
+  return last
+}
+
 /** L'heure sous une bulle, du côté de son auteur. Aujourd'hui : l'heure
  *  seule ; un autre jour : la date devant (l'année seulement si elle diffère). */
-function MessageTime({ at, mine }: { at: string; mine: boolean }) {
+function MessageTime({ at, mine, edited }: { at: string; mine: boolean; edited: string | null }) {
+  const t = useT()
   const language = useStore((s) => s.language)
   const locale = language === 'sga' ? 'fr' : language
   const date = new Date(at)
@@ -700,10 +803,14 @@ function MessageTime({ at, mine }: { at: string; mine: boolean }) {
   return (
     <time
       dateTime={at}
-      title={formatDate(date, locale, { dateStyle: 'full', timeStyle: 'short' })}
+      title={
+        formatDate(date, locale, { dateStyle: 'full', timeStyle: 'short' }) +
+        (edited ? `\n${t('support.edited')} : ${formatDate(new Date(edited), locale, { dateStyle: 'medium', timeStyle: 'short' })}` : '')
+      }
       className={`px-1.5 text-[10.5px] tabular-nums text-txt-muted max-sm:text-[12px] max-sm:text-white/40 ${mine ? 'self-end' : 'self-start'}`}
     >
       {day ? `${day} · ${time}` : time}
+      {edited && ` · ${t('support.edited')}`}
     </time>
   )
 }
@@ -793,9 +900,9 @@ function Conversation({
               <p className="-mb-1 text-[10px] font-semibold uppercase tracking-wider text-txt-muted">
                 {g.author_kind === 'staff' ? t('support.team') : g.author_name}
               </p>
-              {g.messages.map((m) => <MessageBody key={m.id} body={m.body} />)}
+              {g.messages.map((m) => <MessageItem key={m.id} ticketId={ticket.id} message={m} onSaved={onReplied} />)}
             </div>
-            <MessageTime at={g.created_at} mine={g.author_kind !== 'staff'} />
+            <MessageTime at={g.created_at} mine={g.author_kind !== 'staff'} edited={lastEdit(g)} />
           </motion.div>
         ))}
       </div>
@@ -921,9 +1028,9 @@ function MobileConversation({ ticket, loading, labelOf, onReplied, onBack, onDel
                   <p className="-mb-1 text-[12px] font-semibold uppercase tracking-wide text-white/50">
                     {g.author_kind === 'staff' ? t('support.team') : g.author_name}
                   </p>
-                  {g.messages.map((m) => <MessageBody key={m.id} body={m.body} />)}
+                  {g.messages.map((m) => <MessageItem key={m.id} ticketId={shown.id} message={m} onSaved={onReplied} />)}
                 </div>
-                <MessageTime at={g.created_at} mine={g.author_kind !== 'staff'} />
+                <MessageTime at={g.created_at} mine={g.author_kind !== 'staff'} edited={lastEdit(g)} />
               </div>
             ))}
             <p className="pt-1 text-center text-[13px] leading-relaxed text-white/45">{t('support.attachmentsNote')}</p>

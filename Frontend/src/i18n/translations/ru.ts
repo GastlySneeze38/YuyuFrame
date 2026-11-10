@@ -2165,6 +2165,10 @@ export const ru: TranslationSchema = {
     attachmentsNote:
       'Скриншоты, логи, чеки: используйте приватный канал Discord, открытый под ваше обращение — из лаунчера ничего прикрепить нельзя.',
     team: 'Команда YuyuFrame',
+    edit: 'Изменить',
+    editSave: 'Сохранить',
+    editCancel: 'Отмена',
+    edited: 'изменено',
     replyPlaceholder: 'Напишите ответ…',
     reopenPlaceholder: 'Это обращение закрыто — напишите, чтобы открыть его заново…',
     send: 'Отправить',
