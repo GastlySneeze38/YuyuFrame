@@ -113,13 +113,7 @@ pub async fn support_diagnostic(
 
     let mut out = String::new();
     let _ = writeln!(out, "Launcher : YuyuFrame {}", app.package_info().version);
-    let _ = writeln!(
-        out,
-        "Système : {} {} ({})",
-        sysinfo::System::name().unwrap_or_else(|| "?".into()),
-        sysinfo::System::os_version().unwrap_or_else(|| "?".into()),
-        std::env::consts::ARCH,
-    );
+    let _ = writeln!(out, "Système : {} ({})", crate::app::device::os_label(), std::env::consts::ARCH);
     if let Some(cpu) = sys.cpus().first() {
         let _ = writeln!(out, "Processeur : {} ({} cœurs logiques)", cpu.brand().trim(), sys.cpus().len());
     }

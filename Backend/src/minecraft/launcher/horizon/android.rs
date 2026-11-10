@@ -104,6 +104,12 @@ pub async fn engine_version(app: &tauri::AppHandle) -> Option<String> {
         .filter(|v| !v.trim().is_empty())
 }
 
+/// Le téléphone se décrit (nom, modèle, ANDROID_ID) : `app::device`. Passe
+/// par ce pont, le seul vers Android, bien que rien n'y concerne le jeu.
+pub async fn device(app: &tauri::AppHandle) -> Result<crate::app::device::AndroidDevice> {
+    bridge(app, |b| b.call::<crate::app::device::AndroidDevice>("device")).await
+}
+
 /// Lance l'écran du jeu avec les options de la partie, puis attend qu'il se
 /// ferme. Même contrat que la version ordinateur : `Ok` à une fin normale,
 /// `LAUNCH_CANCELLED_MSG` si on l'a arrêtée.

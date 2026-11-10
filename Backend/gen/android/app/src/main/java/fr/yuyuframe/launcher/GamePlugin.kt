@@ -58,6 +58,34 @@ class GamePlugin(private val activity: Activity) : Plugin(activity) {
         invoke.resolve(JSObject())
     }
 
+    /**
+     * Ce qui décrit ce téléphone au serveur (src/app/device.rs) — rien à voir avec le jeu, mais
+     * c'est le seul pont vers Android du launcher.
+     *
+     * - `name` : le nom choisi dans les réglages (« Galaxy A32 de … »), sinon fabricant + modèle.
+     *   Sans lui, la liste des appareils du compte montrait « PC ».
+     * - `id` : ANDROID_ID, propre à l'appli sur ce téléphone et qui survit à une réinstallation
+     *   (même clé de signature) : l'équivalent du MachineGuid de Windows pour l'anti-alt. Le Rust
+     *   n'en envoie qu'un hachage salé. Aucune permission requise.
+     */
+    @Command
+    fun device(invoke: Invoke) {
+        val resolver = activity.contentResolver
+        val result = JSObject()
+        val chosen = try {
+            android.provider.Settings.Global.getString(resolver, "device_name")
+        } catch (e: Exception) {
+            null
+        }
+        val brand = android.os.Build.MANUFACTURER.orEmpty().replaceFirstChar { it.uppercase() }
+        val model = android.os.Build.MODEL.orEmpty()
+        val fallback = if (model.startsWith(brand, ignoreCase = true)) model else "$brand $model".trim()
+        result.put("name", chosen?.takeIf { it.isNotBlank() } ?: fallback)
+        result.put("model", fallback)
+        result.put("id", android.provider.Settings.Secure.getString(resolver, android.provider.Settings.Secure.ANDROID_ID) ?: "")
+        invoke.resolve(result)
+    }
+
     /** La version du moteur embarqué (écrite par horizon-android/yuyu/build_engine.py). */
     @Command
     fun engine(invoke: Invoke) {

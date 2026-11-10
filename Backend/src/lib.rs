@@ -90,6 +90,11 @@ pub fn run() {
         // envoyées par le Rust seulement : l'interface n'a pas de permission dessus.
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {
+            // Le téléphone se décrit au plus tôt : nom et empreinte de
+            // l'appareil, envoyés au serveur à la connexion (`app::device`).
+            #[cfg(target_os = "android")]
+            app::device::fetch_android(app.handle().clone());
+
             // Premier lancement (app pas encore ouverte) : l'OS a passé l'URL
             // en argument de commande — voir app::deep_link pour pourquoi
             // ça ne peut pas être émis directement ici (frontend pas encore monté).

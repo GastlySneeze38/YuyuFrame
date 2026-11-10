@@ -14,6 +14,7 @@
 //!   process      lancement de processus sans console
 
 pub mod deep_link;
+pub mod device;
 pub mod locale;
 pub mod logging;
 pub mod pending;

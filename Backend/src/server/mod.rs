@@ -49,18 +49,12 @@ const REFRESH_MARGIN_SECS: i64 = 60;
 pub fn device_info() -> Value {
     serde_json::json!({
         "device_id": crate::integrations::analytics::install_id(),
-        "device_name": hostname(),
+        "device_name": crate::app::device::name(),
         "os": std::env::consts::OS,
         "launcher_version": env!("CARGO_PKG_VERSION"),
         "hardware_id": crate::security::hardware::hardware_id(),
         "language": crate::app::locale::ui_language(),
     })
-}
-
-fn hostname() -> String {
-    std::env::var("COMPUTERNAME")
-        .or_else(|_| std::env::var("HOSTNAME"))
-        .unwrap_or_else(|_| "PC".into())
 }
 
 fn now() -> i64 {

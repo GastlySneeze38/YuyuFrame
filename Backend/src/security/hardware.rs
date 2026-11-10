@@ -5,7 +5,8 @@
 // `device_id` (le fichier des statistiques) ne peut pas tenir ce rôle : le
 // supprimer en donne un nouveau. Ici la source est l'identifiant que le
 // système garde pour lui-même — `MachineGuid` sous Windows, `machine-id` sous
-// Linux —, qui survit à une réinstallation du launcher.
+// Linux, `ANDROID_ID` sur téléphone (depuis le 2026-11-10 ; avant, un téléphone
+// n'envoyait rien) —, qui survit à une réinstallation du launcher.
 //
 // Ce qui part au serveur est un SHA-256 salé de cet identifiant, jamais
 // l'identifiant : le serveur sait reconnaître deux fois le même poste, pas
@@ -21,8 +22,23 @@ use std::sync::OnceLock;
 const SALT: &[u8] = b"yuyuframe-hardware-v1\0";
 
 pub fn hardware_id() -> Option<&'static str> {
-    static ID: OnceLock<Option<String>> = OnceLock::new();
-    ID.get_or_init(|| machine_id().map(|id| fingerprint(&id))).as_deref()
+    // Android : ANDROID_ID arrive du plugin Kotlin peu après le démarrage
+    // (`app::device`). Une absence n'est donc pas gardée : l'appel suivant
+    // redemande, et la première empreinte trouvée l'est pour de bon.
+    #[cfg(target_os = "android")]
+    {
+        static ID: OnceLock<String> = OnceLock::new();
+        if let Some(id) = ID.get() {
+            return Some(id.as_str());
+        }
+        let source = machine_id()?;
+        Some(ID.get_or_init(|| fingerprint(&source)).as_str())
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        static ID: OnceLock<Option<String>> = OnceLock::new();
+        ID.get_or_init(|| machine_id().map(|id| fingerprint(&id))).as_deref()
+    }
 }
 
 fn fingerprint(machine_id: &str) -> String {
@@ -74,7 +90,14 @@ fn machine_id() -> Option<String> {
     (!id.is_empty()).then(|| id.to_string())
 }
 
-#[cfg(not(target_os = "windows"))]
+/// Android : ANDROID_ID (`app::device`), propre à l'appli sur ce téléphone,
+/// qui survit à une réinstallation tant que la clé de signature ne change pas.
+#[cfg(target_os = "android")]
+fn machine_id() -> Option<String> {
+    crate::app::device::android_id()
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "android")))]
 fn machine_id() -> Option<String> {
     ["/etc/machine-id", "/var/lib/dbus/machine-id"]
         .iter()
