@@ -20,6 +20,7 @@ import { jvmLinkBlock } from '@/lib/loader'
 import { useIsMobile } from '@/mobile/useIsMobile'
 import { ScreenHeader } from '@/mobile/ui/ScreenHeader'
 import { Segmented as MobileSegmented } from '@/mobile/ui/kit'
+import { SwipeTabs } from '@/mobile/ui/SwipeTabs'
 
 const CATEGORIES: JvmFlagCategory[] = ['jvm', 'gc', 'jit']
 
@@ -355,6 +356,8 @@ export default function JvmProfileEditor() {
               ]}
             />
             {warnings}
+            {/* Balayer le contenu passe d'une catégorie à l'autre (`SwipeTabs`). */}
+            <SwipeTabs tabs={[...CATEGORIES, 'preview'] as EditorTab[]} value={tab} onChange={setTab} className="flex flex-col">
             {tab !== 'preview' ? (
               <CategoryPane
                 category={tab}
@@ -412,6 +415,7 @@ export default function JvmProfileEditor() {
                 )}
               </div>
             )}
+            </SwipeTabs>
           </div>
         </div>
         {dirty && (

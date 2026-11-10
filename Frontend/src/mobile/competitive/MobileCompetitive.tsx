@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { useT } from '@/i18n'
@@ -6,7 +6,7 @@ import { Skeleton, SkeletonRows } from '@/components/ui/Skeleton'
 import { RankTile, useRankName } from '@/components/competitive/RankCard'
 import { MenuButton } from '@/mobile/ui/NavDrawer'
 import { Sheet, SheetTitle } from '@/mobile/ui/Sheet'
-import { bindTouchDrag, isTouchControl, rubber } from '@/mobile/ui/gesture'
+import { SwipeTabs } from '@/mobile/ui/SwipeTabs'
 import { MODES, TIER_COLORS, emptyStanding, tierOf, type CompetitiveData, type DuelRow, type ModeKey, type ServerStats, type Standing } from '@/lib/competitive'
 import { MobileHistory, MobileLeaderboard, MobileSeason, MobileStats } from './views'
 
@@ -143,7 +143,7 @@ export function MobileCompetitive({
       ) : !data ? (
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-6">{empty}</div>
       ) : (
-        <SwipeViews view={view} onView={onView}>
+        <SwipeTabs tabs={COMPETITIVE_VIEWS} value={view} onChange={onView} animate={false}>
         <motion.div
           // Une colonne par écran et par mode : chacun repart en haut. Il
           // arrive du côté vers lequel on va (24 px), en fondu court.
@@ -184,7 +184,7 @@ export function MobileCompetitive({
             />
           )}
         </motion.div>
-        </SwipeViews>
+        </SwipeTabs>
       )}
 
       {data && (
@@ -201,73 +201,6 @@ export function MobileCompetitive({
       )}
     </div>
   )
-}
-
-/** Distance (px) ou vitesse (px/s) d'un balayage qui change d'écran. */
-const SWIPE_OFFSET = 60
-const SWIPE_VELOCITY = 400
-
-/**
- * Balayer l'écran vers la gauche ou la droite passe à l'écran voisin
- * (Duels ↔ Stats ↔ Saison ↔ Classement), comme les onglets d'Android
- * (2026-11-09). Pendant le geste, la colonne suit un peu le doigt en
- * résistant ; au premier et au dernier écran, elle résiste davantage et
- * revient. Un geste plutôt vertical reste un défilement, et un contenu qui
- * défile lui-même horizontalement garde son geste.
- */
-function SwipeViews({ view, onView, children }: { view: CompetitiveView; onView: (v: CompetitiveView) => void; children: ReactNode }) {
-  const ref = useRef<HTMLDivElement>(null)
-  const latest = useRef({ view, onView })
-  latest.current = { view, onView }
-
-  useEffect(() => {
-    const el = ref.current!
-    const column = () => el.firstElementChild as HTMLElement | null
-    const neighbour = (d: number) => {
-      const i = COMPETITIVE_VIEWS.indexOf(latest.current.view) + (d < 0 ? 1 : -1)
-      return COMPETITIVE_VIEWS[i] ?? null
-    }
-    return bindTouchDrag(el, {
-      axis: 'x',
-      accept: (dx, dy, target) =>
-        Math.abs(dx) > Math.abs(dy) * 1.5 && !isTouchControl(target) && !canScrollHorizontally(target, el, dx),
-      onStart: () => {
-        const c = column()
-        if (c) c.style.transition = 'none'
-      },
-      onMove: (d) => {
-        const c = column()
-        // Le doigt « tire » l'écran : plus fort quand il n'y a rien derrière.
-        if (c) c.style.transform = `translateX(${rubber(d, neighbour(d) ? 90 : 40)}px)`
-      },
-      onEnd: (d, velocity) => {
-        const next = neighbour(d)
-        const c = column()
-        if (next && (Math.abs(d) > SWIPE_OFFSET || Math.abs(velocity) > SWIPE_VELOCITY) && Math.sign(velocity || d) === Math.sign(d)) {
-          latest.current.onView(next)
-          return
-        }
-        if (c) {
-          c.style.transition = 'transform 260ms cubic-bezier(0.2, 0.9, 0.25, 1)'
-          c.style.transform = ''
-          window.setTimeout(() => { c.style.transition = '' }, 300)
-        }
-      },
-    })
-  }, [])
-
-  return <div ref={ref} className="flex min-h-0 flex-1 flex-col">{children}</div>
-}
-
-/** Un ancêtre de `el` (jusqu'à `root` exclu) qui peut encore défiler dans le sens du geste. */
-function canScrollHorizontally(el: Element, root: Element, dx: number): boolean {
-  for (let n: Element | null = el; n && n !== root; n = n.parentElement) {
-    if (!(n instanceof HTMLElement) || n.scrollWidth <= n.clientWidth + 1) continue
-    const ox = getComputedStyle(n).overflowX
-    if (ox !== 'auto' && ox !== 'scroll') continue
-    if (dx > 0 ? n.scrollLeft > 0 : n.scrollLeft + n.clientWidth < n.scrollWidth - 1) return true
-  }
-  return false
 }
 
 /** L'icône d'un mode : la masse (manche et tête à pointes) ou l'épée. */

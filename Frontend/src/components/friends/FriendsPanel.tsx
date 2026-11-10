@@ -16,6 +16,7 @@ import { InviteList } from './InviteCards'
 import { FriendSettingsView } from './FriendSettingsView'
 import { prefetchFriendProfile } from '@/lib/friendProfileCache'
 import { useProgressiveList } from '@/hooks/useProgressiveList'
+import { SwipeTabs } from '@/mobile/ui/SwipeTabs'
 import { MyStatusBar } from './MyStatusBar'
 import { MyProfileView } from './MyProfileView'
 import { AccountMenu } from '@/components/account/AccountMenu'
@@ -194,7 +195,9 @@ function PanelBody({ onClose }: { onClose: () => void }) {
         </div>
       )}
 
-      {/* Corps */}
+      {/* Corps. Au doigt, balayer la liste passe d'Amis à Demandes
+          (`SwipeTabs`) ; hors de la liste (fiche, réglages), rien. */}
+      <SwipeTabs tabs={view.kind === 'list' && signedIn && list ? (['friends', 'requests'] as const) : []} value={tab} onChange={openTab}>
       <div className="min-h-0 flex-1 overflow-y-auto">
         {!signedIn ? (
           <Empty text={t('friends.signIn')} action={t('friends.signInButton')} onAction={() => { onClose(); navigate('/yuyu') }} />
@@ -273,6 +276,7 @@ function PanelBody({ onClose }: { onClose: () => void }) {
           </div>
         )}
       </div>
+      </SwipeTabs>
 
       {view.kind === 'list' && signedIn && list && tab === 'requests' && <AddFriendBar focusSignal={addFocus} prefill={prefill} />}
       {signedIn && list && <MyStatusBar onOpenProfile={() => setView({ kind: 'me' })} />}

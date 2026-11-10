@@ -84,7 +84,11 @@ function PushedLayer({ open, onBack, onClosed, backLabel, title, subtitle, right
       axis: 'x',
       // Vers la droite et franchement horizontal ; jamais depuis un champ ni
       // depuis un contenu qui peut encore défiler vers la gauche.
-      accept: (dx, dy, target) => dx > 0 && dx > Math.abs(dy) * 1.2 && !isTouchControl(target) && !canScrollLeft(target, el),
+      // Des onglets qui ont un onglet avant (`SwipeTabs`) prennent le geste
+      // vers la droite : on revient d'abord au premier onglet, puis en arrière.
+      accept: (dx, dy, target) =>
+        dx > 0 && dx > Math.abs(dy) * 1.2 && !isTouchControl(target) && !canScrollLeft(target, el) &&
+        !target.closest('[data-swipe-tabs]')?.hasAttribute('data-swipe-prev'),
       onStart: () => { base = slide.current!.stop() },
       onMove: (d) => {
         const v = base + d

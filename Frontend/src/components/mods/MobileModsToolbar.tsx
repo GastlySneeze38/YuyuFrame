@@ -10,6 +10,18 @@ function familyOf(tab: Tab): Family {
 }
 
 /**
+ * L'ordre des onglets qu'un balayage du contenu parcourt (`SwipeTabs`) : les
+ * écrans de la famille ouverte — le niveau le plus profond prend le geste.
+ * La famille Options n'a pas d'écrans : là, ce sont les familles.
+ */
+export function swipeOrder(tab: Tab, isPlugin: boolean): Tab[] {
+  const family = familyOf(tab)
+  if (family === 'mods') return ['installed', 'browse', 'modpack']
+  if (family === 'packs') return ['packs-installed', 'packs-shader', 'packs-resourcepack']
+  return [...(!isPlugin ? ['installed' as const] : []), 'packs-installed', 'options']
+}
+
+/**
  * La barre de l'écran des mods, sur téléphone.
  *
  * Mêmes écrans que la barre du PC, rangés autrement : sur PC, trois menus

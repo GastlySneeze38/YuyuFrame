@@ -30,7 +30,7 @@ const PUSH_EASE = [0.32, 0.72, 0, 1] as const
  * liste → détail de toutes les applis. Le contenu ouvert est noté dans
  * l'adresse (`?open=<id>`) : le bouton retour d'Android le referme.
  *
- * Ordre et hiérarchie du PC : en-tête (titre, configurations JVM), Favoris,
+ * Ordre et hiérarchie du PC : en-tête (titre), Favoris,
  * Autres (repliables), puis les deux actions principales — Nouvelle instance
  * en avant, Importer à côté — posées en bas, sous le pouce.
  */
@@ -151,16 +151,14 @@ export default function MobileInstances() {
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-bg-primary text-white">
-      {/* ── En-tête : titre en grand, configurations JVM à droite ── */}
+      {/* ── En-tête : titre en grand ── */}
       <header className="flex shrink-0 items-center gap-1 pb-3 pl-1.5 pr-4 pt-[max(12px,env(safe-area-inset-top))]">
         <MenuButton />
         <h1 className="min-w-0 flex-1 truncate text-[28px] font-black leading-none tracking-[-0.015em] text-white">{t('instancesPage.title')}</h1>
-        <button
-          onClick={() => navigate('/jvm')}
-          className="press flex h-11 shrink-0 items-center rounded-full border border-white/[0.1] bg-white/[0.05] px-4 text-[14px] font-semibold text-white/80"
-        >
-          {t('settings.lancement.jvmLabel')}
-        </button>
+        {/* Plus de raccourci vers les configurations JVM (2026-11-10) : le
+            téléphone ne lance pas de Java (Horizon seulement), donc rien ne
+            s'y règle. L'écran `/jvm` reste, pour la future synchronisation
+            téléphone ↔ PC. */}
       </header>
 
       {/* ── La liste ── */}

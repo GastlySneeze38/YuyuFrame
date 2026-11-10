@@ -25,6 +25,7 @@ import { MenuButton } from '@/mobile/ui/NavDrawer'
 import { PushedMoreButton, PushedScreen } from '@/mobile/ui/PushedScreen'
 import { ActionSheet, SHEET_ICONS } from '@/mobile/ui/ActionSheet'
 import type { SupportCategory, TicketDetail, TicketStatus, TicketSummary } from '@/types/support'
+import { SwipeTabs } from '@/mobile/ui/SwipeTabs'
 
 /**
  * Support — tout ce qu'on peut demander à l'équipe.
@@ -44,6 +45,7 @@ import type { SupportCategory, TicketDetail, TicketStatus, TicketSummary } from 
 const DRAFT_KEY = SUPPORT_DRAFT_KEY
 
 type Tab = 'requests' | 'crashes' | 'patchNotes' | 'videos'
+const SUPPORT_TABS: Tab[] = ['requests', 'crashes', 'patchNotes', 'videos']
 type Kind = 'question' | 'refund' | 'plan' | 'deletion'
 
 interface KindSpec {
@@ -198,6 +200,9 @@ export default function Support() {
         </header>
         <TabBar tab={tab} onPick={setTab} />
 
+        {/* Balayer le contenu change d'onglet (`SwipeTabs`). */}
+        <SwipeTabs tabs={SUPPORT_TABS} value={tab} onChange={setTab}>
+        <div className="flex min-h-0 flex-1 flex-col">
         {tab === 'videos' ? (
           <VideosSoon />
         ) : tab === 'patchNotes' ? (
@@ -248,6 +253,8 @@ export default function Support() {
             </div>
           </div>
         )}
+        </div>
+        </SwipeTabs>
 
         <MobileConversation
           ticket={openTicket}
@@ -368,7 +375,7 @@ function TabBar({ tab, onPick }: { tab: Tab; onPick: (tab: Tab) => void }) {
     return (
       <div className="shrink-0 px-4 pb-3">
         <div className="grid grid-cols-4 gap-1 rounded-2xl bg-white/[0.04] p-1">
-          {(['requests', 'crashes', 'patchNotes', 'videos'] as Tab[]).map((key) => (
+          {SUPPORT_TABS.map((key) => (
             <button
               key={key}
               onClick={() => onPick(key)}
@@ -392,7 +399,7 @@ function TabBar({ tab, onPick }: { tab: Tab; onPick: (tab: Tab) => void }) {
   }
   return (
     <div className="flex shrink-0 gap-1 border-b border-line-soft px-6">
-      {(['requests', 'crashes', 'patchNotes', 'videos'] as Tab[]).map((key) => (
+      {SUPPORT_TABS.map((key) => (
         <button
           key={key}
           onClick={() => onPick(key)}

@@ -28,6 +28,7 @@ import { PushedMoreButton } from '@/mobile/ui/PushedScreen'
 import { ActionSheet, SHEET_ICONS } from '@/mobile/ui/ActionSheet'
 import { Sheet, SheetTitle } from '@/mobile/ui/Sheet'
 import { CARD, LIST, Note, RowChevron, Section, Segmented } from '@/mobile/ui/kit'
+import { SwipeTabs } from '@/mobile/ui/SwipeTabs'
 
 /**
  * Skins — l'écran unique, pour les comptes Microsoft comme pour les comptes
@@ -667,6 +668,9 @@ export default function Skins() {
                   onChange={setTab}
                   options={(['player', 'url', 'file'] as const).map((m) => ({ value: m, label: t(`skins.source${m[0].toUpperCase()}${m.slice(1)}Short`) }))}
                 />
+                {/* Balayer l'explication et le champ change de source (`SwipeTabs`). */}
+                <SwipeTabs tabs={['player', 'url', 'file'] as const} value={tab} onChange={setTab} className="flex flex-col">
+                <div className="flex flex-col gap-3">
                 <p className="px-1 text-[13px] leading-relaxed text-white/55">{t(`skins.source${tab[0].toUpperCase()}${tab.slice(1)}Hint`)}</p>
                 {tab === 'file' ? (
                   <button onClick={pickFile} disabled={searching} className="press flex h-12 items-center justify-center gap-2 rounded-2xl bg-[rgb(var(--accent))] text-[15px] font-semibold text-white disabled:opacity-50">
@@ -697,6 +701,8 @@ export default function Skins() {
                     </button>
                   </div>
                 )}
+                </div>
+                </SwipeTabs>
                 <div className={`${LIST} mt-2`}>
                   {[
                     { to: '/skins/catalog', title: t('skinCatalog.openButton'), hint: t('skinCatalog.openHint'), icon: <><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></> },

@@ -15,6 +15,7 @@ import { useT } from '@/i18n'
 import { useIsMobile } from '@/mobile/useIsMobile'
 import { ScreenHeader } from '@/mobile/ui/ScreenHeader'
 import { Segmented } from '@/mobile/ui/kit'
+import { SwipeTabs } from '@/mobile/ui/SwipeTabs'
 
 /**
  * Écran Serveurs, ouvert depuis la rangée de serveurs de l'accueil.
@@ -110,7 +111,11 @@ export default function Servers() {
         <div className="shrink-0 px-4 pb-3 pt-3">
           <Segmented value={tab} onChange={go} options={TABS.map((v) => ({ value: v, label: t(`servers.page.tabs.${v}`) }))} />
         </div>
-        <div className="flex min-h-0 flex-1 flex-col">{views}</div>
+        {/* Balayer le contenu change d'onglet (`SwipeTabs`) ; la fiche
+            d'un serveur ouverte prend le geste pour ses propres onglets. */}
+        <SwipeTabs tabs={TABS} value={tab} onChange={go}>
+          <div className="flex min-h-0 flex-1 flex-col">{views}</div>
+        </SwipeTabs>
       </div>
     )
   }

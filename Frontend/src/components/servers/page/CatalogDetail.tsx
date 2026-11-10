@@ -3,6 +3,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { useIsMobile } from '@/mobile/useIsMobile'
 import { Sheet, SheetTitle } from '@/mobile/ui/Sheet'
 import { CheckRow, Segmented as KitSegmented } from '@/mobile/ui/kit'
+import { SwipeTabs } from '@/mobile/ui/SwipeTabs'
 import { openExternal as openUrl } from '@/lib/openExternal'
 import { api } from '@/api/client'
 import type { CatalogServer, CatalogServerDetail } from '@/api/client'
@@ -230,6 +231,9 @@ export function CatalogDetail({ server, onClose, onAdded }: { server: CatalogSer
             <span />
           </header>
 
+          {/* Toute la fiche est la zone du geste : Description ↔ Infos, et
+              jamais les onglets de l'écran Serveurs en dessous. */}
+          <SwipeTabs tabs={tabs.map((tb) => tb.key)} value={tab} onChange={setTab}>
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[max(32px,env(safe-area-inset-bottom))]">
             <div className="relative h-[150px] overflow-hidden" style={{ background: `linear-gradient(135deg, color-mix(in srgb, ${accent} 40%, transparent), color-mix(in srgb, ${accent} 6%, transparent))` }}>
               <RemoteImage src={server.banner_url} eager className="h-full w-full object-cover" />
@@ -332,6 +336,7 @@ export function CatalogDetail({ server, onClose, onAdded }: { server: CatalogSer
               )}
             </div>
           </div>
+          </SwipeTabs>
 
           {/* Image agrandie, sur tout l'écran ; un toucher la referme. */}
           <AnimatePresence>

@@ -19,7 +19,8 @@ import { ConflictBanner } from '@/components/mods/ConflictBanner'
 import { ModpackBrowseTab, type MergedModpackHit } from '@/components/mods/ModpackBrowseTab'
 import { BrowseTab, type MergedHit } from '@/components/mods/BrowseTab'
 import { ToolbarMenu } from '@/components/mods/ToolbarMenu'
-import { MobileImportFab, MobileModsToolbar } from '@/components/mods/MobileModsToolbar'
+import { MobileImportFab, MobileModsToolbar, swipeOrder } from '@/components/mods/MobileModsToolbar'
+import { SwipeTabs } from '@/mobile/ui/SwipeTabs'
 import { TOOLBAR_ICON } from '@/components/mods/toolbarIcons'
 import { useIsMobile } from '@/mobile/useIsMobile'
 import { PacksTab } from '@/components/mods/PacksTab'
@@ -1432,6 +1433,9 @@ export function ModsContent({ instance }: { instance: Instance }) {
       {/* Content */}
       {/* Sur téléphone, 96 px gardés en bas : le dernier élément de la liste
           remonte au-dessus du bouton flottant au lieu de rester dessous. */}
+      {/* Sur téléphone, balayer le contenu change d'écran dans la famille
+          ouverte (Installés ↔ Shaders ↔ Ressources…) : `SwipeTabs`. */}
+      <MaybeSwipe on={mobile} tabs={swipeOrder(tab, isPlugin)} value={tab} onChange={setTab}>
       <div onScroll={onContentScroll} className={`flex-1 overflow-y-auto ${mobile ? 'overscroll-contain px-4 pb-24 pt-3' : 'px-6 py-3'}`}>
         {modpackMeta && (
           <ModpackBanner
@@ -1557,8 +1561,15 @@ export function ModsContent({ instance }: { instance: Instance }) {
           </div>
         )}
       </div>
+      </MaybeSwipe>
     </div>
   )
+}
+
+/** `SwipeTabs` sur téléphone seulement ; sur PC, le contenu tel quel. */
+function MaybeSwipe<T>({ on, tabs, value, onChange, children }: { on: boolean; tabs: readonly T[]; value: T; onChange: (t: T) => void; children: React.ReactElement }) {
+  if (!on) return children
+  return <SwipeTabs tabs={tabs} value={value} onChange={onChange}>{children}</SwipeTabs>
 }
 
 // ── Standalone page (kept for /mods route) ────────────────────────────────────

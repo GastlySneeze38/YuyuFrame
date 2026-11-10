@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { LegalMarkdown } from '@/components/legal/LegalMarkdown'
 import { useT } from '@/i18n'
 import { Segmented } from '@/mobile/ui/kit'
+import { SwipeTabs } from '@/mobile/ui/SwipeTabs'
 
 type TabId = 'conditions' | 'confidentialite' | 'licence'
 
@@ -62,7 +63,8 @@ export default function Legal() {
         ))}
       </div>
 
-      {/* Content */}
+      {/* Content — au doigt, balayer change d'onglet (`SwipeTabs`, sans effet à la souris). */}
+      <SwipeTabs tabs={TABS.map((tb) => tb.id)} value={tab} onChange={selectTab}>
       <div className="flex-1 overflow-y-auto overscroll-contain px-6 py-6 max-sm:px-4 max-sm:pb-[max(32px,env(safe-area-inset-bottom))]">
         <div className="mx-auto flex max-w-2xl flex-col gap-5">
           {tab === 'conditions' && <LegalMarkdown source={termsMd} />}
@@ -70,6 +72,7 @@ export default function Legal() {
           {tab === 'licence' && <PlainText source={licenseTxt} />}
         </div>
       </div>
+      </SwipeTabs>
     </div>
   )
 }
