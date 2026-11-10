@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
-import { motion } from 'framer-motion'
+import { motion, type Transition } from 'framer-motion'
 import launchSoundUrl from '@/assets/sounds/halloween-launch.ogg'
 import { useStore } from '@/stores/useStore'
 
@@ -59,11 +59,13 @@ export function HalloweenSky() {
 
       <Moon />
 
-      {/* La sorcière passe devant la lune de temps en temps. */}
+      {/* La sorcière passe devant la lune de temps en temps. Elle glisse sur
+          une piste de toute la largeur (`x` en % de la piste = % du ciel) :
+          animer `left` se calculait sur le fil principal, sans fin. */}
       <motion.div
-        className="absolute top-[13%]"
-        initial={{ left: '-12%' }}
-        animate={{ left: '108%' }}
+        className="pointer-events-none absolute inset-x-0 top-[13%]"
+        initial={{ x: '-12%' }}
+        animate={{ x: '108%' }}
         transition={{ duration: 11, ease: 'linear', repeat: Infinity, repeatDelay: 19, delay: 5 }}
       >
         <motion.svg
@@ -219,9 +221,22 @@ function BatSwarm() {
     }
 
     let frame = 0
+    let idle = 0
     let last = performance.now()
     let clock = 0
     const step = (now: number) => {
+      // En pause quand on ne le voit pas (2026-11-10) : sur téléphone,
+      // l'accueil reste monté mais masqué (`display: none`, mobile/KeptTabs)
+      // quand on va sur un autre onglet, et la simulation tournait à 60 images
+      // par seconde pour rien. Une vérification par demi-seconde suffit pour
+      // reprendre au retour.
+      if (document.hidden || canvas.offsetWidth === 0) {
+        idle = window.setTimeout(() => {
+          last = performance.now()
+          frame = requestAnimationFrame(step)
+        }, 500)
+        return
+      }
       // Borné : au retour d'un onglet caché, un pas de plusieurs secondes
       // enverrait tout le monde hors du ciel.
       const dt = Math.min((now - last) / 1000, 0.05)
@@ -304,6 +319,7 @@ function BatSwarm() {
 
     return () => {
       cancelAnimationFrame(frame)
+      window.clearTimeout(idle)
       observer.disconnect()
     }
   }, [])
@@ -410,6 +426,8 @@ function Pumpkin({ left, right, size, delay, hop, wobble }: { left?: string; rig
   )
 }
 
+const SPIDER_DROP: Transition = { duration: 9, times: [0, 0.25, 0.35, 0.45, 0.8, 1], repeat: Infinity, repeatDelay: 10, delay: 4, ease: 'easeInOut' }
+
 /** Une araignée descend au bout de son fil, se balance, et remonte. */
 function Spider() {
   return (
@@ -419,21 +437,29 @@ function Spider() {
       animate={{ rotate: [0, 6, -6, 4, 0] }}
       transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
     >
+      {/* Le fil s'étire en `scaleY` et l'araignée le suit en `y` : animer
+          `height` refaisait la mise en page à chaque image, sans fin. */}
       <motion.div
-        className="w-px"
-        style={{ background: 'rgba(255,255,255,0.28)' }}
-        initial={{ height: 0 }}
-        animate={{ height: [0, 70, 58, 66, 66, 0] }}
-        transition={{ duration: 9, times: [0, 0.25, 0.35, 0.45, 0.8, 1], repeat: Infinity, repeatDelay: 10, delay: 4, ease: 'easeInOut' }}
+        className="h-[70px] w-px"
+        style={{ background: 'rgba(255,255,255,0.28)', transformOrigin: '50% 0%' }}
+        initial={{ scaleY: 0 }}
+        animate={{ scaleY: [0, 1, 58 / 70, 66 / 70, 66 / 70, 0] }}
+        transition={SPIDER_DROP}
       />
-      <svg viewBox="0 0 16 12" className="-mt-px h-[11px] w-[15px]">
+      <motion.svg
+        viewBox="0 0 16 12"
+        className="absolute left-1/2 top-[-1px] -ml-[7.5px] h-[11px] w-[15px]"
+        initial={{ y: 0 }}
+        animate={{ y: [0, 70, 58, 66, 66, 0] }}
+        transition={SPIDER_DROP}
+      >
         <g stroke={INK} strokeWidth="1" fill="none">
           <path d="M6 5 L1 2 M6 6 L0 6 M6 7 L1 10 M10 5 L15 2 M10 6 L16 6 M10 7 L15 10" />
         </g>
         <ellipse cx="8" cy="6" rx="3" ry="3.4" fill={INK} />
         <circle cx="7" cy="5" r="0.7" fill="#ff5a3a" />
         <circle cx="9" cy="5" r="0.7" fill="#ff5a3a" />
-      </svg>
+      </motion.svg>
     </motion.div>
   )
 }

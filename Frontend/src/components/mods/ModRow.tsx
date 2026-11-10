@@ -41,6 +41,9 @@ export const ModRow = memo(function ModRow({
   const [confirm, setConfirm] = useState(false)
   const mobile = useIsMobile()
   const [sheetOpen, setSheetOpen] = useState(false)
+  // La feuille « … » n'est montée qu'à la première ouverture : fermée, elle
+  // ne servait à rien, et une liste de 200 mods en préparait 200.
+  const [sheetUsed, setSheetUsed] = useState(false)
 
   // ── Téléphone ──
   // Six éléments sur une ligne de 358 px ne laissaient plus de place au nom.
@@ -97,7 +100,7 @@ export const ModRow = memo(function ModRow({
         </div>
         <Toggle checked={mod.enabled} onChange={() => onToggle(mod)} title={mod.enabled ? t('mods.disable') : t('mods.enable')} />
         <button
-          onClick={() => setSheetOpen(true)}
+          onClick={() => { setSheetUsed(true); setSheetOpen(true) }}
           aria-label={t('instancesPage.moreActions')}
           aria-haspopup="dialog"
           className="press flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/55"
@@ -106,7 +109,7 @@ export const ModRow = memo(function ModRow({
             ? <ButtonSpinner size={16} trackColor="rgba(255,255,255,0.1)" />
             : <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5"><circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" /></svg>}
         </button>
-        <ActionSheet
+        {sheetUsed && <ActionSheet
           open={sheetOpen}
           onClose={() => setSheetOpen(false)}
           header={
@@ -118,7 +121,7 @@ export const ModRow = memo(function ModRow({
             </>
           }
           actions={actions}
-        />
+        />}
       </div>
     )
   }

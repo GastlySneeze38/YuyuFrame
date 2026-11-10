@@ -8,7 +8,7 @@ import { CARD, LIST, Note, RowChevron, Section } from '@/mobile/ui/kit'
 import { RewardImage } from '@/components/competitive/RewardImage'
 import { RankTile } from '@/components/competitive/RankCard'
 import { TopoBackdrop } from '@/components/competitive/TopoBackdrop'
-import { DIFFICULTY, FREE_COLOR, PASS_COLOR, countdown, missionText, nextUtcMidnight, useNow } from '@/components/competitive/Challenges'
+import { DIFFICULTY, FREE_COLOR, PASS_COLOR, LiveCountdown, missionText, nextUtcMidnight, useNow } from '@/components/competitive/Challenges'
 import { usePass } from '@/lib/usePass'
 import {
   DIVISIONS_PER_TIER,
@@ -63,11 +63,12 @@ function LockIcon({ className }: { className?: string }) {
   )
 }
 
-function Clock({ time }: { time: string }) {
+/** Le compte à rebours d'une section : seul lui se redessine chaque seconde. */
+function Clock({ until }: { until: number | ((now: number) => number) }) {
   return (
     <span className="flex shrink-0 items-center gap-1 text-[13px] tabular-nums text-white/55">
       <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm1 11h-5v-2h3V6h2z" /></svg>
-      {time}
+      <LiveCountdown until={until} />
     </span>
   )
 }
@@ -171,7 +172,7 @@ function MissionLists({ challenges, pass, meta, onReroll }: {
   onReroll: (id: string) => Promise<void>
 }) {
   const t = useT()
-  const now = useNow()
+  const now = useNow(60_000)
   if (challenges === null) return <Note>{t('competitive.challenges.soon')}</Note>
   const daily = challenges.filter((c) => c.period === 'daily').sort((a, b) => Number(!!b.carried) - Number(!!a.carried))
   const weekly = challenges.filter((c) => c.period === 'weekly')
@@ -180,7 +181,7 @@ function MissionLists({ challenges, pass, meta, onReroll }: {
 
   return (
     <>
-      <Section title={t('competitive.challenges.daily')} aside={daily.length > 0 && <Clock time={countdown(nextUtcMidnight(now) - now)} />}>
+      <Section title={t('competitive.challenges.daily')} aside={daily.length > 0 && <Clock until={nextUtcMidnight} />}>
         {pass && (
           <div className={`flex flex-col gap-2 px-4 py-3.5 ${CARD}`}>
             <Checkpoints done={pass.checkpointsDone} total={pass.checkpoints} />
@@ -199,7 +200,7 @@ function MissionLists({ challenges, pass, meta, onReroll }: {
         </div>
       </Section>
 
-      <Section title={t('competitive.challenges.weekly')} aside={weekly[0] && <Clock time={countdown(weekly[0].endsAt - now)} />}>
+      <Section title={t('competitive.challenges.weekly')} aside={weekly[0] && <Clock until={weekly[0].endsAt} />}>
         {weekly.every((c) => c.progress >= c.goal) ? (
           <Note>{t('competitive.missions.allDone')}</Note>
         ) : (
@@ -292,7 +293,7 @@ function MissionRow({ mission: c, now, onReroll }: { mission: Challenge; now: nu
 
 function ObjectiveRow({ objective: o, pass }: { objective: PassObjective; pass: BattlePass }) {
   const t = useT()
-  const now = useNow()
+  const now = useNow(60_000)
   const color = o.kind === 'rank' ? TIER_COLORS[o.tier] : PASS_COLOR
   const title =
     o.kind === 'unlock' ? t(`competitive.seasons.kinds.${o.reward}`, { rank: o.name })

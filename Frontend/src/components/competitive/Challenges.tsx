@@ -25,13 +25,28 @@ export const PASS_COLOR = '129 120 255'
 export const FREE_COLOR = '52 211 153'
 
 /** L'heure, rafraîchie chaque seconde : pour les comptes à rebours. */
-export function useNow(): number {
+/**
+ * L'heure, remise à jour toutes les `everyMs` (1 s par défaut). Ce qui ne
+ * montre que des jours en demande une par minute (2026-11-10) : la seconde
+ * redessinait toute la liste des missions pour changer un seul chiffre. Les
+ * comptes à rebours à la seconde ont leur propre composant (`LiveCountdown`),
+ * seul à se redessiner.
+ */
+export function useNow(everyMs = 1000): number {
   const [now, setNow] = useState(Date.now())
   useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000)
+    const timer = setInterval(() => setNow(Date.now()), everyMs)
     return () => clearInterval(timer)
-  }, [])
+  }, [everyMs])
   return now
+}
+
+/** Un compte à rebours à la seconde, qui seul se redessine. `until` : une
+ *  échéance, ou de quoi la calculer depuis l'heure (minuit UTC suivant). */
+export function LiveCountdown({ until, title }: { until: number | ((now: number) => number); title?: (time: string) => string }) {
+  const now = useNow()
+  const time = countdown((typeof until === 'function' ? until(now) : until) - now)
+  return title ? <span title={title(time)}>{time}</span> : <>{time}</>
 }
 
 /** « 15:34:29 » sous un jour, « 3:16:49:05 » (jours en tête) au-delà. */
@@ -105,7 +120,7 @@ export function Missions({
   onReroll?: (id: string) => void
 }) {
   const t = useT()
-  const now = useNow()
+  const now = useNow(60_000)
   if (challenges === null) {
     return (
       <div className="flex items-center justify-center rounded-2xl border border-line bg-surface-1 p-5">
@@ -126,7 +141,7 @@ export function Missions({
   return (
     <div className="flex min-h-0 flex-col justify-between gap-[clamp(10px,2.2vh,20px)] overflow-y-auto rounded-2xl border border-line bg-surface-1 px-4 py-[clamp(12px,2.2vh,20px)] lg:px-5">
       <section className="flex flex-col gap-[clamp(6px,1.3vh,12px)]">
-        <SectionHead title={t('competitive.challenges.daily')} refill={daily.length ? countdown(nextUtcMidnight(now) - now) : null} />
+        <SectionHead title={t('competitive.challenges.daily')} refill={daily.length ? nextUtcMidnight : null} />
         {pass && (
           <div title={t('competitive.missions.perCheckpoint', { xp: pass.checkpointXp.toLocaleString() })}>
             <Checkpoints done={pass.checkpointsDone} total={pass.checkpoints} />
@@ -148,7 +163,7 @@ export function Missions({
       </section>
 
       <section className="flex flex-col gap-[clamp(6px,1.3vh,12px)]">
-        <SectionHead title={t('competitive.challenges.weekly')} refill={weekly[0] ? countdown(weekly[0].endsAt - now) : null} />
+        <SectionHead title={t('competitive.challenges.weekly')} refill={weekly[0] ? weekly[0].endsAt : null} />
         {weekly.every((c) => c.progress >= c.goal) ? (
           <p className="py-4 text-center text-[11px] font-bold uppercase tracking-[0.06em] text-txt-muted">{t('competitive.missions.allDone')}</p>
         ) : (
@@ -164,15 +179,15 @@ export function Missions({
 }
 
 /** Titre d'une section et son compte à rebours (horloge), sur une ligne. */
-function SectionHead({ title, refill }: { title: string; refill: string | null }) {
+function SectionHead({ title, refill }: { title: string; refill: number | ((now: number) => number) | null }) {
   const t = useT()
   return (
     <div className="flex items-center justify-between gap-3">
       <span className="truncate text-[12.5px] font-black uppercase tracking-[0.04em]">{title}</span>
-      {refill && (
-        <span title={t('competitive.missions.refills', { time: refill })} className="flex shrink-0 items-center gap-1 text-[11px] tabular-nums text-txt-muted">
+      {refill !== null && (
+        <span className="flex shrink-0 items-center gap-1 text-[11px] tabular-nums text-txt-muted">
           <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm1 11h-5v-2h3V6h2z" /></svg>
-          {refill}
+          <LiveCountdown until={refill} title={(time) => t('competitive.missions.refills', { time })} />
         </span>
       )}
     </div>
@@ -469,7 +484,7 @@ function Objective({ objective: o, pass, index, imageSize, horizontal }: {
   horizontal: boolean
 }) {
   const t = useT()
-  const now = useNow()
+  const now = useNow(60_000)
   const color = o.kind === 'rank' ? TIER_COLORS[o.tier] : PASS_COLOR
 
   const title =

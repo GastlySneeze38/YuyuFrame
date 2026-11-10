@@ -9,6 +9,7 @@ import { displayName, baseFilename, type ModrinthInfo, type ModUpdate } from './
 import { ModRow } from './ModRow'
 import { useT } from '@/i18n'
 import { useIsMobile } from '@/mobile/useIsMobile'
+import { useProgressiveList } from '@/hooks/useProgressiveList'
 
 export function InstalledTab({
   mods, modpackMeta, showPackContent, loading, error, isPlugin, modSearch, onModSearch, logoCache, versionMap,
@@ -142,7 +143,7 @@ export function InstalledTab({
           <div className="mb-5">
             <p className={sectionHdrClass}>{t('mods.modpackContent', { count: packMods.length })}</p>
             {renderHeader()}
-            <motion.div variants={listVariants} initial="initial" animate="animate" className="flex flex-col gap-2">{packMods.map((m) => renderRow(m, true))}</motion.div>
+            <ModList items={packMods} resetKey={modSearch} render={(m) => renderRow(m, true)} />
           </div>
         )}
 
@@ -177,7 +178,7 @@ export function InstalledTab({
           ) : (
             <>
               {renderHeader()}
-              <motion.div variants={listVariants} initial="initial" animate="animate" className="flex flex-col gap-2">{extraMods.map((m) => renderRow(m, false))}</motion.div>
+              <ModList items={extraMods} resetKey={modSearch} render={(m) => renderRow(m, false)} />
             </>
           )}
         </div>
@@ -207,7 +208,23 @@ export function InstalledTab({
 
       {filtered.length > 0 && renderHeader()}
 
-      <motion.div variants={listVariants} initial="initial" animate="animate" className="flex flex-col gap-2">{filtered.map((m) => renderRow(m, false))}</motion.div>
+      <ModList items={filtered} resetKey={modSearch} render={(m) => renderRow(m, false)} />
     </div>
+  )
+}
+
+/**
+ * Les lignes de mods, 30 par 30 en approchant du bas (`useProgressiveList`,
+ * 2026-11-10) : un gros modpack en compte 200, chacune avec son icône, et
+ * tout dessiner d'un coup retardait l'ouverture de l'écran. La recherche
+ * repart des 30 premières.
+ */
+function ModList({ items, resetKey, render }: { items: Mod[]; resetKey: string; render: (m: Mod) => React.ReactNode }) {
+  const { visible, sentinel } = useProgressiveList(items.length, { step: 30, resetKey })
+  return (
+    <motion.div variants={listVariants} initial="initial" animate="animate" className="flex flex-col gap-2">
+      {items.slice(0, visible).map(render)}
+      {visible < items.length && <div ref={sentinel} aria-hidden className="h-px" />}
+    </motion.div>
   )
 }

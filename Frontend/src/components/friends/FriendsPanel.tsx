@@ -167,7 +167,17 @@ function PanelBody({ onClose }: { onClose: () => void }) {
       </div>
 
       {view.kind === 'list' && signedIn && list && (
-        <div className="flex shrink-0 gap-1 border-b border-line-soft px-3 py-2">
+        <div className="shrink-0 border-b border-line-soft px-3 py-2">
+          {/* Le fond de l'onglet actif glisse en CSS (2026-11-10) : avec le
+              « layoutId » de framer-motion, il était recalculé sur le fil
+              principal, ce qui saccadait sur téléphone. Deux onglets de
+              même largeur : une translation de sa propre largeur suffit. */}
+          <div className="relative flex gap-1">
+          <span
+            aria-hidden
+            className="absolute inset-y-0 left-0 w-[calc(50%-2px)] rounded-lg bg-white/[0.07] transition-transform duration-200 ease-[cubic-bezier(0.23,1,0.32,1)]"
+            style={{ transform: tab === 'requests' ? 'translateX(calc(100% + 4px))' : 'none' }}
+          />
           {(['friends', 'requests'] as const).map((key) => {
             const count = key === 'friends' ? list.friends.length : list.incoming.length + invites.length
             return (
@@ -178,7 +188,6 @@ function PanelBody({ onClose }: { onClose: () => void }) {
                   tab === key ? 'text-white' : 'text-txt-muted hover:text-txt-secondary'
                 }`}
               >
-                {tab === key && <motion.span layoutId="friends-tab" className="absolute inset-0 rounded-lg bg-white/[0.07]" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />}
                 <span className="relative">{t(`friends.tabs.${key}`)}</span>
                 {count > 0 && (
                   <span
@@ -192,6 +201,7 @@ function PanelBody({ onClose }: { onClose: () => void }) {
               </button>
             )
           })}
+          </div>
         </div>
       )}
 

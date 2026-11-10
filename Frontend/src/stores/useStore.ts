@@ -4,6 +4,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { clearPersistentCache } from '@/lib/persistentCache'
 import type { Instance, JvmVendor, Version, Account } from '@/types'
 import { AUTH_SYSTEM_VERSION } from '@/config/authVersion'
+import { matches as isMobileScreen } from '@/mobile/useIsMobile'
 
 export type YuyuPlan = 'free' | 'premium' | 'ultimate'
 
@@ -441,7 +442,11 @@ export const useStore = create<Store>()(
       setUiScale: (v) => set({ uiScale: Math.min(UI_SCALE_MAX, Math.max(UI_SCALE_MIN, Math.round(v / 5) * 5)) }),
       reduceMotion: false,
       setReduceMotion: (reduceMotion) => set({ reduceMotion }),
-      glassBlur: true,
+      // Éteint par défaut sur téléphone (2026-11-10) : dans la WebView
+      // Android, le flou d'arrière-plan est recalculé à chaque image où
+      // quelque chose bouge dessous — l'un des effets les plus chers. Le
+      // réglage reste, pour qui le veut.
+      glassBlur: !isMobileScreen(),
       setGlassBlur: (glassBlur) => set({ glassBlur }),
 
       soundVolume: 80,
