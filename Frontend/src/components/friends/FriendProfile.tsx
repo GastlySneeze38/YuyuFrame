@@ -15,7 +15,7 @@ import { useT } from '@/i18n'
 import { isDemo } from '@/stores/useDevFlags'
 import { cachedFriendProfile, friendProfileStale, loadFriendProfile } from '@/lib/friendProfileCache'
 import { Skeleton } from '@/components/ui/Skeleton'
-import type { Friend, PublicProfile, ReportReason } from '@/types/friends'
+import type { Friend, FriendPresence, MinecraftAccount, PublicProfile, ReportReason, ShowcaseView } from '@/types/friends'
 import { FriendAvatar, GameTile, activityText } from './FriendBits'
 import { ProfileLayout } from './ProfileLayout'
 import { ProfileShowcase } from './ProfileShowcase'
@@ -37,19 +37,11 @@ import { RemoteImage } from '@/components/ui/RemoteImage'
  */
 export function FriendProfile({ friend, onDone }: { friend: Friend; onDone: () => void }) {
   const t = useT()
-  const language = useStore((s) => s.language)
-  const gameRunning = useStore((s) => s.gameRunning)
-  const onPublicServer = useOnPublicServer(gameRunning)
-  const [joining, setJoining] = useState(false)
-  const navigate = useNavigate()
   const [profile, setProfile] = useState<PublicProfile | null>(() => cachedFriendProfile(friend.id))
   const loading = !profile
   const p = friend.presence
   const custom = liveCustom(p)
   const color = STATUS_COLORS[p.state]
-  const game = p.activity?.kind === 'game' ? p.activity : null
-  // Rejoindre : il faut qu'il soit sur un serveur ET qu'il me le montre.
-  const joinBlocked = !game ? t('friends.profile.joinNotPlaying') : !game.server ? t('friends.profile.joinHidden') : null
 
   // Son profil : celui gardé pour la session s'il y en a un (la fiche
   // s'affiche alors d'un bloc), relu seulement s'il a plus de 5 minutes ;
@@ -91,40 +83,94 @@ export function FriendProfile({ friend, onDone }: { friend: Friend; onDone: () =
         profile.bio && <p className="rise-in whitespace-pre-line px-4 pt-1.5 text-[12.5px] leading-relaxed text-txt-secondary [overflow-wrap:anywhere]">{profile.bio}</p>
       )}
 
+      <ProfileDetails
+        presence={p}
+        showcase={profile?.showcase ?? null}
+        discord={profile?.discord ?? null}
+        accounts={friend.minecraft}
+        since={friend.since}
+        friendId={friend.id}
+      />
+      </ProfileLayout>
+    </motion.div>
+  )
+}
+
+/**
+ * Tout ce qui suit la bio d'une fiche : le rejoindre et son onglet
+ * compétitif, ce qu'il fait, sa vitrine, son Discord, ses comptes Minecraft,
+ * depuis quand on est amis.
+ *
+ * Partagé par la fiche d'un ami, l'aperçu de ma fiche (`ProfilePreview`) et
+ * ma propre fiche : les trois montrent la même chose, écrite une fois.
+ * `friendId` absent = aperçu : tout est dessiné à l'identique mais rien ne
+ * réagit (`inert`) — on montre ce que verraient mes amis.
+ */
+export function ProfileDetails({ presence, showcase, discord, accounts, since, friendId, actions = true }: {
+  presence: FriendPresence
+  /** `null` = la fiche n'est pas encore arrivée (squelette). */
+  showcase: ShowcaseView[] | null
+  discord: PublicProfile['discord']
+  accounts: MinecraftAccount[]
+  /** `null` = pas de ligne « Amis depuis ». */
+  since: string | null
+  friendId: string | null
+  /** Rejoindre / Compétitif (absents de ma propre fiche). */
+  actions?: boolean
+}) {
+  const t = useT()
+  const language = useStore((s) => s.language)
+  const gameRunning = useStore((s) => s.gameRunning)
+  const onPublicServer = useMyServer(gameRunning && friendId !== null) !== null
+  const [joining, setJoining] = useState(false)
+  const navigate = useNavigate()
+  const p = presence
+  const game = p.activity?.kind === 'game' ? p.activity : null
+  // Rejoindre : il faut qu'il soit sur un serveur ET qu'il me le montre.
+  const joinBlocked = !game ? t('friends.profile.joinNotPlaying') : !game.server ? t('friends.profile.joinHidden') : null
+
+  return (
+    <div inert={friendId === null} className="contents">
       {/* Ce qu'on vient faire ici : le rejoindre, voir son onglet compétitif. */}
-      <div className="rise-in grid grid-cols-2 gap-2 px-4 pt-3.5" style={{ '--rise-delay': '50ms' } as React.CSSProperties}>
-        <ActionButton
-          primary
-          disabled={!!joinBlocked}
-          title={joinBlocked ?? undefined}
-          onClick={() => setJoining(true)}
-          label={t('friends.profile.join')}
-          path="M7 4.5v15l12.5-7.5L7 4.5z"
-          filled
-        />
-        {/* Le même onglet Compétitif que le mien, ouvert sur lui. */}
-        <ActionButton onClick={() => navigate(`/competitive?friend=${friend.id}`)} label={t('friends.profile.competitive')} path="M8 21h8M12 17v4M7 4h10v5a5 5 0 01-10 0V4zM7 6H4v2a3 3 0 003 3M17 6h3v2a3 3 0 01-3 3" />
-      </div>
+      {actions && (
+        <div className="rise-in grid grid-cols-2 gap-2 px-4 pt-3.5" style={{ '--rise-delay': '50ms' } as React.CSSProperties}>
+          <ActionButton
+            primary
+            disabled={!!joinBlocked}
+            title={joinBlocked ?? undefined}
+            onClick={() => setJoining(true)}
+            label={t('friends.profile.join')}
+            path="M7 4.5v15l12.5-7.5L7 4.5z"
+            filled
+          />
+          {/* Le même onglet Compétitif que le mien, ouvert sur lui. */}
+          <ActionButton
+            onClick={() => navigate(friendId ? `/competitive?friend=${friendId}` : '/competitive')}
+            label={t('friends.profile.competitive')}
+            path="M8 21h8M12 17v4M7 4h10v5a5 5 0 01-10 0V4zM7 6H4v2a3 3 0 003 3M17 6h3v2a3 3 0 01-3 3"
+          />
+        </div>
+      )}
 
       {/* En jeu sans me montrer son serveur : on dit pourquoi « Rejoindre » est
           grisé, et on peut le lui demander (il reçoit une notification). */}
-      {game && !game.server && <AskServer friendId={friend.id} />}
+      {actions && game && !game.server && <AskServer friendId={friendId} />}
 
       {/* Je joue et il est là : l'inviter sur mon serveur. */}
-      {onPublicServer && p.state !== 'offline' && <InviteFriend friendId={friend.id} />}
+      {friendId && onPublicServer && p.state !== 'offline' && <InviteFriend friendId={friendId} />}
 
       {/* Ce qu'il fait, sa vitrine, ses comptes, depuis quand vous êtes amis. */}
       <div className="rise-in flex flex-col gap-2 px-4 pb-4 pt-3" style={{ '--rise-delay': '100ms' } as React.CSSProperties}>
-        {loading ? <Skeleton className="skeleton-strong h-14 rounded-xl" /> : <ProfileShowcase items={profile.showcase} />}
+        {showcase === null ? <Skeleton className="skeleton-strong h-14 rounded-xl" /> : <ProfileShowcase items={showcase} />}
         {/* Son compte Discord lié ; le pseudo seulement s'il le montre. */}
-        {profile?.discord && (
+        {discord && (
           <div className="flex items-center gap-3 rounded-xl border border-line bg-surface-1 px-3 py-2.5">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#5865F2]/15 text-[#7983f5]">
               <DiscordMark className="h-5 w-5" />
             </span>
             <div className="flex min-w-0 flex-col">
-              <span className="truncate text-[12.5px] font-bold">{profile.discord.username ?? t('friends.discord.badge')}</span>
-              {profile.discord.username && <span className="text-[11px] text-txt-muted">{t('friends.discord.badge')}</span>}
+              <span className="truncate text-[12.5px] font-bold">{discord.username ?? t('friends.discord.badge')}</span>
+              {discord.username && <span className="text-[11px] text-txt-muted">{t('friends.discord.badge')}</span>}
             </div>
           </div>
         )}
@@ -154,19 +200,20 @@ export function FriendProfile({ friend, onDone }: { friend: Friend; onDone: () =
             </span>
           )}
         </div>
-        {friend.minecraft.length > 0 && <MinecraftAccounts accounts={friend.minecraft} />}
-        <div className="flex items-center gap-3 rounded-xl border border-line bg-surface-1 px-3 py-2.5">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] border border-accent/30 bg-accent/10 text-accent-hover">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
-              <path d="M12 20.5s-7.5-4.4-7.5-10A4.3 4.3 0 0112 8a4.3 4.3 0 017.5 2.5c0 5.6-7.5 10-7.5 10z" />
-            </svg>
-          </span>
-          <span className="text-[12.5px] font-medium text-txt-secondary">
-            {t('friends.profile.friendsSince', { date: new Date(friend.since).toLocaleDateString(dateLocale(language), { day: 'numeric', month: 'long', year: 'numeric' }) })}
-          </span>
-        </div>
+        {accounts.length > 0 && <MinecraftAccounts accounts={accounts} />}
+        {since && (
+          <div className="flex items-center gap-3 rounded-xl border border-line bg-surface-1 px-3 py-2.5">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] border border-accent/30 bg-accent/10 text-accent-hover">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+                <path d="M12 20.5s-7.5-4.4-7.5-10A4.3 4.3 0 0112 8a4.3 4.3 0 017.5 2.5c0 5.6-7.5 10-7.5 10z" />
+              </svg>
+            </span>
+            <span className="text-[12.5px] font-medium text-txt-secondary">
+              {t('friends.profile.friendsSince', { date: new Date(since).toLocaleDateString(dateLocale(language), { day: 'numeric', month: 'long', year: 'numeric' }) })}
+            </span>
+          </div>
+        )}
       </div>
-      </ProfileLayout>
 
       {/* La fenêtre de lancement, hors du panneau : il est transformé par son
           animation, et un `fixed` à l'intérieur s'y collerait. */}
@@ -176,7 +223,7 @@ export function FriendProfile({ friend, onDone }: { friend: Friend; onDone: () =
           <JoinServerModal request={{ ip: game.server, mcVersion: game.mc_version, loader: game.loader }} onClose={() => setJoining(false)} />,
           document.body,
         )}
-    </motion.div>
+    </div>
   )
 }
 
@@ -211,13 +258,13 @@ export function ThoughtBubble({ accent, children }: { accent: string | null; chi
 /** « Il ne te montre pas son serveur » et de quoi le lui demander. Une fois
  *  envoyée, la demande ne se renvoie pas (le serveur en accepte une toutes les
  *  10 minutes). */
-function AskServer({ friendId }: { friendId: string }) {
+function AskServer({ friendId }: { friendId: string | null }) {
   const t = useT()
   const [state, setState] = useState<'idle' | 'sending' | 'sent'>('idle')
   async function ask() {
     setState('sending')
     try {
-      if (!isDemo()) await api.friends.requestServer(friendId)
+      if (!isDemo() && friendId) await api.friends.requestServer(friendId)
       setState('sent')
     } catch (e) {
       showError(e)
@@ -592,20 +639,21 @@ function MenuItem({ children, onClick, disabled, danger = false, armed = false }
 }
 
 /**
- * Suis-je sur un serveur public, celui qu'une invitation enverrait ? Le jeu
- * l'annonce au launcher (`friends_my_server`) ; relu toutes les 2 s tant
- * qu'une partie tourne. En solo, au menu ou sur un serveur privé : non.
+ * Le serveur public où je joue : celui qu'une invitation enverrait, et que
+ * voient mes amis quand je le leur montre. Le jeu l'annonce au launcher
+ * (`friends_my_server`) ; relu toutes les 2 s tant que `watch`. En solo, au
+ * menu ou sur un serveur privé : `null`.
  */
-function useOnPublicServer(gameRunning: boolean): boolean {
+export function useMyServer(watch: boolean): string | null {
   const [server, setServer] = useState<string | null>(null)
   useEffect(() => {
-    if (!gameRunning) { setServer(null); return }
-    if (isDemo()) { setServer('demo'); return }
+    if (!watch) { setServer(null); return }
+    if (isDemo()) { setServer('play.example.net'); return }
     let alive = true
     const read = () => api.friends.myServer().then((s) => { if (alive) setServer(s) }).catch(() => {})
     read()
     const timer = window.setInterval(read, 2000)
     return () => { alive = false; window.clearInterval(timer) }
-  }, [gameRunning])
-  return server !== null
+  }, [watch])
+  return server
 }

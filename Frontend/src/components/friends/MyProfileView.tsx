@@ -10,14 +10,16 @@ import { useStore } from '@/stores/useStore'
 import { useT } from '@/i18n'
 import type { MyProfile, ShowcaseView } from '@/types/friends'
 import { FriendAvatar } from './FriendBits'
-import { ThoughtBubble } from './FriendProfile'
+import { ProfileDetails, ThoughtBubble } from './FriendProfile'
+import { myAccounts, useMyDiscord, useMyPresence } from './ProfilePreview'
 import { ProfileEditor, showcasePreview } from './ProfileEditor'
 import { ProfileLayout } from './ProfileLayout'
-import { ProfileShowcase } from './ProfileShowcase'
 
 /**
  * Mon profil, dans le panneau des amis : la fiche telle que mes amis la
- * voient — bannière, bio, vitrine —, rien d'autre. Tout se change dans la
+ * voient — bannière, bio, vitrine, ce que je fais, Discord, comptes
+ * Minecraft (`ProfileDetails`, comme leur fiche), sans « Rejoindre » ni
+ * « amis depuis », qui n'ont pas de sens pour soi. Tout se change dans la
  * grande fenêtre « Modifier le profil » (`ProfileEditor`), qui a la place de
  * tout montrer avec un aperçu.
  *
@@ -38,6 +40,8 @@ export function MyProfileView() {
   const [copied, setCopied] = useState(false)
 
   const custom = me ? liveCustom(me) : null
+  const presence = useMyPresence()
+  const discord = useMyDiscord()
 
   useEffect(() => {
     const load = isDemo() ? Promise.resolve(demoMyProfile()) : api.friends.myProfile()
@@ -61,6 +65,7 @@ export function MyProfileView() {
   const color = STATUS_COLORS[me.status]
   const statusChanged = status.trim() !== (custom ?? '')
   const showcase = showcasePreview(profile.showcase, served, profile.library)
+  const accounts = myAccounts(profile)
 
   async function saveStatus() {
     if (!me || !statusChanged) return
@@ -149,9 +154,14 @@ export function MyProfileView() {
             {t('friends.me.edit')}
           </button>
 
-          {showcase.length > 0 ? <ProfileShowcase items={showcase} /> : <p className="text-[12px] text-txt-muted">{t('friends.me.emptyShowcase')}</p>}
-          <p className="text-[11px] text-txt-muted">{t('friends.me.asFriendsSee')}</p>
+          {showcase.length === 0 && <p className="text-[12px] text-txt-muted">{t('friends.me.emptyShowcase')}</p>}
         </div>
+        {/* Le reste de ce que voient mes amis : vitrine, ce que je fais,
+            Discord, comptes Minecraft — les mêmes blocs que leur fiche. */}
+        <div className="-mt-3">
+          <ProfileDetails presence={presence} showcase={showcase} discord={discord} accounts={accounts} since={null} friendId={null} actions={false} />
+        </div>
+        <p className="-mt-2 px-4 pb-4 text-[11px] text-txt-muted">{t('friends.me.asFriendsSee')}</p>
       </ProfileLayout>
 
       {editing && (

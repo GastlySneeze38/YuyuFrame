@@ -1955,6 +1955,7 @@ export const ru: TranslationSchema = {
       showcaseCount: '{{count}} / {{max}} элементов',
       whoSees: 'Кто видит',
       parts: { banner: 'Баннер', accent: 'Цвет', bio: 'Описание', showcase: 'Витрина', account: 'Основной аккаунт' },
+      accountShort: 'Аккаунт',
       partHints: { banner: 'Фон твоего профиля', accent: 'Окантовка твоего профиля' },
       accountHint: 'Его голова представляет тебя, и показывается его ранг.',
       accentNote: 'Его видят те же, кто видит твой баннер.',

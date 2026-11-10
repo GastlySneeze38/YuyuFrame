@@ -1955,6 +1955,7 @@ export const en: TranslationSchema = {
       showcaseCount: '{{count}} / {{max}} items',
       whoSees: 'Who sees it',
       parts: { banner: 'Banner', accent: 'Colour', bio: 'Bio', showcase: 'Showcase', account: 'Main account' },
+      accountShort: 'Account',
       partHints: { banner: 'Your profile background', accent: 'Your profile trim' },
       accountHint: 'Its head represents you, and its rank is the one shown.',
       accentNote: 'Seen by the same people as your banner.',

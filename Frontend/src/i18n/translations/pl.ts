@@ -1956,6 +1956,7 @@ export const pl: TranslationSchema = {
       showcaseCount: '{{count}} / {{max}} elementów',
       whoSees: 'Kto widzi',
       parts: { banner: 'Baner', accent: 'Kolor', bio: 'Opis', showcase: 'Gablota', account: 'Konto główne' },
+      accountShort: 'Konto',
       partHints: { banner: 'Tło twojego profilu', accent: 'Obwódka twojego profilu' },
       accountHint: 'Jego głowa cię przedstawia i to jego ranga jest pokazywana.',
       accentNote: 'Widzą go te same osoby co twój baner.',

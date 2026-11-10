@@ -1962,6 +1962,7 @@ export const fr = {
       showcaseCount: '{{count}} / {{max}} éléments',
       whoSees: 'Qui la voit',
       parts: { banner: 'Bannière', accent: 'Couleur', bio: 'Bio', showcase: 'Vitrine', account: 'Compte principal' },
+      accountShort: 'Compte',
       partHints: { banner: 'Le fond de ta fiche', accent: 'Le liseré de ta fiche' },
       accountHint: 'Sa tête te représente, et c’est son rang qui s’affiche.',
       accentNote: 'Visible par les mêmes personnes que ta bannière.',

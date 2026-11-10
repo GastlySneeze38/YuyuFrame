@@ -13,9 +13,9 @@ import { showError, showNotice } from '@/stores/useErrorToast'
 import { useT } from '@/i18n'
 import type { LibraryItem, MyProfile, MyStatusKind, ProfileLibrary, ShowcaseItem, ShowcaseView, Visibility3 } from '@/types/friends'
 import { FriendAvatar } from './FriendBits'
-import { ThoughtBubble } from './FriendProfile'
-import { ProfileLayout } from './ProfileLayout'
-import { ProfileShowcase } from './ProfileShowcase'
+import { ProfilePreview } from './ProfilePreview'
+import { PushedScreen } from '@/mobile/ui/PushedScreen'
+import { SwipeTabs } from '@/mobile/ui/SwipeTabs'
 
 const BIO_MAX = 190
 const BIO_LINES = 3
@@ -87,6 +87,7 @@ export function ProfileEditor({
   const main = draft.accounts.find((a) => a.uuid === draft.main_mc_uuid) ?? draft.accounts[0] ?? null
   const color = STATUS_COLORS[status]
   const mobile = useIsMobile()
+  const previewShowcase = useMemo(() => showcasePreview(draft.showcase, served, library), [draft.showcase, served, library])
 
   async function save() {
     if (isDemo()) {
@@ -182,6 +183,7 @@ export function ProfileEditor({
           status={status}
           username={username}
           mainUuid={main?.uuid ?? null}
+          showcase={previewShowcase}
           dirty={dirty}
           saving={saving}
           onSave={() => void save()}
@@ -246,19 +248,7 @@ export function ProfileEditor({
         <div className="flex min-h-0 flex-col gap-2">
           <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-txt-muted">{t('friends.me.preview')}</span>
           <div className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-line bg-[rgb(var(--bg-card))]">
-            <ProfileLayout
-              banner={draft.banner}
-              accent={draft.accent}
-              color={color}
-              avatar={<FriendAvatar skin={`https://mc-heads.net/skin/${main?.uuid ?? 'MHF_Steve'}`} state={status} size={72} />}
-              bubble={custom ? <ThoughtBubble accent={draft.accent}>{custom}</ThoughtBubble> : null}
-              name={username}
-            >
-              <div className="flex flex-col gap-2 px-4 pb-4 pt-1.5">
-                {draft.bio && <p className="whitespace-pre-line text-[12.5px] leading-relaxed text-txt-secondary [overflow-wrap:anywhere]">{draft.bio}</p>}
-                <ProfileShowcase items={showcasePreview(draft.showcase, served, library)} />
-              </div>
-            </ProfileLayout>
+            <ProfilePreview draft={draft} showcase={previewShowcase} username={username} />
           </div>
         </div>
       </div>
@@ -284,12 +274,14 @@ export function ProfileEditor({
 
 /**
  * La modification sur téléphone : les trois colonnes du PC n'y tiennent pas.
- * En haut, un aperçu réduit (bannière, couleur, tête, pseudo) qui suit chaque
- * choix ; dessous, les parties en pastilles qu'on fait défiler de côté ; puis
- * la partie choisie, qui prend toute la hauteur restante ; Annuler et
- * Enregistrer en bas, à portée du pouce.
+ * En haut, un bouton qui résume la fiche (bannière, tête, pseudo) et ouvre
+ * l'aperçu en entier sur sa propre page ; dessous, les parties sur une seule
+ * rangée qui tient dans la largeur (pas de défilement de côté : tout se voit,
+ * et le contenu se balaie aussi d'une partie à l'autre) ; puis la partie
+ * choisie, qui prend toute la hauteur restante ; Annuler et Enregistrer en
+ * bas, à portée du pouce.
  */
-function MobileLayout({ part, onPart, draft, color, status, username, mainUuid, dirty, saving, onSave, onCancel, children }: {
+function MobileLayout({ part, onPart, draft, color, status, username, mainUuid, showcase, dirty, saving, onSave, onCancel, children }: {
   part: Part
   onPart: (p: Part) => void
   draft: MyProfile
@@ -297,6 +289,7 @@ function MobileLayout({ part, onPart, draft, color, status, username, mainUuid, 
   status: MyStatusKind
   username: string
   mainUuid: string | null
+  showcase: ShowcaseView[]
   dirty: boolean
   saving: boolean
   onSave: () => void
@@ -304,44 +297,54 @@ function MobileLayout({ part, onPart, draft, color, status, username, mainUuid, 
   children: React.ReactNode
 }) {
   const t = useT()
+  const [previewing, setPreviewing] = useState(false)
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      {/* L'aperçu réduit. */}
-      <div className="mx-4 shrink-0 overflow-hidden rounded-2xl border border-line bg-[rgb(var(--bg-card))]">
-        <div className="relative h-14" style={{ background: bannerBackground(draft.banner, color) }}>
-          {draft.accent && <div className="absolute inset-x-0 bottom-0 h-[3px]" style={{ background: draft.accent }} />}
-        </div>
-        <div className="flex items-end gap-3 px-3 pb-3">
-          <div className="-mt-7 shrink-0 rounded-[30%] bg-[rgb(var(--bg-card))] p-1">
-            <FriendAvatar skin={`https://mc-heads.net/skin/${mainUuid ?? 'MHF_Steve'}`} state={status} size={48} />
-          </div>
-          <p className="min-w-0 flex-1 truncate pb-0.5 text-[17px] font-black">{username}</p>
-        </div>
-      </div>
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      {/* L'aperçu : un bouton qui suit chaque choix et ouvre la fiche entière. */}
+      <button
+        onClick={() => setPreviewing(true)}
+        className="press relative mx-4 flex h-[68px] shrink-0 items-center gap-3 overflow-hidden rounded-2xl border border-line bg-[rgb(var(--bg-card))] pl-2.5 pr-3 text-left"
+      >
+        <span className="absolute inset-y-0 left-0 w-[46%] opacity-90" style={{ background: bannerBackground(draft.banner, color) }} />
+        <span className="absolute inset-y-0 left-[26%] w-[20%] bg-gradient-to-r from-transparent to-[rgb(var(--bg-card))]" />
+        {draft.accent && <span className="absolute inset-y-0 left-0 w-[3px]" style={{ background: draft.accent }} />}
+        <span className="relative shrink-0 rounded-[30%] bg-[rgb(var(--bg-card))] p-1">
+          <FriendAvatar skin={`https://mc-heads.net/skin/${mainUuid ?? 'MHF_Steve'}`} state={status} size={40} />
+        </span>
+        <span className="relative flex min-w-0 flex-1 flex-col">
+          <span className="truncate text-[16px] font-black leading-tight [text-shadow:0_1px_6px_rgba(0,0,0,0.5)]">{username}</span>
+          <span className="truncate text-[12.5px] font-semibold text-white/65">{t('friends.me.preview')}</span>
+        </span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" className="relative h-5 w-5 shrink-0 text-white/50">
+          <path d="M9 6l6 6-6 6" />
+        </svg>
+      </button>
 
-      {/* Les parties, en pastilles. */}
-      <div className="-mb-1 flex shrink-0 gap-2 overflow-x-auto px-4 pb-1 pt-3 [scrollbar-width:none]">
+      {/* Les parties, sur une rangée qui tient dans la largeur. */}
+      <div className="grid shrink-0 grid-cols-5 gap-1.5 px-4 pt-3">
         {PARTS.map((p) => (
           <button
             key={p}
             onClick={() => onPart(p)}
-            className={`press no-touch-floor flex h-11 shrink-0 items-center gap-2 rounded-full border pl-1.5 pr-4 transition-colors duration-150 ${
-              part === p ? 'border-accent/60 bg-accent/25 text-white' : 'border-line bg-white/[0.04] text-white/70'
+            className={`press no-touch-floor flex min-w-0 flex-col items-center gap-1 rounded-xl border px-0.5 pb-1.5 pt-2 transition-colors duration-150 ${
+              part === p ? 'border-accent/60 bg-accent/20 text-white' : 'border-line bg-white/[0.04] text-white/65'
             }`}
           >
             <span className="flex scale-[0.85]">
               <PartSummary part={p} draft={draft} color={color} />
             </span>
-            <span className="whitespace-nowrap text-[15px] font-semibold">{t(`friends.me.parts.${p}`)}</span>
+            <span className="w-full truncate text-center text-[11.5px] font-semibold">{t(p === 'account' ? 'friends.me.accountShort' : `friends.me.parts.${p}`)}</span>
           </button>
         ))}
       </div>
 
       {/* La partie choisie : les bibliothèques font défiler leur liste, la
           bio et le compte défilent en entier. */}
-      <div className={`flex min-h-0 flex-1 flex-col px-4 pt-4 ${part === 'bio' || part === 'account' ? 'overflow-y-auto' : 'overflow-hidden'}`}>
-        {children}
-      </div>
+      <SwipeTabs tabs={PARTS} value={part} onChange={onPart}>
+        <div className={`flex min-h-0 flex-1 flex-col px-4 pt-4 ${part === 'bio' || part === 'account' ? 'overflow-y-auto' : 'overflow-hidden'}`}>
+          {children}
+        </div>
+      </SwipeTabs>
 
       <div className="flex shrink-0 gap-2 border-t border-line-soft px-4 pt-3">
         <button onClick={onCancel} disabled={saving} className="press h-12 flex-1 rounded-2xl bg-white/[0.07] text-[16px] font-semibold text-white/85">
@@ -355,6 +358,11 @@ function MobileLayout({ part, onPart, draft, color, status, username, mainUuid, 
           {t('friends.custom.save')}
         </button>
       </div>
+
+      {/* La fiche entière, telle que la verront mes amis, sur sa page. */}
+      <PushedScreen open={previewing} onBack={() => setPreviewing(false)} backLabel={t('friends.me.editTitle')} title={t('friends.me.preview')} bodyClassName="">
+        <ProfilePreview draft={draft} showcase={showcase} username={username} />
+      </PushedScreen>
     </div>
   )
 }
