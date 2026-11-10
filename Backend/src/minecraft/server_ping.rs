@@ -426,10 +426,19 @@ fn srv_records(name: &str) -> Vec<(String, u16, u16)> {
 
 /// Hors Windows, pas de fenêtre de pare-feu à craindre : un client DNS
 /// ordinaire suffit.
+///
+/// **Android (2026-11-10)** : la configuration du système se lit dans
+/// `/etc/resolv.conf`, qui n'existe pas sur Android — sans repli, aucun SRV
+/// n'était jamais suivi, et `hypixel.net` (dont le jeu est sur
+/// `mc.hypixel.net` par son SRV) semblait injoignable. On interroge alors le
+/// DNS public de Cloudflare : seul le nom du serveur part, comme pour
+/// n'importe quelle résolution.
 #[cfg(not(target_os = "windows"))]
 fn srv_records(name: &str) -> Vec<(String, u16, u16)> {
+    use hickory_resolver::config::{ResolverConfig, ResolverOpts};
     use hickory_resolver::Resolver;
-    let Ok(resolver) = Resolver::from_system_conf() else { return Vec::new() };
+    let resolver = Resolver::from_system_conf().or_else(|_| Resolver::new(ResolverConfig::cloudflare(), ResolverOpts::default()));
+    let Ok(resolver) = resolver else { return Vec::new() };
     match resolver.srv_lookup(format!("{name}.")) {
         Ok(lookup) => lookup.iter().map(|r| (r.target().to_utf8(), r.port(), r.priority())).collect(),
         Err(_) => Vec::new(),

@@ -50,7 +50,9 @@ export interface JoinRequest {
  * Chaque instance porte son verdict au fil des réponses : celle de l'ami
  * d'abord, puis acceptées, en cours, « à essayer » (le serveur ne dit rien),
  * et refusées, grisées. Serveur injoignable : comme avant, même version et
- * même loader. Le catalogue, lui, connaît déjà les versions (`versions`).
+ * même loader. Les versions du catalogue (`versions`, fiche Modrinth) sont
+ * acceptées d'office et les autres demandées au serveur : la fiche est
+ * souvent en retard sur le serveur (Hypixel sans 26.3, donc sans Horizon).
  *
  * L'adresse est rejointe **sans le port par défaut** (`withoutDefaultPort`) :
  * écrit, il empêcherait le jeu de suivre l'enregistrement SRV du serveur.
@@ -73,17 +75,20 @@ export function JoinServerModal({ request, onClose }: { request: JoinRequest; on
   const [busy, setBusy] = useState(false)
 
   const ip = withoutDefaultPort(request.ip)
-  // Le catalogue connaît déjà les versions du serveur ; sinon on le lui demande.
-  const probing = !request.versions?.length
+  // Les versions que le catalogue (Modrinth) annonce pour ce serveur :
+  // acceptées d'office. Sa fiche est souvent en retard (Hypixel n'y a pas
+  // 26.3), donc les autres versions de mes instances sont quand même
+  // demandées au serveur, comme pour un ami.
+  const listed = request.versions ?? []
+  const fromCatalog = listed.length > 0
   const [info, setInfo] = useState<ServerProbeInfo | null>(null)
   const [verdicts, setVerdicts] = useState<Record<string, VersionVerdict>>({})
 
-  // Le loader exigé : celui du serveur s'il est moddé, aucun s'il ne l'est
-  // pas, celui de l'ami tant qu'on ne peut pas savoir (serveur injoignable).
-  const required = !probing
-    ? request.anyLoader
-      ? null
-      : request.loader
+  // Le loader exigé : aucun pour un serveur du catalogue marqué vanilla ;
+  // sinon celui du serveur s'il est moddé, aucun s'il ne l'est pas, celui de
+  // l'ami tant qu'on ne peut pas savoir (serveur injoignable).
+  const required = request.anyLoader
+    ? null
     : info === null || !info.reachable
       ? request.loader
       : info.modded === null
@@ -91,17 +96,15 @@ export function JoinServerModal({ request, onClose }: { request: JoinRequest; on
         : info.modded === 'modded'
           ? request.loader
           : info.modded
-  const offline = probing && info !== null && !info.reachable
+  const offline = info !== null && !info.reachable
   const candidates = instances.filter((i) => {
     if (required && i.loader !== required) return false
-    if (!probing) return request.versions!.includes(i.mc_version)
-    // Injoignable : seulement la version de l'ami, comme avant.
-    if (offline) return i.mc_version === request.mcVersion
+    // Injoignable : seulement les versions sûres (celle de l'ami, celles du catalogue).
+    if (offline) return i.mc_version === request.mcVersion || listed.includes(i.mc_version)
     return true
   })
 
   useEffect(() => {
-    if (!probing) return
     let alive = true
     void probeServer(ip).then((found) => {
       if (!alive) return
@@ -110,7 +113,7 @@ export function JoinServerModal({ request, onClose }: { request: JoinRequest; on
       // Les versions de mes instances, la plus récente d'abord : une question
       // à la fois, chaque réponse affichée dès qu'elle arrive.
       const own = [...new Set(instances.map((i) => i.mc_version))]
-        .filter((v) => v !== request.mcVersion)
+        .filter((v) => v !== request.mcVersion && !listed.includes(v))
         .sort((a, b) => compareVersions(b, a))
       for (const v of own) void probeVersion(ip, v).then((r) => alive && setVerdicts((p) => ({ ...p, [v]: r })))
     })
@@ -119,11 +122,12 @@ export function JoinServerModal({ request, onClose }: { request: JoinRequest; on
     }
     // Les instances sont lues à l'ouverture : une instance créée ici est de la version de l'ami.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ip, probing, request.mcVersion])
+  }, [ip, request.mcVersion])
 
   function statusOf(inst: Instance): RowStatus {
-    if (!probing) return 'ok'
-    if (inst.mc_version === request.mcVersion) return 'same'
+    if (listed.includes(inst.mc_version)) return 'ok'
+    // « Sa version » n'a de sens que pour un ami ; le catalogue n'a que la sienne, déjà acceptée.
+    if (inst.mc_version === request.mcVersion) return fromCatalog ? 'ok' : 'same'
     if (info === null) return 'checking'
     if (info.echoes_all) return 'unsure'
     if (!(inst.mc_version in verdicts)) return 'checking'
@@ -235,7 +239,7 @@ export function JoinServerModal({ request, onClose }: { request: JoinRequest; on
       <p className="-mt-2 text-[12px] text-[rgba(255,255,255,0.4)] max-sm:mt-0 max-sm:text-[13px] max-sm:text-white/55">
         {t('friends.join.target', { version: request.mcVersion, loader: request.anyLoader ? 'vanilla' : request.loader, server: ip })}
       </p>
-      {probing && info?.modded && (
+      {!request.anyLoader && info?.modded && (
         <p className="mt-1 text-[12px] text-warning max-sm:text-[13px]">
           {t('friends.join.modded', { loader: loaderName(info.modded === 'modded' ? request.loader : info.modded) })}
         </p>

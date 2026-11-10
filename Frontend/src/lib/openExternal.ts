@@ -8,8 +8,10 @@ import { inTauri } from '@/lib/platform'
  * `@tauri-apps/plugin-shell` ne fait rien sur Android : sur téléphone, aucun
  * lien de l'appli ne s'ouvrait (site, paiement, NameMC, fiche d'un serveur…).
  * `tauri-plugin-opener` confie l'adresse au système, qui choisit le
- * navigateur, sur PC comme sur téléphone. Permission `opener:allow-open-url`
- * (`Backend/capabilities/default.json`) : http, https, mailto et tel.
+ * navigateur, sur PC comme sur téléphone. Deux permissions
+ * (`Backend/capabilities/default.json`) : `opener:allow-open-url` autorise
+ * l'appel, `opener:allow-default-urls` les adresses (http, https, mailto,
+ * tel) — sans la seconde, la liste est vide et TOUTE adresse est refusée.
  *
  * Hors de Tauri (aperçu dans le navigateur pendant le développement), un
  * nouvel onglet.
@@ -37,6 +39,6 @@ export function installExternalLinks(): void {
     const href = a.getAttribute('href') ?? ''
     if (!/^(https?:|mailto:|tel:)/i.test(href)) return
     e.preventDefault()
-    void openExternal(href).catch(() => {})
+    void openExternal(href).catch((err) => console.warn('[openExternal] refusé :', href, err))
   })
 }
