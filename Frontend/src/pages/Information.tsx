@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getName, getVersion, getTauriVersion } from '@tauri-apps/api/app'
-import { open } from '@tauri-apps/plugin-shell'
+import { openExternal as open } from '@/lib/openExternal'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { useT } from '@/i18n'
 

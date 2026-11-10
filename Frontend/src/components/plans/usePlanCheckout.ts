@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { open } from '@tauri-apps/plugin-shell'
+import { openExternal as open } from '@/lib/openExternal'
 import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
 import type { YuyuPlan } from '@/stores/useStore'

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { open } from '@tauri-apps/plugin-shell'
+import { openExternal as open } from '@/lib/openExternal'
 import { api } from '@/api/client'
 import { Toggle } from '@/components/ui/Toggle'
 import { showError } from '@/stores/useErrorToast'

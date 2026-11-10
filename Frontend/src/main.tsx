@@ -10,6 +10,7 @@ import { loadLanguage } from './i18n'
 import { useStore } from './stores/useStore'
 import { startAppearance } from './lib/appearance'
 import { installOverscroll } from './lib/overscroll'
+import { installExternalLinks } from './lib/openExternal'
 
 /** `reducedMotion` : « user » suit le système (Framer Motion supprime alors
  *  les déplacements et ne garde que les fondus) ; « always » quand le réglage
@@ -48,6 +49,10 @@ startAppearance()
 // L'étirement des zones qui ne peuvent plus défiler : téléphone seulement
 // (pointeur principal au doigt — un PC à écran tactile n'en a pas).
 if (window.matchMedia('(pointer: coarse)').matches) installOverscroll()
+
+// Les liens `<a href="https://…">` s'ouvrent dans le navigateur du système,
+// sur PC comme sur téléphone (où ils ne faisaient rien).
+installExternalLinks()
 
 // Ouverte dans un navigateur pendant le développement : on simule Tauri avant
 // le premier rendu (voir `dev/browserPreview.ts`). Le `import()` est DANS la

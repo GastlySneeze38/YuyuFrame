@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import { open as openUrl } from '@tauri-apps/plugin-shell'
+import { openExternal as openUrl } from '@/lib/openExternal'
 
 /**
  * Une description venue d'ailleurs (fiche Modrinth d'un serveur…) : du

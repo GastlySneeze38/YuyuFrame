@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { open } from '@tauri-apps/plugin-shell'
+import { openExternal as open } from '@/lib/openExternal'
 import { ModalShell } from '@/components/ui/ModalShell'
 import { Button } from '@/components/ui/Button'
 import { useT } from '@/i18n'
