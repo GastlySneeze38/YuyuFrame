@@ -180,13 +180,30 @@ jobs:
           YUYU_ANDROID_KEY_PASSWORD: ${{ secrets.YUYU_ANDROID_KEY_PASSWORD }}
         run: npx --prefix ../Frontend tauri android build --apk --target aarch64
 
+      # Où Gradle range l'APK dépend de la version de Tauri et des variantes : on
+      # le cherche au lieu de supposer un chemin. Signé, il s'appelle *-release.apk ;
+      # un *-unsigned.apk voudrait dire que la clé n'a pas été prise.
+      - name: Find the APK
+        run: |
+          find Launcher-Client/Backend/gen/android/app/build/outputs -name '*.apk' -print
+          apk=$(find Launcher-Client/Backend/gen/android/app/build/outputs -name '*.apk' ! -name '*unsigned*' | grep -i release | head -1)
+          test -n "$apk" || { echo "aucun APK signé produit"; exit 1; }
+          echo "APK=$apk" >> "$GITHUB_ENV"
+
+      # Gardé dans le run (7 jours) : si l'envoi à la release échoue, l'APK se
+      # récupère dans la page du run sans tout recompiler.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: yuyuframe-apk
+          path: ${{ env.APK }}
+          retention-days: 7
+
       - name: Attach the APK to the draft release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_ID: ${{ needs.release.outputs.release_id }}
         run: |
-          apk=$(ls Launcher-Client/Backend/gen/android/app/build/outputs/apk/arm64/release/*.apk | head -1)
-          test -n "$apk" || { echo "aucun APK produit"; exit 1; }
+          apk="$APK"
           name="YuyuFrame_${GITHUB_REF_NAME#v}_arm64.apk"
           curl --fail -sS -X POST \
             -H "Authorization: Bearer $GH_TOKEN" \
