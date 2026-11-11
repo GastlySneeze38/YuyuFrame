@@ -8,6 +8,11 @@ on:
 jobs:
   release:
     runs-on: windows-latest
+    permissions:
+      contents: write
+    # Le brouillon de release créé ici reçoit ensuite l'APK (job android).
+    outputs:
+      release_id: ${{ steps.tauri.outputs.releaseId }}
     steps:
       - uses: actions/checkout@v4
 
@@ -52,6 +57,7 @@ jobs:
         run: build.bat
 
       - uses: tauri-apps/tauri-action@v0
+        id: tauri
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -63,3 +69,121 @@ jobs:
           releaseName: 'YuyuFrame ${{ github.ref_name }}'
           releaseDraft: true
           prerelease: false
+
+  # L'APK Android, joint au même brouillon que le .exe : le site ne lit que la
+  # dernière release et y cherche les deux (useLatestRelease). Il n'est donc à
+  # publier qu'une fois les deux fichiers présents.
+  #
+  # Le moteur (Horizon pour Android, copie de Starling avec nos patchs) n'est pas
+  # dans ce dépôt : il vient du dépôt public YuyuFrame-Mobile. Les deux sont
+  # rangés côte à côte, comme dans le monorepo, pour que les chemins du module
+  # Gradle `starling` et de build_engine.py restent les mêmes qu'en local.
+  #
+  # Recette reprise de la CI de Starling (leur .github/workflows/android.yml) :
+  # versions du SDK épinglées par leur build_apk.py, profil `fast` pour une
+  # version publiée, swap et 3 compilations à la fois — sans quoi la mémoire du
+  # serveur (16 Go) ne suffit pas.
+  #
+  # Clé de signature : secrets YUYU_ANDROID_KEYSTORE_BASE64, YUYU_ANDROID_KEY_ALIAS
+  # et YUYU_ANDROID_KEY_PASSWORD (docs/launcher/android.md § Publier). Elle ne
+  # doit jamais changer : Android n'installe une mise à jour que signée par la
+  # même clé.
+  android:
+    needs: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      contents: write
+    env:
+      NDK_VERSION: 28.2.13676358
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: Launcher-Client
+
+      - uses: actions/checkout@v4
+        with:
+          repository: GastlySneeze38/YuyuFrame-Mobile
+          path: horizon-android
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # javac et d8 pour le moteur, Gradle pour l'appli.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install the build-tools, platform and NDK
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install \
+            "build-tools;35.0.0" "platforms;android-36" "ndk;$NDK_VERSION" > /dev/null
+          echo "NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+
+      - name: Install Rust for Android and cargo-ndk
+        run: |
+          rustup toolchain install stable --profile minimal --target aarch64-linux-android
+          rustup default stable
+          cargo install cargo-ndk --version 3.5.4 --locked
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: android
+          workspaces: |
+            horizon-android
+            Launcher-Client/Backend
+
+      - name: Make room for the build
+        run: |
+          sudo swapoff -a || true
+          where=/mnt size=20G
+          avail=$(df --output=avail -BG "$where" 2>/dev/null | tail -1 | tr -dc 0-9)
+          if [ "${avail:-0}" -lt 30 ]; then where=$RUNNER_TEMP size=10G; fi
+          sudo fallocate -l "$size" "$where/build.swap"
+          sudo chmod 600 "$where/build.swap"
+          sudo mkswap "$where/build.swap" > /dev/null
+          sudo swapon "$where/build.swap"
+          free -h
+          echo "CARGO_BUILD_JOBS=3" >> "$GITHUB_ENV"
+
+      - name: Build the engine
+        run: python horizon-android/yuyu/build_engine.py --profile fast
+
+      - name: Install frontend deps
+        working-directory: Launcher-Client/Frontend
+        run: npm ci
+
+      - name: Unpack the signing key
+        env:
+          KEYSTORE: ${{ secrets.YUYU_ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$KEYSTORE" || { echo "YUYU_ANDROID_KEYSTORE_BASE64 manque dans les secrets"; exit 1; }
+          echo "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/yuyuframe-release.jks"
+          echo "YUYU_ANDROID_KEYSTORE=$RUNNER_TEMP/yuyuframe-release.jks" >> "$GITHUB_ENV"
+
+      - name: Build the APK
+        working-directory: Launcher-Client/Backend
+        env:
+          YUYU_ANDROID_KEY_ALIAS: ${{ secrets.YUYU_ANDROID_KEY_ALIAS }}
+          YUYU_ANDROID_KEY_PASSWORD: ${{ secrets.YUYU_ANDROID_KEY_PASSWORD }}
+        run: npx --prefix ../Frontend tauri android build --apk --target aarch64
+
+      - name: Attach the APK to the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs.release.outputs.release_id }}
+        run: |
+          apk=$(ls Launcher-Client/Backend/gen/android/app/build/outputs/apk/arm64/release/*.apk | head -1)
+          test -n "$apk" || { echo "aucun APK produit"; exit 1; }
+          name="YuyuFrame_${GITHUB_REF_NAME#v}_arm64.apk"
+          curl --fail -sS -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Content-Type: application/vnd.android.package-archive" \
+            --data-binary "@$apk" \
+            "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=$name"

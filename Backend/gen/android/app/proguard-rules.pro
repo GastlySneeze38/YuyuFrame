@@ -1,3 +1,11 @@
+# Le moteur (Starling) et notre écran de jeu sont appelés depuis le code natif
+# par leur nom (JNI) et lancés par le manifeste : R8 ne voit pas ces appels et
+# renommerait ou retirerait ces classes, ce qui ferait planter le jeu au
+# lancement, seulement en version release. Starling, lui, ne passe jamais par R8
+# (son build_apk.py compile avec d8).
+-keep class io.github.juanluci.starling.** { *; }
+-keep class fr.yuyuframe.** { *; }
+
 # Add project specific ProGuard rules here.
 # You can control the set of applied configuration files using the
 # proguardFiles setting in build.gradle.

@@ -34,6 +34,21 @@ android {
     packaging {
         jniLibs.useLegacyPackaging = true
     }
+    // Clé de publication, donnée par l'environnement (la CI la sort des secrets
+    // du dépôt, docs/launcher/android.md § Publier). Sans elle, la version
+    // release sort non signée et rien ne change pour un build local. Magasin
+    // PKCS12 : un seul mot de passe, pour le magasin et pour la clé.
+    val releaseKeystore = System.getenv("YUYU_ANDROID_KEYSTORE")?.takeIf { it.isNotBlank() }
+    if (releaseKeystore != null) {
+        signingConfigs {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storePassword = System.getenv("YUYU_ANDROID_KEY_PASSWORD")
+                keyAlias = System.getenv("YUYU_ANDROID_KEY_ALIAS")
+                keyPassword = System.getenv("YUYU_ANDROID_KEY_PASSWORD")
+            }
+        }
+    }
     buildTypes {
         getByName("debug") {
             manifestPlaceholders["usesCleartextTraffic"] = "true"
@@ -47,6 +62,7 @@ android {
             }
         }
         getByName("release") {
+            if (releaseKeystore != null) signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             proguardFiles(
                 *fileTree(".") { include("**/*.pro") }
