@@ -7,6 +7,8 @@ import com.yuyuframe.launcheragent.apigraphic.anim.UiEasing;
 import com.yuyuframe.launcheragent.apigraphic.platform.UiInputPoller;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.anim.UiTransition;
+import com.yuyuframe.launcheragent.apigraphic.widget.UiOverlay;
+import com.yuyuframe.launcheragent.apigraphic.widget.UiOverlayStack;
 import com.yuyuframe.launcheragent.apigraphic.widget.UiWidget;
 
 import java.awt.Color;
@@ -195,11 +197,88 @@ public class UiColorPicker extends UiWidget {
 
     public UiColor value() { return rgbColor(); }
 
-    /** Ouvre/ferme le panneau — point d'entrée UNIQUE (onClick ET clic extérieur, voir pollContinuous) pour que la couleur finale rejoigne TOUJOURS les récents à la fermeture, peu importe comment elle a été fermée. */
+    /**
+     * Ouvre/ferme le panneau — le panneau est un élément flottant de l'écran
+     * ({@link UiOverlayStack}) : il passe au-dessus de tout, et la pile le
+     * ferme d'elle-même au clic ailleurs et à Échap. La couleur finale
+     * rejoint les récents à CHAQUE fermeture, quelle qu'en soit la cause
+     * (voir {@code panel.onClosed}).
+     */
     private void setExpanded(boolean v) {
-        if (expanded && !v) pushRecent(rgbColor());
-        expanded = v;
+        if (v == expanded) return;
+        if (v) {
+            expanded = true;
+            openedIn = UiOverlayStack.active();
+            openedIn.open(panel);
+        } else if (openedIn != null) {
+            openedIn.close(panel); // -> panel.onClosed()
+        } else {
+            expanded = false;
+        }
     }
+
+    private UiOverlayStack openedIn;
+
+    /** Même clic reçu deux fois (événement du jeu et sondage d'une liste) : voir UiDropdown. */
+    private static final long SAME_CLICK_NANOS = 120_000_000L;
+    private long lastToggleNanos;
+
+    private boolean sameClick() {
+        return System.nanoTime() - lastToggleNanos < SAME_CLICK_NANOS;
+    }
+
+    private boolean overSwatch(double mx, double my) {
+        return mx >= x && mx <= x + w && my >= y && my <= y + h;
+    }
+
+    private boolean overPanel(double mx, double my) {
+        return mx >= x && mx <= x + PANEL_W && my >= panelBottom() && my <= panelTop();
+    }
+
+    /** Le panneau déplié, dans la pile de l'écran. */
+    private final UiOverlay panel = new UiOverlay() {
+        @Override
+        public boolean modal() { return false; }
+
+        /** La pastille en fait partie : la recliquer referme le panneau. */
+        @Override
+        public boolean contains(double mx, double my) {
+            return overPanel(mx, my) || overSwatch(mx, my);
+        }
+
+        @Override
+        public float enterSeconds() { return 0.14f; }
+
+        @Override
+        public float exitSeconds() { return 0.14f; }
+
+        @Override
+        public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight, float appear) {
+            drawPanel(renderer, mouseX, mouseY, vpWidth, vpHeight);
+        }
+
+        @Override
+        public void poll(UiInputPoller input) {
+            pollPanel(input);
+        }
+
+        /** Les gestes dans le panneau passent par le sondage ; ici seulement la pastille, qui referme. */
+        @Override
+        public void click(double mx, double my, int button, boolean doubleClick) {
+            if (overSwatch(mx, my) && !overPanel(mx, my) && !sameClick()) {
+                lastToggleNanos = System.nanoTime();
+                setExpanded(false);
+            }
+        }
+
+        @Override
+        public void onClosed() {
+            if (expanded) pushRecent(rgbColor());
+            expanded = false;
+            draggingWheel = draggingBri = draggingAlpha = false;
+            hexField.setFocused(false);
+        }
+    };
 
     // ── Géométrie du panneau — dérivée depuis le bas de la pastille (y), empile VERS LE BAS (ou VERS LE HAUT si {@link #flipUp}) ──
 
@@ -284,19 +363,11 @@ public class UiColorPicker extends UiWidget {
     }
 
     /**
-     * Le panneau déroulé ENTIER vit ici, PAS dans {@link #draw} (voir
-     * UiWidget#drawOverlay pour le pourquoi — BUG TROUVÉ, retour
-     * utilisateur : "la modal entière... se fait chevaucher par tout") :
-     * dessiné dans un second passage APRÈS tout le reste de la liste
-     * (UiScrollContainer), ce panneau flotte désormais TOUJOURS au-dessus,
-     * peu importe ce qui se trouve plus bas dans l'écran. Seule la pastille
-     * (bouton fermé) reste dans draw() — sa position dans la liste continue
-     * de compter pour son propre clipFade/sa propre visibilité au bord du
-     * scroll, ce que ce panneau n'a lui, jamais besoin d'avoir puisqu'il
-     * n'existe que par-dessus tout, jamais coupé par un bord de viewport.
+     * Le panneau déroulé ENTIER, dessiné par la pile de l'écran (voir
+     * {@link #panel}) au-dessus de tout le reste — seule la pastille reste
+     * dans {@link #draw}.
      */
-    @Override
-    public void drawOverlay(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
+    private void drawPanel(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
         // Décidé AVANT le early-return ci-dessous (et avant tout appel à
         // panelTop()/panelBottom()) — voir javadoc de #flipUp : doit rester
         // à jour même pendant le fondu d'ouverture, et {@link #pollContinuous}
@@ -553,17 +624,13 @@ public class UiColorPicker extends UiWidget {
 
     @Override
     public void onClick() {
+        if (sameClick()) return;
+        lastToggleNanos = System.nanoTime();
         setExpanded(!expanded);
     }
 
-    /** Le panneau ouvert couvre ce point : le clic est pour lui, pas pour le réglage qu'il cache (voir UiWidget#overlayContains). */
-    @Override
-    public boolean overlayContains(double mouseX, double mouseY) {
-        return expanded && mouseX >= x && mouseX <= x + PANEL_W && mouseY >= panelBottom() && mouseY <= panelTop();
-    }
-
-    @Override
-    public void pollContinuous(UiInputPoller input) {
+    /** Gestes dans le panneau ouvert — appelé à chaque image par la pile de l'écran (voir {@link #panel}). */
+    private void pollPanel(UiInputPoller input) {
         if (!expanded) return;
         hexField.pollContinuous(input);
 
@@ -579,19 +646,11 @@ public class UiColorPicker extends UiWidget {
 
         float bx = x + PANEL_PAD, bw = contentW();
 
-        // Fermeture au clic EXTÉRIEUR (voir javadoc de classe : comportement
-        // de modal standard, absent jusqu'ici) — testé AVANT le reste : un
-        // clic hors pastille ET hors panneau ferme, sans déclencher un
-        // début de glissement au passage.
-        if (input.leftClicked) {
-            boolean overSwatch = input.mouseX >= x && input.mouseX <= x + w && input.mouseY >= y && input.mouseY <= y + h;
-            boolean overPanel = input.mouseX >= x && input.mouseX <= x + PANEL_W
-                && input.mouseY >= panelBottom() && input.mouseY <= panelTop();
-            if (!overSwatch && !overPanel) {
-                setExpanded(false);
-                draggingWheel = draggingBri = draggingAlpha = false;
-                return;
-            }
+        // Le clic à l'extérieur ferme le panneau par la pile (voir panel) ;
+        // ici, rien ne doit démarrer de glissement hors du panneau.
+        if (input.leftClicked && !overPanel(input.mouseX, input.mouseY)) {
+            draggingWheel = draggingBri = draggingAlpha = false;
+            return;
         }
 
         if (!input.leftDown) {

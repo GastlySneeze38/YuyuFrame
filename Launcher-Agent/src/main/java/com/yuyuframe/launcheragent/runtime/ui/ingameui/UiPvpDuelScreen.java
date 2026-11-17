@@ -55,9 +55,6 @@ public final class UiPvpDuelScreen extends UiScreenBase {
 
     private final Object lastScreen;
     private final DuelHistory.Duel duel;
-    private PvpInfoModal info;
-    /** Le détail d'une famille, ouvert au clic sur sa ligne. */
-    private PvpFamilyModal familyDetail;
     /** Le détail des familles, lu au premier clic : il relit le journal du duel. */
     private DuelDetail detail;
     private int lastW = -1, lastH = -1;
@@ -86,26 +83,19 @@ public final class UiPvpDuelScreen extends UiScreenBase {
         return UiColor.TRANSPARENT;
     }
 
-    @Override
-    protected List<UiWidget> modalWidgets() {
-        if (info != null) return info.widgets();
-        return familyDetail == null ? null : familyDetail.widgets();
-    }
-
-    @Override
-    protected void onModalEscape() {
-        if (info != null) info.close();
-        else if (familyDetail != null) familyDetail.close();
-    }
-
+    /** L'explication de la note, dans la pile de l'écran. */
     private void openInfo(int topic) {
-        info = new PvpInfoModal(duel.report, topic);
+        overlays.open(new PvpInfoModal(duel.report, topic));
     }
 
-    /** Le détail d'une de mes familles : des faits de ce duel ; « Comment c'est compté » mène à son explication. */
+    /**
+     * Le détail d'une de mes familles : des faits de ce duel ; « Comment c'est
+     * compté » ferme le détail et ouvre son explication par-dessus, l'une
+     * passant sur l'autre pendant la sortie.
+     */
     private void openFamily(int family) {
         if (detail == null) detail = DuelDetail.load(duel.time);
-        familyDetail = new PvpFamilyModal(family, duel.report, detail, () -> openInfo(PvpInfoModal.FAMILY_TOPICS[family]));
+        overlays.open(new PvpFamilyModal(family, duel.report, detail, () -> openInfo(PvpInfoModal.FAMILY_TOPICS[family])));
     }
 
     // ── Mise en page ─────────────────────────────────────────────────────────
@@ -195,8 +185,6 @@ public final class UiPvpDuelScreen extends UiScreenBase {
             buildLayout();
             lastW = screenWidth; lastH = screenHeight; lastScale = UiTheme.UI_SCALE;
         }
-        if (info != null && info.closed()) info = null;
-        if (familyDetail != null && familyDetail.closed()) familyDetail = null;
         UiRenderer renderer = UiRenderer.get(getClass().getClassLoader());
         renderer.beginGlassFrame(GLASS_PASSES, screenWidth, screenHeight);
         try {
@@ -206,17 +194,15 @@ public final class UiPvpDuelScreen extends UiScreenBase {
         }
         super.uiDraw(mouseX, mouseY);
         try {
-            boolean hover = info == null && familyDetail == null;
+            // Sous une fenêtre ouverte, la souris arrive déjà hors de l'écran
+            // (UiScreenBase) : rien ne s'allume à travers. Les fenêtres
+            // elles-mêmes sont dessinées par la pile, après ce contenu.
             drawBanner(renderer);
             drawScore(renderer, bannerBottom - gap());
-            drawFaceToFace(renderer, bannerBottom - gap(), hover ? mouseX : -1, hover ? mouseY : -1);
+            drawFaceToFace(renderer, bannerBottom - gap(), mouseX, mouseY);
             drawFigures(renderer, mainBottom - gap());
             drawAnalysis(renderer, figuresBottom - gap(), contentBottom);
             PvpScoreUi.alpha = 1f;
-            // « Comment c'est compté » ouvre l'explication pendant que le détail se ferme : l'une passe sur l'autre.
-            if (familyDetail != null) familyDetail.draw(renderer, info == null ? mouseX : -1, info == null ? mouseY : -1, screenWidth, screenHeight);
-            if (info != null) info.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
-            drawRevealVeil(renderer);
         } catch (Throwable t) {
             LauncherLog.err("[UiPvpDuelScreen] uiDraw: " + t);
         } finally {

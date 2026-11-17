@@ -235,6 +235,7 @@ public final class GlobalUiSettings extends LauncherModule {
         // l'ancienne "Normale" (1f) est maintenant "Petite", l'ancienne
         // "Grande" (1.18f) est maintenant "Normale", et un nouveau palier
         // "Grande" plus grand encore (1.4f) a été ajouté.
-        UiTheme.UI_SCALE = uiSize == 0 ? 1f : uiSize == 2 ? 1.4f : 1.18f;
+        // Le facteur de la fenêtre s'y ajoute (voir UiTheme.setViewport).
+        UiTheme.setUserScale(uiSize == 0 ? 1f : uiSize == 2 ? 1.4f : 1.18f);
     }
 }

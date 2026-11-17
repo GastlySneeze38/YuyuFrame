@@ -109,9 +109,9 @@ public class UiHudEditorScreen extends UiScreenBase {
 
             // Aides de placement — PAR-DESSUS les boîtes.
             drawPlacementAids(renderer);
-            // Voir UiModConfigScreen — ré-appliqué pour couvrir les lignes de guide ci-dessus.
-            drawRevealVeil(renderer);
-        } catch (Throwable ignored) {}
+        } catch (Throwable t) {
+            com.yuyuframe.launcheragent.base.log.LauncherLog.err("[UiHudEditorScreen] uiDraw: " + t);
+        }
     }
 
     private void buildLayout() {

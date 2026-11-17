@@ -3,6 +3,7 @@ package com.yuyuframe.launcheragent.runtime.ui.ingameui.component;
 import com.yuyuframe.launcheragent.apigraphic.anim.UiAnimatedFloat;
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.widget.UiHitTest;
+import com.yuyuframe.launcheragent.apigraphic.widget.UiOverlayStack;
 import com.yuyuframe.launcheragent.apigraphic.platform.UiInputPoller;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.widget.UiWidget;
@@ -256,6 +257,8 @@ public class UiScrollContainer {
     }
 
     public void pollInput(UiInputPoller input) {
+        // Une modale est ouverte : ce qui est derrière ne défile pas et ne se clique pas.
+        if (UiOverlayStack.active().blocksInput()) return;
         boolean overViewport = input.mouseX >= vx && input.mouseX <= vx + vw
             && input.mouseY >= vy && input.mouseY <= vy + vh;
         if (overViewport && input.scrollDelta != 0) {
@@ -343,10 +346,11 @@ public class UiScrollContainer {
         // la souris elle-même n'a pas bougé. Une liste FRAÎCHE à chaque appel
         // change de référence à chaque fois, donc le cache se réinvalide
         // correctement dès que le CONTENU (pas juste la position souris) change.
-        // Un panneau flottant ouvert sous la souris (liste déroulée, couleurs) ?
-        // Demandé AVANT pollContinuous : c'est là qu'il traite le clic, et
-        // souvent se referme — après, il ne couvrirait plus rien.
-        boolean overFloating = overlayContains(input.mouseX, input.mouseY);
+        // Un élément flottant de l'écran (liste déroulée, bulle, modale) couvre
+        // la souris ? Le clic est pour lui (voir UiOverlayStack) — un élément
+        // en train de se fermer couvre encore sa surface, donc le clic qui
+        // vient de choisir une ligne ne retombe pas sur le réglage dessous.
+        boolean overFloating = UiOverlayStack.active().capturesPoint(input.mouseX, input.mouseY);
 
         List<UiWidget> visibleNow = new ArrayList<>();
         for (UiWidget w : content) {
@@ -409,14 +413,6 @@ public class UiScrollContainer {
         }
     }
 
-    /** Un widget du contenu a-t-il un panneau flottant ouvert sous ce point ? Voir {@link UiWidget#overlayContains}. */
-    public boolean overlayContains(double mouseX, double mouseY) {
-        for (UiWidget w : content) {
-            if (visible(w) && w.overlayContains(mouseX, mouseY)) return true;
-        }
-        return false;
-    }
-
     public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
         applyOffsets();
         // Marge autour du viewport (2026-09-16) : sur les ères GL, où ce
@@ -457,22 +453,11 @@ public class UiScrollContainer {
 
         drawScrollbar(renderer, vpWidth, vpHeight);
 
-        // Second passage — voir UiWidget#drawOverlay (BUG TROUVÉ, retour
-        // utilisateur : "la modal [color picker] entière... se fait
-        // chevaucher par tout") : un panneau déroulant dessiné dans le
-        // premier passage ci-dessus reste soumis à l'ordre d'insertion —
-        // n'importe quel widget plus bas dans la liste (donc plus bas à
-        // l'écran) se dessine PAR-DESSUS lui s'ils se chevauchent. Ce
-        // second passage, après TOUT le contenu normal ET la scrollbar,
-        // garantit qu'un tel panneau flotte toujours au-dessus — même motif
-        // que UiTooltip juste en dessous, déjà dessiné en dernier pour la
-        // même raison.
-        for (UiWidget w : content) {
-            if (!visible(w)) continue;
-            w.drawOverlay(renderer, mouseX, mouseY, vpWidth, vpHeight);
-        }
-
-        if (hoveredTooltip != null) UiTooltip.draw(renderer, hoveredTooltip, mouseX, mouseY, vpWidth, vpHeight);
+        // Les panneaux flottants des widgets (liste déroulée, couleurs) ne
+        // sont plus dessinés ici : ils vivent dans la pile de l'écran
+        // (UiOverlayStack), au-dessus de tout. L'infobulle aussi part en fin
+        // d'image, après eux.
+        if (hoveredTooltip != null) UiTooltip.defer(hoveredTooltip);
     }
 
     private void drawScrollbar(UiRenderer renderer, int vpWidth, int vpHeight) {

@@ -72,7 +72,6 @@ public final class UiPvpScoreScreen extends UiScreenBase {
     private double mouseX, mouseY;
     /** La page du compétitif est affichée à la place du bilan. */
     private boolean competitive;
-    private PvpInfoModal info;
     private int lastW = -1, lastH = -1;
     private float lastScale = -1f;
 
@@ -175,16 +174,6 @@ public final class UiPvpScoreScreen extends UiScreenBase {
     }
 
     @Override
-    protected List<UiWidget> modalWidgets() {
-        return info == null ? null : info.widgets();
-    }
-
-    @Override
-    protected void onModalEscape() {
-        if (info != null) info.close();
-    }
-
-    @Override
     public void uiDraw(double mouseX, double mouseY) {
         if (screenWidth > 0 && screenHeight > 0
                 && (screenWidth != lastW || screenHeight != lastH || UiTheme.UI_SCALE != lastScale)) {
@@ -202,7 +191,6 @@ public final class UiPvpScoreScreen extends UiScreenBase {
             }
             buildLayout();
         }
-        if (info != null && info.closed()) info = null;
         this.mouseX = mouseX;
         this.mouseY = mouseY;
         UiRenderer renderer = UiRenderer.get(getClass().getClassLoader());
@@ -239,10 +227,8 @@ public final class UiPvpScoreScreen extends UiScreenBase {
             } else if (scroll != null) {
                 scroll.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
             }
-            // La liste des modes passe par-dessus l'historique.
-            if (modeDropdown != null) modeDropdown.drawPanel(renderer, mouseX, mouseY, screenWidth, screenHeight);
-            if (info != null) info.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
-            drawRevealVeil(renderer);
+            // La liste des modes et l'explication sont dessinées par la pile
+            // de l'écran, par-dessus l'historique.
         } catch (Throwable t) {
             LauncherLog.err("[UiPvpScoreScreen] uiDraw: " + t);
         } finally {
@@ -253,9 +239,9 @@ public final class UiPvpScoreScreen extends UiScreenBase {
     @Override
     public void uiPollInput(UiInputPoller input) {
         super.uiPollInput(input);
-        // La liste ne défile ni ne se clique tant que l'explication ou la liste des modes est ouverte.
-        boolean blocked = info != null || (modeDropdown != null && modeDropdown.busy(input.mouseX, input.mouseY));
-        if (scroll != null && !blocked) scroll.pollInput(input);
+        // Sous l'explication (bloquante) ou la liste des modes, la liste ne
+        // réagit pas : la pile de l'écran le règle (voir UiScrollContainer).
+        if (scroll != null) scroll.pollInput(input);
     }
 
     // ── Mise en page ─────────────────────────────────────────────────────────
@@ -279,7 +265,7 @@ public final class UiPvpScoreScreen extends UiScreenBase {
         widgets.clear();
         widgets.add(PvpScoreUi.backButton(screenWidth, screenHeight, () -> closeTo(lastScreen)));
         widgets.add(PvpScoreUi.helpButton(screenWidth, screenHeight,
-            () -> info = new PvpInfoModal(null, PvpInfoModal.OVERVIEW)));
+            () -> overlays.open(new PvpInfoModal(null, PvpInfoModal.OVERVIEW))));
         com.yuyuframe.launcheragent.runtime.module.gameplay.PvpScoreModule module =
             com.yuyuframe.launcheragent.runtime.module.gameplay.PvpScoreModule.instance();
         if (module != null) {

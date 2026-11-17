@@ -17,6 +17,7 @@ import com.yuyuframe.launcheragent.apigraphic.layout.TaffyNode;
 import com.yuyuframe.launcheragent.apigraphic.layout.TaffyStyle;
 import com.yuyuframe.launcheragent.apigraphic.anim.UiStagger;
 import com.yuyuframe.launcheragent.apigraphic.anim.UiTransition;
+import com.yuyuframe.launcheragent.apigraphic.widget.UiOverlay;
 import com.yuyuframe.launcheragent.apigraphic.widget.UiWidget;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.UiScreenBase;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiButton;
@@ -218,32 +219,50 @@ public final class ModrinthContentScreen extends UiScreenBase {
     }
 
     private void toggleFilters() {
-        filtersOpen = !filtersOpen;
-        if (filtersOpen) buildDrawer();
+        if (filtersOpen) {
+            overlays.close(drawer); // -> drawer.onClosed()
+            return;
+        }
+        filtersOpen = true;
+        buildDrawer();
+        overlays.open(drawer);
         buildLayout(); // met à jour le "•" du bouton Filtres — pas de recherche réseau relancée
     }
 
-    @Override
-    protected List<UiWidget> modalWidgets() {
-        return filtersOpen ? drawerAllWidgets : null;
-    }
+    /**
+     * Le tiroir de filtres, élément bloquant de la pile de l'écran : il pose
+     * son propre fond (qui le ferme au clic) et ses propres animations ; la
+     * pile le garde dessiné le temps qu'il se replie.
+     */
+    private final UiOverlay drawer = new UiOverlay() {
+        @Override public boolean modal() { return true; }
+        @Override public UiColor scrim() { return null; }
+        @Override public float exitSeconds() { return 0.35f; }
+        @Override public List<UiWidget> widgets() { return drawerAllWidgets; }
 
-    @Override
-    protected void onModalEscape() {
-        toggleFilters();
-    }
+        @Override
+        public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight, float appear) {
+            drawDrawer(renderer, mouseX, mouseY);
+        }
+
+        @Override
+        public void onClosed() {
+            filtersOpen = false;
+            buildLayout();
+        }
+    };
 
     @Override
     public void uiPollInput(UiInputPoller input) {
         updateDrawerLayout();
         // Les cartes et la pagination vivent dans la liste widgets de l'écran :
-        // modalWidgets() les rend inertes tant que la fenêtre de filtres est
+        // la pile les rend inertes tant que la fenêtre de filtres est
         // ouverte. Reste l'instant de la FERMETURE : le clic qui ferme (bouton,
         // croix, fond) a encore le bouton enfoncé à l'image suivante, où les
         // cartes sont de nouveau sondées et le prendraient pour un clic neuf
         // (elles n'ont pas vu l'appui, n'étant pas sondées sous la fenêtre).
         // Les cartes restent donc sourdes jusqu'au relâchement du bouton.
-        if (filtersOpen) cardsMuted = true;
+        if (filtersOpen || overlays.blocksInput()) cardsMuted = true;
         else if (!input.leftDown) cardsMuted = false;
         super.uiPollInput(input);
     }
@@ -304,13 +323,7 @@ public final class ModrinthContentScreen extends UiScreenBase {
                 renderer.drawTextShadowed(UiFont.REGULAR, status, MARGIN, MARGIN + PAGER_H / 2f - 5f,
                     UiTheme.TEXT_SECONDARY, UiTheme.TEXT_SHADOW, 1f, -1f, 0.42f, screenWidth, screenHeight);
             }
-            // Tiroir de filtres DESSINÉ EN DERNIER (par-dessus la liste) — voir
-            // modalWidgets() pour pourquoi le dessin ne peut pas passer par la
-            // liste widgets générique de UiScreenBase (ordre de dessin vs.
-            // ordre de priorité au clic contradictoires sur une liste plate).
-            drawDrawer(renderer, mouseX, mouseY);
-            // Voir UiModConfigScreen — ré-appliqué pour couvrir le titre/la liste ci-dessus.
-            drawRevealVeil(renderer);
+            // Le tiroir de filtres est dessiné par la pile de l'écran, par-dessus tout ça.
         } catch (Throwable t) {
             LauncherLog.err("[ModrinthContentScreen] uiDraw: " + t);
         }
@@ -547,9 +560,8 @@ public final class ModrinthContentScreen extends UiScreenBase {
 
     // ── Tiroir de filtres (modal) ────────────────────────────────────────────
     //
-    // PREMIER modal de ce moteur UI — voir UiScreenBase.modalWidgets() pour le
-    // mécanisme générique posé pour lui (et réutilisable par de futurs
-    // modaux). Glisse depuis la droite, pleine hauteur, fond assombri sur le
+    // Élément bloquant de la pile de l'écran (voir UiOverlayStack et
+    // `drawer`). Glisse depuis la droite, pleine hauteur, fond assombri sur le
     // reste de l'écran (liste de résultats visible en dégradé derrière, pas
     // repoussée vers le bas comme l'ancien panneau inline — qui pouvait la
     // chevaucher, voir historique de session).

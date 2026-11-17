@@ -1,40 +1,30 @@
 package com.yuyuframe.launcheragent.runtime.ui.ingameui.component;
 
-import com.yuyuframe.launcheragent.apigraphic.anim.UiAnimatedFloat;
-import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
-import com.yuyuframe.launcheragent.apigraphic.widget.UiWidget;
+import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
+import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
 import com.yuyuframe.launcheragent.apigraphic.value.UiTheme;
 
-/** Bouton texte — rect arrondi, s'éclaircit en douceur au survol (voir UiAnimatedFloat), libellé centré. */
-public class UiButton extends UiWidget {
+/**
+ * Bouton texte : petite surface de verre, halo d'accent au survol, enfoncement
+ * à l'appui, onde au clic, libellé centré (coupé avec « ... » s'il ne tient
+ * pas, texte complet en infobulle).
+ */
+public class UiButton extends UiInteractive {
 
     private static final UiColor BASE = new UiColor(45, 45, 50, 230);
     private static final UiColor HOVER = new UiColor(65, 65, 72, 230);
-    private static final float HOVER_ANIM_SPEED = 16f;
 
-    // Non static — dépendent de UiTheme.UI_SCALE au moment de la construction
-    // (voir GlobalUiSettings, réglage "Taille de l'interface"), même motif que
-    // UiSlider/UiToggle/UiColorPicker. w/h viennent déjà mis à l'échelle par
-    // l'appelant (ConfigScreenBuilder, UiMainMenuScreen...).
-    private final float RADIUS = UiTheme.scaled(5f);
-    private final float LABEL_SCALE = UiTheme.scaled(0.46f);
-
-    // Retour visuel à l'APPUI ajouté (voir audit runtime/ui/ : seul le hover
-    // faisait un lerp de couleur, rien ne se passait à l'appui lui-même).
-    // UiWidget.onClick() ne reçoit aucune coordonnée (voir sa javadoc) — le
-    // ripple part donc du CENTRE du bouton plutôt que du point de clic exact,
-    // simplification délibérée plutôt que de changer la signature partagée
-    // par tous les widgets pour ce seul besoin. Rayon borné au plus petit
-    // des deux côtés : aucun clip GPU fiable (voir UiScrollContainer), un
-    // ripple plus large déborderait visiblement des coins arrondis.
+    /**
+     * Onde partie du CENTRE (un clic ne porte pas de coordonnées), rayon borné
+     * au plus petit des deux côtés : plus large, elle déborderait des coins.
+     */
     private static final long RIPPLE_DURATION_MS = 380L;
     private static final UiColor RIPPLE_COLOR = new UiColor(255, 255, 255, 255);
     private long rippleStartMs = -1L;
 
     private final String label;
     private final Runnable action;
-    private final UiAnimatedFloat hoverAnim = new UiAnimatedFloat(0f, HOVER_ANIM_SPEED);
 
     public UiButton(float x, float y, float w, float h, String label, Runnable action) {
         super(x, y, w, h);
@@ -44,73 +34,52 @@ public class UiButton extends UiWidget {
 
     @Override
     public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
-        boolean over = contains(mouseX, mouseY);
-        hoverAnim.setTarget(over ? 1f : 0f);
-        pressAnim.setTarget(over && pressed ? 1f : 0f);
-        float hover = hoverAnim.get();
-        float press = pressAnim.get();
-        UiColor color = UiColor.lerp(BASE, HOVER, hover);
-        // Halo d'accent qui grandit autour du bouton au survol.
+        updateStates(mouseX, mouseY);
+        float radius = UiTheme.px(5f);
+        // Halo d'accent qui s'étend au survol : le signal « cliquable », en
+        // plus du fond qui s'éclaircit.
         if (hover > 0.01f) {
-            float halo = UiTheme.scaled(3f) * hover;
-            renderer.drawRoundedRect(x - halo, y - halo, x + w + halo, y + h + halo, RADIUS + halo,
+            float halo = UiTheme.px(UiTheme.Space.S3) * hover;
+            renderer.drawRoundedRect(x - halo, y - halo, x + w + halo, y + h + halo, radius + halo,
                 UiTheme.ACCENT.withAlpha(0.16f * hover), vpWidth, vpHeight);
         }
-        // Enfoncé : le bouton rentre un peu sur lui-même pendant l'appui.
+        // Enfoncé : la surface rentre un peu dans ses bornes, le contour passe à l'accent.
         float inset = Math.min(w, h) * 0.05f * press;
-        float bx1 = x + inset, by1 = y + inset, bx2 = x + w - inset, by2 = y + h - inset;
-        // Bouton de verre (rework 2026-08-27) — composant PARTAGÉ, converti
-        // ici pour propager le style à tous ses appelants d'un coup.
-        UiColor btnBorder = renderer.isGlassAvailable()
-            ? UiColor.lerp(UiColor.lerp(UiTheme.GLASS_BORDER, UiTheme.GLASS_BORDER_HOVER, hover), UiTheme.ACCENT, press) : null;
-        renderer.drawGlassPanel(bx1, by1, bx2, by2, RADIUS,
-            UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_FIELD, color,
-            btnBorder, Math.max(1f, UiTheme.scaled(1f)), vpWidth, vpHeight);
+        UiColor border = UiColor.lerp(UiColor.lerp(UiTheme.GLASS_BORDER, UiTheme.GLASS_BORDER_HOVER, hover), UiTheme.ACCENT, press);
+        UiSurface.field(UiColor.lerp(BASE, HOVER, hover)).radius(radius).border(border)
+            .draw(renderer, x + inset, y + inset, w - inset * 2f, h - inset * 2f, vpWidth, vpHeight);
         if (rippleStartMs >= 0) {
             float progress = (System.currentTimeMillis() - rippleStartMs) / (float) RIPPLE_DURATION_MS;
             if (progress >= 1f) {
                 rippleStartMs = -1L;
             } else {
-                float maxRadius = Math.min(w, h) * 0.9f;
-                renderer.drawRipple(x + w / 2f, y + h / 2f, maxRadius, progress, 0.22f, RIPPLE_COLOR, vpWidth, vpHeight);
+                renderer.drawRipple(x + w / 2f, y + h / 2f, Math.min(w, h) * 0.9f, progress, 0.22f, RIPPLE_COLOR, vpWidth, vpHeight);
             }
         }
         if (label != null) {
-            String shown = fittedLabel(renderer);
-            float tw = renderer.textWidth(shown, LABEL_SCALE);
-            renderer.drawText(shown, x + (w - tw) / 2f, y + h / 2f - UiTheme.scaled(5f), UiTheme.TEXT_PRIMARY, LABEL_SCALE, vpWidth, vpHeight);
+            float scale = UiTheme.px(UiTheme.Text.BUTTON);
+            String shown = fittedLabel(scale);
+            UiText.drawCentered(renderer, null, shown, x, w, y + h / 2f - UiTheme.px(UiTheme.Space.S5),
+                UiTheme.TEXT_PRIMARY, scale, vpWidth, vpHeight);
         }
     }
 
-    /** Suffixe de troncature — trois points ASCII, présents dans toutes les polices de l'atlas. */
-    private static final String ELLIPSIS = "...";
     private String fittedFor;
-    private float fittedWidth = -1f;
+    private float fittedWidth = -1f, fittedScale = -1f;
+    /** L'infobulle actuelle a été posée par {@link #fittedLabel}, pas par l'appelant. */
+    private boolean autoTooltip;
 
     /**
-     * Libellé tenant dans la largeur du bouton, coupé avec « ... » sinon.
-     *
-     * <p>BUG TROUVÉ (retour utilisateur 2026-09-13, palette de macros) : le
-     * libellé était dessiné centré sans aucune limite, et un nom long
-     * débordait des deux côtés du bouton. Couper plutôt que rétrécir : un
-     * texte réduit à la largeur deviendrait illisible pour un long nom. Le
-     * texte complet reste disponible en infobulle — posée seulement quand le
-     * libellé est réellement coupé, et jamais par-dessus une infobulle choisie
-     * par l'appelant.
-     *
-     * <p>Recalculé seulement quand la largeur change : la mesure de texte
-     * lettre par lettre n'a pas à tourner à chaque frame.
+     * Libellé tenant dans la largeur du bouton, coupé sinon (un libellé
+     * rétréci deviendrait illisible). Recalculé seulement quand la largeur
+     * change. Le texte complet passe en infobulle, jamais par-dessus une
+     * infobulle choisie par l'appelant.
      */
-    private String fittedLabel(UiRenderer renderer) {
-        if (fittedFor != null && fittedWidth == w) return fittedFor;
-        float maxW = w - UiTheme.scaled(12f);
-        String result = label;
-        if (renderer.textWidth(label, LABEL_SCALE) > maxW) {
-            int end = label.length();
-            while (end > 0 && renderer.textWidth(label.substring(0, end).trim() + ELLIPSIS, LABEL_SCALE) > maxW) {
-                end--;
-            }
-            result = label.substring(0, end).trim() + ELLIPSIS;
+    private String fittedLabel(float scale) {
+        if (fittedFor != null && fittedWidth == w && fittedScale == scale) return fittedFor;
+        float maxW = w - UiTheme.px(UiTheme.Space.S12);
+        String result = UiText.fit(UiFont.REGULAR, label, maxW, scale);
+        if (!result.equals(label)) {
             if (tooltip == null) {
                 tooltip = label;
                 autoTooltip = true;
@@ -121,24 +90,13 @@ public class UiButton extends UiWidget {
         }
         fittedFor = result;
         fittedWidth = w;
+        fittedScale = scale;
         return result;
     }
 
-    /** L'infobulle actuelle a été posée par {@link #fittedLabel}, pas par l'appelant. */
-    private boolean autoTooltip;
-
     @Override
-    public void onClick() {
+    protected void onActivate() {
         rippleStartMs = System.currentTimeMillis();
         if (action != null) action.run();
-    }
-
-    /** Bouton gauche tenu enfoncé — lu à chaque image, pour l'enfoncement du bouton. */
-    private boolean pressed;
-    private final UiAnimatedFloat pressAnim = new UiAnimatedFloat(0f, 22f);
-
-    @Override
-    public void pollContinuous(com.yuyuframe.launcheragent.apigraphic.platform.UiInputPoller input) {
-        pressed = input.leftDown;
     }
 }

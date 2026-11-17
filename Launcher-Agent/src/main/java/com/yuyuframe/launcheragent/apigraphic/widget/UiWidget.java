@@ -83,35 +83,8 @@ public abstract class UiWidget {
      */
     public void pollContinuous(UiInputPoller input) {}
 
-    /**
-     * Contenu FLOTTANT qui doit toujours passer AU-DESSUS de tout le reste
-     * de la liste (voir {@code UiScrollContainer#draw}, appelé dans un
-     * second passage APRÈS tous les {@link #draw} — même motif que
-     * {@code UiTooltip}, déjà dessiné en dernier pour la même raison) — BUG
-     * TROUVÉ (retour utilisateur : "la modal entière... se fait chevaucher
-     * par tout") : un panneau déroulant (color picker, dropdown...) qui
-     * dessine son contenu flottant DANS {@link #draw} reste soumis à
-     * l'ordre d'insertion de la liste — n'importe quel widget ajouté APRÈS
-     * lui (donc plus bas dans l'écran) se dessine PAR-DESSUS s'il chevauche
-     * spatialement, même si ce panneau doit visuellement flotter au-dessus
-     * de tout. No-op par défaut — seuls les widgets avec un vrai popover
-     * (voir UiColorPicker/UiDropdown) le surchargent.
-     */
-    public void drawOverlay(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {}
-
-    /**
-     * Le contenu flottant de ce widget (liste déroulée, panneau de couleurs)
-     * couvre-t-il ce point ? Le clic y revient alors à lui seul.
-     *
-     * <p>Pendant de {@link #drawOverlay} pour la souris : un panneau flottant
-     * est dessiné par-dessus ce qui se trouve plus bas, mais il traite ses
-     * clics lui-même ({@link #pollContinuous}), en dehors de la recherche du
-     * widget cliqué. Sans cette question, cette recherche trouvait aussi le
-     * widget RECOUVERT et lui envoyait le même clic — choisir une ligne d'une
-     * liste basculait l'interrupteur caché dessous. Qui distribue les clics
-     * la pose d'abord (voir {@code UiScrollContainer}, {@code UiScreenBase}).
-     */
-    public boolean overlayContains(double mouseX, double mouseY) {
-        return false;
-    }
+    // Un contenu FLOTTANT (liste déroulée, panneau de couleurs, bulle) n'est
+    // pas dessiné par le widget : il s'ouvre dans la pile de l'écran
+    // (UiOverlayStack.active().open(...)), qui le dessine au-dessus de tout et
+    // lui réserve les clics qui tombent sur lui.
 }

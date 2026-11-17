@@ -136,9 +136,9 @@ public class UiModGroupConfigScreen extends UiScreenBase {
                 UiTheme.TEXT_PRIMARY, UiTheme.scaled(0.68f), screenWidth, screenHeight);
             updateActiveTab();
             if (scroll != null) scroll.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
-            // Voir UiModConfigScreen — ré-appliqué pour couvrir le titre/panneau ci-dessus.
-            drawRevealVeil(renderer);
-        } catch (Throwable ignored) {}
+        } catch (Throwable t) {
+            com.yuyuframe.launcheragent.base.log.LauncherLog.err("[UiModGroupConfigScreen] uiDraw: " + t);
+        }
     }
 
     @Override

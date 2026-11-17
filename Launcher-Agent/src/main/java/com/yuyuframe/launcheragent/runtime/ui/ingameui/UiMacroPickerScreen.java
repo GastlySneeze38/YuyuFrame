@@ -90,7 +90,6 @@ public final class UiMacroPickerScreen extends UiScreenBase {
             } else if (scroll != null) {
                 scroll.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
             }
-            drawRevealVeil(renderer);
         } catch (Throwable t) {
             LauncherLog.err("[UiMacroPickerScreen] uiDraw: " + t);
         }
@@ -157,10 +156,4 @@ public final class UiMacroPickerScreen extends UiScreenBase {
     // Le libellé vient de Macro.label() : le NOM s'il est renseigné, sinon
     // la commande. C'était la demande — « qu'il n'y ait que le nom de la
     // macro qui s'affiche dans la palette ».
-
-    /** Aucun widget modal ici — la palette EST le contenu. */
-    @Override
-    protected java.util.List<UiWidget> modalWidgets() {
-        return null;
-    }
 }

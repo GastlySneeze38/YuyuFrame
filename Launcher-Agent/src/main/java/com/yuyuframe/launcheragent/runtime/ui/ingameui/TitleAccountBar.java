@@ -195,7 +195,8 @@ public final class TitleAccountBar {
 
     /** Une longueur de la barre : le réglage « Taille de l'interface », puis la taille de la fenêtre. */
     private static float px(float value) {
-        return UiTheme.scaled(value) * fit;
+        // Le réglage seul : la fenêtre est déjà dans `fit`, propre à cette barre.
+        return UiTheme.userScaled(value) * fit;
     }
 
     private static boolean inside(double mx, double my, float x, float y, float w, float h) {

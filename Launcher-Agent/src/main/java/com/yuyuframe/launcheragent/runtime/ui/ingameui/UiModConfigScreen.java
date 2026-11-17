@@ -16,9 +16,8 @@ import com.yuyuframe.launcheragent.apigraphic.layout.TaffyLayoutResult;
 import com.yuyuframe.launcheragent.apigraphic.layout.TaffyNode;
 import com.yuyuframe.launcheragent.apigraphic.layout.TaffyStyle;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiScrollContainer;
-import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiModalForm;
-import com.yuyuframe.launcheragent.runtime.ui.config.SettingModal;
 import com.yuyuframe.launcheragent.apigraphic.value.UiTheme;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -85,14 +84,6 @@ public class UiModConfigScreen extends UiScreenBase {
     private int lastLayoutWidth = -1, lastLayoutHeight = -1;
     private int lastSettingsRevision = -1;
 
-    /**
-     * Formulaire modal en cours, ou {@code null}. Demandé par un module via
-     * {@link SettingModal#request} — voir sa javadoc pour pourquoi le module
-     * ne peut pas l'ouvrir lui-même.
-     */
-    private UiModalForm modal;
-    /** Fenêtre libre en cours ({@link SettingModal.Dialog}), ou {@code null}. Jamais en même temps que {@link #modal}. */
-    private SettingModal.Dialog dialog;
     private float lastUiScale = -1f;
 
     public UiModConfigScreen(Object lastScreen, LauncherModule module) {
@@ -123,46 +114,10 @@ public class UiModConfigScreen extends UiScreenBase {
             lastUiScale = UiTheme.UI_SCALE;
             lastSettingsRevision = module.settingsRevision;
         }
-        // BUG TROUVÉ (retour utilisateur : "la sidebar y'a rien qui va, le
-        // z-order est pas bon") : UiPanel.draw() était appelé ICI, APRÈS
-        // super.uiDraw() — qui a déjà dessiné les CategoryTab (dans
-        // "widgets") À CE moment. Le panneau, positionné exactement sur la
-        // même zone que ces onglets, se retrouvait donc dessiné PAR-DESSUS
-        // eux (dernier dessiné = au-dessus), les recouvrant entièrement.
-        // Fix : le panneau est maintenant un widget à part entière
-        // (SidebarPanel), ajouté EN PREMIER dans "widgets" (voir
-        // buildLayout) — l'ordre d'insertion pilote le z-order de
-        // super.uiDraw(), donc il se dessine AVANT (donc EN DESSOUS) les
-        // onglets, plus besoin de l'appeler séparément ici.
         // Arrière-plan flouté partagé par toutes les surfaces de verre de ce
-        // frame — DOIT précéder tout dessin (voir UiRenderer#beginGlassFrame :
-        // la file s'exécute dans l'ordre d'empilement, donc la chaîne capture
-        // le monde seul). Un seul calcul pour l'écran entier.
-        // Une demande de modale posée par un module au frame précédent (clic
-        // sur « Ajouter… ») — voir SettingModal.
-        SettingModal requested = SettingModal.consume();
-        if (requested != null) {
-            // Sauvegarde à la FERMETURE de la modale, pas au clic qui l'ouvre.
-            //
-            // BUG TROUVÉ (retour utilisateur 2026-08-31, persistance des
-            // macros) : l'action « Ajouter une macro » ne fait que DEMANDER la
-            // modale — l'entrée n'est créée que plus tard, quand l'utilisateur
-            // valide la dernière étape. Sauvegarder au moment du clic écrivait
-            // donc l'état d'AVANT l'ajout. Ici on écrit une fois la modale
-            // refermée, quand la donnée existe vraiment. Une annulation
-            // réenregistre un état inchangé, ce qui est sans effet.
-            modal = new UiModalForm(requested, () -> {
-                modal = null;
-                module.onConfigChanged();
-                HudConfigStore.save();
-            });
-        }
-        SettingModal.Dialog requestedDialog = SettingModal.consumeDialog();
-        if (requestedDialog != null) {
-            dialog = requestedDialog;
-            dialog.opened(() -> dialog = null);
-        }
-
+        // frame — DOIT précéder tout dessin (voir UiRenderer#beginGlassFrame).
+        // Les fenêtres demandées par le module (« Ajouter… ») sont ouvertes
+        // par UiScreenBase dans la pile de l'écran.
         UiRenderer.get(getClass().getClassLoader()).beginGlassFrame(GLASS_PASSES, screenWidth, screenHeight);
         super.uiDraw(mouseX, mouseY);
         try {
@@ -177,43 +132,24 @@ public class UiModConfigScreen extends UiScreenBase {
                 module.drawConfigPreview(renderer, previewPanelX + (previewPanelW - previewSize) / 2f,
                     previewPanelY + UiTheme.scaled(14f), previewSize, screenWidth, screenHeight);
             }
-            // APRÈS la liste : la modale doit couvrir le contenu, pas
-            // l'inverse. Son voile plein écran absorbe aussi les clics
-            // alentour, puisque modalWidgets() rend sa liste exclusive.
-            if (modal != null) modal.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
-            if (dialog != null) dialog.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
-            // Ré-appliqué ici (déjà dessiné une fois dans super.uiDraw()) — voir
-            // sa javadoc : sans ça, le titre/panneau ci-dessus apparaîtrait
-            // d'un coup sec, jamais couvert par le voile.
-            drawRevealVeil(renderer);
-        } catch (Throwable ignored) {}
+        } catch (Throwable t) {
+            LauncherLog.err("[UiModConfigScreen] uiDraw: " + t);
+        }
     }
 
+    /** Une fenêtre du module vient de se fermer : le module relit sa configuration, puis on l'écrit. */
     @Override
-    protected java.util.List<com.yuyuframe.launcheragent.apigraphic.widget.UiWidget> modalWidgets() {
-        if (dialog != null) return dialog.widgets();
-        return modal == null ? null : modal.widgets();
-    }
-
-    /** Une liste déroulée de la colonne des réglages peut descendre sur un onglet ou sur l'aperçu : le clic est pour elle. */
-    @Override
-    protected boolean floatingPanelElsewhere(double mouseX, double mouseY) {
-        return modal == null && dialog == null && scroll != null && scroll.overlayContains(mouseX, mouseY);
-    }
-
-    /** Échap ferme d'abord la modale, pas l'écran — sinon on perdrait la saisie en cours en voulant juste annuler une étape. */
-    @Override
-    protected void onModalEscape() {
-        modal = null;
-        dialog = null;
+    protected void onSettingModalClosed() {
+        module.onConfigChanged();
+        super.onSettingModalClosed();
     }
 
     @Override
     public void uiPollInput(UiInputPoller input) {
         super.uiPollInput(input);
-        // La liste ne défile plus tant qu'une modale est ouverte : le contenu
-        // derrière n'est pas censé bouger.
-        if (scroll != null && modal == null && dialog == null) scroll.pollInput(input);
+        // Sous une fenêtre ouverte, la liste ne défile ni ne se clique : la
+        // pile de l'écran le règle (voir UiScrollContainer).
+        if (scroll != null) scroll.pollInput(input);
     }
 
     private void buildLayout() {

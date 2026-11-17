@@ -26,6 +26,24 @@ public final class UiTooltip {
     private static long lastDrawnMs = -1L;
     private static final long FADE_MS = 260L;
 
+    /**
+     * Infobulle demandée pendant le dessin du contenu (une liste qui défile),
+     * affichée par l'écran en toute fin d'image — au-dessus des éléments
+     * flottants. Voir {@code UiScreenBase#drawFrame}.
+     */
+    private static String deferred;
+
+    public static void defer(String text) {
+        if (text != null) deferred = text;
+    }
+
+    /** L'infobulle demandée à cette image, et l'oublie. */
+    public static String takeDeferred() {
+        String t = deferred;
+        deferred = null;
+        return t;
+    }
+
     public static void draw(UiRenderer renderer, String text, double mouseX, double mouseY, int vpWidth, int vpHeight) {
         if (text == null || text.isEmpty()) {
             lastText = null;

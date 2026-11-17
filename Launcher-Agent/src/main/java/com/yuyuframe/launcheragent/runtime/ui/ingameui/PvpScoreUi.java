@@ -407,24 +407,69 @@ public final class PvpScoreUi {
 
     /**
      * La liste déroulante du mode affiché. Le bouton est un widget de l'écran ;
-     * la liste ouverte est dessinée par l'écran après tout le reste
-     * ({@link #drawPanel}), pour passer par-dessus l'historique. Elle s'ouvre en
-     * se dépliant, et dit sous les modes que d'autres arrivent.
+     * la liste ouverte est un élément flottant de l'écran
+     * ({@link com.yuyuframe.launcheragent.apigraphic.widget.UiOverlayStack}),
+     * au-dessus de l'historique. Elle s'ouvre en se dépliant, et dit sous les
+     * modes que d'autres arrivent.
      */
     static final class ModeDropdown extends UiWidget {
         private final java.util.function.IntConsumer onChange;
         private int selected;
-        private boolean expanded;
         private final UiAnimatedFloat hover = new UiAnimatedFloat(0f, 16f);
         private final UiAnimatedFloat unfold = new UiAnimatedFloat(0f, 14f);
-        /** Le clic qui choisit un mode referme la liste : on s'en souvient un instant (voir {@code UiDropdown}). */
-        private long clickTakenAtNanos;
+        private com.yuyuframe.launcheragent.apigraphic.widget.UiOverlayStack openedIn;
+        /** Même clic reçu deux fois (événement du jeu et sondage) : voir {@code UiDropdown}. */
+        private long lastToggleNanos;
 
         ModeDropdown(float x, float y, float w, float h, int selected, java.util.function.IntConsumer onChange) {
             super(x, y, w, h);
             this.selected = Math.max(0, Math.min(MODES.length - 1, selected));
             this.onChange = onChange;
         }
+
+        private boolean expanded() { return openedIn != null && openedIn.isOpen(list); }
+
+        private boolean sameClick() { return System.nanoTime() - lastToggleNanos < 120_000_000L; }
+
+        /** La liste ouverte, dans la pile de l'écran. */
+        private final com.yuyuframe.launcheragent.apigraphic.widget.UiOverlay list =
+            new com.yuyuframe.launcheragent.apigraphic.widget.UiOverlay() {
+                @Override
+                public boolean modal() { return false; }
+
+                /** Le bouton en fait partie : le recliquer referme la liste. */
+                @Override
+                public boolean contains(double mx, double my) {
+                    return overPanel(mx, my) || ModeDropdown.this.contains(mx, my);
+                }
+
+                @Override
+                public float exitSeconds() { return 0.25f; }
+
+                @Override
+                public void draw(UiRenderer r, double mouseX, double mouseY, int vw, int vh, float appear) {
+                    drawPanel(r, mouseX, mouseY, vw, vh);
+                }
+
+                @Override
+                public void click(double mx, double my, int button, boolean doubleClick) {
+                    if (!overPanel(mx, my) && sameClick()) return; // le clic qui vient de l'ouvrir
+                    lastToggleNanos = System.nanoTime();
+                    for (int i = 0; i < MODES.length; i++) {
+                        float rowTop = panelTop() - i * h;
+                        if (mx >= x && mx <= x + w && my >= rowTop - h && my <= rowTop) {
+                            if (i != selected) {
+                                selected = i;
+                                if (onChange != null) onChange.accept(i);
+                            }
+                            break;
+                        }
+                    }
+                    // La note sous les modes ne ferme pas la liste ; tout le reste, si.
+                    boolean onNote = overPanel(mx, my) && my < panelTop() - MODES.length * h;
+                    if (!onNote && openedIn != null) openedIn.close(this);
+                }
+            };
 
         private float gap() { return UiTheme.scaled(6f); }
         private float noteHeight() { return UiTheme.scaled(30f); }
@@ -433,7 +478,7 @@ public final class PvpScoreUi {
 
         @Override
         public void draw(UiRenderer r, double mouseX, double mouseY, int vw, int vh) {
-            hover.setTarget(contains(mouseX, mouseY) || expanded ? 1f : 0f);
+            hover.setTarget(contains(mouseX, mouseY) || expanded() ? 1f : 0f);
             float t = hover.get();
             float radius = UiTheme.scaled(9f);
             UiColor border = UiColor.lerp(UiTheme.GLASS_BORDER, UiTheme.GLASS_BORDER_HOVER, t);
@@ -458,8 +503,8 @@ public final class PvpScoreUi {
         }
 
         /** La liste ouverte : elle se déplie vers le bas, ses lignes apparaissent à mesure. */
-        void drawPanel(UiRenderer r, double mouseX, double mouseY, int vw, int vh) {
-            unfold.setTarget(expanded ? 1f : 0f);
+        private void drawPanel(UiRenderer r, double mouseX, double mouseY, int vw, int vh) {
+            unfold.setTarget(expanded() ? 1f : 0f);
             float open = unfold.get();
             if (open < 0.02f) return;
             float top = panelTop();
@@ -513,45 +558,20 @@ public final class PvpScoreUi {
 
         @Override
         public void onClick() {
-            expanded = !expanded;
-        }
-
-        /** La liste est ouverte, ou vient de prendre un clic : ce qu'elle recouvre ne doit pas le recevoir aussi. */
-        boolean busy(double mouseX, double mouseY) {
-            return expanded || overlayContains(mouseX, mouseY);
+            if (sameClick()) return;
+            lastToggleNanos = System.nanoTime();
+            com.yuyuframe.launcheragent.apigraphic.widget.UiOverlayStack stack =
+                com.yuyuframe.launcheragent.apigraphic.widget.UiOverlayStack.active();
+            if (stack.isOpen(list)) {
+                stack.close(list);
+            } else {
+                openedIn = stack;
+                stack.open(list);
+            }
         }
 
         private boolean overPanel(double mx, double my) {
             return mx >= x && mx <= x + w && my >= panelBottom() && my <= panelTop();
-        }
-
-        @Override
-        public boolean overlayContains(double mouseX, double mouseY) {
-            boolean justTaken = clickTakenAtNanos != 0L && System.nanoTime() - clickTakenAtNanos < 200_000_000L;
-            return (expanded || justTaken) && overPanel(mouseX, mouseY);
-        }
-
-        @Override
-        public void pollContinuous(UiInputPoller input) {
-            if (!expanded || !input.leftClicked) return;
-            for (int i = 0; i < MODES.length; i++) {
-                float rowTop = panelTop() - i * h;
-                if (input.mouseX >= x && input.mouseX <= x + w && input.mouseY >= rowTop - h && input.mouseY <= rowTop) {
-                    expanded = false;
-                    clickTakenAtNanos = System.nanoTime();
-                    if (i != selected) {
-                        selected = i;
-                        if (onChange != null) onChange.accept(i);
-                    }
-                    return;
-                }
-            }
-            // Ailleurs que sur le bouton (qui se gère lui-même) : la liste se referme.
-            if (overPanel(input.mouseX, input.mouseY)) {
-                clickTakenAtNanos = System.nanoTime();
-                return;
-            }
-            if (!contains(input.mouseX, input.mouseY)) expanded = false;
         }
     }
 

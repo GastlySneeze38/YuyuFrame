@@ -24,7 +24,7 @@ import java.util.List;
  * arrière ne les efface pas, ce qui est tout l'intérêt d'un formulaire par
  * étapes plutôt que d'une suite de fenêtres jetables.
  */
-public final class UiModalForm {
+public final class UiModalForm implements com.yuyuframe.launcheragent.apigraphic.widget.UiOverlay {
 
     private static final float PANEL_W = 420f;
     private static final float PANEL_H = 210f;
@@ -54,21 +54,31 @@ public final class UiModalForm {
         }
     }
 
-    /** Widgets actifs — passés tels quels à {@code UiScreenBase.modalWidgets()}, ce qui leur réserve TOUS les clics. */
+    /** Élément bloquant de la pile de l'écran : voile (posé par la pile), et ses widgets reçoivent TOUS les clics. */
+    @Override
+    public boolean modal() { return true; }
+
+    @Override
+    public float enterSeconds() { return OPEN_S; }
+
+    @Override
     public List<UiWidget> widgets() { return widgets; }
 
-    public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
+    /** La pile l'a fermée (bouton, Échap) : on prévient qui l'a ouverte. */
+    @Override
+    public void onClosed() {
+        if (onClose != null) onClose.run();
+    }
+
+    @Override
+    public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight, float appear) {
         if (vpWidth != lastW || vpHeight != lastH || UiTheme.UI_SCALE != lastScale || step != builtStep) {
             build(vpWidth, vpHeight);
             lastW = vpWidth; lastH = vpHeight; lastScale = UiTheme.UI_SCALE; builtStep = step;
         }
 
-        // Ouverture : le voile s'assombrit pendant que le panneau jaillit du
-        // centre avec un petit rebond.
-        float open = clamp01((System.nanoTime() - openedAt) / 1e9f / OPEN_S);
-        // Voile plein écran : il assombrit le fond ET absorbe les clics à côté
-        // du panneau, puisque modalWidgets() rend cette liste exclusive.
-        renderer.drawRoundedRect(0, 0, vpWidth, vpHeight, 0f, new UiColor(0, 0, 0, Math.round(120 * Math.min(1f, open * 2f))), vpWidth, vpHeight);
+        // Le panneau jaillit du centre avec un petit rebond (et y retourne en se fermant).
+        float open = appear;
         renderer.pushLayer(Math.min(1f, open * 2.2f), 0.84f + 0.16f * backOut(open), px + pw / 2f, py + ph / 2f, 0f, 0f);
         try {
             renderer.drawShadow(px, py, px + pw, py + ph, UiTheme.RADIUS_MD, 24f, 0f, new UiColor(0, 0, 0, 140), vpWidth, vpHeight);
@@ -115,9 +125,8 @@ public final class UiModalForm {
 
     private static final float OPEN_S = 0.42f;
     private static final float STEP_S = 0.32f;
-    private final long openedAt = System.nanoTime();
     /** Dernier changement d'étape, et son sens : +1 en avançant, −1 en revenant. */
-    private long stepAt = openedAt;
+    private long stepAt = System.nanoTime();
     private int stepDir;
     private final com.yuyuframe.launcheragent.apigraphic.anim.UiAnimatedFloat progressAnim =
         new com.yuyuframe.launcheragent.apigraphic.anim.UiAnimatedFloat(0f, 10f);
@@ -195,6 +204,6 @@ public final class UiModalForm {
     }
 
     private void close() {
-        if (onClose != null) onClose.run();
+        com.yuyuframe.launcheragent.apigraphic.widget.UiOverlayStack.active().close(this); // -> onClosed()
     }
 }

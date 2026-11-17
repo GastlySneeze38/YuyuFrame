@@ -5,6 +5,10 @@ import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.widget.UiDrawable;
 import com.yuyuframe.launcheragent.apigraphic.widget.UiFocusable;
 import com.yuyuframe.launcheragent.apigraphic.widget.UiHitTest;
+import com.yuyuframe.launcheragent.apigraphic.widget.UiOverlay;
+import com.yuyuframe.launcheragent.apigraphic.widget.UiOverlayStack;
+import com.yuyuframe.launcheragent.runtime.ui.config.SettingModal;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiModalForm;
 import com.yuyuframe.launcheragent.apigraphic.platform.UiInputPoller;
 import com.yuyuframe.launcheragent.apigraphic.platform.lwjgl3.UiInputPollerModern;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
@@ -205,7 +209,7 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
             if (!exiting) {
                 pushEnterLayer(renderer);
                 try {
-                    uiDraw(mouseX, mouseY);
+                    drawFrame(renderer, mouseX, mouseY);
                 } finally {
                     renderer.popLayer();
                 }
@@ -216,7 +220,7 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
             float t = clamp01((System.nanoTime() - exitStartNanos) / 1e9f / duration);
             pushExitLayer(renderer, t);
             try {
-                uiDraw(mouseX, mouseY);
+                drawFrame(renderer, mouseX, mouseY);
             } finally {
                 renderer.popLayer();
             }
@@ -230,7 +234,7 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
                 // par l'écran qui s'en va (voir UiRenderer.freezeGlassChain).
                 UiRenderer.freezeGlassChain(true);
                 try {
-                    next.uiDraw(mouseX, mouseY);
+                    next.drawFrame(renderer, mouseX, mouseY);
                 } finally {
                     UiRenderer.freezeGlassChain(false);
                     renderer.popLayer();
@@ -249,6 +253,90 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
             // dessin suivant.
             while (renderer.layerDepth() > depth) renderer.popLayer();
         }
+    }
+
+    /**
+     * Une image complète de l'écran : son contenu ({@link #uiDraw}), puis ses
+     * éléments flottants ({@link #overlays}), puis l'infobulle — dans cet
+     * ordre, toujours. Sous une bloquante, le contenu reçoit une souris hors
+     * de l'écran : rien ne s'y allume au survol à travers le voile.
+     */
+    private void drawFrame(UiRenderer renderer, double mouseX, double mouseY) {
+        overlays.makeActive();
+        openRequestedModals();
+        // Sous un élément flottant (ou sous le voile d'une bloquante), le
+        // contenu reçoit une souris hors de l'écran : rien ne s'y allume à
+        // travers.
+        boolean captured = overlays.capturesPoint(mouseX, mouseY);
+        hoveredTooltip = null;
+        UiTooltip.takeDeferred();
+        uiDraw(captured ? -1e6 : mouseX, captured ? -1e6 : mouseY);
+        String contentTip = UiTooltip.takeDeferred();
+        overlays.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
+        String tip = captured ? overlays.tooltipAt(mouseX, mouseY)
+            : hoveredTooltip != null ? hoveredTooltip : contentTip;
+        if (tip != null) UiTooltip.draw(renderer, tip, mouseX, mouseY, screenWidth, screenHeight);
+    }
+
+    /**
+     * Les éléments flottants de cet écran : modales, tiroirs, listes déroulées,
+     * bulles. Voir {@link UiOverlayStack} — c'est le seul moyen d'afficher
+     * quelque chose par-dessus l'écran.
+     */
+    protected final UiOverlayStack overlays = new UiOverlayStack();
+
+    /** Infobulle du widget de l'écran survolé à cette image, dessinée après tout le reste. */
+    private String hoveredTooltip;
+
+    /**
+     * Pose l'infobulle à afficher à cette image — pour un écran qui dessine
+     * des widgets hors de {@link #widgets} (liste qui défile).
+     */
+    protected void showTooltip(String text) {
+        if (text != null) hoveredTooltip = text;
+    }
+
+    /**
+     * Une fenêtre demandée par un module ({@link SettingModal#request},
+     * {@link SettingModal#requestDialog}) — un module ne connaît aucun écran,
+     * il pose une demande que l'écran affiché prend ici, à l'image suivante.
+     */
+    private void openRequestedModals() {
+        SettingModal form = SettingModal.consume();
+        if (form != null) overlays.open(new UiModalForm(form, this::onSettingModalClosed));
+        SettingModal.Dialog dialog = SettingModal.consumeDialog();
+        if (dialog != null) {
+            UiOverlay overlay = new UiOverlay() {
+                @Override public boolean modal() { return true; }
+                // La fenêtre pose son propre voile et apparaît d'un coup, comme avant.
+                @Override public UiColor scrim() { return null; }
+                @Override public float enterSeconds() { return 0.01f; }
+                @Override public float exitSeconds() { return 0.01f; }
+                @Override public List<UiWidget> widgets() { return dialog.widgets(); }
+                @Override public void onClosed() { onSettingModalClosed(); }
+                @Override
+                public void draw(UiRenderer r, double mx, double my, int vw, int vh, float appear) {
+                    dialog.draw(r, mx, my, vw, vh);
+                }
+            };
+            dialog.opened(() -> overlays.close(overlay));
+            overlays.open(overlay);
+        }
+    }
+
+    /**
+     * Une fenêtre de module vient de se fermer : la donnée qu'elle a créée
+     * existe maintenant, c'est le moment de l'écrire (l'action « Ajouter… »
+     * ne fait que DEMANDER la fenêtre — écrire au clic enregistrait l'état
+     * d'avant l'ajout, bug du 2026-08-31).
+     */
+    protected void onSettingModalClosed() {
+        com.yuyuframe.launcheragent.runtime.ui.HudConfigStore.save();
+    }
+
+    /** Une bloquante est ouverte : le contenu de l'écran ne doit ni réagir ni défiler. */
+    protected boolean inputBlocked() {
+        return overlays.blocksInput();
     }
 
     /**
@@ -301,40 +389,27 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
      */
     private UiInputPoller lastInput;
 
-    /**
-     * Widgets EXCLUSIFS pendant qu'un modal est actif (voir tiroir de filtres,
-     * {@code ModrinthContentScreen}) — quand non-null, {@link #dispatchClick}
-     * et {@link #uiPollInput} n'utilisent QUE cette liste (widgets normaux du
-     * fond ignorés pour le clic/le survol continu), pour qu'un clic sur un
-     * bouton d'arrière-plan ne traverse jamais le voile du modal. Nécessaire
-     * car {@code widgets} est une seule liste PLATE testée dans l'ORDRE
-     * D'INSERTION pour le clic ET le dessin (voir dispatchClick/uiDraw) — les
-     * deux ordres ne peuvent pas être satisfaits simultanément pour un calque
-     * qui doit être "dessiné en dernier" (par-dessus) mais "testé en premier"
-     * (prioritaire au clic) si tout partage la même liste. Le DESSIN, lui,
-     * N'EST PAS concerné par ce hook (widgets du fond toujours dessinés
-     * normalement ci-dessous, dimés par le voile du modal que la sous-classe
-     * dessine ELLE-MÊME par-dessus, après son propre contenu — voir
-     * ModrinthContentScreen.uiDraw) : seule la découpe clic/survol est
-     * générique ici, le z-order visuel reste piloté par la sous-classe.
-     * {@code null} par défaut = comportement normal (widgets standards).
-     */
-    protected List<UiWidget> modalWidgets() { return null; }
-
     @Override
     public void uiPollInput(UiInputPoller input) {
         lastInput = input;
         screenWidth = input.fbWidth;
         screenHeight = input.fbHeight;
+        // L'échelle suit la fenêtre : posée AVANT toute mise en page de cette image.
+        UiTheme.setViewport(screenWidth, screenHeight);
+        overlays.makeActive();
         // Pendant la sortie, l'écran ne réagit plus : il s'en va.
         if (exiting) return;
 
+        // Les éléments flottants d'abord (de haut en bas) ; une bloquante
+        // coupe tout le reste.
+        overlays.poll(input);
+        if (overlays.blocksInput()) return;
+
         // Continu — CHAQUE widget, chaque frame, indépendamment du clic (drag
         // de slider, capture de touche en cours...). Le clic lui-même est
-        // géré par le VRAI mouseClicked() ci-dessous, plus ici — voir sa
-        // javadoc et celle de la classe.
-        List<UiWidget> active = modalWidgets();
-        for (UiWidget w : (active != null ? active : widgets)) {
+        // géré par le VRAI mouseClicked() ci-dessous — voir sa javadoc et
+        // celle de la classe.
+        for (UiWidget w : new ArrayList<>(widgets)) {
             try {
                 w.pollContinuous(input);
             } catch (Throwable t) {
@@ -414,31 +489,12 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
      * — comportement de CHAQUE widget existant qui ne surcharge que l'ancien
      * {@link UiWidget#onClick()} reste 100% inchangé (voir sa javadoc).
      */
-    /**
-     * Un panneau flottant couvre-t-il ce point ? Ceux des widgets de l'écran,
-     * et ceux que l'écran range ailleurs (le contenu d'une liste défilante :
-     * voir {@link #floatingPanelElsewhere}).
-     */
-    private boolean floatingPanelAt(List<UiWidget> targets, double mouseX, double mouseY) {
-        for (UiWidget w : targets) {
-            if (w.overlayContains(mouseX, mouseY)) return true;
-        }
-        return floatingPanelElsewhere(mouseX, mouseY);
-    }
-
-    /**
-     * À surcharger par un écran dont une partie des widgets vit hors de
-     * {@link #widgets} (une liste défilante) : un panneau flottant ouvert
-     * là-bas peut recouvrir un widget d'ici.
-     */
-    protected boolean floatingPanelElsewhere(double mouseX, double mouseY) {
-        return false;
-    }
-
     private boolean dispatchClick(int button, boolean doubleClick) {
         if (button < 0 || button > 2 || lastInput == null || exiting) return false;
-        List<UiWidget> active = modalWidgets();
-        List<UiWidget> targets = active != null ? active : widgets;
+        // Les éléments flottants d'abord : le plus haut qui couvre le point
+        // prend le clic, une bloquante prend tout (voir UiOverlayStack).
+        if (overlays.click(lastInput.mouseX, lastInput.mouseY, button, doubleClick)) return true;
+        List<UiWidget> targets = widgets;
         // Hit-test centralisé (roadmap Phase 5.6, retour utilisateur : "c'est
         // ce qui est visible qui doit être cliquable") — voir UiHitTest pour
         // la règle exacte (plus petite aire gagne, PAS l'ordre d'insertion).
@@ -455,11 +511,7 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
         // clic est un événement rare, pas un test par frame, la mise en
         // cache ne visait de toute façon pas ce point d'appel précis).
         UiHitTest.invalidate();
-        // Un panneau flottant ouvert sous la souris (liste déroulée, couleurs)
-        // traite ce clic lui-même : ce qu'il recouvre ne le reçoit pas. Voir
-        // UiWidget#overlayContains et floatingPanelAt.
-        UiWidget clicked = floatingPanelAt(targets, lastInput.mouseX, lastInput.mouseY)
-            ? null : UiHitTest.find(targets, lastInput.mouseX, lastInput.mouseY);
+        UiWidget clicked = UiHitTest.find(targets, lastInput.mouseX, lastInput.mouseY);
         // Perte de focus au clic EXTÉRIEUR — barre de recherche moderne : un
         // champ texte reste focus indéfiniment sinon (pas de mécanisme
         // d'exclusivité ailleurs), curseur clignotant en fond même après avoir
@@ -543,8 +595,8 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
     /**
      * Cycle le focus entre les widgets {@link UiFocusable} de l'écran
      * (ex: {@code UiTextField}) — {@code backward} = Shift+Tab (sens
-     * inverse). Ne parcourt QUE {@link #widgets}/{@link #modalWidgets()}
-     * (même portée que {@link #dispatchClick}) — le contenu d'un {@code
+     * inverse). Ne parcourt QUE {@link #widgets}, ou ceux de la fenêtre
+     * bloquante du dessus ({@link UiOverlayStack#focusScope}) — le contenu d'un {@code
      * UiScrollContainer} séparé (ex: la grille de mods de
      * UiMainMenuScreen) n'est pas encore inclus, aucun widget focusable n'y
      * vit actuellement (juste des cartes/toggles, pas de champ de texte).
@@ -553,8 +605,8 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
      * ce cas plutôt que d'avaler la touche pour rien.
      */
     private boolean dispatchTab(boolean backward) {
-        List<UiWidget> active = modalWidgets();
-        List<UiWidget> targets = active != null ? active : widgets;
+        List<UiWidget> scope = overlays.focusScope();
+        List<UiWidget> targets = scope != null ? scope : widgets;
         List<UiFocusable> focusables = new ArrayList<>();
         int currentIndex = -1;
         for (UiWidget w : targets) {
@@ -596,15 +648,10 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
         // la capture n'ait la main.
         if (UiKeybindButton.captureInProgress()) return;
 
-        // Modal actif (voir modalWidgets()) : Échap le ferme, RIEN d'autre —
-        // ne doit ni faire perdre le focus d'un champ de l'écran DERRIÈRE le
-        // modal (inaccessible tant qu'il est ouvert) ni fermer l'écran entier
-        // d'un coup (surprise pour l'utilisateur qui voulait juste fermer le
-        // tiroir de filtres).
-        if (modalWidgets() != null) {
-            onModalEscape();
-            return;
-        }
+        // Un élément flottant ouvert : Échap est pour lui (rendre le focus de
+        // son champ, ou le fermer), RIEN d'autre — ni le focus d'un champ de
+        // l'écran derrière, ni l'écran entier d'un coup.
+        if (overlays.escape()) return;
         for (UiWidget w : widgets) {
             if (w instanceof UiTextField && ((UiTextField) w).focused()) {
                 ((UiTextField) w).setFocused(false);
@@ -613,9 +660,6 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
         }
         closeTo(escapeTarget);
     }
-
-    /** Appelé par Échap quand {@link #modalWidgets()} est actif — la sous-classe ferme SON modal ici (voir ModrinthContentScreen.toggleFilters). No-op par défaut. */
-    protected void onModalEscape() {}
 
     /**
      * Équivalent 1.8.9 (LWJGL2/pré-refonte-Element) de {@link #mouseClicked}
@@ -658,7 +702,6 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
         try {
             renderer.drawRoundedRect(0, 0, screenWidth, screenHeight, 0, overlayColor(), screenWidth, screenHeight);
 
-            String hoveredTooltip = null;
             boolean cascade = cascadeWidgets();
             for (int i = 0; i < widgets.size(); i++) {
                 UiWidget w = widgets.get(i);
@@ -678,23 +721,14 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
                 } else {
                     w.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
                 }
+                // Dessinée par drawFrame, après tout le reste de l'image.
                 if (w.tooltip != null && w.contains(mouseX, mouseY)) hoveredTooltip = w.tooltip;
             }
-            if (hoveredTooltip != null) UiTooltip.draw(renderer, hoveredTooltip, mouseX, mouseY, screenWidth, screenHeight);
         } catch (Throwable t) {
             LauncherLog.err("[UiScreenBase] uiDraw: " + t);
         } finally {
             while (renderer.layerDepth() > depth) renderer.popLayer();
         }
-    }
-
-    /**
-     * Ancien « rideau » de révélation, remplacé le 2026-10-18 par la
-     * transition de l'écran entier (voir {@link #uiFrame}). Gardé sans effet :
-     * des sous-classes l'appellent encore après leur propre contenu, qui est
-     * désormais dans le même calque que le reste.
-     */
-    protected void drawRevealVeil(UiRenderer renderer) {
     }
 
     /**

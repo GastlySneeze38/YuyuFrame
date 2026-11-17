@@ -10,6 +10,7 @@ import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
 import com.yuyuframe.launcheragent.apigraphic.platform.UiInputPoller;
 import com.yuyuframe.launcheragent.apigraphic.asset.UiRemoteImage;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
+import com.yuyuframe.launcheragent.apigraphic.widget.UiOverlay;
 import com.yuyuframe.launcheragent.apigraphic.widget.UiWidget;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.UiScreenBase;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiButton;
@@ -153,7 +154,7 @@ public final class ModrinthProjectDetailScreen extends UiScreenBase {
         String v = System.getProperty("launcheragent.mcVersion", "");
         this.mcVersion = "unknown".equals(v) ? "" : v;
         this.currentVersionOnly = !mcVersion.isEmpty();
-        escapeTarget = parent; // Échap = « Retour » vers la liste (la visionneuse a sa propre sortie, voir onModalEscape)
+        escapeTarget = parent; // Échap = « Retour » vers la liste (la visionneuse, élément de la pile, prend Échap avant l'écran)
         fetchDetails();
     }
 
@@ -215,15 +216,25 @@ public final class ModrinthProjectDetailScreen extends UiScreenBase {
             : UiTheme.OVERLAY_BG;
     }
 
-    @Override
-    protected List<UiWidget> modalWidgets() {
-        return lightboxOpen ? lightboxWidgets : null;
-    }
+    /**
+     * La visionneuse, élément bloquant de la pile de l'écran : elle pose son
+     * propre fond (qui la ferme au clic) et son propre fondu ; la pile la
+     * garde dessinée le temps qu'elle s'efface.
+     */
+    private final UiOverlay lightboxOverlay = new UiOverlay() {
+        @Override public boolean modal() { return true; }
+        @Override public UiColor scrim() { return null; }
+        @Override public float exitSeconds() { return 0.35f; }
+        @Override public List<UiWidget> widgets() { return lightboxWidgets; }
 
-    @Override
-    protected void onModalEscape() {
-        lightboxOpen = false;
-    }
+        @Override
+        public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight, float appear) {
+            drawLightbox(renderer, mouseX, mouseY);
+        }
+
+        @Override
+        public void onClosed() { lightboxOpen = false; }
+    };
 
     @Override
     public void uiPollInput(UiInputPoller input) {
@@ -290,11 +301,10 @@ public final class ModrinthProjectDetailScreen extends UiScreenBase {
             // Les widgets de l'en-tête ont déjà été dessinés par super, sous le
             // cadre : on les redessine par-dessus. (Leur liste ne contient que
             // l'en-tête ; le contenu défilant vit dans `content`.)
-            double hx = lightboxOpen ? -1e6 : mouseX, hy = lightboxOpen ? -1e6 : mouseY;
-            for (UiWidget w : widgets) w.draw(renderer, hx, hy, screenWidth, screenHeight);
+            // (Sous la visionneuse, la souris arrive déjà hors de l'écran : voir UiScreenBase.)
+            for (UiWidget w : widgets) w.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
             drawHeader(renderer);
-            drawLightbox(renderer, mouseX, mouseY);
-            drawRevealVeil(renderer);
+            // La visionneuse est dessinée par la pile de l'écran, par-dessus.
         } catch (Throwable t) {
             LauncherLog.err("[ModrinthProjectDetailScreen] uiDraw: " + t);
         }
@@ -958,6 +968,7 @@ public final class ModrinthProjectDetailScreen extends UiScreenBase {
         if (lightbox == null) return;
         lightbox.setIndex(index);
         lightboxOpen = true;
+        overlays.open(lightboxOverlay);
     }
 
     private void drawLightbox(UiRenderer renderer, double mouseX, double mouseY) {
@@ -982,7 +993,7 @@ public final class ModrinthProjectDetailScreen extends UiScreenBase {
         LightboxBackdrop() { super(0, 0, screenWidth, screenHeight); }
 
         @Override
-        public void onClick() { lightboxOpen = false; }
+        public void onClick() { overlays.close(lightboxOverlay); }
 
         @Override
         public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {}

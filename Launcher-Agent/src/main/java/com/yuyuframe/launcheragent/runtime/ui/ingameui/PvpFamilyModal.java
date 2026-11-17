@@ -38,7 +38,7 @@ import java.util.Map;
  * Tout vient du noyau ({@link DuelDetail}) ; ici on ne fait que traduire et
  * ranger.
  */
-final class PvpFamilyModal {
+final class PvpFamilyModal implements com.yuyuframe.launcheragent.apigraphic.widget.UiOverlay {
 
     /** Deux faits au plus de chaque côté, quatre actions au plus. */
     private static final int FACTS_SHOWN = 2;
@@ -73,16 +73,35 @@ final class PvpFamilyModal {
         this.explain = explain;
     }
 
-    List<UiWidget> widgets() {
+    // ── Élément bloquant de la pile de l'écran (voir UiOverlayStack et PvpInfoModal) ──
+
+    @Override
+    public boolean modal() { return true; }
+
+    @Override
+    public com.yuyuframe.launcheragent.apigraphic.value.UiColor scrim() { return null; }
+
+    @Override
+    public float exitSeconds() { return CLOSE_SECS; }
+
+    @Override
+    public List<UiWidget> widgets() {
         return widgets;
     }
 
-    void close() {
-        if (closingAt == 0L) closingAt = System.nanoTime();
+    @Override
+    public void draw(UiRenderer r, double mouseX, double mouseY, int vw, int vh, float appear) {
+        draw(r, mouseX, mouseY, vw, vh);
     }
 
-    boolean closed() {
-        return closingAt != 0L && (System.nanoTime() - closingAt) / 1e9f >= CLOSE_SECS;
+    /** Demande la fermeture à la pile ; Échap passe par elle directement. */
+    void close() {
+        com.yuyuframe.launcheragent.apigraphic.widget.UiOverlayStack.active().close(this);
+    }
+
+    @Override
+    public void onClosed() {
+        if (closingAt == 0L) closingAt = System.nanoTime();
     }
 
     private float presence() {

@@ -27,7 +27,7 @@ import java.util.List;
  * un seuil, une référence ou une règle qui change s'y reporte. Pas de tiret
  * long ni de symbole mathématique : la police ne les a pas.
  */
-final class PvpInfoModal {
+final class PvpInfoModal implements com.yuyuframe.launcheragent.apigraphic.widget.UiOverlay {
 
     /** Un sujet : son titre dans la liste, et ses paragraphes ; un paragraphe qui commence par « # » est un intertitre. */
     private static final class Topic {
@@ -72,18 +72,41 @@ final class PvpInfoModal {
         this.selected = Math.max(0, Math.min(topics.size() - 1, topic));
     }
 
+    // ── Élément bloquant de la pile de l'écran (voir UiOverlayStack) ────────
+    //
+    // La fenêtre garde ses propres animations (voile, rebond, sujets) : la
+    // pile ne pose ni voile ni calque pour elle, elle la garde seulement
+    // dessinée le temps de sa sortie.
+
+    @Override
+    public boolean modal() { return true; }
+
+    @Override
+    public com.yuyuframe.launcheragent.apigraphic.value.UiColor scrim() { return null; }
+
+    @Override
+    public float exitSeconds() { return CLOSE_SECS; }
+
     /** Les widgets de la fenêtre : tant qu'elle est là, eux seuls reçoivent les clics. */
-    List<UiWidget> widgets() {
+    @Override
+    public List<UiWidget> widgets() {
         return widgets;
     }
 
-    /** Lance la fermeture : la fenêtre s'efface, puis {@link #closed} le dit à l'écran, qui la retire. */
-    void close() {
-        if (closingAt == 0L) closingAt = System.nanoTime();
+    @Override
+    public void draw(UiRenderer r, double mouseX, double mouseY, int vw, int vh, float appear) {
+        draw(r, mouseX, mouseY, vw, vh);
     }
 
-    boolean closed() {
-        return closingAt != 0L && (System.nanoTime() - closingAt) / 1e9f >= CLOSE_SECS;
+    /** Demande la fermeture à la pile (bouton « Fermer ») ; Échap passe par elle directement. */
+    void close() {
+        com.yuyuframe.launcheragent.apigraphic.widget.UiOverlayStack.active().close(this);
+    }
+
+    /** La pile l'a fermée : la fenêtre s'efface. */
+    @Override
+    public void onClosed() {
+        if (closingAt == 0L) closingAt = System.nanoTime();
     }
 
     /** 0 fermée, 1 ouverte : monte à l'ouverture, redescend à la fermeture. */
