@@ -194,8 +194,11 @@ public class UiToggle extends UiWidget {
 
         hoverAnim.setTarget(enabled && contains(mouseX, mouseY) ? 1f : 0f);
         float hover = hoverAnim.get();
-        float knobD = h - 4f;
-        float knobXOff = 2f + t * (w - knobD - 4f); // 2f (position OFF) -> w-knobD-2f (position ON)
+        // Marge du bouton rond dans sa piste, à l'échelle (2 px fixes : il
+        // touchait presque le bord en 4K et flottait en petite fenêtre).
+        float m = Math.max(1f, UiTheme.scaled(2f));
+        float knobD = h - 2f * m;
+        float knobXOff = m + t * (w - knobD - 2f * m);
         // Le bouton s'étire pendant qu'il glisse, puis reprend sa forme : il
         // s'allonge du côté où il va (sin(πt) vaut 0 aux deux bouts).
         float stretch = (float) Math.sin(Math.PI * t) * knobD * 0.35f * (anim.target() > 0.5f ? 1f : -1f);
@@ -204,11 +207,11 @@ public class UiToggle extends UiWidget {
         // Halo au survol, centré sur le bouton.
         if (hover > 0.01f) {
             float halo = UiTheme.scaled(4f) * hover;
-            renderer.drawRoundedRect(kx1 - halo, y + 2f - halo, kx2 + halo, y + h - 2f + halo, knobD / 2f + halo,
+            renderer.drawRoundedRect(kx1 - halo, y + m - halo, kx2 + halo, y + h - m + halo, knobD / 2f + halo,
                 UiTheme.ACCENT.withAlpha(0.28f * hover * drawAlpha), vpWidth, vpHeight);
         }
         UiColor knob = enabled ? UiTheme.TEXT_PRIMARY : UiTheme.TEXT_MUTED;
-        renderer.drawRoundedRect(kx1, y + 2f, kx2, y + h - 2f, knobD / 2f, knob.multiplyAlpha(drawAlpha), vpWidth, vpHeight);
+        renderer.drawRoundedRect(kx1, y + m, kx2, y + h - m, knobD / 2f, knob.multiplyAlpha(drawAlpha), vpWidth, vpHeight);
     }
 
     /** Survol : halo autour du bouton. */

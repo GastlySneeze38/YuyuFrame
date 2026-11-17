@@ -85,7 +85,7 @@ public final class UiMacroPickerScreen extends UiScreenBase {
                 UiTheme.TEXT_PRIMARY, UiTheme.scaled(0.58f), screenWidth, screenHeight);
 
             if (module.macros.isEmpty()) {
-                renderer.drawText(Lang.tr("Aucune macro — ajoute-en dans les réglages du module."),
+                renderer.drawText(Lang.tr("Aucune macro : ajoute-en dans les réglages du module."),
                     px + pad, py + ph / 2f, UiTheme.TEXT_MUTED, UiTheme.scaled(0.46f), screenWidth, screenHeight);
             } else if (scroll != null) {
                 scroll.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);

@@ -11,10 +11,13 @@ import com.yuyuframe.launcheragent.apigraphic.platform.UiInputPoller;
 import com.yuyuframe.launcheragent.apigraphic.anim.UiEasing;
 import com.yuyuframe.launcheragent.apigraphic.asset.UiRemoteImage;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
-import com.yuyuframe.launcheragent.apigraphic.layout.LayoutSolver;
 import com.yuyuframe.launcheragent.apigraphic.layout.TaffyLayoutResult;
-import com.yuyuframe.launcheragent.apigraphic.layout.TaffyNode;
-import com.yuyuframe.launcheragent.apigraphic.layout.TaffyStyle;
+import com.yuyuframe.launcheragent.apigraphic.layout.UiLayout;
+import com.yuyuframe.launcheragent.runtime.i18n.Lang;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiIconButton;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiScreenHeader;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiText;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiSurface;
 import com.yuyuframe.launcheragent.apigraphic.anim.UiStagger;
 import com.yuyuframe.launcheragent.apigraphic.anim.UiTransition;
 import com.yuyuframe.launcheragent.apigraphic.widget.UiOverlay;
@@ -212,7 +215,7 @@ public final class ModrinthContentScreen extends UiScreenBase {
         shownResults = Collections.emptyList();
         totalHits = 0L;
         selectedCategories.clear(); // catégories propres au type précédent, sans rapport ici
-        if (searchField != null) searchField.setPlaceholder(kind.searchPlaceholder);
+        if (searchField != null) searchField.setPlaceholder(Lang.tr(kind.searchPlaceholder));
         buildLayout();
         if (filtersOpen) buildDrawer(); // les chips de catégories dépendent du type actif
         triggerSearch();
@@ -312,16 +315,14 @@ public final class ModrinthContentScreen extends UiScreenBase {
         super.uiDraw(mouseX, mouseY);
         try {
             UiRenderer renderer = UiRenderer.get(getClass().getClassLoader());
-            // Titre posé directement sur le décor — ombre portée obligatoire
-            // (voir UiTheme.TEXT_SHADOW), il ne repose sur aucune surface de verre.
-            renderer.drawTextShadowed(UiFont.BOLD, kind.headerTitle, MARGIN, screenHeight - 48,
-                UiTheme.TEXT_PRIMARY, UiTheme.TEXT_SHADOW, 1f, -1f, 0.8f, screenWidth, screenHeight);
+            // Le titre est dans la barre commune (UiScreenHeader).
             String status = statusText;
             if (!status.isEmpty()) {
-                // Sur la rangée de la pagination, à gauche : le haut de l'écran
-                // est gardé pour la grille. Posé sur le décor, donc ombré.
-                renderer.drawTextShadowed(UiFont.REGULAR, status, MARGIN, MARGIN + PAGER_H / 2f - 5f,
-                    UiTheme.TEXT_SECONDARY, UiTheme.TEXT_SHADOW, 1f, -1f, 0.42f, screenWidth, screenHeight);
+                // Sur la rangée de la pagination, à gauche. Posé sur le décor, donc ombré.
+                float scale = s(UiTheme.Text.BODY);
+                UiText.drawOnBackdrop(renderer, UiFont.REGULAR, status, MARGIN,
+                    UiText.centeredBaseline(UiFont.REGULAR, MARGIN, PAGER_H, scale),
+                    UiTheme.TEXT_SECONDARY, scale, screenWidth, screenHeight);
             }
             // Le tiroir de filtres est dessiné par la pile de l'écran, par-dessus tout ça.
         } catch (Throwable t) {
@@ -333,173 +334,122 @@ public final class ModrinthContentScreen extends UiScreenBase {
     // suite au premier jet jugé "pas beau"/trop tassé en haut à gauche (titre/
     // Retour/recherche qui se chevauchaient, texte minuscule sur un écran
     // entier vide) : tout est maintenant nettement plus grand et espacé.
-    private static final float MARGIN = 28f;
+    // Mesures de l'écran, en pixels RÉELS : recalculées depuis l'échelle de
+    // l'interface à chaque mise en page (rescale). Elles étaient en pixels
+    // fixes : en taille « Grande » ou en 4K, Modrinth paraissait d'une autre
+    // application, plus petit que tout le reste.
+    private static float MARGIN;
 
     /** Étages de flou — même valeur que les autres écrans (voir UiRenderer#beginGlassFrame). */
-    private static final int GLASS_PASSES = 4;
-    private static final float BACK_W = 110f, BACK_H = 34f;
-    private static final float TAB_H = 34f, TAB_W = 160f;
-    // Distances depuis le HAUT de l'écran (screenHeight - X) — décalées de
-    // +52px (hauteur d'onglet + marge) par rapport à l'ancien agencement sans
-    // onglets, pour faire de la place à la ligne Resource Packs/Shaders.
-    // Resserrées le 2026-10-04 (onglets 72, recherche 120, chips 174, grille
-    // 220) : le statut est descendu sur la rangée de la pagination, et tout ce
-    // qui est rendu en haut va à la grille.
-    private static final float TAB_TOP_GAP = 72f;
-    private static final float SEARCH_TOP_GAP = 120f;
-    private static final float SEARCH_H = 40f;
-    private static final float SEARCH_BTN_W = 130f;
-    private static final float FILTER_BTN_W = 100f;
+    private static final int GLASS_PASSES = UiTheme.GLASS_PASSES;
+    private static float TAB_H, TAB_W;
+    private static float SEARCH_H;
+    private static float SEARCH_BTN_W;
+    private static float FILTER_BTN_W;
     /** Rangée de catégories au-dessus de la grille — raccourci des mêmes filtres que le tiroir. */
-    private static final float INLINE_CHIPS_TOP_GAP = 174f;
-    private static final float INLINE_CHIP_H = 30f, INLINE_CHIP_GAP = 8f;
-    private static final float HEADER_H = 220f;
-    private static final float CHIP_H = 40f, CHIP_GAP = 14f;
+    private static float INLINE_CHIP_H, INLINE_CHIP_GAP;
+    private static float CHIP_H, CHIP_GAP;
     // Grille : au plus 3 colonnes, moins si une carte passerait sous CARD_MIN_W.
-    private static final float CARD_H = 96f, CARD_GAP = 14f, CARD_MIN_W = 380f;
+    private static float CARD_H, CARD_GAP, CARD_MIN_W;
     private static final int MAX_COLS = 3;
     /** Rangée du bas : statut à gauche, pagination au centre. */
-    private static final float PAGER_H = 36f, PAGER_GAP = 14f;
+    private static float PAGER_H, PAGER_GAP;
+    private static float DRAWER_W, DRAWER_MARGIN, MODAL_CHIP_H, MODAL_CHIP_GAP;
+    private static float PAGE_BTN_W, PAGE_BTN_GAP;
+
+    static { rescale(); }
+
+    /** Une longueur de référence à l'échelle de l'interface. */
+    static float s(float v) { return UiTheme.px(v); }
+
+    /** Toutes les mesures de l'écran à l'échelle courante. */
+    private static void rescale() {
+        MARGIN = s(28f);
+        TAB_H = s(34f); TAB_W = s(160f);
+        SEARCH_H = s(40f); SEARCH_BTN_W = s(130f); FILTER_BTN_W = s(110f);
+        INLINE_CHIP_H = s(30f); INLINE_CHIP_GAP = s(8f);
+        CHIP_H = s(40f); CHIP_GAP = s(14f);
+        CARD_H = s(96f); CARD_GAP = s(14f); CARD_MIN_W = s(380f);
+        PAGER_H = s(36f); PAGER_GAP = s(14f);
+        DRAWER_W = s(560f); DRAWER_MARGIN = s(28f); MODAL_CHIP_H = s(34f); MODAL_CHIP_GAP = s(10f);
+        PAGE_BTN_W = s(36f); PAGE_BTN_GAP = s(6f);
+        ResultCard.rescale();
+    }
 
     private void buildLayout() {
         widgets.clear();
 
-        // ── Arbre de layout (rework 2026-08-27) ─────────────────────────────
-        //
-        // Remplace une pile de constantes "distance depuis le haut de l'écran"
-        // (TAB_TOP_GAP, SEARCH_TOP_GAP, HEADER_H...) qui devaient rester
-        // cohérentes ENTRE ELLES à la main : décaler la barre de recherche
-        // obligeait à recalculer HEADER_H, sous peine de voir la liste de
-        // résultats la chevaucher. Elles deviennent ici de simples ÉCARTS
-        // successifs, chacun indépendant des autres.
-        //
-        // Écarts portés par des marges INDIVIDUELLES et non par un gap de
-        // colonne : les trois écarts sont différents, un gap unique ne peut
-        // pas les exprimer.
-        TaffyNode screen = new TaffyNode("screen", new TaffyStyle()
-            .size(TaffyStyle.px(screenWidth), TaffyStyle.px(screenHeight))
-            .flexDirection("column"));
-        screen.style.padding = new String[]{ "0", TaffyStyle.px(MARGIN), TaffyStyle.px(MARGIN), TaffyStyle.px(MARGIN) };
-
+        // Une colonne de rangées décrite à Taffy (barre de titre commune,
+        // onglets, recherche, catégories, grille) : aucune distance depuis le
+        // haut de l'écran à tenir cohérente à la main.
+        rescale();
         boolean shadersTab = com.yuyuframe.launcheragent.runtime.content.ShaderLoaderDetector.isPresent(getClass().getClassLoader());
+        // L'onglet Shaders n'existe que si un loader de shaders est là (un
+        // shaderpack sans loader ne sert à rien) ; s'il a disparu, retour aux packs.
+        if (!shadersTab && kind == ContentKind.SHADER) kind = ContentKind.RESOURCE_PACK;
 
-        TaffyNode tabsRow = LayoutSolver.row("tabsRow", 10f);
-        tabsRow.style.height = TaffyStyle.px(TAB_H);
-        tabsRow.style.flexShrink = 0f;
-        tabsRow.style.margin = new String[]{ TaffyStyle.px(TAB_TOP_GAP), "0", "0", "0" };
-        tabsRow.child(LayoutSolver.box("tab:pack", TAB_W, TAB_H));
-        if (shadersTab) tabsRow.child(LayoutSolver.box("tab:shader", TAB_W, TAB_H));
-        screen.child(tabsRow);
-
-        TaffyNode searchRow = LayoutSolver.row("searchRow", 0f);
-        searchRow.style.height = TaffyStyle.px(SEARCH_H);
-        searchRow.style.flexShrink = 0f;
-        searchRow.style.margin = new String[]{
-            TaffyStyle.px(SEARCH_TOP_GAP - TAB_TOP_GAP - TAB_H), "0", "0", "0" };
-        // 460 souhaité mais AUTORISÉ À RÉTRÉCIR face à deux boutons qui, eux,
-        // gardent leur taille — reproduit l'ancien Math.min(460, ...) sans le
-        // calculer, et sans sa constante "32" qui ne correspondait à aucun des
-        // deux écarts réels (16 et 10).
-        TaffyStyle searchStyle = new TaffyStyle();
-        searchStyle.width = TaffyStyle.px(460f);
-        searchStyle.height = TaffyStyle.px(SEARCH_H);
-        searchRow.child(new TaffyNode("search", searchStyle));
-        TaffyNode findBtn = LayoutSolver.box("btn:search", SEARCH_BTN_W, SEARCH_H);
-        findBtn.style.margin = new String[]{ "0", "0", "0", TaffyStyle.px(16f) };
-        searchRow.child(findBtn);
-        TaffyNode filterBtn = LayoutSolver.box("btn:filters", FILTER_BTN_W, SEARCH_H);
-        filterBtn.style.margin = new String[]{ "0", "0", "0", TaffyStyle.px(10f) };
-        searchRow.child(filterBtn);
-        screen.child(searchRow);
-
-        TaffyStyle resultsStyle = new TaffyStyle();
-        resultsStyle.flexGrow = 1f;
-        // Marge basse = la rangée de pagination (voir showResults).
-        resultsStyle.margin = new String[]{
-            TaffyStyle.px(HEADER_H - SEARCH_TOP_GAP - SEARCH_H), "0", TaffyStyle.px(PAGER_H + PAGER_GAP), "0" };
-        screen.child(new TaffyNode("results", resultsStyle));
-
-        // "Retour" en HAUT-DROITE — l'ancien placement (haut-gauche, sous le
-        // titre) chevauchait littéralement le titre (confirmé en jeu). Ancré
-        // HORS FLUX : il ne doit pousser aucune des rangées ci-dessus.
-        screen.child(LayoutSolver.anchored("back", BACK_W, BACK_H, MARGIN, MARGIN, null, null));
-
-        LayoutSolver.Solved layout = LayoutSolver.solve(screen, screenWidth, screenHeight);
-
-        UiButton backBtn = new UiButton(screenWidth - MARGIN - BACK_W, screenHeight - MARGIN - BACK_H, BACK_W, BACK_H,
-            "Retour", () -> closeTo(lastScreen));
-        if (layout != null) layout.apply("back", backBtn);
-        widgets.add(backBtn);
-
-        // Onglets Resource Packs / Shaders — Shaders SEULEMENT si un loader de
-        // shaders compatible est détecté (même garde que l'ancien bouton
-        // "Shaders..." de GameMenuScreenMixin, supprimé : un shaderpack
-        // installé sans loader ne sert à rien). Repli sur Resource Packs si
-        // l'onglet Shaders était actif mais le loader a disparu entre-temps
-        // (peu probable en pratique — mods rechargés seulement au lancement —
-        // mais évite un écran bloqué sur un onglet qui n'existe plus).
-        boolean shadersAvailable = shadersTab;
-        if (!shadersAvailable && kind == ContentKind.SHADER) kind = ContentKind.RESOURCE_PACK;
-        float tabY = screenHeight - TAB_TOP_GAP - TAB_H;
-        TabButton packTab = new TabButton(MARGIN, tabY, TAB_W, TAB_H, ContentKind.RESOURCE_PACK);
-        if (layout != null) layout.apply("tab:pack", packTab);
-        widgets.add(packTab);
-        if (shadersAvailable) {
-            TabButton shaderTab = new TabButton(MARGIN + TAB_W + 10f, tabY, TAB_W, TAB_H, ContentKind.SHADER);
-            if (layout != null) layout.apply("tab:shader", shaderTab);
-            widgets.add(shaderTab);
-        }
-
-        float searchY = screenHeight - SEARCH_TOP_GAP - SEARCH_H;
-        float searchW = Math.min(460f, screenWidth - MARGIN * 2 - SEARCH_BTN_W - FILTER_BTN_W - 32f);
-        // Même instance de champ réutilisée d'un rebuild à l'autre (toggleFilters/
-        // switchKind rappellent buildLayout()) — recréer un UiTextField à
-        // chaque fois effacerait ce que l'utilisateur est en train de taper.
+        // Même instance de champ d'une mise en page à l'autre : la recréer
+        // effacerait ce que l'utilisateur est en train de taper.
         if (searchField == null) {
-            searchField = new UiTextField(0, 0, 0, 0, kind.searchPlaceholder, this::onSearchTextChanged)
+            searchField = new UiTextField(0, 0, 0, 0, Lang.tr(kind.searchPlaceholder), this::onSearchTextChanged)
                 .searchIcon()
                 .onSubmit(this::triggerSearch);
         }
-        searchField.x = MARGIN;
-        searchField.y = searchY;
-        searchField.w = searchW;
-        searchField.h = SEARCH_H;
-        if (layout != null) layout.apply("search", searchField);
-        widgets.add(searchField);
-
-        UiButton findButton = new UiButton(MARGIN + searchW + 16f, searchY, SEARCH_BTN_W, SEARCH_H, "Chercher", this::triggerSearch);
-        if (layout != null) layout.apply("btn:search", findButton);
-        widgets.add(findButton);
-
         boolean anyFilterActive = sort != SortOrder.DEFAULT || currentVersionOnly || !selectedCategories.isEmpty();
-        UiButton filterButton = new UiButton(MARGIN + searchW + 16f + SEARCH_BTN_W + 10f, searchY, FILTER_BTN_W, SEARCH_H,
-            "Filtres" + (anyFilterActive ? " •" : ""), this::toggleFilters);
-        if (layout != null) layout.apply("btn:filters", filterButton);
+        UiScreenHeader header = new UiScreenHeader("Modrinth", () -> closeTo(lastScreen), () -> closeTo(null));
+        TabButton packTab = new TabButton(0, 0, 0, 0, ContentKind.RESOURCE_PACK);
+        TabButton shaderTab = shadersTab ? new TabButton(0, 0, 0, 0, ContentKind.SHADER) : null;
+        UiButton findButton = new UiButton(0, 0, 0, 0, Lang.tr("Chercher"), this::triggerSearch);
+        UiButton filterButton = new UiButton(0, 0, 0, 0, Lang.tr("Filtres") + (anyFilterActive ? " *" : ""), this::toggleFilters);
+
+        // ── Structure : barre de titre, onglets, recherche, catégories, grille ──
+        UiLayout.Box root = UiLayout.column().size(screenWidth, screenHeight)
+            .pad(s(24f), MARGIN, MARGIN, MARGIN).gap(s(14f));
+        root.add(header.layout());
+        UiLayout.Box tabsRow = root.add(UiLayout.row().height(TAB_H).rigid().gap(s(10f)));
+        tabsRow.add(UiLayout.fixed(TAB_W, TAB_H).bind(packTab));
+        if (shaderTab != null) tabsRow.add(UiLayout.fixed(TAB_W, TAB_H).bind(shaderTab));
+        // La recherche vise 460 mais cède si la place manque ; les boutons, jamais.
+        UiLayout.Box searchRow = root.add(UiLayout.row().height(SEARCH_H).rigid().gap(s(10f)));
+        searchRow.add(UiLayout.box().width(s(460f)).height(SEARCH_H).bind(searchField));
+        searchRow.add(UiLayout.fixed(SEARCH_BTN_W, SEARCH_H).bind(findButton));
+        searchRow.add(UiLayout.fixed(FILTER_BTN_W, SEARCH_H).bind(filterButton));
+        UiLayout.Box chipsRow = root.add(UiLayout.box().height(INLINE_CHIP_H).rigid());
+        // Marge basse = la rangée de pagination (voir showResults).
+        UiLayout.Box results = root.add(UiLayout.box().grow(1f).margin(0f, 0f, PAGER_H + PAGER_GAP - s(14f), 0f));
+
+        UiLayout.Result layout = UiLayout.solve(root, screenWidth, screenHeight);
+        header.addTo(widgets);
+        widgets.add(packTab);
+        if (shaderTab != null) widgets.add(shaderTab);
+        widgets.add(searchField);
+        widgets.add(findButton);
         widgets.add(filterButton);
 
         // Catégories du type actif, en une rangée au-dessus de la grille. Même
-        // état que les chips du tiroir (selectedCategories) : ce n'est qu'un
-        // raccourci. Celles qui ne tiennent pas sur la rangée restent
-        // accessibles par « Filtres » — pas de retour à la ligne, qui
-        // prendrait une rangée de cartes.
-        UiRenderer renderer = UiRenderer.get(getClass().getClassLoader());
-        float chipY = screenHeight - INLINE_CHIPS_TOP_GAP - INLINE_CHIP_H;
-        float chipX = MARGIN;
-        for (String cat : kind.categories) {
-            float cw = renderer.textWidth(cat, InlineChip.SCALE) + 26f;
-            if (chipX + cw > screenWidth - MARGIN) break;
-            widgets.add(new InlineChip(chipX, chipY, cw, INLINE_CHIP_H, cat));
-            chipX += cw + INLINE_CHIP_GAP;
+        // état que les chips du tiroir : un raccourci. Celles qui ne tiennent
+        // pas restent dans « Filtres » (un retour à la ligne prendrait une
+        // rangée de cartes).
+        TaffyLayoutResult.Rect chips = layout == null ? null : layout.rect(chipsRow);
+        if (chips != null) {
+            UiRenderer renderer = UiRenderer.get(getClass().getClassLoader());
+            float chipX = chips.x;
+            for (String cat : kind.categories) {
+                float cw = renderer.textWidth(cat, InlineChip.scale()) + s(26f);
+                if (chipX + cw > chips.x + chips.w) break;
+                widgets.add(new InlineChip(chipX, chips.y, cw, INLINE_CHIP_H, cat));
+                chipX += cw + INLINE_CHIP_GAP;
+            }
         }
 
-        TaffyLayoutResult.Rect res = layout == null ? null : layout.get("results");
+        TaffyLayoutResult.Rect res = layout == null ? null : layout.rect(results);
         if (res != null) {
             gridX = res.x; gridY = res.y; gridW = res.w; gridH = Math.max(1f, res.h);
         } else {
             gridX = MARGIN;
             gridY = MARGIN + PAGER_H + PAGER_GAP;
             gridW = screenWidth - MARGIN * 2;
-            gridH = Math.max(1f, screenHeight - HEADER_H - gridY);
+            gridH = Math.max(1f, screenHeight - s(220f) - gridY);
         }
         // La grille mesure sa place : autant de colonnes que possible sans
         // passer sous CARD_MIN_W, autant de rangées ENTIÈRES que la hauteur en
@@ -521,7 +471,7 @@ public final class ModrinthContentScreen extends UiScreenBase {
      * ouverture du tiroir, elle clignoterait.
      */
     private final class InlineChip extends UiWidget {
-        static final float SCALE = 0.4f;
+        static float scale() { return s(UiTheme.Text.SMALL); }
         private final String category;
         private final UiAnimatedFloat hoverAnim = new UiAnimatedFloat(0f, 16f);
 
@@ -552,9 +502,9 @@ public final class ModrinthContentScreen extends UiScreenBase {
                     UiColor.lerp(UiTheme.PANEL_BG_ALT, UiTheme.CARD_HOVER, hover),
                     border, Math.max(1f, UiTheme.scaled(1f)), vpWidth, vpHeight);
             }
-            float tw = renderer.textWidth(category, SCALE);
-            renderer.drawText(category, x + (w - tw) / 2f, y + h / 2f - 4.5f,
-                active ? UiTheme.TEXT_PRIMARY : UiTheme.TEXT_SECONDARY, SCALE, vpWidth, vpHeight);
+            float scale = scale();
+            UiText.drawCentered(renderer, UiFont.REGULAR, category, x, w, UiText.centeredBaseline(UiFont.REGULAR, y, h, scale),
+                active ? UiTheme.TEXT_PRIMARY : UiTheme.TEXT_SECONDARY, scale, vpWidth, vpHeight);
         }
     }
 
@@ -581,9 +531,6 @@ public final class ModrinthContentScreen extends UiScreenBase {
     // passe par drawGlassPanel, donc par la chaîne partagée du frame, comme
     // toutes les cartes — elle est opaque dans ses bornes, ce qui est dessous
     // ne transparaît pas.
-    private static final float DRAWER_W = 560f;
-    private static final float DRAWER_MARGIN = 28f;
-    private static final float MODAL_CHIP_H = 34f, MODAL_CHIP_GAP = 10f;
     private final UiAnimatedFloat drawerAnim = new UiAnimatedFloat(0f, 12f);
     /** Avancement de l'ouverture, lu UNE fois par image (drawDrawer) et partagé par tout ce qui s'estompe avec la fenêtre. */
     private float modalT;
@@ -628,26 +575,28 @@ public final class ModrinthContentScreen extends UiScreenBase {
         float bottom = modalTop - modalH;
         // Fondu d'ouverture par l'alpha du repli, qui pilote aussi celui du
         // verre (voir UiRenderer#drawGlassPanel).
-        UiColor border = renderer.isGlassAvailable() ? UiTheme.GLASS_BORDER_HOVER.multiplyAlpha(t) : null;
-        renderer.drawGlassPanel(panelX, bottom, panelX + DRAWER_W, modalTop, UiTheme.RADIUS_MD,
-            UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_MODAL, UiTheme.PANEL_BG.multiplyAlpha(t),
-            border, Math.max(1f, UiTheme.scaled(1f)), screenWidth, screenHeight);
+        // Verre de modale, comme tout ce qui flotte ; le fondu passe par l'alpha.
+        UiSurface.of(UiTheme.Glass.MODAL).radius(UiTheme.RADIUS_LG).fill(UiTheme.PANEL_BG)
+            .border(UiTheme.GLASS_BORDER_HOVER).alpha(t)
+            .draw(renderer, panelX, bottom, DRAWER_W, modalH, screenWidth, screenHeight);
 
         UiColor labelColor = UiTheme.TEXT_MUTED.multiplyAlpha(t);
         float textX = panelX + DRAWER_MARGIN;
-        renderer.drawText(UiFont.BOLD, "Filtres", textX, modalTop - 46f,
-            UiTheme.TEXT_PRIMARY.multiplyAlpha(t), 0.62f, screenWidth, screenHeight);
+        float line = UiTheme.hairline();
+        renderer.drawText(UiFont.BOLD, Lang.tr("Filtres"), textX, modalTop - s(46f),
+            UiTheme.TEXT_PRIMARY.multiplyAlpha(t), s(UiTheme.Text.HEADING), screenWidth, screenHeight);
         // Trait sous l'en-tête et au-dessus du pied : trois zones lisibles.
         UiColor rule = UiTheme.GLASS_HAIRLINE.multiplyAlpha(t);
-        renderer.drawRoundedRect(textX, modalTop - 66f, panelX + DRAWER_W - DRAWER_MARGIN, modalTop - 65f, 0f,
+        renderer.drawRoundedRect(textX, modalTop - s(66f), panelX + DRAWER_W - DRAWER_MARGIN, modalTop - s(66f) + line, 0f,
             rule, screenWidth, screenHeight);
-        renderer.drawRoundedRect(textX, bottom + DRAWER_MARGIN + 54f, panelX + DRAWER_W - DRAWER_MARGIN,
-            bottom + DRAWER_MARGIN + 55f, 0f, rule, screenWidth, screenHeight);
-        renderer.drawText("Trier par", textX, drawerSortLabelY, labelColor, 0.4f, screenWidth, screenHeight);
+        renderer.drawRoundedRect(textX, bottom + DRAWER_MARGIN + s(54f), panelX + DRAWER_W - DRAWER_MARGIN,
+            bottom + DRAWER_MARGIN + s(54f) + line, 0f, rule, screenWidth, screenHeight);
+        float labelScale = s(UiTheme.Text.SMALL);
+        renderer.drawText(Lang.tr("Trier par"), textX, drawerSortLabelY, labelColor, labelScale, screenWidth, screenHeight);
         if (drawerHasVersionChip) {
-            renderer.drawText("Version", textX, drawerVersionLabelY, labelColor, 0.4f, screenWidth, screenHeight);
+            renderer.drawText(Lang.tr("Version"), textX, drawerVersionLabelY, labelColor, labelScale, screenWidth, screenHeight);
         }
-        renderer.drawText("Catégories", textX, drawerCatLabelY, labelColor, 0.4f, screenWidth, screenHeight);
+        renderer.drawText(Lang.tr("Catégories"), textX, drawerCatLabelY, labelColor, labelScale, screenWidth, screenHeight);
 
         for (UiWidget w : drawerContent) w.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
     }
@@ -663,32 +612,6 @@ public final class ModrinthContentScreen extends UiScreenBase {
         public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
             renderer.drawRoundedRect(x, y, x + w, y + h, 0,
                 new UiColor(8, 8, 12, 255).multiplyAlpha(0.6f * modalT), vpWidth, vpHeight);
-        }
-    }
-
-    /** Bouton fermer (×) du tiroir — coin haut-droite. */
-    private final class DrawerCloseButton extends UiWidget {
-        private final UiAnimatedFloat hoverAnim = new UiAnimatedFloat(0f, 16f);
-        private final UiTransition entrance;
-
-        DrawerCloseButton(float w, float h, float entranceDelay) {
-            super(0, 0, w, h);
-            entrance = new UiTransition(0.24f, entranceDelay, UiEasing.EASE_OUT_CUBIC);
-            entrance.show();
-        }
-
-        @Override
-        public void onClick() { toggleFilters(); }
-
-        @Override
-        public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
-            float e = entrance.eased() * modalT; // modalT : s'estompe aussi à la fermeture de la fenêtre
-            hoverAnim.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
-            UiColor bg = UiColor.lerp(UiTheme.PANEL_BG_ALT, UiTheme.CARD_HOVER, hoverAnim.get()).multiplyAlpha(e);
-            renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, bg, vpWidth, vpHeight);
-            float scale = 0.56f;
-            float tw = renderer.textWidth("×", scale); // × (multiplication, U+00D7 — Latin-1 Supplement, supporté par UiFont)
-            renderer.drawText("×", x + (w - tw) / 2f, y + h / 2f - 7f, UiTheme.TEXT_SECONDARY.multiplyAlpha(e), scale, vpWidth, vpHeight);
         }
     }
 
@@ -714,21 +637,12 @@ public final class ModrinthContentScreen extends UiScreenBase {
     private static final float ENTRANCE_PER_ITEM_DELAY = 0.028f;
     private static final float ENTRANCE_MAX_DELAY = 0.32f;
 
-    // BUG TROUVÉ (utilisateur : "les titres sont beaucoup trop serrés au
-    // sélection") : l'espace réservé entre un libellé de section et sa
-    // rangée de chips valait EXACTEMENT CHIP_H (40f), donc le HAUT de la
-    // première chip tombait pile sur la ligne de BASE du texte (drawText
-    // dessine au-dessus de "y", jamais en dessous) — zéro espace visuel
-    // entre les lettres et la chip. Un vrai espacement doit ajouter une
-    // marge EN PLUS de CHIP_H, pas s'y substituer.
-    private static final float LABEL_TO_CHIP_GAP = CHIP_H + 20f;
-
     private void buildDrawer() {
         drawerContent.clear();
         drawerContentBaseX.clear();
         UiRenderer renderer = UiRenderer.get(getClass().getClassLoader());
-        float chipScale = 0.46f;
-        float chipPad = 28f;
+        float chipScale = FilterChip.scale();
+        float chipPad = s(28f);
         float maxLocalX = DRAWER_W - DRAWER_MARGIN;
         int[] entranceIndex = {0}; // tableau 1-case = compteur mutable capturable par les lambdas ci-dessous
 
@@ -736,45 +650,48 @@ public final class ModrinthContentScreen extends UiScreenBase {
         // nombre de rangées de chips, donc tout est d'abord posé par rapport à
         // un bord haut à y = 0 (y négatifs, vers le bas), puis décalé d'un bloc
         // une fois la hauteur connue et la fenêtre centrée.
-        float closeSize = 32f;
-        addDrawerWidget(new DrawerCloseButton(closeSize, closeSize, nextEntranceDelay(entranceIndex)),
-            DRAWER_W - DRAWER_MARGIN - closeSize, -18f - closeSize);
+        float closeSize = s(32f);
+        addDrawerWidget(new UiIconButton(0, 0, closeSize, closeSize,
+                com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiCloseButton.ICON, this::toggleFilters),
+            DRAWER_W - DRAWER_MARGIN - closeSize, -s(18f) - closeSize);
 
-        // Chaque section : libellé (ligne de base), puis ses chips 14 px dessous.
-        float y = -96f;
+        // Chaque section : libellé (ligne de base), puis ses chips dessous.
+        float labelGap = s(14f), sectionGap = s(36f);
+        float y = -s(96f);
         drawerSortLabelY = y;
-        y -= 14f + MODAL_CHIP_H;
+        y -= labelGap + MODAL_CHIP_H;
         float x = DRAWER_MARGIN;
-        for (SortOrder s : SortOrder.values()) {
-            float w = renderer.textWidth(s.label, chipScale) + chipPad;
+        for (SortOrder order : SortOrder.values()) {
+            String label = Lang.tr(order.label);
+            float w = renderer.textWidth(label, chipScale) + chipPad;
             if (x + w > maxLocalX) {
                 x = DRAWER_MARGIN;
                 y -= MODAL_CHIP_H + MODAL_CHIP_GAP;
             }
-            addDrawerWidget(new FilterChip(0, 0, w, MODAL_CHIP_H, s.label, () -> sort == s, () -> {
-                sort = s;
+            addDrawerWidget(new FilterChip(0, 0, w, MODAL_CHIP_H, label, () -> sort == order, () -> {
+                sort = order;
                 triggerSearch();
             }, nextEntranceDelay(entranceIndex)), x, y);
             x += w + MODAL_CHIP_GAP;
         }
-        y -= 36f;
+        y -= sectionGap;
 
         String mcVersion = System.getProperty("launcheragent.mcVersion", "");
         drawerHasVersionChip = !mcVersion.isEmpty() && !"unknown".equals(mcVersion);
         if (drawerHasVersionChip) {
             drawerVersionLabelY = y;
-            y -= 14f + MODAL_CHIP_H;
-            String versionLabel = "Version " + mcVersion + " uniquement";
+            y -= labelGap + MODAL_CHIP_H;
+            String versionLabel = Lang.tr("Version") + " " + mcVersion + " " + Lang.tr("uniquement");
             float vw = renderer.textWidth(versionLabel, chipScale) + chipPad;
             addDrawerWidget(new FilterChip(0, 0, vw, MODAL_CHIP_H, versionLabel, () -> currentVersionOnly, () -> {
                 currentVersionOnly = !currentVersionOnly;
                 triggerSearch();
             }, nextEntranceDelay(entranceIndex)), DRAWER_MARGIN, y);
-            y -= 36f;
+            y -= sectionGap;
         }
 
         drawerCatLabelY = y;
-        y -= 14f + MODAL_CHIP_H;
+        y -= labelGap + MODAL_CHIP_H;
         x = DRAWER_MARGIN;
         for (String cat : kind.categories) {
             float w = renderer.textWidth(cat, chipScale) + chipPad;
@@ -791,11 +708,12 @@ public final class ModrinthContentScreen extends UiScreenBase {
 
         // Pied : réinitialiser à gauche, fermer à droite, sous un trait (voir
         // drawDrawer, qui le place 54 px au-dessus du bas de la fenêtre).
-        float footH = 40f;
-        float footW = (DRAWER_W - DRAWER_MARGIN * 2 - 12f) / 2f;
-        y -= 30f + footH;
-        addDrawerWidget(new UiButton(0, 0, footW, footH, "Réinitialiser", this::resetFilters), DRAWER_MARGIN, y);
-        addDrawerWidget(new UiButton(0, 0, footW, footH, "Fermer", this::toggleFilters), DRAWER_MARGIN + footW + 12f, y);
+        float footH = s(40f), footGap = s(12f);
+        float footW = (DRAWER_W - DRAWER_MARGIN * 2 - footGap) / 2f;
+        y -= s(30f) + footH;
+        addDrawerWidget(new UiButton(0, 0, footW, footH, Lang.tr("Réinitialiser"), this::resetFilters), DRAWER_MARGIN, y);
+        addDrawerWidget(new UiButton(0, 0, footW, footH, Lang.tr("Fermer"), this::toggleFilters)
+            .variant(UiButton.Variant.PRIMARY), DRAWER_MARGIN + footW + footGap, y);
 
         // Second temps : y vaut maintenant le bas du pied, relatif au bord haut.
         modalH = -y + DRAWER_MARGIN;
@@ -833,7 +751,7 @@ public final class ModrinthContentScreen extends UiScreenBase {
      * tiroir se rouvre (buildDrawer() reconstruit tout depuis zéro).
      */
     private final class FilterChip extends UiWidget {
-        private static final float ENTRANCE_SLIDE_PX = 12f;
+        static float scale() { return s(UiTheme.Text.LABEL); }
 
         private final String label;
         private final java.util.function.BooleanSupplier active;
@@ -862,17 +780,17 @@ public final class ModrinthContentScreen extends UiScreenBase {
             // plus bas) — décalage purement visuel, contains() (hit-test)
             // reste sur la position finale (this.y), pas sur cette position
             // dessinée : un clic pendant les ~280ms d'animation reste fiable.
-            float sy = y + (1f - e) * -ENTRANCE_SLIDE_PX; // "y" décalé pour cette frame (voir commentaire ci-dessus)
+            float sy = y + (1f - e) * -s(12f); // "y" décalé pour cette frame (voir commentaire ci-dessus)
 
             boolean isActive = active.getAsBoolean();
             hoverAnim.setTarget(!isActive && contains(mouseX, mouseY) ? 1f : 0f);
             UiColor bg = (isActive ? UiTheme.ACCENT : UiColor.lerp(UiTheme.PANEL_BG_ALT, UiTheme.CARD_HOVER, hoverAnim.get()))
                 .multiplyAlpha(e);
             renderer.drawRoundedRect(x, sy, x + w, sy + h, UiTheme.RADIUS_SM, bg, vpWidth, vpHeight);
-            float scale = 0.46f;
-            float tw = renderer.textWidth(label, scale);
+            float scale = scale();
             UiColor textColor = (isActive ? UiTheme.TEXT_PRIMARY : UiTheme.TEXT_SECONDARY).multiplyAlpha(e);
-            renderer.drawText(label, x + (w - tw) / 2f, sy + h / 2f - 5f, textColor, scale, vpWidth, vpHeight);
+            UiText.drawCentered(renderer, UiFont.REGULAR, label, x, w, UiText.centeredBaseline(UiFont.REGULAR, sy, h, scale),
+                textColor, scale, vpWidth, vpHeight);
         }
     }
 
@@ -895,10 +813,10 @@ public final class ModrinthContentScreen extends UiScreenBase {
             hoverAnim.setTarget(!active && contains(mouseX, mouseY) ? 1f : 0f);
             UiColor bg = active ? UiTheme.ACCENT : UiColor.lerp(UiTheme.PANEL_BG_ALT, UiTheme.CARD_HOVER, hoverAnim.get());
             renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, bg, vpWidth, vpHeight);
-            float scale = 0.46f;
-            float tw = renderer.textWidth(target.tabLabel, scale);
-            renderer.drawText(target.tabLabel, x + (w - tw) / 2f, y + h / 2f - 5f,
-                active ? UiTheme.TEXT_PRIMARY : UiTheme.TEXT_SECONDARY, scale, vpWidth, vpHeight);
+            float scale = s(UiTheme.Text.LABEL);
+            UiText.drawCentered(renderer, UiFont.REGULAR, Lang.tr(target.tabLabel), x, w,
+                UiText.centeredBaseline(UiFont.REGULAR, y, h, scale),
+                active ? UiTheme.TEXT_ON_ACCENT : UiTheme.TEXT_SECONDARY, scale, vpWidth, vpHeight);
         }
     }
 
@@ -1022,7 +940,6 @@ public final class ModrinthContentScreen extends UiScreenBase {
 
     // ── Pagination ───────────────────────────────────────────────────────────
 
-    private static final float PAGE_BTN_W = 36f, PAGE_BTN_GAP = 6f;
     private static final int PAGE_PREV = -2, PAGE_NEXT = -3, PAGE_ELLIPSIS = -1;
 
     /**
@@ -1099,11 +1016,11 @@ public final class ModrinthContentScreen extends UiScreenBase {
                     UiColor.lerp(UiTheme.PANEL_BG_ALT, UiTheme.CARD_HOVER, hover),
                     border, Math.max(1f, UiTheme.scaled(1f)), vpWidth, vpHeight);
             }
-            float scale = 0.44f;
-            float tw = renderer.textWidth(label, scale);
+            float scale = s(UiTheme.Text.BODY);
             UiColor color = current ? UiTheme.TEXT_PRIMARY
                 : enabled() ? UiTheme.TEXT_SECONDARY : UiTheme.TEXT_MUTED;
-            renderer.drawText(label, x + (w - tw) / 2f, y + h / 2f - 5f, color, scale, vpWidth, vpHeight);
+            UiText.drawCentered(renderer, UiFont.REGULAR, label, x, w, UiText.centeredBaseline(UiFont.REGULAR, y, h, scale),
+                color, scale, vpWidth, vpHeight);
         }
     }
 
@@ -1270,8 +1187,15 @@ public final class ModrinthContentScreen extends UiScreenBase {
      * avec ModCard (UiMainMenuScreen).
      */
     private final class ResultCard extends UiWidget {
-        private static final float BTN_W = 96f, BTN_H = 30f, PAD = 14f, ICON = 64f;
-        private static final float TITLE_SCALE = 0.48f, DESC_SCALE = 0.36f;
+        // À l'échelle de l'interface, recalculées par rescale().
+        private static float BTN_W, BTN_H, PAD, ICON, TITLE_SCALE, DESC_SCALE, HOVER_LIFT_PX, DEL_H, DEL_GAP;
+
+        static void rescale() {
+            BTN_W = s(104f); BTN_H = s(30f); PAD = s(14f); ICON = s(64f);
+            TITLE_SCALE = s(UiTheme.Text.LABEL); DESC_SCALE = s(UiTheme.Text.CAPTION);
+            HOVER_LIFT_PX = s(3f);
+            DEL_H = s(26f); DEL_GAP = s(6f);
+        }
         /** Description coupée en deux lignes — calculée une fois, pas à chaque image. */
         private String[] descLines;
         private final ModrinthJson.Hit hit;
@@ -1287,7 +1211,6 @@ public final class ModrinthContentScreen extends UiScreenBase {
         // (voir dy dans draw()) — sinon la zone cliquable "courrait après"
         // la carte pendant l'animation, avec un risque de clic manqué juste
         // après le début du survol.
-        private static final float HOVER_LIFT_PX = 3f;
         private final UiAnimatedFloat hoverLift = new UiAnimatedFloat(0f, 18f);
 
         ResultCard(float x, float y, float w, float h, ModrinthJson.Hit hit, boolean alreadyInstalled) {
@@ -1304,7 +1227,6 @@ public final class ModrinthContentScreen extends UiScreenBase {
         private boolean installing() { return hit.projectId.equals(installingProjectId); }
 
         // Bouton « Supprimer » : même largeur, juste sous le bouton d'état.
-        private static final float DEL_H = 26f, DEL_GAP = 6f;
         private static final long DELETE_CONFIRM_MS = 3000L;
         private long deleteArmedAtMs;
         private final UiAnimatedFloat btnHover = new UiAnimatedFloat(0f, 16f);
@@ -1398,30 +1320,12 @@ public final class ModrinthContentScreen extends UiScreenBase {
             // scroll plutôt que de rester visible un instant après elle.
             // Légèrement plus prononcée qu'au repos au maximum du survol :
             // accentue la sensation de carte qui se soulève, pas juste "qui glisse".
-            float shadowBlur = 6f + liftT * 4f;
-            float shadowAlpha = (60 + liftT * 30) * fade / 255f;
-            renderer.drawShadow(x, dy, x + w, dy + h, UiTheme.RADIUS_MD, shadowBlur, 0f,
-                new UiColor(0f, 0f, 0f, shadowAlpha), vpWidth, vpHeight);
-            // Carte de verre (rework 2026-08-27) — le survol DÉTEND la teinte
-            // (plus de décor flouté visible à travers) au lieu d'éclaircir un
-            // aplat, comme sur l'écran principal. Le fondu de bord de scroll
-            // passe par la couleur de repli, qui pilote AUSSI l'opacité du
-            // verre (voir UiRenderer#drawGlassPanel).
-            float glassStrength = UiTheme.GLASS_STRENGTH_CARD - liftT * 0.1f;
-            UiColor resBorder = renderer.isGlassAvailable()
-                ? UiColor.lerp(UiTheme.GLASS_BORDER, UiTheme.GLASS_BORDER_HOVER, liftT).multiplyAlpha(fade) : null;
-            renderer.drawGlassPanel(x, dy, x + w, dy + h, UiTheme.RADIUS_MD,
-                UiTheme.GLASS_TINT, glassStrength, UiTheme.CARD_BG.multiplyAlpha(fade),
-                resBorder, Math.max(1f, UiTheme.scaled(1f)), vpWidth, vpHeight);
-            if (renderer.isGlassAvailable()) {
-                float hairline = Math.max(1f, UiTheme.scaled(1f));
-                renderer.drawRoundedRect(x + UiTheme.RADIUS_MD, dy + h - hairline, x + w - UiTheme.RADIUS_MD, dy + h, 0f,
-                    UiTheme.GLASS_HAIRLINE.multiplyAlpha(fade), vpWidth, vpHeight);
-            }
+            // La même carte que la grille des modules (UiSurface.card) : le
+            // survol détend le verre et étoffe l'ombre ; le fondu passe par l'alpha.
+            UiSurface.card(liftT).alpha(fade).draw(renderer, x, dy, w, h, vpWidth, vpHeight);
 
-            // Icône plafonnée (pas juste h-24) — sinon elle grossit à l'infini
-            // avec la hauteur de carte et écrase visuellement le texte.
-            float iconSize = Math.min(h - 32f, ICON);
+            // Icône plafonnée — sinon elle grossit avec la hauteur de carte et écrase le texte.
+            float iconSize = Math.min(h - s(32f), ICON);
             float iconY = dy + (h - iconSize) / 2f;
             // Vraie icône du pack (voir resizedIcon/UiRemoteImage) une
             // fois disponible ; pastille-lettre en attendant (état "en cours
@@ -1434,20 +1338,21 @@ public final class ModrinthContentScreen extends UiScreenBase {
                 BufferedImage icon = resizedIcon(hit.projectId, hit.iconUrl);
                 if (icon != null) {
                     iconFade.markReady();
-                    renderer.drawIcon(hit.projectId, icon, x + 14, iconY, iconSize, iconSize,
+                    renderer.drawIcon(hit.projectId, icon, x + PAD, iconY, iconSize, iconSize,
                         iconFade.alpha() * fade, vpWidth, vpHeight);
                 } else {
-                    renderer.drawRoundedRect(x + 14, iconY, x + 14 + iconSize, iconY + iconSize,
+                    renderer.drawRoundedRect(x + PAD, iconY, x + PAD + iconSize, iconY + iconSize,
                         UiTheme.RADIUS_SM, UiTheme.ACCENT_DIM.multiplyAlpha(fade), vpWidth, vpHeight);
                     String initial = (hit.title == null || hit.title.isEmpty()) ? "?" : hit.title.substring(0, 1).toUpperCase(Locale.ROOT);
-                    float iw = renderer.textWidth(initial, 0.75f);
-                    renderer.drawText(initial, x + 14 + (iconSize - iw) / 2f, iconY + iconSize / 2f - 9f,
-                        UiTheme.ACCENT.multiplyAlpha(fade), 0.75f, vpWidth, vpHeight);
+                    float initialScale = s(UiTheme.Text.TITLE);
+                    UiText.drawCentered(renderer, UiFont.REGULAR, initial, x + PAD, iconSize,
+                        UiText.centeredBaseline(UiFont.REGULAR, iconY, iconSize, initialScale),
+                        UiTheme.ACCENT.multiplyAlpha(fade), initialScale, vpWidth, vpHeight);
                 }
             }
 
-            float textX = x + 14 + iconSize + 14;
-            float textMaxW = btnX() - 12f - textX;
+            float textX = x + PAD + iconSize + PAD;
+            float textMaxW = btnX() - s(12f) - textX;
 
             // Carte compacte : titre en gras sur la ligne du bouton, puis la
             // description sur deux lignes. Auteur et téléchargements ne sont
@@ -1455,14 +1360,14 @@ public final class ModrinthContentScreen extends UiScreenBase {
             // carte ouvre. Le gras est un peu plus large que la mesure
             // (truncate mesure en maigre), d'où la marge de 6 %.
             renderer.drawText(UiFont.BOLD, renderer.truncate(hit.title, TITLE_SCALE, textMaxW * 0.94f),
-                textX, dy + h - PAD - 19f, UiTheme.TEXT_PRIMARY.multiplyAlpha(fade), TITLE_SCALE, vpWidth, vpHeight);
+                textX, dy + h - PAD - s(19f), UiTheme.TEXT_PRIMARY.multiplyAlpha(fade), TITLE_SCALE, vpWidth, vpHeight);
 
             if (hit.description != null && !hit.description.isEmpty()) {
                 if (descLines == null) descLines = wrapTwoLines(renderer, hit.description, DESC_SCALE, textMaxW);
                 UiColor descColor = UiTheme.TEXT_SECONDARY.multiplyAlpha(fade);
-                renderer.drawText(descLines[0], textX, dy + h - PAD - 42f, descColor, DESC_SCALE, vpWidth, vpHeight);
+                renderer.drawText(descLines[0], textX, dy + h - PAD - s(42f), descColor, DESC_SCALE, vpWidth, vpHeight);
                 if (descLines[1] != null) {
-                    renderer.drawText(descLines[1], textX, dy + h - PAD - 60f, descColor, DESC_SCALE, vpWidth, vpHeight);
+                    renderer.drawText(descLines[1], textX, dy + h - PAD - s(60f), descColor, DESC_SCALE, vpWidth, vpHeight);
                 }
             }
 
@@ -1476,9 +1381,10 @@ public final class ModrinthContentScreen extends UiScreenBase {
             // volontairement à la position non-soulevée, voir javadoc de hoverLift.
             float bx = btnX();
             float liftedBtnY = btnY() + liftT * HOVER_LIFT_PX;
-            String label = installing ? spinnerFrame() + " Installation" : (alreadyInstalled ? "Installé" : "Installer");
+            String label = installing ? spinnerFrame() + " " + Lang.tr("Installation")
+                : Lang.tr(alreadyInstalled ? "Installé" : "Installer");
             drawStateButton(renderer, bx, liftedBtnY, BTN_W, BTN_H, label, alreadyInstalled, installing,
-                bh, fade, 0.4f, vpWidth, vpHeight);
+                bh, fade, s(UiTheme.Text.SMALL), vpWidth, vpHeight);
 
             // « Supprimer », sous « Installé ». Deux clics : le premier arme
             // (« Confirmer ? », rouge plein, DELETE_CONFIRM_MS), le second
@@ -1488,8 +1394,9 @@ public final class ModrinthContentScreen extends UiScreenBase {
                 delHover.setTarget(overDeleteRect(mouseX, mouseY) ? 1f : 0f);
                 float dh = delHover.get();
                 float delY = delY() + liftT * HOVER_LIFT_PX;
-                String delLabel = removing ? spinnerFrame() + " Suppression" : armed ? "Confirmer ?" : "Supprimer";
-                drawDeleteButton(renderer, bx, delY, BTN_W, DEL_H, delLabel, armed, dh, fade, 0.36f, vpWidth, vpHeight);
+                String delLabel = removing ? spinnerFrame() + " " + Lang.tr("Suppression")
+                    : Lang.tr(armed ? "Confirmer ?" : "Supprimer");
+                drawDeleteButton(renderer, bx, delY, BTN_W, DEL_H, delLabel, armed, dh, fade, s(UiTheme.Text.CAPTION), vpWidth, vpHeight);
             }
         }
     }
@@ -1614,7 +1521,7 @@ public final class ModrinthContentScreen extends UiScreenBase {
                     }
                 }
                 if (matches.size() > 1) {
-                    statusText = "Plusieurs fichiers correspondent à " + hit.title + " — à supprimer dans le dossier " + kind.installDirName;
+                    statusText = "Plusieurs fichiers correspondent à " + hit.title + " : à supprimer dans le dossier " + kind.installDirName;
                     return;
                 }
                 if (matches.size() == 1 && Files.isRegularFile(matches.get(0))) target = matches.get(0);
@@ -1630,7 +1537,7 @@ public final class ModrinthContentScreen extends UiScreenBase {
             } catch (java.io.IOException e) {
                 // Cas courant : pack activé, le jeu garde le fichier ouvert.
                 LauncherLog.warn("[ModrinthContentScreen] doRemove: " + e);
-                statusText = "Impossible de supprimer " + hit.title + " — désactive-le d'abord dans le jeu";
+                statusText = "Impossible de supprimer " + hit.title + " : désactive-le d'abord dans le jeu";
             }
         } catch (Throwable t) {
             LauncherLog.err("[ModrinthContentScreen] doRemove: " + t);

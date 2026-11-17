@@ -196,7 +196,7 @@ public final class UiPvpScoreScreen extends UiScreenBase {
         UiRenderer renderer = UiRenderer.get(getClass().getClassLoader());
         renderer.beginGlassFrame(GLASS_PASSES, screenWidth, screenHeight);
         try {
-            PvpScoreUi.drawPage(renderer, Lang.tr("SCORE PVP"), screenWidth, screenHeight);
+            PvpScoreUi.drawPage(renderer, screenWidth, screenHeight);
             // La carte du centre AVANT les widgets : son en-tête (mode,
             // casual / compétitif) est posé dessus.
             float dy = enter(0.12f);
@@ -263,14 +263,15 @@ public final class UiPvpScoreScreen extends UiScreenBase {
 
     private void buildLayout() {
         widgets.clear();
-        widgets.add(PvpScoreUi.backButton(screenWidth, screenHeight, () -> closeTo(lastScreen)));
-        widgets.add(PvpScoreUi.helpButton(screenWidth, screenHeight,
-            () -> overlays.open(new PvpInfoModal(null, PvpInfoModal.OVERVIEW))));
+        // La barre commune : retour, titre, réglages et aide, croix.
         com.yuyuframe.launcheragent.runtime.module.gameplay.PvpScoreModule module =
             com.yuyuframe.launcheragent.runtime.module.gameplay.PvpScoreModule.instance();
-        if (module != null) {
-            widgets.add(PvpScoreUi.settingsButton(screenWidth, screenHeight, () -> closeTo(new UiModConfigScreen(this, module))));
-        }
+        UiWidget help = PvpScoreUi.helpButton(() -> overlays.open(new PvpInfoModal(null, PvpInfoModal.OVERVIEW)));
+        UiWidget[] extras = module != null
+            ? new UiWidget[]{ PvpScoreUi.settingsButton(() -> closeTo(new UiModConfigScreen(this, module))), help }
+            : new UiWidget[]{ help };
+        PvpScoreUi.header(screenWidth, screenHeight, Lang.tr("Score PvP"), () -> closeTo(lastScreen), () -> closeTo(null), extras)
+            .addTo(widgets);
 
         // Les trois colonnes : deux côtés de même largeur, la liste au milieu.
         float[] c = PvpScoreUi.content(screenWidth, screenHeight);

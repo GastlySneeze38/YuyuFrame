@@ -115,8 +115,8 @@ public final class UiPvpDuelScreen extends UiScreenBase {
 
     private void buildLayout() {
         widgets.clear();
-        widgets.add(PvpScoreUi.backButton(screenWidth, screenHeight, () -> closeTo(lastScreen)));
-        widgets.add(PvpScoreUi.helpButton(screenWidth, screenHeight, () -> openInfo(PvpInfoModal.OVERVIEW)));
+        PvpScoreUi.header(screenWidth, screenHeight, Lang.tr("Duel"), () -> closeTo(lastScreen), () -> closeTo(null),
+            PvpScoreUi.helpButton(() -> openInfo(PvpInfoModal.OVERVIEW))).addTo(widgets);
 
         float[] c = PvpScoreUi.content(screenWidth, screenHeight);
         left = c[0];
@@ -188,7 +188,7 @@ public final class UiPvpDuelScreen extends UiScreenBase {
         UiRenderer renderer = UiRenderer.get(getClass().getClassLoader());
         renderer.beginGlassFrame(GLASS_PASSES, screenWidth, screenHeight);
         try {
-            PvpScoreUi.drawPage(renderer, Lang.tr("DUEL"), screenWidth, screenHeight);
+            PvpScoreUi.drawPage(renderer, screenWidth, screenHeight);
         } catch (Throwable t) {
             LauncherLog.err("[UiPvpDuelScreen] fond : " + t);
         }

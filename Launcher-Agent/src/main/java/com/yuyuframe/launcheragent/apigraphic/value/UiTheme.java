@@ -169,6 +169,15 @@ public final class UiTheme {
     /** « C'est fait » : le pendant de {@link #DANGER}. Le même dans les deux thèmes. */
     public static final UiColor SUCCESS = new UiColor(92, 196, 128, 255);
 
+    /** Avertissement : titre vif et texte un ton en dessous — selon le thème (le jaune vif est illisible sur fond clair). */
+    public static UiColor warning() {
+        return currentMode == Mode.LIGHT ? new UiColor(168, 112, 0, 255) : new UiColor(255, 204, 64, 255);
+    }
+
+    public static UiColor warningSoft() {
+        return currentMode == Mode.LIGHT ? new UiColor(140, 100, 20, 255) : new UiColor(232, 196, 110, 255);
+    }
+
     /** Pastilles de présence, mêmes couleurs que le launcher ({@code STATUS_COLORS}). Les mêmes dans les deux thèmes. */
     public static final UiColor STATUS_ONLINE = new UiColor(59, 165, 93, 255);
     public static final UiColor STATUS_AWAY = new UiColor(250, 166, 26, 255);

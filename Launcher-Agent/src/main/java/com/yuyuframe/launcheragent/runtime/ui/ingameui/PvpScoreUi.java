@@ -11,7 +11,10 @@ import com.yuyuframe.launcheragent.apigraphic.value.UiTheme;
 import com.yuyuframe.launcheragent.runtime.combat.NativeCombat;
 import com.yuyuframe.launcheragent.runtime.i18n.Lang;
 import com.yuyuframe.launcheragent.runtime.module.gameplay.PvpScoreModule;
+import com.yuyuframe.launcheragent.apigraphic.layout.UiLayout;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiButton;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiIconButton;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiScreenHeader;
 
 import java.time.Instant;
 import java.time.ZoneId;
@@ -130,105 +133,47 @@ public final class PvpScoreUi {
         return new float[]{ side, screenWidth - side, screenHeight - topBarHeight(), UiTheme.scaled(40f) };
     }
 
-    /** Le bouton de retour, en haut à gauche. */
-    static UiButton backButton(int screenWidth, int screenHeight, Runnable back) {
+    /**
+     * La barre de titre commune ({@link UiScreenHeader}) posée dans la barre
+     * du haut de la page : retour, titre, gestes de la page, croix.
+     */
+    static UiScreenHeader header(int screenWidth, int screenHeight, String title, Runnable back, Runnable close,
+                                 UiWidget... extras) {
         float[] c = content(screenWidth, screenHeight);
-        float w = UiTheme.scaled(140f);
-        float h = UiTheme.scaled(40f);
-        float y = screenHeight - topBarHeight() / 2f - h / 2f;
-        return new UiButton(c[0], y, w, h, Lang.tr("Retour"), back);
+        UiScreenHeader header = new UiScreenHeader(title, back, close, extras);
+        float barH = topBarHeight();
+        UiLayout.Box root = UiLayout.row().size(c[1] - c[0], barH).alignItems("center");
+        root.add(header.layout().grow(1f));
+        UiLayout.solve(root, c[1] - c[0], barH, c[0], screenHeight - barH);
+        return header;
     }
 
-    /** Le bouton qui ouvre l'explication du calcul, en haut à droite : un rond de verre marqué « i ». */
-    static UiWidget helpButton(int screenWidth, int screenHeight, Runnable open) {
-        float[] c = content(screenWidth, screenHeight);
-        float size = UiTheme.scaled(40f);
-        float y = screenHeight - topBarHeight() / 2f - size / 2f;
-        GlassButton button = new GlassButton(c[1] - size, y, size, null, open);
+    /** L'aide « i » de la barre : ouvre l'explication du calcul. */
+    static UiWidget helpButton(Runnable open) {
+        UiIconButton button = new UiIconButton(UiScreenHeader.ICON_INFO, open);
         button.tooltip = Lang.tr("Comment ça marche ?");
         return button;
     }
 
     /**
      * Les réglages du module (compétitif ou casual, sa touche, les mots, les
-     * sons, le partage des duels), à gauche du « i » : un rond de verre à
-     * engrenage. La carte du module ouvre cette page, pas ses réglages —
-     * c'est leur seule entrée.
+     * sons, le partage des duels) — la carte du module ouvre cette page, pas
+     * ses réglages : c'est leur seule entrée.
      */
-    static UiWidget settingsButton(int screenWidth, int screenHeight, Runnable open) {
-        float[] c = content(screenWidth, screenHeight);
-        float size = UiTheme.scaled(40f);
-        float y = screenHeight - topBarHeight() / 2f - size / 2f;
-        GlassButton button = new GlassButton(c[1] - size - UiTheme.scaled(12f) - size, y, size, GEAR_ICON, open);
+    static UiWidget settingsButton(Runnable open) {
+        UiIconButton button = new UiIconButton(com.yuyuframe.launcheragent.runtime.ui.LauncherModule.icons8("settings"), open);
         button.tooltip = Lang.tr("Réglages : compétitif ou casual, sa touche, les mots, les sons, le partage des duels");
         return button;
     }
 
-    /** L'engrenage, de la même famille d'icônes que celui de l'écran-titre ({@code TitleAccountBar}). */
-    private static final String GEAR_ICON = com.yuyuframe.launcheragent.runtime.ui.LauncherModule.icons8("settings");
-
     /**
-     * Un bouton rond en verre (flou du décor, teinte du thème, liseré), qui
-     * se teinte de la couleur d'accent au survol — comme l'engrenage de
-     * l'écran-titre. Porte une icône ({@code icon}, une adresse d'image) ou,
-     * sans icône, la lettre « i ».
+     * Le fond d'une page : le même voile que tous les écrans du menu — le
+     * monde du jeu reste visible, c'est lui que les cartes de verre floutent.
+     * Le titre est dans la barre commune ({@link #header}).
      */
-    private static final class GlassButton extends UiWidget {
-        private final String icon;
-        private final Runnable action;
-        private final UiAnimatedFloat hover = new UiAnimatedFloat(0f, 16f);
-
-        GlassButton(float x, float y, float size, String icon, Runnable action) {
-            super(x, y, size, size);
-            this.icon = icon;
-            this.action = action;
-        }
-
-        @Override
-        public void draw(UiRenderer r, double mouseX, double mouseY, int vw, int vh) {
-            hover.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
-            float t = hover.get();
-            float radius = w / 2f;
-            // Le liseré, puis le verre teinté de l'accent au survol (la couleur donnée est l'aplat de repli).
-            r.drawRoundedRect(x - 1f, y - 1f, x + w + 1f, y + h + 1f, radius + 1f,
-                UiColor.lerp(UiTheme.GLASS_BORDER, UiTheme.ACCENT, t), vw, vh);
-            UiColor fallback = UiColor.lerp(UiTheme.PANEL_BG, UiTheme.ACCENT, t * 0.55f).withAlpha(1f);
-            UiColor tint = UiColor.lerp(UiTheme.GLASS_TINT, UiTheme.ACCENT, t * 0.6f);
-            r.drawGlassPanel(x, y, x + w, y + h, radius, tint, UiTheme.GLASS_STRENGTH_FIELD, fallback, vw, vh);
-            java.awt.image.BufferedImage image = icon == null ? null
-                : com.yuyuframe.launcheragent.apigraphic.asset.UiRemoteImage.get(icon);
-            if (image != null) {
-                // Grossit un peu au survol : seul retour visuel sur un bouton sans libellé.
-                float size = w * (0.5f + 0.06f * t);
-                float off = (w - size) / 2f;
-                r.drawIcon(icon, image, x + off, y + off, size, size, vw, vh);
-                return;
-            }
-            // Sans icône, ou tant que l'image n'est pas arrivée : une lettre.
-            float scale = UiTheme.scaled(0.7f);
-            centered(r, UiFont.BOLD, icon == null ? "i" : "...", x + w / 2f, middle(y + h / 2f, scale), w, UiTheme.TEXT_PRIMARY, scale, vw, vh);
-        }
-
-        @Override
-        public void onClick() {
-            action.run();
-        }
-    }
-
-    /**
-     * Le fond d'une page : le même voile que le menu YuyuFrame — le monde du
-     * jeu reste visible, c'est lui que les cartes de verre floutent —, et le
-     * titre au milieu de la barre du haut, en capitales espacées.
-     */
-    static void drawPage(UiRenderer r, String title, int screenWidth, int screenHeight) {
+    static void drawPage(UiRenderer r, int screenWidth, int screenHeight) {
         UiColor veil = r.isGlassAvailable() ? UiTheme.GLASS_SCRIM : UiTheme.OVERLAY_BG;
         r.drawRoundedRect(0f, 0f, screenWidth, screenHeight, 0f, veil, screenWidth, screenHeight);
-        float bar = screenHeight - topBarHeight();
-        float[] c = content(screenWidth, screenHeight);
-        r.drawRoundedRect(c[0], bar, c[1], bar + Math.max(1f, UiTheme.scaled(1f)), 0f, UiTheme.GLASS_HAIRLINE, screenWidth, screenHeight);
-        float scale = UiTheme.scaled(0.62f);
-        centered(r, UiFont.BOLD, title, screenWidth / 2f, middle(bar + topBarHeight() / 2f, scale), screenWidth * 0.4f,
-            UiTheme.TEXT_PRIMARY, scale, screenWidth, screenHeight);
     }
 
     // ── Animations ───────────────────────────────────────────────────────────

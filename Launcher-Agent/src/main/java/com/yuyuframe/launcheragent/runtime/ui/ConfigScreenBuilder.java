@@ -82,9 +82,12 @@ public final class ConfigScreenBuilder {
     private static Grouped buildGrouped(LauncherModule module, float x, float w,
                                          LinkedHashMap<String, Runnable> headerActions,
                                          LinkedHashMap<String, String> headerActionLabels) {
-        ROW_H = UiTheme.scaled(34f);
-        ROW_GAP = UiTheme.scaled(8f);
-        LABEL_SCALE = UiTheme.scaled(0.5f);
+        // Lignes JOINTES (écart nul) : une section se lit comme un seul
+        // panneau découpé par des traits fins, plus comme une pile de boîtes
+        // encadrées (voir RowBackground et markSectionEdges).
+        ROW_H = UiTheme.scaled(36f);
+        ROW_GAP = 0f;
+        LABEL_SCALE = UiTheme.scaled(UiTheme.Text.LABEL);
 
         LinkedHashMap<String, List<UiWidget>> byCategory = new LinkedHashMap<>();
         LinkedHashMap<String, Float> cursors = new LinkedHashMap<>();
@@ -107,7 +110,25 @@ public final class ConfigScreenBuilder {
             cursor = addRow(rows, setting, module, x, w, cursor);
             cursors.put(setting.category, cursor);
         }
+        for (List<UiWidget> rows : byCategory.values()) markSectionEdges(rows);
         return new Grouped(byCategory, cursors);
+    }
+
+    /**
+     * Repère la première et la dernière ligne d'une section : seules elles
+     * arrondissent leurs coins extérieurs, les autres se touchent — la
+     * section se lit comme UN panneau.
+     */
+    private static void markSectionEdges(List<UiWidget> rows) {
+        RowBackground top = null, bottom = null;
+        for (UiWidget w : rows) {
+            if (!(w instanceof RowBackground)) continue;
+            RowBackground r = (RowBackground) w;
+            if (top == null || r.y > top.y) top = r;
+            if (bottom == null || r.y < bottom.y) bottom = r;
+        }
+        if (top != null) top.first = true;
+        if (bottom != null) bottom.last = true;
     }
 
     // Dimensions d'en-tête de section EXPOSÉES (voir sectionHeader/sectionHeaderHeight
@@ -271,8 +292,8 @@ public final class ConfigScreenBuilder {
                     .heartStyle().boundTo(favoriteState);
         }
 
-        private float actionW() { return UiTheme.scaled(160f); }
-        private float actionH() { return UiTheme.scaled(22f); }
+        private float actionW() { return UiTheme.scaled(190f); }
+        private float actionH() { return UiTheme.scaled(28f); }
         // Marge droite agrandie (retour utilisateur : "le toggle est serré") — 8->14.
         private float actionX() { return x + w - actionW() - UiTheme.scaled(14f); }
         private float actionY() { return y + (h - actionH()) / 2f; }
@@ -326,24 +347,16 @@ public final class ConfigScreenBuilder {
 
         @Override
         public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
-            // En-tête de section — plus teinté que les lignes ordinaires
-            // (GLASS_STRENGTH_PANEL) pour rester le repère structurant de la
-            // liste, sinon il se noierait dans la succession de bandes.
-            renderer.drawGlassPanel(x, y, x + w, y + h, UiTheme.RADIUS_SM,
-                UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_PANEL,
-                UiTheme.PANEL_BG_ALT.multiplyAlpha(0.82f * clipFade), vpWidth, vpHeight);
-            float barW = UiTheme.scaled(3f), barInset = UiTheme.scaled(3f);
-            renderer.drawRoundedRect(x, y + barInset, x + barW, y + h - barInset, barW / 2f,
-                UiTheme.ACCENT.multiplyAlpha(clipFade), vpWidth, vpHeight);
-            // Traduit ICI, à l'affichage uniquement — "label" reste le texte
-            // source (français) partout ailleurs dans cette classe (jamais
-            // utilisé comme clé de recherche par ce widget lui-même, mais
-            // CategoryTab (UiModConfigScreen) s'en sert comme clé dans
-            // anchors — même principe, voir sa javadoc de classe).
-            String displayLabel = Lang.tr(label);
-            float scale = UiTheme.scaled(0.5f);
-            renderer.drawTextShadowed(UiFont.BOLD, displayLabel, x + barW + UiTheme.scaled(10f), y + h / 2f - UiTheme.scaled(6f),
-                UiTheme.TEXT_PRIMARY.multiplyAlpha(clipFade), new UiColor(0, 0, 0, 150).multiplyAlpha(clipFade),
+            // En-tête de section : un simple titre en capitales posé sur le
+            // décor, au-dessus du panneau de ses lignes — ni verre, ni barre
+            // d'accent (une boîte de plus dans une pile de boîtes). Ombre
+            // portée : il est sur le décor, pas sur du verre. Le libellé
+            // reste le texte source (clé des ancres), traduit ici seulement.
+            String displayLabel = Lang.tr(label).toUpperCase(java.util.Locale.ROOT);
+            float scale = UiTheme.scaled(UiTheme.Text.SMALL);
+            renderer.drawTextShadowed(UiFont.BOLD, displayLabel, x + UiTheme.scaled(4f),
+                com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiText.centeredBaseline(UiFont.BOLD, y, h, scale),
+                UiTheme.TEXT_SECONDARY.multiplyAlpha(clipFade), UiTheme.TEXT_SHADOW.multiplyAlpha(clipFade),
                 scale, scale, scale, vpWidth, vpHeight);
 
             if (toggle != null) {
@@ -353,16 +366,15 @@ public final class ConfigScreenBuilder {
                 return;
             }
 
-            if (action != null) {
+            if (action != null && clipFade > 0.05f) {
+                // Le bouton commun (variante secondaire), pas un rectangle de plus.
                 actionHoverAnim.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
-                UiColor btnColor = UiColor.lerp(UiTheme.CARD_BG, UiTheme.CARD_HOVER, actionHoverAnim.get());
-                renderer.drawRoundedRect(actionX(), actionY(), actionX() + actionW(), actionY() + actionH(),
-                    UiTheme.RADIUS_SM, btnColor.multiplyAlpha(clipFade), vpWidth, vpHeight);
-                float actionScale = UiTheme.scaled(0.4f);
-                String displayAction = Lang.tr(actionLabel);
-                float tw = renderer.textWidth(displayAction, actionScale);
-                renderer.drawText(displayAction, actionX() + (actionW() - tw) / 2f, actionY() + actionH() / 2f - UiTheme.scaled(4f),
-                    UiTheme.TEXT_PRIMARY.multiplyAlpha(clipFade), actionScale, vpWidth, vpHeight);
+                String displayAction = com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiText.fit(
+                    UiFont.REGULAR, Lang.tr(actionLabel), actionW() - UiTheme.scaled(12f), UiTheme.scaled(UiTheme.Text.LABEL));
+                com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiButton.paint(renderer,
+                    actionX(), actionY(), actionW(), actionH(),
+                    com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiButton.Variant.SECONDARY,
+                    actionHoverAnim.get(), 0f, displayAction, vpWidth, vpHeight);
             }
         }
     }
@@ -393,7 +405,7 @@ public final class ConfigScreenBuilder {
         // "Opacité du HUD" (voir HudElement.opacity) : le global reste un
         // gradateur d'ensemble, celui-ci règle la hiérarchie entre modules.
         cursor = sliderRow(rows, x, w, cursor, Lang.tr("Opacité"),
-            Lang.tr("Transparence de CE panneau seulement — se combine avec le réglage global \"Opacité du HUD\"."),
+            Lang.tr("Transparence de ce panneau seulement, combinée au réglage global \"Opacité du HUD\"."),
             0.1f, 1f, 0.05f, element.opacity, v -> { element.opacity = v; module.onConfigChanged(); HudConfigStore.save(); }, null);
         // Couleur du texte : jusqu'ici figée dans le code de chaque module
         // (accent bleu de FPS, vert de Ping...) et non persistée.
@@ -552,6 +564,9 @@ public final class ConfigScreenBuilder {
      * fois ouvert, un second fond plus grand ici ferait doublon.
      */
     private static final class RowBackground extends UiWidget {
+        /** Première / dernière ligne de sa section (voir markSectionEdges) : coins extérieurs arrondis. */
+        boolean first, last;
+
         RowBackground(float x, float y, float w, float h) { super(x, y, w, h); }
 
         /**
@@ -575,17 +590,24 @@ public final class ConfigScreenBuilder {
 
         @Override
         public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
-            // Bandeau de verre par ligne de réglage (rework 2026-08-27) — c'est
-            // LA surface dominante des écrans de config. Teinte légère : ces
-            // bandes se succèdent verticalement, une teinte forte redonnerait
-            // un aplat plein écran et annulerait l'intérêt du flou.
-            // clipFade porté par la couleur de repli, qui pilote AUSSI
-            // l'opacité du verre (voir UiRenderer#drawGlassPanel).
-            renderer.drawGlassPanel(x, y, x + w, y + h, UiTheme.RADIUS_SM,
-                UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_FIELD,
-                new UiColor(0, 0, 0, 60).multiplyAlpha(clipFade),
-                renderer.isGlassAvailable() ? UiTheme.GLASS_BORDER.multiplyAlpha(clipFade) : null,
-                Math.max(1f, UiTheme.scaled(1f)), vpWidth, vpHeight);
+            // Verre de panneau, un morceau par ligne (chaque ligne s'estompe
+            // seule au bord de la liste qui défile — un seul grand panneau
+            // s'estomperait d'un bloc). Les lignes se touchent : seules la
+            // première et la dernière arrondissent leurs coins extérieurs,
+            // et un trait fin sépare les autres. Sans contour : un cadre par
+            // ligne refaisait une pile de boîtes.
+            //
+            // Rayons dans l'ordre (bas-gauche, bas-droite, haut-gauche,
+            // haut-droite), le repère montant vers le haut.
+            float r = UiTheme.RADIUS_MD;
+            float bottomR = last ? r : 0f, topR = first ? r : 0f;
+            renderer.drawGlassPanel(x, y, x + w, y + h, bottomR, bottomR, topR, topR,
+                UiTheme.GLASS_TINT, UiTheme.Glass.PANEL.strength, UiTheme.PANEL_BG.multiplyAlpha(clipFade), vpWidth, vpHeight);
+            if (!first) {
+                float pad = UiTheme.scaled(12f);
+                renderer.drawRoundedRect(x + pad, y + h - UiTheme.hairline(), x + w - pad, y + h, 0f,
+                    UiTheme.DIVIDER.multiplyAlpha(clipFade), vpWidth, vpHeight);
+            }
         }
     }
 
@@ -609,15 +631,12 @@ public final class ConfigScreenBuilder {
      * défilante estompe un widget entier dès que son bord dépasse, donc un
      * bloc haut disparaîtrait d'un coup en défilant.
      */
-    /** Jaune d'avertissement : le titre vif, le paragraphe un ton en dessous. */
-    private static final UiColor WARNING_TITLE = new UiColor(255, 204, 64, 255);
-    private static final UiColor WARNING_TEXT = new UiColor(232, 196, 110, 255);
-
     private static float infoRow(List<UiWidget> rows, float x, float w, float cursor, String title, String text, boolean warning) {
         float pad = UiTheme.scaled(12f);
         List<UiTextSpan> spans = new ArrayList<>(2);
-        if (title != null && !title.isEmpty()) spans.add(UiTextSpan.bold(title + "\n", warning ? WARNING_TITLE : UiTheme.TEXT_PRIMARY));
-        if (text != null && !text.isEmpty()) spans.add(UiTextSpan.plain(text, warning ? WARNING_TEXT : UiTheme.TEXT_SECONDARY));
+        // Jaune d'avertissement du thème : titre vif, paragraphe un ton en dessous.
+        if (title != null && !title.isEmpty()) spans.add(UiTextSpan.bold(title + "\n", warning ? UiTheme.warning() : UiTheme.TEXT_PRIMARY));
+        if (text != null && !text.isEmpty()) spans.add(UiTextSpan.plain(text, warning ? UiTheme.warningSoft() : UiTheme.TEXT_SECONDARY));
         UiRichText.Layout layout = UiRichText.layout(spans, w - 2f * pad, LABEL_SCALE);
         float height = layout.height + 2f * pad;
         float rowY = cursor - height;
@@ -744,6 +763,11 @@ public final class ConfigScreenBuilder {
         float gap = UiTheme.scaled(8f);
         float delW = UiTheme.scaled(30f);
         float leftW = UiTheme.scaled(inline.fixedLabel != null ? 190f : 120f);
+        // Même fond que les autres lignes : sans lui, la ligne flottait hors du panneau de sa section.
+        rows.add(new RowBackground(x, rowY, w, ROW_H));
+        float inset = UiTheme.scaled(8f);
+        x += inset;
+        w -= inset * 2f;
 
         if (inline.fixedLabel != null) {
             // Libellé NON cliquable — un libellé large posé avant les
@@ -789,8 +813,10 @@ public final class ConfigScreenBuilder {
 
         // Commit après la suppression, même raison que pour Setting.Action :
         // sans lui, l'entrée revenait au prochain chargement.
-        rows.add(new UiButton(x + w - delW, ctrlY, delW, ctrlH, "×",
-            () -> { inline.delete.run(); commit.run(); }));
+        // Une icône de croix, pas le caractère « × » : la police du jeu ne l'a pas.
+        rows.add(new com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiIconButton(x + w - delW, ctrlY, delW, ctrlH,
+            com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiCloseButton.ICON,
+            () -> { inline.delete.run(); commit.run(); }).danger());
         return rowY - ROW_GAP;
     }
 
@@ -833,28 +859,44 @@ public final class ConfigScreenBuilder {
             // mis en cache, puis dessiné comme une icône.
             boolean revealed = field.isRevealed();
             float size = Math.min(w, h) * 0.62f;
-            renderer.drawIcon(revealed ? "ui:eye-open" : "ui:eye-closed",
+            renderer.drawIcon(eyeKey(revealed),
                 eyeGlyph(revealed), x + (w - size) / 2f, y + (h - size) / 2f, size, vpWidth, vpHeight);
         }
     }
 
-    private static volatile java.awt.image.BufferedImage eyeOpenGlyph, eyeClosedGlyph;
+    private static java.awt.image.BufferedImage eyeOpenGlyph, eyeClosedGlyph;
+    /** Couleurs avec lesquelles les deux glyphes ont été dessinés : l'accent et le thème changent en direct. */
+    private static UiColor eyeOpenColor, eyeClosedColor;
 
+    /** La clé de texture suit la couleur, sinon le moteur garderait l'ancienne image. */
+    private static String eyeKey(boolean revealed) {
+        return (revealed ? "ui:eye-hide-" + UiTheme.TEXT_SECONDARY.hashCode() : "ui:eye-show-" + UiTheme.ACCENT.hashCode());
+    }
+
+    /**
+     * L'icône montre ce que fera le clic, comme partout : masqué → un œil
+     * (« afficher »), révélé → un œil barré (« masquer »).
+     */
     private static java.awt.image.BufferedImage eyeGlyph(boolean revealed) {
         if (revealed) {
-            if (eyeOpenGlyph == null) eyeOpenGlyph = renderEyeGlyph(true, UiTheme.ACCENT);
-            return eyeOpenGlyph;
+            if (eyeClosedGlyph == null || eyeClosedColor != UiTheme.TEXT_SECONDARY) {
+                eyeClosedColor = UiTheme.TEXT_SECONDARY;
+                eyeClosedGlyph = renderEyeGlyph(true, eyeClosedColor);
+            }
+            return eyeClosedGlyph;
         }
-        if (eyeClosedGlyph == null) eyeClosedGlyph = renderEyeGlyph(false, UiTheme.TEXT_SECONDARY);
-        return eyeClosedGlyph;
+        if (eyeOpenGlyph == null || eyeOpenColor != UiTheme.ACCENT) {
+            eyeOpenColor = UiTheme.ACCENT;
+            eyeOpenGlyph = renderEyeGlyph(false, eyeOpenColor);
+        }
+        return eyeOpenGlyph;
     }
 
     /**
      * Œil en amande : deux courbes symétriques se rejoignant aux coins, plus
-     * une pupille. Barré quand le contenu est RÉVÉLÉ — c'est l'état
-     * exceptionnel, donc celui qu'on signale.
+     * une pupille, barré si {@code slashed}.
      */
-    private static java.awt.image.BufferedImage renderEyeGlyph(boolean revealed, UiColor color) {
+    private static java.awt.image.BufferedImage renderEyeGlyph(boolean slashed, UiColor color) {
         int size = 64;
         java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(size, size, java.awt.image.BufferedImage.TYPE_INT_ARGB);
         java.awt.Graphics2D g = img.createGraphics();
@@ -878,7 +920,7 @@ public final class ConfigScreenBuilder {
             float pupil = size * 0.115f;
             g.fill(new java.awt.geom.Ellipse2D.Float(cx - pupil, cy - pupil, pupil * 2f, pupil * 2f));
 
-            if (revealed) {
+            if (slashed) {
                 g.draw(new java.awt.geom.Line2D.Float(cx - halfW * 0.95f, cy + halfW * 0.95f,
                     cx + halfW * 0.95f, cy - halfW * 0.95f));
             }
