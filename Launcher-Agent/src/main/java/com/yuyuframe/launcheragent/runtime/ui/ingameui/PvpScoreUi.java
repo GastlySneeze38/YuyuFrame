@@ -493,13 +493,7 @@ public final class PvpScoreUi {
             left(r, UiFont.BOLD, Lang.tr(MODES[selected]), x + pad + labelW, middle(mid, value), w - pad * 3f - labelW,
                 UiTheme.TEXT_PRIMARY, value, vw, vh);
             // Le chevron se retourne en s'ouvrant : il descend d'un cran en se fondant, et l'autre arrive.
-            float open = unfold.get();
-            float chevron = UiTheme.scaled(0.5f);
-            float cx = x + w - pad - r.textWidth(UiFont.BOLD, "v", chevron);
-            r.drawText(UiFont.BOLD, "v", cx, middle(mid, chevron) - open * UiTheme.scaled(4f),
-                UiTheme.TEXT_SECONDARY.multiplyAlpha(1f - open), chevron, vw, vh);
-            r.drawText(UiFont.BOLD, "^", cx, middle(mid, chevron) + (1f - open) * UiTheme.scaled(4f) - UiTheme.scaled(3f),
-                UiTheme.ACCENT.multiplyAlpha(open), chevron, vw, vh);
+            com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiDropdown.drawChevron(r, x + w - pad, mid, unfold.get(), vw, vh);
         }
 
         /** La liste ouverte : elle se déplie vers le bas, ses lignes apparaissent à mesure. */

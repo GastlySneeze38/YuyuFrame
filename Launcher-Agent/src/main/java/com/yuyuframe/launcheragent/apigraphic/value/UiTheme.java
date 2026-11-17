@@ -280,14 +280,21 @@ public final class UiTheme {
             S36 = 36f, S40 = 40f, S48 = 48f, S64 = 64f;
     }
 
-    /** Rayons d'arrondi, en pixels de référence (non mis à l'échelle, comme depuis toujours). */
+    /**
+     * Trois rayons d'arrondi (plus XS pour les fins traits), en pixels non
+     * mis à l'échelle comme depuis toujours. La forme des coins est ce qui
+     * fait d'un ensemble UN ensemble : chaque surface prend l'un des trois.
+     */
     public static final class Radius {
         private Radius() {}
+        /** Traits fins, liserés, barres de progression. */
         public static final float XS = 1.5f;
-        public static final float SM = 4f;
-        public static final float MD = 8f;
-        public static final float LG = 12f;
-        public static final float XL = 16f;
+        /** Petites surfaces : boutons, champs, pastilles, listes déroulantes fermées. */
+        public static final float SM = 6f;
+        /** Cartes, listes dépliées, bulles. */
+        public static final float MD = 10f;
+        /** Grands panneaux et modales. */
+        public static final float LG = 16f;
     }
 
     public static final float RADIUS_SM = Radius.SM;
@@ -296,39 +303,43 @@ public final class UiTheme {
     public static final float RADIUS_LG = Radius.LG;
 
     /**
-     * Tailles de texte (facteur d'échelle de la police, avant {@link #px}),
-     * nommées par leur rôle. Un texte nouveau prend le rôle le plus proche.
+     * Tailles de texte (facteur d'échelle de la police, avant {@link #px}).
+     *
+     * <p>SIX niveaux seulement ({@code XS} à {@code XXL}) : des écarts de
+     * 0,02 ne se lisent pas comme une hiérarchie, seulement comme des
+     * différences. Les noms par rôle en dessous ne sont que des alias vers
+     * ces six niveaux — un texte nouveau prend le rôle qui lui correspond, ou
+     * directement un niveau.
      */
     public static final class Text {
         private Text() {}
-        /** Titres de section en capitales, nom dans la bande d'une tuile. */
-        public static final float CAPTION = 0.36f;
-        /** Descriptions de carte, messages d'état. */
-        public static final float SMALL = 0.40f;
-        /** Texte courant : noms de carte, sous-titres, sous-lignes. */
-        public static final float BODY = 0.42f;
-        /** Texte courant appuyé : lignes de bulle, en-têtes de groupe. */
-        public static final float BODY_STRONG = 0.44f;
-        /** Libellés de boutons, symboles. */
-        public static final float BUTTON = 0.46f;
-        /** Navigation, champs, listes déroulantes. */
-        public static final float LABEL = 0.48f;
-        /** Chiffres et valeurs mises en avant (XP, paliers). */
-        public static final float VALUE = 0.50f;
-        /** Phrase d'une mission. */
-        public static final float ITEM = 0.52f;
-        /** Pseudo d'un ami. */
-        public static final float NAME = 0.54f;
-        /** Titre d'un bloc (« Amis »). */
-        public static final float HEADING = 0.56f;
-        /** Titre d'une carte de section (missions). */
-        public static final float CARD_TITLE = 0.58f;
-        /** Grande initiale de repli. */
-        public static final float INITIAL = 0.62f;
-        /** Nom en tête d'une bulle. */
-        public static final float SUBTITLE = 0.64f;
+        /** Capitales de section, nom dans une bande. */
+        public static final float XS = 0.36f;
+        /** Descriptions, messages d'état. */
+        public static final float SM = 0.40f;
+        /** Texte courant. */
+        public static final float MD = 0.42f;
+        /** Libellés : boutons, navigation, champs, noms, valeurs. */
+        public static final float LG = 0.48f;
+        /** Titres de bloc. */
+        public static final float XL = 0.56f;
         /** Titre d'écran, logo. */
-        public static final float TITLE = 0.68f;
+        public static final float XXL = 0.68f;
+
+        public static final float CAPTION = XS;
+        public static final float SMALL = SM;
+        public static final float BODY = MD;
+        public static final float BODY_STRONG = MD;
+        public static final float BUTTON = LG;
+        public static final float LABEL = LG;
+        public static final float VALUE = LG;
+        public static final float ITEM = LG;
+        public static final float NAME = LG;
+        public static final float HEADING = XL;
+        public static final float CARD_TITLE = XL;
+        public static final float INITIAL = XL;
+        public static final float SUBTITLE = XL;
+        public static final float TITLE = XXL;
     }
 
     /** Vitesses et durées d'animation — mêmes réglages partout pour que tout « réponde » pareil. */

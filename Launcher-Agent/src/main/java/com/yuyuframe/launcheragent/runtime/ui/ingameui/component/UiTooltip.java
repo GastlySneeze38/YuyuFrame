@@ -96,11 +96,10 @@ public final class UiTooltip {
         float pop = 1f + (c1 + 1f) * u * u * u + c1 * u * u;
         renderer.pushLayer(alpha, 0.7f + 0.3f * pop, pivotX, pivotY, 0f, 0f);
         try {
-            renderer.drawShadow(x, yBottom, x + boxW, yTop, UiTheme.RADIUS_SM, 10f, 0f,
-                new com.yuyuframe.launcheragent.apigraphic.value.UiColor(0, 0, 0, 90), vpWidth, vpHeight);
-            renderer.drawRoundedRect(x - 1f, yBottom - 1f, x + boxW + 1f, yTop + 1f, UiTheme.RADIUS_SM + 1f,
-                UiTheme.ACCENT.withAlpha(0.4f), vpWidth, vpHeight);
-            renderer.drawRoundedRect(x, yBottom, x + boxW, yTop, UiTheme.RADIUS_SM, UiTheme.PANEL_BG_ALT, vpWidth, vpHeight);
+            // Comme tout ce qui flotte : verre de modale.
+            UiSurface.of(UiTheme.Glass.MODAL).radius(UiTheme.RADIUS_SM).fill(UiTheme.PANEL_BG_ALT)
+                .border(UiTheme.ACCENT.withAlpha(0.4f)).shadow(UiTheme.SHADOW_PANEL, 10f, 0f, 0f)
+                .draw(renderer, x, yBottom, boxW, yTop - yBottom, vpWidth, vpHeight);
             renderer.drawText(text, x + PAD, yBottom + PAD + UiFont.REGULAR.descent * SCALE * UiFont.SIZE_CORRECTION,
                 UiTheme.TEXT_PRIMARY, SCALE, vpWidth, vpHeight);
         } finally {

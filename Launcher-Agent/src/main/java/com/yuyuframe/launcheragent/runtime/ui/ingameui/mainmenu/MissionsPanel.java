@@ -1,13 +1,13 @@
 package com.yuyuframe.launcheragent.runtime.ui.ingameui.mainmenu;
 
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
-import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
 import com.yuyuframe.launcheragent.apigraphic.value.UiTheme;
 import com.yuyuframe.launcheragent.apigraphic.widget.UiWidget;
 import com.yuyuframe.launcheragent.runtime.friends.GameMissions;
 import com.yuyuframe.launcheragent.runtime.i18n.Lang;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiIcon;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiSurface;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiText;
 
 import java.util.ArrayList;
@@ -79,12 +79,15 @@ public final class MissionsPanel extends UiWidget {
         }
     }
 
-    /** Fond d'une carte : aplat sombre arrondi, comme les cartes du launcher, et un trait de lumière en haut. */
+    /**
+     * Fond d'une carte : la même surface de verre que le reste de l'écran
+     * (elle était un aplat opaque, d'une autre matière que les cartes de
+     * modules posées juste à côté).
+     */
     private static void card(UiRenderer renderer, float cx, float cy, float cw, float ch, int vpWidth, int vpHeight) {
-        float r = px(UiTheme.Radius.XL);
-        renderer.drawShadow(cx, cy, cx + cw, cy + ch, r, px(UiTheme.Space.S20), 0f, UiTheme.SHADOW_PANEL, vpWidth, vpHeight);
-        renderer.drawRoundedRect(cx, cy, cx + cw, cy + ch, r, UiTheme.PANEL_BG.multiplyAlpha(0.94f), vpWidth, vpHeight);
-        renderer.drawRoundedRect(cx + r, cy + ch - px(1f), cx + cw - r, cy + ch, 0f, UiTheme.GLASS_BORDER, vpWidth, vpHeight);
+        UiSurface.panel().radius(UiTheme.RADIUS_LG)
+            .shadow(UiTheme.SHADOW_PANEL, px(UiTheme.Space.S20), 0f, 0f)
+            .draw(renderer, cx, cy, cw, ch, vpWidth, vpHeight);
     }
 
     /** Dessine une carte de missions sous {@code top} ; rend sa hauteur. */
@@ -146,7 +149,7 @@ public final class MissionsPanel extends UiWidget {
                 float scale = px(UiTheme.Text.VALUE);
                 float nw = renderer.textWidth(UiFont.BOLD, num, scale);
                 renderer.drawText(UiFont.BOLD, num, dx + (d - nw) / 2f, mid - px(UiTheme.Space.S5),
-                    filled ? UiTheme.TEXT_PRIMARY : new UiColor(255, 255, 255, 90), scale, vpWidth, vpHeight);
+                    filled ? UiTheme.TEXT_PRIMARY : UiTheme.TEXT_MUTED, scale, vpWidth, vpHeight);
             }
             cursor -= checkpointsH;
         }
@@ -198,7 +201,7 @@ public final class MissionsPanel extends UiWidget {
                 // Barrée une fois faite, comme dans le launcher.
                 float pw = renderer.textWidth(UiFont.BOLD, phrase, itemScale);
                 renderer.drawRoundedRect(tx, titleBase + px(UiTheme.Space.S5), tx + pw, titleBase + px(6.5f), 0f,
-                    new UiColor(255, 255, 255, 55), vpWidth, vpHeight);
+                    UiTheme.TEXT_MUTED.multiplyAlpha(0.6f), vpWidth, vpHeight);
             }
             String sub = m.progress + " / " + m.goal;
             String mode = "mace".equals(m.mode) ? Lang.tr("Masse") : "sword".equals(m.mode) ? Lang.tr("Épée") : "";

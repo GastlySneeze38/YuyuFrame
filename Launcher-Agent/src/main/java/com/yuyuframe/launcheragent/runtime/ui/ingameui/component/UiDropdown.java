@@ -70,12 +70,20 @@ public class UiDropdown extends UiWidget {
         float scale = textScale(), pad = textPad(), voff = textVOff();
         renderer.drawText(options.get(selectedIndex), x + pad + hover * UiTheme.px(UiTheme.Space.S2), y + h / 2f - voff,
             UiTheme.TEXT_PRIMARY, scale, vpWidth, vpHeight);
-        // La flèche bascule de « v » à « ^ » en glissant, sans saut.
-        float aw = renderer.textWidth("v", scale);
-        float ax = x + w - aw - pad;
-        float ay = y + h / 2f - voff;
-        renderer.drawText("v", ax, ay - open * UiTheme.px(UiTheme.Space.S4), UiTheme.TEXT_SECONDARY.multiplyAlpha(1f - open), scale, vpWidth, vpHeight);
-        renderer.drawText("^", ax, ay + (1f - open) * UiTheme.px(UiTheme.Space.S4), UiTheme.accentLight().multiplyAlpha(open), scale, vpWidth, vpHeight);
+        // Chevron (une icône, pas les lettres « v » et « ^ ») : il bascule en glissant, sans saut.
+        drawChevron(renderer, x + w - pad, y + h / 2f, open, vpWidth, vpHeight);
+    }
+
+    static final String CHEVRON_DOWN = UiIcon.named("expand-arrow");
+    static final String CHEVRON_UP = UiIcon.named("collapse-arrow");
+
+    /** Chevron d'une liste déroulante, bord droit à {@code right}, centré sur {@code midY} ; {@code open} de 0 à 1. */
+    public static void drawChevron(UiRenderer renderer, float right, float midY, float open, int vpWidth, int vpHeight) {
+        float size = UiTheme.px(UiTheme.Space.S12);
+        float cx = right - size;
+        float shift = UiTheme.px(UiTheme.Space.S4);
+        UiIcon.crisp(renderer, CHEVRON_DOWN, cx, midY - size / 2f - open * shift, size, 0.7f * (1f - open), vpWidth, vpHeight);
+        UiIcon.crisp(renderer, CHEVRON_UP, cx, midY - size / 2f + (1f - open) * shift, size, open, vpWidth, vpHeight);
     }
 
     /**
@@ -160,12 +168,12 @@ public class UiDropdown extends UiWidget {
             renderer.pushLayer(Math.min(1f, open * 1.6f), 0.82f + 0.18f * grow, x + w / 2f, top,
                 0f, (1f - open) * UiTheme.px(UiTheme.Space.S10));
             try {
-                renderer.drawShadow(x, bottom, x + w, top, UiTheme.RADIUS_SM, 12f, 0f, UiTheme.SHADOW_PANEL, vpWidth, vpHeight);
-                renderer.drawRoundedRect(x - 1f, bottom - 1f, x + w + 1f, top + 1f, UiTheme.RADIUS_SM + 1f,
-                    UiTheme.ACCENT.withAlpha(0.35f), vpWidth, vpHeight);
-                renderer.drawRoundedRect(x, bottom, x + w, top, UiTheme.RADIUS_SM, UiTheme.PANEL_BG_ALT, vpWidth, vpHeight);
+                // Tout ce qui flotte est du verre de modale, bordé d'accent pour dire d'où il sort.
+                UiSurface.of(UiTheme.Glass.MODAL).radius(UiTheme.RADIUS_MD).fill(UiTheme.PANEL_BG_ALT)
+                    .border(UiTheme.ACCENT.withAlpha(0.35f)).shadow(UiTheme.SHADOW_PANEL, 12f, 0f, 0f)
+                    .draw(renderer, x, bottom, w, top - bottom, vpWidth, vpHeight);
 
-                float rowInset = UiTheme.px(UiTheme.Space.S2), rowRadius = UiTheme.px(UiTheme.Space.S2);
+                float rowInset = UiTheme.px(UiTheme.Space.S4), rowRadius = UiTheme.RADIUS_SM;
                 int hovered = -1;
                 if (overPanel(mouseX, mouseY)) hovered = (int) Math.floor((top - mouseY) / rowH);
                 if (hovered >= options.size()) hovered = -1;

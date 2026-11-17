@@ -200,7 +200,7 @@ public final class UiModalForm implements com.yuyuframe.launcheragent.apigraphic
                     // l'écran reste bloqué sans moyen d'en sortir.
                     close();
                 }
-            }));
+            }).variant(UiButton.Variant.PRIMARY));
     }
 
     private void close() {

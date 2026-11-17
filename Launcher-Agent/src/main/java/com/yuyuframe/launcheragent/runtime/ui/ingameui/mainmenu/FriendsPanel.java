@@ -12,7 +12,9 @@ import com.yuyuframe.launcheragent.apigraphic.widget.UiWidget;
 import com.yuyuframe.launcheragent.runtime.friends.GameFriends;
 import com.yuyuframe.launcheragent.runtime.i18n.Lang;
 import com.yuyuframe.launcheragent.runtime.presence.PresenceContext;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiButton;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiIcon;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiSurface;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiText;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTextField;
 
@@ -212,10 +214,14 @@ public final class FriendsPanel extends UiWidget {
         GameFriends.Friend hoveredFriend = null;
         float hoveredTop = 0f;
         float rowTop = cursor;
+        boolean moreBelow = false;
         for (int i = scroll; i < entries.size(); i++) {
             Object e = entries.get(i);
             float eh = e instanceof String[] ? groupH : rowH;
-            if (rowTop - eh < bottom - 0.5f) break;
+            if (rowTop - eh < bottom - 0.5f) {
+                moreBelow = true;
+                break;
+            }
             float rowBottom = rowTop - eh;
             boolean hovered = mouseX >= x && mouseX <= x + w && mouseY >= rowBottom && mouseY <= rowTop;
             if (e instanceof String[]) {
@@ -232,7 +238,7 @@ public final class FriendsPanel extends UiWidget {
                 GameFriends.Friend f = (GameFriends.Friend) e;
                 boolean open = bubbleFriend != null && bubbleFriend.id.equals(f.id);
                 if (hovered || open) {
-                    renderer.drawRoundedRect(x, rowBottom + px(1f), x + w, rowTop - px(1f), px(UiTheme.Space.S6),
+                    renderer.drawRoundedRect(x, rowBottom + px(1f), x + w, rowTop - px(1f), UiTheme.RADIUS_SM,
                         UiTheme.SIDEBAR_HOVER, vpWidth, vpHeight);
                 }
                 if (hovered) {
@@ -242,6 +248,16 @@ public final class FriendsPanel extends UiWidget {
                 drawRow(renderer, f, x + pad * 0.6f, rowBottom, w - pad * 1.2f, eh, vpWidth, vpHeight);
             }
             rowTop = rowBottom;
+        }
+        // La liste ne montre que des lignes entières : un fondu au bord dit
+        // qu'elle continue (la molette la fait défiler).
+        float fade = px(UiTheme.Space.S24);
+        UiColor veil = UiTheme.GLASS_TINT.multiplyAlpha(0.9f);
+        if (moreBelow) {
+            renderer.drawGradientRect(x, bottom, x + w, bottom + fade, 0f, veil, UiColor.TRANSPARENT, vpWidth, vpHeight);
+        }
+        if (scroll > 0) {
+            renderer.drawGradientRect(x, cursor - fade, x + w, cursor, 0f, UiColor.TRANSPARENT, veil, vpWidth, vpHeight);
         }
         // Liste relue entre-temps : la bulle suit l'ami (nouvel objet), ou se ferme s'il a disparu.
         if (hoveredFriend == null && bubbleFriend != null) {
@@ -449,9 +465,11 @@ public final class FriendsPanel extends UiWidget {
         // de la ligne à la bulle ne la ferme pas en route.
         bubbleRect = new float[]{ bx - px(UiTheme.Space.S10), bbottom, bx + bw, btop };
 
-        float radius = px(UiTheme.Space.S10);
-        renderer.drawShadow(bx, bbottom, bx + bw, btop, radius, px(UiTheme.Space.S18), 0f, UiTheme.SHADOW_FLOATING, vpWidth, vpHeight);
-        renderer.drawRoundedRect(bx, bbottom, bx + bw, btop, radius, UiTheme.PANEL_BG, vpWidth, vpHeight);
+        // Tout ce qui flotte est du verre de modale : la même matière que le reste.
+        float radius = UiTheme.RADIUS_MD;
+        UiSurface.of(UiTheme.Glass.MODAL).radius(radius).hairlineTop()
+            .shadow(UiTheme.SHADOW_FLOATING, px(UiTheme.Space.S18), 0f, 0f)
+            .draw(renderer, bx, bbottom, bw, bh, vpWidth, vpHeight);
         renderer.drawRoundedRect(bx + radius, btop - px(UiTheme.Space.S3), bx + bw - radius, btop, px(UiTheme.Radius.XS),
             UiTheme.statusColor(f.state).multiplyAlpha(0.8f), vpWidth, vpHeight);
 
@@ -478,10 +496,9 @@ public final class FriendsPanel extends UiWidget {
             float bx1 = bx + pad, bx2 = bx + bw - pad;
             inviteRect = new float[]{ bx1, by1, bx2, by2 };
             boolean hot = inside(inviteRect, mouseX, mouseY) && !GameFriends.inviting();
-            renderer.drawRoundedRect(bx1, by1, bx2, by2, px(7f), hot ? UiTheme.accentLight() : UiTheme.ACCENT, vpWidth, vpHeight);
             String label = GameFriends.inviting() ? Lang.tr("Envoi...") : Lang.tr("Inviter sur mon serveur");
-            UiText.drawCentered(renderer, UiFont.BOLD, label, bx1, bx2 - bx1, by1 + buttonH / 2f - px(UiTheme.Space.S5),
-                UiTheme.TEXT_PRIMARY, px(UiTheme.Text.LABEL), vpWidth, vpHeight);
+            UiButton.paint(renderer, bx1, by1, bx2 - bx1, buttonH, UiButton.Variant.PRIMARY, hot ? 1f : 0f, 0f,
+                UiText.fit(UiFont.REGULAR, label, bx2 - bx1 - px(UiTheme.Space.S12), px(UiTheme.Text.LABEL)), vpWidth, vpHeight);
         } else {
             inviteRect = null;
         }

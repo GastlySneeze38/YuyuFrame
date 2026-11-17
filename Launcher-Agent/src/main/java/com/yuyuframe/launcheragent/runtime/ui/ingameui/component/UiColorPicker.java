@@ -380,9 +380,10 @@ public class UiColorPicker extends UiWidget {
         float panelAlpha = panelTransition.eased();
         if (panelAlpha <= 0.02f) return;
 
-        renderer.drawShadow(x, panelBottom(), x + PANEL_W, panelTop(), UiTheme.RADIUS_MD, UiTheme.scaled(10f), 0f,
-            new UiColor(0, 0, 0, (int) (110 * panelAlpha)), vpWidth, vpHeight);
-        renderer.drawRoundedRect(x, panelBottom(), x + PANEL_W, panelTop(), UiTheme.RADIUS_MD, UiTheme.PANEL_BG_ALT.multiplyAlpha(panelAlpha), vpWidth, vpHeight);
+        // Comme tout ce qui flotte : verre de modale.
+        UiSurface.of(UiTheme.Glass.MODAL).radius(UiTheme.RADIUS_MD).fill(UiTheme.PANEL_BG_ALT).hairlineTop()
+            .shadow(UiTheme.SHADOW_PANEL, UiTheme.scaled(10f), 0f, 0f).alpha(panelAlpha)
+            .draw(renderer, x, panelBottom(), PANEL_W, panelTop() - panelBottom(), vpWidth, vpHeight);
 
         float bx = x + PANEL_PAD, bw = contentW();
 
