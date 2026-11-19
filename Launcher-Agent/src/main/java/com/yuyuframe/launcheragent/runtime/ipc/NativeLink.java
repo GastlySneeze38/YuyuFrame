@@ -54,7 +54,43 @@ public final class NativeLink {
 
     /** Vrai si le jeu a un launcher au bout du fil (ou l'a eu : après une coupure, les questions répondent « erreur »). */
     public static boolean available() {
-        return READY;
+        return READY || responder != null;
+    }
+
+    // ── Répondeur local : l'aperçu de l'interface ───────────────────────────
+
+    /** Répond à la place du launcher. */
+    public interface Responder {
+        /** La réponse à {@code question}, au format du launcher ({@code error⇥…} pour un refus). */
+        String answer(String question);
+    }
+
+    /**
+     * Remplace le launcher quand il n'y en a pas. Posé uniquement par l'aperçu
+     * de l'interface ({@code tools/ui-preview}), pour montrer les écrans remplis
+     * (amis, missions) en passant par la MÊME lecture des réponses qu'en jeu.
+     * Sans effet quand un vrai launcher est au bout du fil.
+     */
+    public static void useResponder(Responder r) {
+        responder = r;
+    }
+
+    private static volatile Responder responder;
+    /** Numéros des réponses locales, loin de ceux du natif. */
+    private static final long LOCAL_IDS = 1L << 62;
+    private static final java.util.concurrent.atomic.AtomicLong NEXT_LOCAL = new java.util.concurrent.atomic.AtomicLong(LOCAL_IDS);
+    private static final java.util.Map<Long, String> LOCAL_REPLIES = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static long answerLocally(String question) {
+        String reply;
+        try {
+            reply = responder.answer(question);
+        } catch (Throwable error) {
+            reply = "error\t" + error;
+        }
+        long id = NEXT_LOCAL.getAndIncrement();
+        LOCAL_REPLIES.put(id, reply == null ? "error\tPas de réponse" : reply);
+        return id;
     }
 
     private static boolean load() {
@@ -103,6 +139,9 @@ public final class NativeLink {
      *         pas partir (pas de launcher, canal coupé)
      */
     public static long send(String question) {
+        if (!READY && question != null && responder != null) {
+            return answerLocally(question);
+        }
         if (!READY || question == null) {
             return 0L;
         }
@@ -138,6 +177,10 @@ public final class NativeLink {
      *         l'appelant n'attende jamais indéfiniment
      */
     public static String poll(long id) {
+        if (id >= LOCAL_IDS) {
+            String reply = LOCAL_REPLIES.remove(id);
+            return reply != null ? reply : "error\tRéponse perdue";
+        }
         if (!READY || id <= 0L) {
             return "error\tCanal indisponible";
         }

@@ -212,7 +212,7 @@ public final class MissionsPanel extends UiWidget {
     }
 
     /** « 08:24:55 » sous un jour, « 3:16:49:05 » (jours en tête) au-delà — comme le launcher. */
-    private static String countdown(long ms) {
+    static String countdown(long ms) {
         long total = Math.max(0L, ms / 1000L);
         long d = total / 86400L;
         String hms = String.format(Locale.ROOT, "%02d:%02d:%02d", (total % 86400L) / 3600L, (total % 3600L) / 60L, total % 60L);

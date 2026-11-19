@@ -64,6 +64,32 @@ public final class MinecraftFont {
         wanted = minecraft;
     }
 
+    private static long nextAccentTry;
+
+    /**
+     * La police du jeu comme police d'ACCENT (chiffres, niveau, petites
+     * étiquettes), quel que soit le réglage « Police » : c'est une touche de
+     * Minecraft dans l'interface, pas la police du texte courant. Construite
+     * à la première demande ; tant que les ressources ne sont pas lisibles,
+     * c'est la police moderne qui sert.
+     */
+    public static UiFont accent(boolean boldWeight) {
+        if (regular == null) {
+            long now = System.currentTimeMillis();
+            if (now >= nextAccentTry && attempts < 30) {
+                nextAccentTry = now + 1000L;
+                try {
+                    if (!build()) attempts++;
+                } catch (Throwable t) {
+                    attempts = 30;
+                    LauncherLog.err("[MinecraftFont] police d'accent : " + t);
+                }
+            }
+        }
+        if (regular == null) return boldWeight ? UiFont.BOLD : UiFont.REGULAR;
+        return boldWeight ? bold : regular;
+    }
+
     /** À chaque tick du jeu. Ne coûte rien quand il n'y a rien à changer. */
     public static void tick() {
         if (wanted == applied) return;
