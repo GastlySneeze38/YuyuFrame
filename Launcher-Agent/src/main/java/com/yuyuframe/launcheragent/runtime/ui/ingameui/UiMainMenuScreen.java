@@ -25,6 +25,7 @@ import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiScrollContain
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiText;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTextField;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.mainmenu.AddTile;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.mainmenu.FilterTabs;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.mainmenu.FriendsCard;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.mainmenu.FriendsPanel;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.mainmenu.GridEntry;
@@ -83,6 +84,11 @@ public class UiMainMenuScreen extends UiScreenBase {
 
     /** Titres posés sur le décor, calculés par la mise en page. */
     private float titleX, titleBaseline;
+    /** Onglet Modules : la ligne d'aide sous le titre, et les cartes de la grille (leurs états sont relus en direct). */
+    private float modulesHintBaseline;
+    private List<GridEntry> moduleEntries = new ArrayList<>();
+    /** Filtre de l'onglet Modules : 0 tous, 1 activés, 2 désactivés ; gardé d'une ouverture à l'autre. */
+    private static int moduleFilter;
     private float quickTitleX = -1f, quickTitleBaseline;
 
     private int lastWidth = -1, lastHeight = -1;
@@ -159,6 +165,7 @@ public class UiMainMenuScreen extends UiScreenBase {
                     px(UiTheme.Text.XXL), screenWidth, screenHeight);
             }
             if (tab == Tab.HOME && quickTitleX >= 0f) drawQuickTitle(renderer);
+            if (tab == Tab.MODULES && !moduleEntries.isEmpty()) drawModulesHint(renderer);
         } catch (Throwable t) {
             LauncherLog.err("[UiMainMenuScreen] uiDraw: " + t);
         }
@@ -351,26 +358,42 @@ public class UiMainMenuScreen extends UiScreenBase {
 
     private void buildModules(Box content, TabParts parts, float sideMargin) {
         LayoutSwitchButton layoutButton = new LayoutSwitchButton(this::requestRebuild);
-        float control = px(UiTheme.Space.S36);
+        List<GridEntry> all = entries();
+        moduleEntries = all;
+        FilterTabs filters = new FilterTabs(new String[]{ "Tous", "Activés", "Désactivés" },
+            new java.util.function.IntSupplier[]{ all::size, () -> countModules(true), () -> countModules(false) },
+            () -> moduleFilter, i -> { moduleFilter = i; requestRebuild(); });
+        float control = px(44f);
         Box page = content.add(UiLayout.column().fill().gap(px(UiTheme.Space.S24))
             .pad(px(UiTheme.Space.S32), sideMargin, px(UiTheme.Space.S24), sideMargin));
-        Box head = page.add(UiLayout.row().height(control).rigid());
+        // Le titre et sa ligne d'aide à gauche, les filtres et l'agencement à droite.
+        Box head = page.add(UiLayout.row().height(px(64f)).rigid().alignItems("flex-end").gap(px(UiTheme.Space.S10)));
         head.add(UiLayout.spacer());
+        head.add(UiLayout.fixed(filters.preferredWidth(), control).bind(filters));
         head.add(UiLayout.fixed(control, control).bind(layoutButton));
         // Doit rester plus grand que la zone de fondu de la liste (46) : une carte qui s'estompe ne chevauche pas l'en-tête.
-        Box viewport = page.add(UiLayout.box().grow(1f).margin(px(22f), 0f, 0f, 0f));
+        Box viewport = page.add(UiLayout.box().grow(1f).margin(px(10f), 0f, 0f, 0f));
 
         parts.afterSolve.add(() -> {
-            placeTitle(parts.layout.rect(head));
+            TaffyLayoutResult.Rect headRect = parts.layout.rect(head);
+            if (headRect != null) {
+                // Le titre en haut de la boîte, la ligne d'aide sous lui.
+                titleX = headRect.x;
+                titleBaseline = headRect.y + headRect.h - px(UiTheme.Space.S28);
+                modulesHintBaseline = headRect.y + px(UiTheme.Space.S4);
+            }
+            widgets.add(filters);
             widgets.add(layoutButton);
             TaffyLayoutResult.Rect vp = parts.layout.rect(viewport);
             if (vp == null) return;
             String filter = searchField.text().trim().toLowerCase(Locale.ROOT);
             List<GridEntry> favorites = new ArrayList<>();
             List<GridEntry> others = new ArrayList<>();
-            for (GridEntry e : entries()) {
+            for (GridEntry e : all) {
                 if (!filter.isEmpty() && !Lang.tr(e.name()).toLowerCase(Locale.ROOT).contains(filter)
                         && !e.name().toLowerCase(Locale.ROOT).contains(filter)) continue;
+                // Activés / Désactivés : les modules seuls (un groupe ou un outil n'a pas d'état).
+                if (moduleFilter != 0 && (!e.isToggleable() || e.isActive() != (moduleFilter == 1))) continue;
                 // Les favoris toujours en tête ; le réglage ne décide que des titres de section.
                 (e.isFavorite() ? favorites : others).add(e);
             }
@@ -381,6 +404,26 @@ public class UiMainMenuScreen extends UiScreenBase {
             grid.build(modScroll, vp.x, vp.w - scrollbarReserve, favorites, others, separated, GlobalUiSettings.INSTANCE.cardLayout);
             modScroll.restoreScroll(parts.previousScroll);
         });
+    }
+
+    /** Modules de la grille allumés ({@code true}) ou éteints : les nombres des filtres et de la ligne d'aide. */
+    private int countModules(boolean active) {
+        int n = 0;
+        for (GridEntry e : moduleEntries) if (e.isToggleable() && e.isActive() == active) n++;
+        return n;
+    }
+
+    /** « 8 actifs sur 26 · la bande du bas allume un module, la carte ouvre ses réglages ». */
+    private void drawModulesHint(UiRenderer r) {
+        float s = px(UiTheme.Text.MD);
+        int on = countModules(true);
+        int total = on + countModules(false);
+        String count = on + " " + Lang.tr(on > 1 ? "actifs" : "actif");
+        UiText.drawOnBackdrop(r, UiFont.BOLD, count, titleX, modulesHintBaseline, new UiColor(92, 210, 128, 255), s,
+            screenWidth, screenHeight);
+        float x = titleX + UiText.width(UiFont.BOLD, count, s);
+        String rest = " " + Lang.tr("sur") + " " + total + "   -   " + Lang.tr("La bande du bas allume ou éteint un module, la carte ouvre ses réglages");
+        UiText.drawOnBackdrop(r, UiFont.REGULAR, rest, x, modulesHintBaseline, UiTheme.TEXT_MUTED, s, screenWidth, screenHeight);
     }
 
     // ── Missions et amis ─────────────────────────────────────────────────────
@@ -439,7 +482,12 @@ public class UiMainMenuScreen extends UiScreenBase {
                 () -> closeTo(new UiModGroupConfigScreen(this, g)),
                 null, null,
                 () -> g.favorite,
-                v -> { g.favorite = v; HudConfigStore.save(); }));
+                v -> { g.favorite = v; HudConfigStore.save(); })
+                .members(() -> {
+                    boolean[] on = new boolean[g.members.size()];
+                    for (int i = 0; i < on.length; i++) on[i] = g.members.get(i).isEnabled();
+                    return on;
+                }));
         }
         for (LauncherModule m : ModuleRegistry.ungrouped()) out.add(moduleEntry(m));
         for (LauncherModule m : ModuleRegistry.groupedFavorites()) out.add(moduleEntry(m));
@@ -465,6 +513,7 @@ public class UiMainMenuScreen extends UiScreenBase {
             mod::isEnabled,
             v -> { mod.setEnabled(v); HudConfigStore.save(); },
             () -> mod.favorite,
-            v -> { mod.favorite = v; HudConfigStore.save(); });
+            v -> { mod.favorite = v; HudConfigStore.save(); })
+            .opensSettings(hasSomethingToShow || mod instanceof PvpScoreModule);
     }
 }

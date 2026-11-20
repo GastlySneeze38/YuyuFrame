@@ -13,14 +13,13 @@ import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiToggle;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 /**
  * La grille des cartes de modules, posée dans une liste qui défile.
  *
  * <p>Tout passe par Taffy : sections, rangées, cartes, et les petits
- * contrôles ancrés aux bords de chaque carte (interrupteur, cœur, bande). Le
+ * contrôles ancrés aux bords de chaque carte (cœur, bande d'activation). Le
  * nombre de colonnes se déduit de la largeur disponible — deux au plus en
  * Détaillé, une seule si la fenêtre est trop étroite pour deux cartes
  * lisibles ; autant que possible en Grille d'icônes.
@@ -37,20 +36,24 @@ public final class ModGrid {
 
     // ── Mesures (pixels de référence, voir UiTheme) ────────────────────────
     static float gap() { return UiTheme.px(UiTheme.Space.S16); }
-    static float cardHeight() { return UiTheme.px(76f); }
-    static float sectionHeaderHeight() { return UiTheme.px(UiTheme.Space.S24); }
+    /** Carte Détaillé et Compacte : icône, nom et deux lignes de description, puis la bande. */
+    static float cardHeight() { return UiTheme.px(132f); }
+    /** Tuile de la Grille d'icônes : icône, nom, une ligne de description, puis la bande. */
+    static float tileHeight() { return UiTheme.px(172f); }
+    static float sectionHeaderHeight() { return UiTheme.px(UiTheme.Space.S32); }
     /** Largeur d'une carte Détaillé en dessous de laquelle on passe à une colonne. */
     static float minDetailedWidth() { return UiTheme.px(300f); }
-    /** Taille visée d'une tuile en Grille d'icônes (de grosses tuiles, « comme Lunar »). */
-    static float iconCellWidth() { return UiTheme.px(200f); }
-    /** Bande d'activation en bas d'une tuile (le cœur est centré dedans). */
-    static float bandHeight() { return UiTheme.px(34f); }
-    static float heartSize() { return UiTheme.px(15f); }
-    /** Interrupteur d'une carte : la taille réelle d'un {@link UiToggle}, et ses marges au coin haut-droit. */
-    static float toggleWidth() { return UiTheme.px(44f); }
-    static float toggleHeight() { return UiTheme.px(UiTheme.Space.S24); }
-    static float toggleRight() { return UiTheme.px(UiTheme.Space.S16); }
-    static float toggleTop() { return UiTheme.px(UiTheme.Space.S14); }
+    /** Taille visée d'une tuile en Grille d'icônes. */
+    static float iconCellWidth() { return UiTheme.px(240f); }
+    /**
+     * Bande du bas, sur tous les agencements : elle dit l'état écrit
+     * (« Activé » / « Désactivé ») et la bande ENTIÈRE allume ou éteint le
+     * module (widget invisible apparié). Un groupe y compte ses modules actifs.
+     */
+    static float bandHeight() { return UiTheme.px(48f); }
+    static float heartSize() { return UiTheme.px(18f); }
+    /** Le cœur, au coin haut-droit de la carte. */
+    static float heartInset() { return UiTheme.px(UiTheme.Space.S14); }
 
     private final Map<String, float[]> previousPositions = new HashMap<>();
     private final Map<String, float[]> positions = new HashMap<>();
@@ -94,8 +97,7 @@ public final class ModGrid {
             rowH = cardHeight();
         } else if (layoutMode == 2) {
             cols = UiLayout.columns(areaWidth, iconCellWidth(), gap, 1, 64);
-            // Bien plus large que haute, façon tuile : la place sert à l'icône.
-            rowH = UiLayout.cellWidth(areaWidth, cols, gap) * 0.72f;
+            rowH = tileHeight();
         } else {
             cols = UiLayout.columns(areaWidth, minDetailedWidth(), gap, 1, 2);
             rowH = cardHeight();
@@ -125,8 +127,8 @@ public final class ModGrid {
             LauncherLog.err("[ModGrid] grille non calculée — cartes non créées");
             return;
         }
-        if (favHeader != null) addTitle(scroll, result, favHeader, "Favoris", originX);
-        if (otherHeader != null) addTitle(scroll, result, otherHeader, "Autres modules", originX);
+        if (favHeader != null) addTitle(scroll, result, favHeader, "Favoris", "Le cœur les épingle ici et dans l'accès rapide", originX);
+        if (otherHeader != null) addTitle(scroll, result, otherHeader, "Autres modules", null, originX);
 
         int indexInSection = 0;
         GridEntry firstOther = separated && !others.isEmpty() ? others.get(0) : null;
@@ -145,26 +147,21 @@ public final class ModGrid {
                 GridEntry entry = entries.get(start + c);
                 Slot slot = new Slot(entry, row.add(UiLayout.fixed(cardW, rowH)));
                 // Contrôles ancrés aux bords de la carte : changer sa taille ne demande rien d'autre.
-                if (layoutMode == 2) {
-                    float band = bandHeight(), heart = heartSize();
-                    slot.heart = slot.card.add(UiLayout.fixed(heart, heart)
-                        .absolute(null, UiTheme.px(UiTheme.Space.S8), (band - heart) / 2f, null));
-                    if (entry.hasToggle()) {
-                        slot.toggle = slot.card.add(UiLayout.fixed(cardW, band).absolute(null, null, 0f, 0f));
-                    }
-                } else if (entry.hasToggle()) {
-                    slot.toggle = slot.card.add(UiLayout.fixed(toggleWidth(), toggleHeight())
-                        .absolute(toggleTop(), toggleRight(), null, null));
+                float heart = heartSize();
+                slot.heart = slot.card.add(UiLayout.fixed(heart, heart)
+                    .absolute(heartInset(), heartInset(), null, null));
+                if (entry.hasToggle()) {
+                    slot.toggle = slot.card.add(UiLayout.fixed(cardW, bandHeight()).absolute(null, null, 0f, 0f));
                 }
                 out.add(slot);
             }
         }
     }
 
-    private static void addTitle(UiScrollContainer scroll, UiLayout.Result result, Box box, String label, float originX) {
+    private static void addTitle(UiScrollContainer scroll, UiLayout.Result result, Box box, String label, String hint, float originX) {
         TaffyLayoutResult.Rect r = result.rect(box);
         if (r == null) return;
-        SectionTitle title = new SectionTitle(Lang.tr(label).toUpperCase(Locale.ROOT));
+        SectionTitle title = new SectionTitle(Lang.tr(label), hint == null ? null : Lang.tr(hint));
         title.x = r.x + originX;
         title.y = r.y;
         title.w = r.w;
@@ -203,15 +200,9 @@ public final class ModGrid {
         if (slot.toggle != null) {
             TaffyLayoutResult.Rect t = result.rect(slot.toggle);
             if (t != null) {
-                UiToggle toggle;
-                if (layoutMode == 2) {
-                    // Toute la bande est le clic ; la carte la dessine (style invisible).
-                    toggle = new UiToggle(t.x + ox, t.y, t.w, t.h, entry.enabled.getAsBoolean(), entry.setEnabled::accept)
-                        .invisibleStyle().boundTo(entry.enabled);
-                } else {
-                    toggle = new UiToggle(t.x + ox, t.y, entry.enabled.getAsBoolean(), entry.setEnabled::accept)
-                        .boundTo(entry.enabled);
-                }
+                // Toute la bande est le clic ; la carte la dessine (style invisible).
+                UiToggle toggle = new UiToggle(t.x + ox, t.y, t.w, t.h, entry.enabled.getAsBoolean(), entry.setEnabled::accept)
+                    .invisibleStyle().boundTo(entry.enabled);
                 scroll.add(toggle);
                 card.pairToggle(toggle);
             }

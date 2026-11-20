@@ -2,6 +2,7 @@ package com.yuyuframe.launcheragent.runtime.ui.ingameui.mainmenu;
 
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * Une carte de la grille, quelle que soit sa nature : un module, un groupe
@@ -38,7 +39,36 @@ public final class GridEntry {
         this.setFavorite = setFavorite;
     }
 
+    /** Un groupe : l'état de chacun de ses modules, pour « 3 sur 5 actifs ». {@code null} ailleurs. */
+    Supplier<boolean[]> members;
+    /** Le clic sur la carte ouvre des réglages (et non une bascule) : la carte le dit au survol. */
+    boolean opensSettings;
+
+    /** Voir {@link #members}. */
+    public GridEntry members(Supplier<boolean[]> states) {
+        this.members = states;
+        return this;
+    }
+
+    /** Voir {@link #opensSettings}. */
+    public GridEntry opensSettings(boolean value) {
+        this.opensSettings = value;
+        return this;
+    }
+
     boolean hasToggle() { return enabled != null; }
+
+    boolean isGroup() { return members != null; }
+
+    /** Activé, pour les filtres de l'écran ; un groupe compte s'il a au moins un module actif. */
+    public boolean isActive() {
+        if (enabled != null) return enabled.getAsBoolean();
+        if (members != null) for (boolean b : members.get()) if (b) return true;
+        return false;
+    }
+
+    /** Une carte qui s'allume (module) : les seules que comptent les filtres Activés / Désactivés. */
+    public boolean isToggleable() { return enabled != null; }
 
     public boolean isFavorite() { return favorite.getAsBoolean(); }
 
