@@ -148,8 +148,15 @@ public class UiMainMenuScreen extends UiScreenBase {
     private void open(Tab next) {
         if (tab == next) return;
         tab = next;
+        // La bande du fond rejoue son entrée sur la page qui s'ouvre.
+        bandEnterNanos = 0L;
         requestRebuild();
     }
+
+    /** Début de l'entrée de la bande du fond ; 0 = à la prochaine image (nouvelle page, nouvel écran). */
+    private long bandEnterNanos, bandLastFrame;
+    /** Plus long qu'un élément d'interface : c'est un décor, il ne retient rien. */
+    private static final float BAND_ENTER_S = 0.7f;
 
     @Override
     public void uiPollInput(UiInputPoller input) {
@@ -200,8 +207,24 @@ public class UiMainMenuScreen extends UiScreenBase {
                 // Le passage en fondu se termine juste avant la colonne : elle est posée sur le fond plein.
                 float bandX = homeRight.x - px(UiTheme.Space.S32)
                     - com.yuyuframe.launcheragent.runtime.ui.ingameui.component.BackdropWords.fadeWidth();
-                com.yuyuframe.launcheragent.runtime.ui.ingameui.component.BackdropWords.drawBand(renderer,
-                    bandX, 0f, screenWidth - bandX, screenHeight, screenWidth, screenHeight);
+                // Entrée à chaque ouverture de la page : la bande glisse de la
+                // droite vers sa place en apparaissant. Décor seulement : rien
+                // n'attend la fin, les panneaux sont déjà cliquables.
+                long now = System.nanoTime();
+                // Pas dessinée depuis un moment : on revient sur l'écran (après les
+                // réglages, le jeu…), c'est une nouvelle ouverture.
+                if (bandEnterNanos == 0L || now - bandLastFrame > 300_000_000L) bandEnterNanos = now;
+                bandLastFrame = now;
+                float t = Math.min(1f, (now - bandEnterNanos) / 1e9f / BAND_ENTER_S);
+                float e = com.yuyuframe.launcheragent.apigraphic.anim.UiEasing.UI_OUT.apply(t);
+                float bandW = screenWidth - bandX;
+                renderer.pushLayer(e, 1f, screenWidth, screenHeight / 2f, (1f - e) * bandW * 0.35f, 0f);
+                try {
+                    com.yuyuframe.launcheragent.runtime.ui.ingameui.component.BackdropWords.drawBand(renderer,
+                        bandX, 0f, bandW, screenHeight, screenWidth, screenHeight);
+                } finally {
+                    renderer.popLayer();
+                }
             }
         }
         super.uiDraw(mouseX, mouseY);
