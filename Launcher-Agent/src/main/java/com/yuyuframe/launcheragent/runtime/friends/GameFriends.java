@@ -111,6 +111,59 @@ public final class GameFriends {
     private static long inviteRequest;
     private static String invitedName;
 
+    /** La fiche d'un ami, telle qu'il la montre à ses amis (question {@code fprofile}). Champs vides = rien de choisi. */
+    public static final class Profile {
+        public final String banner, accent, bio, title;
+
+        Profile(String banner, String accent, String bio, String title) {
+            this.banner = banner;
+            this.accent = accent;
+            this.bio = bio;
+            this.title = title;
+        }
+
+        static final Profile EMPTY = new Profile("", "", "", "");
+    }
+
+    /** Fiches déjà reçues, par identifiant public ; relues après {@link #PROFILE_MS}. */
+    private static final java.util.Map<String, Profile> PROFILES = new java.util.HashMap<>();
+    private static final java.util.Map<String, Long> PROFILE_AT = new java.util.HashMap<>();
+    private static final long PROFILE_MS = 5 * 60_000L;
+    private static long profileRequest;
+    private static String profileRequestId;
+    private static long openRequest;
+
+    /**
+     * La fiche de cet ami, demandée au launcher si elle manque ou a vieilli ;
+     * {@code null} tant qu'elle n'est pas arrivée. Un launcher qui ne connaît
+     * pas la question répond une erreur : la fiche reste vide, sans redemande
+     * avant {@link #PROFILE_MS}.
+     */
+    public static Profile profile(String id) {
+        if (id == null || id.isEmpty()) return null;
+        Profile known = PROFILES.get(id);
+        Long at = PROFILE_AT.get(id);
+        boolean stale = at == null || System.currentTimeMillis() - at > PROFILE_MS;
+        if (stale && profileRequest == 0L && available()) {
+            profileRequestId = id;
+            PROFILE_AT.put(id, System.currentTimeMillis());
+            profileRequest = NativeLink.send("fprofile\t" + id);
+        }
+        return known;
+    }
+
+    /** « Ajouter un ami » : le launcher revient devant, sur l'ajout d'un ami. */
+    public static void openAddInLauncher() {
+        if (!available() || openRequest != 0L) return;
+        openRequest = NativeLink.send("open\tfriends");
+    }
+
+    /** « Voir le profil dans le launcher » : le launcher revient devant, sur la fiche de cet ami. */
+    public static void openInLauncher(Friend friend) {
+        if (friend == null || !available() || openRequest != 0L) return;
+        openRequest = NativeLink.send("open\tfriend\t" + friend.id);
+    }
+
     /** Le jeu a-t-il un launcher à qui parler ? */
     public static boolean available() {
         return NativeLink.available();
@@ -118,6 +171,13 @@ public final class GameFriends {
 
     public static List<Friend> friends() {
         return friends;
+    }
+
+    /** L'ami de cet identifiant dans la dernière liste reçue, {@code null} s'il n'y est plus. */
+    public static Friend find(String id) {
+        if (id == null) return null;
+        for (Friend f : friends) if (f.id.equals(id)) return f;
+        return null;
     }
 
     /** Vrai une fois qu'une liste (même vide) a été reçue. */
@@ -175,6 +235,20 @@ public final class GameFriends {
 
     /** À chaque image, sur le fil du jeu. Ne coûte rien quand rien n'est attendu. */
     public static void tick() {
+        if (openRequest != 0L && NativeLink.poll(openRequest) != NativeLink.PENDING) openRequest = 0L;
+        if (profileRequest != 0L) {
+            String reply = NativeLink.poll(profileRequest);
+            if (reply != NativeLink.PENDING) {
+                profileRequest = 0L;
+                String[] p = reply.split("\t", -1);
+                if (p.length >= 6 && "fprofile".equals(p[0]) && p[1].equals(profileRequestId)) {
+                    PROFILES.put(p[1], new Profile(p[2], p[3], drawable(p[4]), drawable(p[5])));
+                } else {
+                    // Launcher d'avant cette question, ou erreur : une fiche vide, redemandée plus tard.
+                    PROFILES.putIfAbsent(profileRequestId, Profile.EMPTY);
+                }
+            }
+        }
         if (listRequest != 0L) {
             String reply = NativeLink.poll(listRequest);
             if (reply != NativeLink.PENDING) {

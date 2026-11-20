@@ -52,6 +52,13 @@ interface FriendsStore {
    *  mon profil. Change à chaque demande ; 0 = jamais demandé. */
   profileRequest: number
   askMyProfile: () => void
+  /** Le menu en jeu ramène le launcher sur le panneau des amis : l'ajout
+   *  (`add`) ou la fiche d'un ami (`friend` + son identifiant public). `seq`
+   *  change à chaque demande. */
+  panelRequest: { seq: number; target: 'add' | 'friend' | null; id?: string } | null
+  askPanel: (target: 'add' | 'friend', id?: string) => void
+  /** Le panneau a pris la demande en charge : rouvert plus tard, il ne la rejoue pas. */
+  takePanelRequest: () => { target: 'add' | 'friend'; id?: string } | null
   /** À la déconnexion : la liste ne parle plus de personne. */
   clear: () => void
 }
@@ -237,6 +244,15 @@ export const useFriends = create<FriendsStore>((set, get) => ({
 
   profileRequest: 0,
   askMyProfile: () => set((s) => ({ profileRequest: s.profileRequest + 1 })),
+
+  panelRequest: null,
+  askPanel: (target, id) => set((s) => ({ panelRequest: { seq: (s.panelRequest?.seq ?? 0) + 1, target, id } })),
+  takePanelRequest: () => {
+    const request = get().panelRequest
+    if (!request?.target) return null
+    set({ panelRequest: { seq: request.seq, target: null } })
+    return { target: request.target, id: request.id }
+  },
 
   clear: () => {
     clearFriendProfiles()

@@ -92,6 +92,16 @@ function PanelBody({ onClose }: { onClose: () => void }) {
     if (profileSeq > 0) setView({ kind: 'me' })
   }, [profileSeq])
 
+  // Depuis l'onglet Amis en jeu : l'ajout, ou la fiche d'un ami.
+  const panelSeq = useFriends((s) => s.panelRequest?.seq ?? 0)
+  useEffect(() => {
+    const request = useFriends.getState().takePanelRequest()
+    if (!request) return
+    if (request.target === 'add') goAdd()
+    else if (request.id) setView({ kind: 'profile', userId: request.id })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panelSeq])
+
   useEffect(() => {
     markRequestsSeen()
     if (signedIn) {

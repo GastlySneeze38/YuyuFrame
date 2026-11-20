@@ -29,6 +29,11 @@ export function FriendsButton({ className, compact = false, large = false }: { c
   useEffect(() => {
     if (profileSeq > 0) setOpen(true)
   }, [profileSeq])
+  // « Ajouter un ami » ou « Voir le profil dans le launcher » depuis l'onglet Amis en jeu.
+  const panelSeq = useFriends((s) => s.panelRequest?.seq ?? 0)
+  useEffect(() => {
+    if (panelSeq > 0) setOpen(true)
+  }, [panelSeq])
   const online = useFriends((s) => s.list?.friends.filter((f) => isOnline(f.presence)).length ?? 0)
   // Les demandes et invitations reçues en attente de réponse : la pastille
   // reste tant qu'on n'y a pas répondu (une invitation expire en 10 min).

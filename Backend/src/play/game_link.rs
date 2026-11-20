@@ -347,6 +347,28 @@ fn profile_line(profile: &serde_json::Value) -> String {
     )
 }
 
+/// La réponse à `fprofile⇥<id>` : `fprofile⇥<id>⇥<bannière>⇥<couleur>⇥<bio>⇥<titre>`,
+/// ce que cet ami montre à ses amis (`GET /friends/{id}/profile`). La bio
+/// tient sur une ligne (retours à la ligne remplacés par des espaces) ; le
+/// titre est le LIBELLÉ de celui de sa vitrine.
+fn friend_profile_line(id: &str, profile: &serde_json::Value) -> String {
+    let title = profile
+        .get("showcase")
+        .and_then(|s| s.as_array())
+        .and_then(|items| items.iter().find(|i| text(i, "/kind") == "title"))
+        .map(|item| text(item, "/label").to_string())
+        .unwrap_or_default();
+    let bio: String = text(profile, "/bio").chars().map(|c| if c == '\n' || c == '\r' { ' ' } else { c }).collect();
+    format!(
+        "fprofile\t{}\t{}\t{}\t{}\t{}",
+        field(id),
+        field(text(profile, "/banner")),
+        field(text(profile, "/accent")),
+        field(bio.trim()),
+        field(&title),
+    )
+}
+
 async fn answer(ctx: &Context, question: &str) -> String {
     let mut parts = question.split('\t');
     match parts.next().unwrap_or("") {
@@ -459,7 +481,34 @@ async fn answer(ctx: &Context, question: &str) -> String {
                 crate::app::tray::reopen_main_window(&ctx.app);
                 "ok".to_string()
             }
+            // L'onglet Amis du menu en jeu : « Ajouter un ami » (`open⇥friends`)
+            // ou « Voir le profil dans le launcher » (`open⇥friend⇥<id>`).
+            Some("friends") => {
+                crate::app::pending::emit_or_stash(&ctx.app, "game_open_friends", serde_json::json!({ "target": "add" }));
+                #[cfg(desktop)]
+                crate::app::tray::reopen_main_window(&ctx.app);
+                "ok".to_string()
+            }
+            Some("friend") => match parts.next().filter(|id| is_public_id(id)) {
+                Some(id) => {
+                    crate::app::pending::emit_or_stash(&ctx.app, "game_open_friends", serde_json::json!({ "target": "friend", "id": id }));
+                    #[cfg(desktop)]
+                    crate::app::tray::reopen_main_window(&ctx.app);
+                    "ok".to_string()
+                }
+                None => error("Ami non précisé"),
+            },
             _ => error("Écran inconnu"),
+        },
+        // La fiche d'un ami dans l'onglet Amis en jeu : sa bannière, sa
+        // couleur, sa bio et son titre, tels qu'il les montre à ses amis.
+        "fprofile" => match parts.next().filter(|id| is_public_id(id)) {
+            Some(id) if demo_friends().is_some() => format!("fprofile\t{id}\taurora\t#3ee6b8\t\t"),
+            Some(id) => match crate::server::get(&ctx.state, &format!("/friends/{id}/profile"), &[]).await {
+                Ok(profile) => friend_profile_line(id, &profile),
+                Err(e) => error(&e.message),
+            },
+            None => error("Ami non précisé"),
         },
         // Le bouton « Inviter » du jeu : même invitation que celle du
         // launcher (le serveur la lit dans notre présence, et l'écrit aussi
@@ -728,6 +777,18 @@ mod tests {
         let old = serde_json::json!({ "showcase": [{ "kind": "title" }], "library": { "titles": [{ "code": "a", "label": "Ancien" }] } });
         assert_eq!(profile_line(&old), "profile\t\t\tAncien");
         assert_eq!(profile_line(&serde_json::json!({})), "profile\t\t\t");
+    }
+
+    #[test]
+    fn la_fiche_d_un_ami_donne_banniere_couleur_bio_et_titre() {
+        let id = "00000000-0000-4000-8000-000000000001";
+        let profile = serde_json::json!({
+            "banner": "nether", "accent": "#ff7a2a", "bio": "Je farm\nles duels\t!",
+            "showcase": [{ "kind": "rank", "mode": "mace", "state": {} }, { "kind": "title", "code": "dev", "label": "Le Dev", "asset": null }],
+        });
+        assert_eq!(friend_profile_line(id, &profile), format!("fprofile\t{id}\tnether\t#ff7a2a\tJe farm les duels!\tLe Dev"));
+        // Une fiche cachée à ses amis : tout vide.
+        assert_eq!(friend_profile_line(id, &serde_json::json!({ "showcase": [] })), format!("fprofile\t{id}\t\t\t\t"));
     }
 
     #[test]

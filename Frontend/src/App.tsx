@@ -385,6 +385,7 @@ export default function App() {
           if (event.name === 'game_state') onGameState(event.payload as Parameters<typeof onGameState>[0])
           else if (event.name === 'game_crashed') onGameCrashed(event.payload as Parameters<typeof onGameCrashed>[0])
           else if (event.name === 'game_open_profile') openMyProfile()
+          else if (event.name === 'game_open_friends') openFriendsPanel(event.payload as { target?: string; id?: string } | null)
         }
       })
       .catch(() => {})
@@ -471,6 +472,15 @@ export default function App() {
     if (!window.location.href.includes('/home')) navigate('/home')
   }
   useTauriEvent('game_open_profile', () => openMyProfile())
+
+  /** L'onglet Amis du menu en jeu : « Ajouter un ami » (`add`) ou la fiche
+   *  d'un ami (`friend` + son identifiant public), dans le panneau des amis. */
+  function openFriendsPanel(payload: { target?: string; id?: string } | null) {
+    const target = payload?.target === 'friend' && payload.id ? 'friend' : 'add'
+    useFriends.getState().askPanel(target, target === 'friend' ? payload?.id : undefined)
+    if (!window.location.href.includes('/home')) navigate('/home')
+  }
+  useTauriEvent<{ target?: string; id?: string }>('game_open_friends', (payload) => openFriendsPanel(payload))
 
   // Les trois demandes de démarrage sont déposées sans se soucier les unes
   // des autres : l'ordre appartient à la file, plus à ce bloc. C'est le seul

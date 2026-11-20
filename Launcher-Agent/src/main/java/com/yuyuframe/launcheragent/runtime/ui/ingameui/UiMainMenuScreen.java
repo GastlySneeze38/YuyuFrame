@@ -9,6 +9,7 @@ import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
 import com.yuyuframe.launcheragent.apigraphic.value.UiTheme;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
+import com.yuyuframe.launcheragent.runtime.friends.GameFriends;
 import com.yuyuframe.launcheragent.runtime.friends.GameMissions;
 import com.yuyuframe.launcheragent.runtime.i18n.Lang;
 import com.yuyuframe.launcheragent.runtime.module.gameplay.PvpScoreModule;
@@ -27,7 +28,8 @@ import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTextField;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.mainmenu.AddTile;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.mainmenu.FilterTabs;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.mainmenu.FriendsCard;
-import com.yuyuframe.launcheragent.runtime.ui.ingameui.mainmenu.FriendsPanel;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.mainmenu.FriendDetail;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.mainmenu.FriendsList;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.mainmenu.GridEntry;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.mainmenu.LayoutSwitchButton;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.mainmenu.MissionsCard;
@@ -77,7 +79,12 @@ public class UiMainMenuScreen extends UiScreenBase {
 
     private final Object lastScreen;
     private final UiTextField searchField;
-    private final UiTextField friendSearch = FriendsPanel.newSearchField();
+    private final UiTextField friendSearch = new UiTextField(0, 0, 0, 0, Lang.tr("Chercher un ami"), v -> requestRebuild()).searchIcon();
+    /** L'ami ouvert dans la fiche de l'onglet Amis (identifiant public), gardé d'une ouverture à l'autre. */
+    private static String selectedFriend;
+    /** Composition de la liste à la dernière mise en page : quand elle change, l'onglet Amis se refait. */
+    private String lastFriendsSignature = "";
+    private float friendsHintBaseline;
     private final ModGrid grid = new ModGrid(this::requestRebuild);
     private final HomeStats stats = HomeStats.load();
     private UiScrollContainer modScroll;
@@ -142,7 +149,9 @@ public class UiMainMenuScreen extends UiScreenBase {
                 && (rebuildRequested || screenWidth != lastWidth || screenHeight != lastHeight
                     || UiTheme.UI_SCALE != lastScale || ModuleRegistry.favoritesRevision() != lastFavoritesRevision
                     // La pastille de l'onglet Missions change sa largeur.
-                    || openMissions() != lastOpenMissions)) {
+                    || openMissions() != lastOpenMissions
+                    // Un ami arrive, part ou change de section : la liste se refait.
+                    || (tab == Tab.FRIENDS && !FriendsList.signature(GameFriends.friends(), friendSearchText()).equals(lastFriendsSignature)))) {
             rebuildRequested = false;
             lastOpenMissions = openMissions();
             lastWidth = screenWidth;
@@ -151,6 +160,8 @@ public class UiMainMenuScreen extends UiScreenBase {
             lastFavoritesRevision = ModuleRegistry.favoritesRevision();
             rebuild();
         }
+        // La liste des amis se tient à jour tant que l'onglet est ouvert.
+        if (tab == Tab.FRIENDS) GameFriends.keepFresh();
         UiRenderer renderer = UiRenderer.get(getClass().getClassLoader());
         // Le flou partagé par toutes les surfaces de verre, AVANT tout dessin :
         // il doit capturer le monde seul. Les lueurs viennent juste après.
@@ -166,6 +177,7 @@ public class UiMainMenuScreen extends UiScreenBase {
             }
             if (tab == Tab.HOME && quickTitleX >= 0f) drawQuickTitle(renderer);
             if (tab == Tab.MODULES && !moduleEntries.isEmpty()) drawModulesHint(renderer);
+            if (tab == Tab.FRIENDS) drawFriendsHint(renderer);
         } catch (Throwable t) {
             LauncherLog.err("[UiMainMenuScreen] uiDraw: " + t);
         }
@@ -440,20 +452,87 @@ public class UiMainMenuScreen extends UiScreenBase {
         });
     }
 
+    /**
+     * L'onglet Amis (refonte du 2026-11-20) : à gauche les amis en trois
+     * sections ({@link FriendsList}), à droite la fiche de celui qu'on a choisi
+     * ({@link FriendDetail}). En haut, la recherche et « Ajouter un ami », qui
+     * ramène le launcher sur l'ajout.
+     */
     private void buildFriends(Box content, TabParts parts, float sideMargin) {
-        FriendsPanel panel = new FriendsPanel(friendSearch);
+        GameFriends.keepFresh();
+        List<GameFriends.Friend> friends = GameFriends.friends();
+        if (GameFriends.find(selectedFriend) == null) selectedFriend = FriendsList.firstId(friends);
+        lastFriendsSignature = FriendsList.signature(friends, friendSearchText());
+
+        FriendDetail detail = new FriendDetail(() -> selectedFriend);
+        FriendDetail.Button add = new FriendDetail.Button(() -> "+  " + Lang.tr("Ajouter un ami"), true,
+            GameFriends::available, GameFriends::openAddInLauncher);
+        float control = px(44f);
+        float addW = UiText.width(UiFont.BOLD, "+  " + Lang.tr("Ajouter un ami"), px(UiTheme.Text.MD)) + px(UiTheme.Space.S40);
+
         Box page = content.add(UiLayout.column().fill().gap(px(UiTheme.Space.S24))
             .pad(px(UiTheme.Space.S32), sideMargin, px(UiTheme.Space.S24), sideMargin));
-        Box head = page.add(UiLayout.box().height(px(UiTheme.Space.S36)).rigid());
-        Box list = page.add(UiLayout.box().grow(1f).width(px(520f)).shrink(1f).bind(panel));
+        Box head = page.add(UiLayout.row().height(px(64f)).rigid().alignItems("flex-end").gap(px(UiTheme.Space.S10)));
+        head.add(UiLayout.spacer());
+        head.add(UiLayout.box().width(px(280f)).height(control).shrink(1f).minWidth(px(160f)).bind(friendSearch));
+        head.add(UiLayout.fixed(addW, control).bind(add));
+        Box body = page.add(UiLayout.row().grow(1f).gap(px(UiTheme.Space.S32)));
+        Box listBox = body.add(UiLayout.box().grow(1f).minWidth(0f).heightPct(100f));
+        Box detailBox = body.add(UiLayout.box().width(px(420f)).rigid().heightPct(100f));
+
         parts.afterSolve.add(() -> {
-            placeTitle(parts.layout.rect(head));
-            TaffyLayoutResult.Rect r = parts.layout.rect(list);
-            if (r != null) panel.bubbleLeft = r.x + r.w + px(UiTheme.Space.S8);
-            widgets.add(panel);
-            // Après le panneau : il pose les bornes du champ pendant son propre dessin.
+            TaffyLayoutResult.Rect headRect = parts.layout.rect(head);
+            if (headRect != null) {
+                titleX = headRect.x;
+                titleBaseline = headRect.y + headRect.h - px(UiTheme.Space.S28);
+                friendsHintBaseline = headRect.y + px(UiTheme.Space.S4);
+            }
             widgets.add(friendSearch);
+            widgets.add(add);
+            TaffyLayoutResult.Rect d = parts.layout.rect(detailBox);
+            if (d != null) {
+                detail.x = d.x; detail.y = d.y; detail.w = d.w; detail.h = d.h;
+                widgets.add(detail);
+                widgets.addAll(detail.children());
+            }
+            TaffyLayoutResult.Rect vp = parts.layout.rect(listBox);
+            if (vp == null) return;
+            modScroll = new UiScrollContainer(vp.x, vp.y, vp.w, Math.max(1f, vp.h));
+            float scrollbarReserve = px(UiTheme.Space.S20);
+            FriendsList.build(modScroll, vp.x, vp.y + vp.h, vp.w - scrollbarReserve, friends, friendSearchText(),
+                () -> selectedFriend, id -> selectedFriend = id);
+            modScroll.restoreScroll(parts.previousScroll);
         });
+    }
+
+    private String friendSearchText() {
+        return friendSearch.text();
+    }
+
+    /** « 3 en ligne sur 8 - clique sur un ami pour voir ce qu'il fait », ou pourquoi la liste est vide. */
+    private void drawFriendsHint(UiRenderer r) {
+        float s = px(UiTheme.Text.MD);
+        List<GameFriends.Friend> friends = GameFriends.friends();
+        String rest;
+        float x = titleX;
+        if (!GameFriends.available()) {
+            rest = Lang.tr("Le launcher YuyuFrame n'est pas joignable");
+        } else if (GameFriends.error() != null) {
+            rest = GameFriends.error();
+        } else if (!GameFriends.loaded()) {
+            rest = Lang.tr("Chargement...");
+        } else if (friends.isEmpty()) {
+            rest = Lang.tr("Ajoute des amis depuis le launcher");
+        } else {
+            int online = 0;
+            for (GameFriends.Friend f : friends) if (f.online()) online++;
+            String count = online + " " + Lang.tr("en ligne");
+            UiText.drawOnBackdrop(r, UiFont.BOLD, count, x, friendsHintBaseline, new UiColor(92, 210, 128, 255), s,
+                screenWidth, screenHeight);
+            x += UiText.width(UiFont.BOLD, count, s);
+            rest = " " + Lang.tr("sur") + " " + friends.size() + "   -   " + Lang.tr("Clique sur un ami pour voir ce qu'il fait");
+        }
+        UiText.drawOnBackdrop(r, UiFont.REGULAR, rest, x, friendsHintBaseline, UiTheme.TEXT_MUTED, s, screenWidth, screenHeight);
     }
 
     // ── Les cartes ───────────────────────────────────────────────────────────
