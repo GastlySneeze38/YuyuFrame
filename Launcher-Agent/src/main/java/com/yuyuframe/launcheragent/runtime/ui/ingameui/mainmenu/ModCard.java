@@ -158,6 +158,7 @@ final class ModCard extends UiInteractive {
         }
 
         UiSurface.card(hover).alpha(alpha).draw(renderer, drawX, drawY, w, h, vpWidth, vpHeight);
+        UiSurface.hoverWash(renderer, drawX, drawY, w, h, UiTheme.RADIUS_MD, hover * alpha, vpWidth, vpHeight);
 
         // Éclat de clic (ou de favori basculé) : s'étend sous la carte et s'efface, avec un rebond.
         float pulse = pulse();

@@ -56,7 +56,8 @@ public final class NavTab extends UiInteractive {
         if (active) {
             r.drawRoundedRect(x, y, x + w, y + h, radius, UiTheme.ACCENT.withAlpha(0.26f), vw, vh);
         } else if (hover > 0.01f) {
-            r.drawRoundedRect(x, y, x + w, y + h, radius, UiTheme.SIDEBAR_HOVER.multiplyAlpha(hover), vw, vh);
+            // Un cran sous l'onglet ouvert : même teinte, moitié moins dense.
+            r.drawRoundedRect(x, y, x + w, y + h, radius, UiTheme.ACCENT.withAlpha(0.13f * hover), vw, vh);
         }
         float s = scale();
         UiColor color = active ? UiTheme.TEXT_PRIMARY : UiColor.lerp(UiTheme.TEXT_MUTED, UiTheme.TEXT_PRIMARY, hover);

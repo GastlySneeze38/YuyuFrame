@@ -25,21 +25,18 @@ import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiScrollContain
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiText;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTextField;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.mainmenu.AddTile;
-import com.yuyuframe.launcheragent.runtime.ui.ingameui.mainmenu.CtaButton;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.mainmenu.FriendsCard;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.mainmenu.FriendsPanel;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.mainmenu.GridEntry;
-import com.yuyuframe.launcheragent.runtime.ui.ingameui.mainmenu.HeroBlock;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.mainmenu.LayoutSwitchButton;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.mainmenu.MissionsCard;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.mainmenu.MissionsPanel;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.mainmenu.ModGrid;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.mainmenu.NavTab;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.mainmenu.PlayerCard;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.mainmenu.QuickTile;
-import com.yuyuframe.launcheragent.runtime.ui.ingameui.mainmenu.StatTile;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.mainmenu.TextLink;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.mainmenu.TopBar;
-import com.yuyuframe.launcheragent.runtime.ui.ingameui.mainmenu.HomeIcons;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.mainmenu.HomeStats;
 
 import java.util.ArrayList;
@@ -56,7 +53,7 @@ import static com.yuyuframe.launcheragent.apigraphic.value.UiTheme.px;
  * <h2>Les onglets</h2>
  *
  * <ul>
- *   <li><b>Accueil</b> : qui on est, trois chiffres, les missions du jour,
+ *   <li><b>Accueil</b> : la carte de joueur ({@link PlayerCard} : bannière, titre, rang, chiffres, derniers duels), les missions du jour,
  *       les amis en ligne et l'accès rapide aux modules favoris ;</li>
  *   <li><b>Modules</b> : la grille complète, filtrée par la recherche ;</li>
  *   <li><b>Missions</b> : le jour et la semaine en détail ;</li>
@@ -168,12 +165,12 @@ public class UiMainMenuScreen extends UiScreenBase {
     }
 
     private void drawQuickTitle(UiRenderer r) {
-        float s = px(UiTheme.Text.LG);
+        float s = px(UiTheme.Text.XL);
         UiText.drawOnBackdrop(r, UiFont.BOLD, Lang.tr("Accès rapide"), quickTitleX, quickTitleBaseline, UiTheme.TEXT_PRIMARY, s,
             screenWidth, screenHeight);
         float tw = UiText.width(UiFont.BOLD, Lang.tr("Accès rapide"), s);
         UiText.drawOnBackdrop(r, UiFont.REGULAR, Lang.tr("Tes modules favoris, un clic pour les allumer"),
-            quickTitleX + tw + px(UiTheme.Space.S14), quickTitleBaseline, UiTheme.TEXT_MUTED, px(UiTheme.Text.SM),
+            quickTitleX + tw + px(UiTheme.Space.S16), quickTitleBaseline, UiTheme.TEXT_MUTED, px(UiTheme.Text.MD),
             screenWidth, screenHeight);
     }
 
@@ -280,37 +277,19 @@ public class UiMainMenuScreen extends UiScreenBase {
         Box page = content.add(UiLayout.row().fill().gap(px(UiTheme.Space.S48))
             .pad(px(UiTheme.Space.S40), sideMargin - px(UiTheme.Space.S8), px(UiTheme.Space.S40), sideMargin));
 
-        // Colonne de gauche : en-tête, actions, chiffres, et l'accès rapide en bas.
+        // Colonne de gauche : la carte de joueur, et l'accès rapide en bas.
         Box left = page.add(UiLayout.column().grow(1f).heightPct(100f).minWidth(0f));
-        HeroBlock hero = new HeroBlock(subtitle());
-        left.add(UiLayout.box().widthPct(100f).height(HeroBlock.preferredHeight()).rigid().bind(hero));
+        PlayerCard card = new PlayerCard(stats, mode -> closeTo(new UiPvpScoreScreen(this, mode)));
+        left.add(UiLayout.box().widthPct(100f).height(PlayerCard.preferredHeight()).rigid().bind(card));
 
-        CtaButton browse = new CtaButton("Parcourir les modules", true, "book", HomeIcons::book, () -> open(Tab.MODULES));
-        CtaButton editHud = new CtaButton("Modifier le HUD", false, "map", HomeIcons::map,
-            () -> closeTo(new UiHudEditorScreen(this)));
-        float ctaH = px(54f);
-        Box ctas = left.add(UiLayout.row().height(ctaH).rigid().gap(px(UiTheme.Space.S12)).margin(px(UiTheme.Space.S28), 0f, 0f, 0f));
-        ctas.add(UiLayout.fixed(browse.preferredWidth(), ctaH).bind(browse));
-        ctas.add(UiLayout.fixed(editHud.preferredWidth(), ctaH).bind(editHud));
-
-        StatTile rank = new StatTile("mace", HomeIcons::mace, stats.rank, "Rang",
-            () -> closeTo(new UiPvpScoreScreen(this)));
-        StatTile score = new StatTile("sword", HomeIcons::sword, stats.average, "Note moyenne", null);
-        StatTile streak = new StatTile("totem", HomeIcons::totem, stats.streak, "Victoires d'affilée", null);
-        float statH = px(124f), statW = px(200f);
-        Box statRow = left.add(UiLayout.row().height(statH).rigid().gap(px(UiTheme.Space.S14)).margin(px(UiTheme.Space.S40), 0f, 0f, 0f));
-        for (StatTile s : new StatTile[]{ rank, score, streak }) {
-            statRow.add(UiLayout.box().width(statW).height(statH).shrink(1f).minWidth(px(120f)).bind(s));
-        }
-
-        // L'accès rapide est calé en bas : deux rangées de tuiles, moins si la
+        // L'accès rapide juste dessous : deux rangées de tuiles, moins si la
         // place manque (elles sont posées à la main dans la boîte résolue).
-        left.add(UiLayout.spacer().minHeight(px(UiTheme.Space.S24)));
-        Box quickHead = left.add(UiLayout.row().height(px(UiTheme.Space.S28)).rigid());
+        float quickHeadH = px(UiTheme.Space.S36);
+        Box quickHead = left.add(UiLayout.row().height(quickHeadH).rigid().margin(px(UiTheme.Space.S40), 0f, 0f, 0f));
         quickHead.add(UiLayout.spacer());
         TextLink edit = new TextLink("Modifier", () -> open(Tab.MODULES));
-        quickHead.add(UiLayout.fixed(edit.preferredWidth(), px(UiTheme.Space.S28)).bind(edit));
-        float quickH = 2f * px(64f) + px(UiTheme.Space.S10);
+        quickHead.add(UiLayout.fixed(edit.preferredWidth(), quickHeadH).bind(edit));
+        float quickH = 2f * QuickTile.height() + px(UiTheme.Space.S12);
         Box quick = left.add(UiLayout.box().height(quickH).shrink(1f).minHeight(0f).margin(px(UiTheme.Space.S12), 0f, 0f, 0f));
 
         // Colonne de droite : missions puis amis.
@@ -321,18 +300,16 @@ public class UiMainMenuScreen extends UiScreenBase {
         right.add(UiLayout.box().widthPct(100f).height(FriendsCard.preferredHeight()).shrink(1f).bind(friendsCard));
 
         parts.afterSolve.add(() -> {
-            widgets.add(hero);
-            widgets.add(browse);
-            widgets.add(editHud);
-            widgets.add(rank);
-            widgets.add(score);
-            widgets.add(streak);
+            widgets.add(card);
+            // Ses parties cliquables, posées dans la boîte résolue.
+            card.place();
+            widgets.addAll(card.children());
             widgets.add(missionsCard);
             widgets.add(friendsCard);
             TaffyLayoutResult.Rect head = parts.layout.rect(quickHead);
             if (head != null) {
                 quickTitleX = head.x;
-                quickTitleBaseline = UiText.centeredBaseline(UiFont.BOLD, head.y, head.h, px(UiTheme.Text.LG));
+                quickTitleBaseline = UiText.centeredBaseline(UiFont.BOLD, head.y, head.h, px(UiTheme.Text.XL));
                 widgets.add(edit);
             }
             layoutQuick(parts.layout.rect(quick));
@@ -345,9 +322,9 @@ public class UiMainMenuScreen extends UiScreenBase {
         List<GridEntry> favorites = new ArrayList<>();
         for (GridEntry e : entries()) if (e.isFavorite()) favorites.add(e);
 
-        float gap = px(UiTheme.Space.S10);
-        float tileH = px(64f);
-        int cols = Math.max(1, UiLayout.columns(rect.w, px(180f), gap, 1, 4));
+        float gap = px(UiTheme.Space.S12);
+        float tileH = QuickTile.height();
+        int cols = Math.max(1, UiLayout.columns(rect.w, px(220f), gap, 1, 4));
         float tileW = UiLayout.cellWidth(rect.w, cols, gap);
         int rows = Math.max(0, (int) Math.floor((rect.h + gap) / (tileH + gap)));
         int capacity = rows * cols;
@@ -368,17 +345,6 @@ public class UiMainMenuScreen extends UiScreenBase {
                 widgets.add(add);
             }
         }
-    }
-
-    private String subtitle() {
-        int on = 0, all = 0;
-        for (LauncherModule m : ModuleRegistry.all()) {
-            all++;
-            if (m.isEnabled()) on++;
-        }
-        String text = on + " " + Lang.tr("modules actifs sur") + " " + all;
-        String version = System.getProperty("launcheragent.mcVersion", "");
-        return version.isEmpty() ? text : text + "  -  Minecraft " + version;
     }
 
     // ── Modules ──────────────────────────────────────────────────────────────

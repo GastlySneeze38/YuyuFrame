@@ -46,6 +46,21 @@ public final class UiSurface {
     }
 
     /** Petite surface (bouton, champ) : verre léger, aplat de repli donné. */
+    /**
+     * Le survol d'une surface cliquable : un voile d'accent posé par-dessus
+     * le verre. Le verre seul change trop peu d'une teinte à l'autre pour se
+     * voir sur un monde sombre ; ce voile est le même partout, pour qu'un
+     * survol se reconnaisse d'un composant à l'autre.
+     */
+    public static void hoverWash(UiRenderer r, float x, float y, float w, float h, float radius, float hover, int vw, int vh) {
+        if (hover <= 0.01f) return;
+        r.drawRoundedRect(x, y, x + w, y + h, radius, UiTheme.ACCENT.withAlpha(0.16f * hover), vw, vh);
+        // Un reflet en haut, comme une surface qui s'approche de la lumière.
+        float line = UiTheme.hairline();
+        r.drawRoundedRect(x + radius, y + h - line, x + w - radius, y + h, 0f,
+            UiTheme.accentLight().withAlpha(0.55f * hover), vw, vh);
+    }
+
     public static Spec field(UiColor fill) {
         return of(Glass.FIELD).radius(UiTheme.RADIUS_SM).fill(fill);
     }

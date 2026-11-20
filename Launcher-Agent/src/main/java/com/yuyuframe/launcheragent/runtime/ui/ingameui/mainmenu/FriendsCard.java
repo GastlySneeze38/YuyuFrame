@@ -41,7 +41,8 @@ public final class FriendsCard extends UiInteractive {
         if (w <= 0f || h <= 0f) return;
         updateStates(mouseX, mouseY);
         GameFriends.keepFresh();
-        UiSurface.card(hover * 0.6f).radius(px(22f)).draw(r, x, y, w, h, vw, vh);
+        UiSurface.card(hover).radius(px(22f)).draw(r, x, y, w, h, vw, vh);
+        UiSurface.hoverWash(r, x, y, w, h, px(22f), hover * 0.7f, vw, vh);
 
         float pad = px(UiTheme.Space.S24);
         float left = x + pad, right = x + w - pad, top = y + h - pad;

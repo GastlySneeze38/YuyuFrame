@@ -24,6 +24,11 @@ export function FriendsButton({ className, compact = false, large = false }: { c
   useEffect(() => {
     if (addSeq > 0 && useFriends.getState().addRequest?.code) setOpen(true)
   }, [addSeq])
+  // « Personnaliser » sur la carte de joueur en jeu : le panneau s'ouvre sur mon profil.
+  const profileSeq = useFriends((s) => s.profileRequest)
+  useEffect(() => {
+    if (profileSeq > 0) setOpen(true)
+  }, [profileSeq])
   const online = useFriends((s) => s.list?.friends.filter((f) => isOnline(f.presence)).length ?? 0)
   // Les demandes et invitations reçues en attente de réponse : la pastille
   // reste tant qu'on n'y a pas répondu (une invitation expire en 10 min).

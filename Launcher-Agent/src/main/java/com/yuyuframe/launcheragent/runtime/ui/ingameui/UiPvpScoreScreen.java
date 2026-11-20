@@ -93,6 +93,12 @@ public final class UiPvpScoreScreen extends UiScreenBase {
         selectMode(mostAdvancedMode());
     }
 
+    /** Ouvert sur un mode donné (index de {@code PvpScoreUi.MODE_CODES}) : celui choisi sur la carte de joueur de l'accueil. */
+    public UiPvpScoreScreen(Object lastScreen, int modeIndex) {
+        this(lastScreen);
+        selectMode(modeIndex);
+    }
+
     /**
      * L'index ({@link PvpScoreUi#MODES}) du mode où le joueur est le plus
      * avancé : un rang dévoilé avant un placement, puis la position la plus

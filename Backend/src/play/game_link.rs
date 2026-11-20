@@ -320,6 +320,33 @@ fn missions_line(challenges: &[serde_json::Value]) -> String {
     line
 }
 
+/// La réponse à `profile` : `profile⇥<bannière>⇥<couleur #rrggbb>⇥<titre>`,
+/// champs vides quand rien n'est choisi. Le titre est son LIBELLÉ (« Le
+/// Dev ») : celui de la vitrine, cherché par son code dans la bibliothèque ;
+/// une vitrine « titre » sans code (profils d'avant la bibliothèque) montre le
+/// plus récent, comme le launcher.
+fn profile_line(profile: &serde_json::Value) -> String {
+    let titles = profile.pointer("/library/titles").and_then(|t| t.as_array()).cloned().unwrap_or_default();
+    let label_of = |code: &str| {
+        titles.iter().find(|t| text(t, "/code") == code).map(|t| text(t, "/label").to_string())
+    };
+    let title = profile
+        .get("showcase")
+        .and_then(|s| s.as_array())
+        .and_then(|items| items.iter().find(|i| text(i, "/kind") == "title"))
+        .and_then(|item| match item.get("code").and_then(|c| c.as_str()) {
+            Some(code) => label_of(code),
+            None => titles.first().map(|t| text(t, "/label").to_string()),
+        })
+        .unwrap_or_default();
+    format!(
+        "profile\t{}\t{}\t{}",
+        field(text(profile, "/banner")),
+        field(text(profile, "/accent")),
+        field(&title),
+    )
+}
+
 async fn answer(ctx: &Context, question: &str) -> String {
     let mut parts = question.split('\t');
     match parts.next().unwrap_or("") {
@@ -417,6 +444,23 @@ async fn answer(ctx: &Context, question: &str) -> String {
                 },
             }
         }
+        // La carte de joueur de l'accueil en jeu : bannière, couleur et titre
+        // choisis dans le profil du launcher (`GET /friends/profile`).
+        "profile" => match crate::server::get(&ctx.state, "/friends/profile", &[]).await {
+            Ok(profile) => profile_line(&profile),
+            Err(e) => error(&e.message),
+        },
+        // « Personnaliser » sur la carte de joueur : le launcher revient
+        // devant, ouvert sur mon profil (panneau des amis).
+        "open" => match parts.next() {
+            Some("profile") => {
+                crate::app::pending::emit_or_stash(&ctx.app, "game_open_profile", serde_json::json!({}));
+                #[cfg(desktop)]
+                crate::app::tray::reopen_main_window(&ctx.app);
+                "ok".to_string()
+            }
+            _ => error("Écran inconnu"),
+        },
         // Le bouton « Inviter » du jeu : même invitation que celle du
         // launcher (le serveur la lit dans notre présence, et l'écrit aussi
         // en message privé Discord à l'ami qui l'a demandé).
@@ -669,6 +713,21 @@ mod tests {
         assert_eq!(&parts[13..25], &[
             "00000000-0000-4000-8000-000000000005", "Philza", "offline", "0", "", "Envacances", "", "", "", "", "", "1793527200",
         ]);
+    }
+
+    #[test]
+    fn le_profil_donne_banniere_couleur_et_libelle_du_titre() {
+        let profile = serde_json::json!({
+            "banner": "aurora", "accent": "#7b72e9",
+            "showcase": [{ "kind": "rank", "mode": "mace" }, { "kind": "title", "code": "dev" }],
+            "library": { "titles": [{ "code": "first", "label": "Premier" }, { "code": "dev", "label": "Le\tDev" }] },
+        });
+        assert_eq!(profile_line(&profile), "profile\taurora\t#7b72e9\tLeDev");
+
+        // Titre sans code : le plus récent, comme le launcher. Rien de choisi : champs vides.
+        let old = serde_json::json!({ "showcase": [{ "kind": "title" }], "library": { "titles": [{ "code": "a", "label": "Ancien" }] } });
+        assert_eq!(profile_line(&old), "profile\t\t\tAncien");
+        assert_eq!(profile_line(&serde_json::json!({})), "profile\t\t\t");
     }
 
     #[test]

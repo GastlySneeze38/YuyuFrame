@@ -48,6 +48,10 @@ interface FriendsStore {
   askAdd: (code: string) => void
   /** Le panneau a pris la demande en charge. */
   takeAddRequest: () => string | null
+  /** « Personnaliser » sur la carte de joueur en jeu : le panneau s'ouvre sur
+   *  mon profil. Change à chaque demande ; 0 = jamais demandé. */
+  profileRequest: number
+  askMyProfile: () => void
   /** À la déconnexion : la liste ne parle plus de personne. */
   clear: () => void
 }
@@ -230,6 +234,9 @@ export const useFriends = create<FriendsStore>((set, get) => ({
     if (code) set((s) => ({ addRequest: s.addRequest && { ...s.addRequest, code: '' } }))
     return code || null
   },
+
+  profileRequest: 0,
+  askMyProfile: () => set((s) => ({ profileRequest: s.profileRequest + 1 })),
 
   clear: () => {
     clearFriendProfiles()

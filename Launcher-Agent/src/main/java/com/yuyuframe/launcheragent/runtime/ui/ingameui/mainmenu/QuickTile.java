@@ -43,10 +43,13 @@ public final class QuickTile extends UiInteractive {
         return entry.hasToggle() && entry.enabled.getAsBoolean();
     }
 
-    private float switchW() { return px(38f); }
+    /** Hauteur d'une tuile : assez grande pour se viser sans chercher. */
+    public static float height() { return px(84f); }
+
+    private float switchW() { return px(46f); }
 
     private float gearRight() {
-        return x + w - px(UiTheme.Space.S14) - (entry.hasToggle() ? switchW() + px(UiTheme.Space.S10) : 0f);
+        return x + w - px(UiTheme.Space.S16) - (entry.hasToggle() ? switchW() + px(UiTheme.Space.S12) : 0f);
     }
 
     @Override
@@ -58,24 +61,24 @@ public final class QuickTile extends UiInteractive {
         knob.setTarget(on ? 1f : 0f);
         float k = knob.get();
 
-        UiColor fill = UiColor.lerp(UiTheme.CARD_BG, UiColor.lerp(UiTheme.CARD_HOVER, UiTheme.ACCENT, 0.18f), hover);
-        UiSurface.card(hover).radius(px(UiTheme.Space.S16)).fill(fill).draw(r, x, y, w, h, vw, vh);
+        UiSurface.card(hover).radius(px(UiTheme.Space.S18)).draw(r, x, y, w, h, vw, vh);
+        UiSurface.hoverWash(r, x, y, w, h, px(UiTheme.Space.S18), hover, vw, vh);
 
         // L'icône, dans un carré teinté d'accent quand le module tourne.
-        float box = px(UiTheme.Space.S40);
-        float bx = x + px(UiTheme.Space.S12), by = y + (h - box) / 2f;
+        float box = px(54f);
+        float bx = x + px(UiTheme.Space.S14), by = y + (h - box) / 2f;
         UiColor boxFill = UiColor.lerp(new UiColor(255, 255, 255, 14), UiTheme.ACCENT.withAlpha(0.36f), k);
-        r.drawRoundedRect(bx, by, bx + box, by + box, px(UiTheme.Space.S12), boxFill, vw, vh);
-        float iconS = px(UiTheme.Space.S20);
+        r.drawRoundedRect(bx, by, bx + box, by + box, px(UiTheme.Space.S14), boxFill, vw, vh);
+        float iconS = px(30f);
         if (entry.iconUrl != null) {
             UiIcon.crisp(r, entry.iconUrl, bx + (box - iconS) / 2f, by + (box - iconS) / 2f, iconS,
                 entry.hasToggle() ? 0.45f + 0.55f * k : 0.9f, vw, vh);
         }
 
         // Interrupteur ou chevron, à droite.
-        float right = x + w - px(UiTheme.Space.S14);
+        float right = x + w - px(UiTheme.Space.S16);
         if (entry.hasToggle()) {
-            float sw = switchW(), sh = px(UiTheme.Space.S20);
+            float sw = switchW(), sh = px(26f);
             float sx = right - sw, sy = y + (h - sh) / 2f;
             r.drawRoundedRect(sx, sy, sx + sw, sy + sh, sh / 2f,
                 UiColor.lerp(new UiColor(255, 255, 255, 36), UiTheme.accentLight(), k), vw, vh);
@@ -84,11 +87,11 @@ public final class QuickTile extends UiInteractive {
             r.drawRoundedRect(kx, sy + px(UiTheme.Space.S3), kx + d, sy + px(UiTheme.Space.S3) + d, d / 2f,
                 new UiColor(255, 255, 255, 255), vw, vh);
         } else {
-            float cs = px(UiTheme.Space.S14);
+            float cs = px(UiTheme.Space.S16);
             UiIcon.crisp(r, CHEVRON, right - cs, y + (h - cs) / 2f, cs, 0.4f + 0.5f * hover, vw, vh);
         }
 
-        float gear = px(UiTheme.Space.S16);
+        float gear = px(UiTheme.Space.S18);
         boolean showGear = entry.hasToggle() && hover > 0.01f;
         if (showGear) {
             float gx = gearRight() - gear;
@@ -97,17 +100,18 @@ public final class QuickTile extends UiInteractive {
         }
 
         // Nom et état.
-        float tx = bx + box + px(UiTheme.Space.S12);
-        float maxW = (showGear ? gearRight() - gear : right - (entry.hasToggle() ? switchW() : px(UiTheme.Space.S14)))
+        float tx = bx + box + px(UiTheme.Space.S16);
+        float maxW = (showGear ? gearRight() - gear : right - (entry.hasToggle() ? switchW() : px(UiTheme.Space.S16)))
             - px(UiTheme.Space.S10) - tx;
-        float nameScale = px(UiTheme.Text.MD);
+        float nameScale = px(UiTheme.Text.LG);
         float mid = y + h / 2f;
-        r.drawText(UiFont.BOLD, UiText.fit(UiFont.BOLD, Lang.tr(entry.name), maxW, nameScale), tx, mid + px(UiTheme.Space.S2),
+        r.drawText(UiFont.BOLD, UiText.fit(UiFont.BOLD, Lang.tr(entry.name), maxW, nameScale), tx, mid + px(UiTheme.Space.S3),
             UiTheme.TEXT_PRIMARY, nameScale, vw, vh);
         String state = !entry.hasToggle() ? Lang.tr("Ouvrir") : on ? Lang.tr("Activé") : Lang.tr("Désactivé");
         UiColor stateColor = entry.hasToggle() && on ? UiTheme.SUCCESS : UiTheme.TEXT_MUTED;
-        r.drawText(UiFont.REGULAR, UiText.fit(UiFont.REGULAR, state, maxW, px(UiTheme.Text.XS)), tx, mid - px(UiTheme.Space.S14),
-            stateColor, px(UiTheme.Text.XS), vw, vh);
+        float stateScale = px(UiTheme.Text.SM);
+        r.drawText(UiFont.REGULAR, UiText.fit(UiFont.REGULAR, state, maxW, stateScale), tx, mid - px(UiTheme.Space.S18),
+            stateColor, stateScale, vw, vh);
     }
 
     @Override
@@ -116,7 +120,7 @@ public final class QuickTile extends UiInteractive {
             if (entry.open != null) entry.open.run();
             return;
         }
-        float gx = gearRight() - px(UiTheme.Space.S16) - px(UiTheme.Space.S4);
+        float gx = gearRight() - px(UiTheme.Space.S18) - px(UiTheme.Space.S4);
         if (lastMouseX >= gx && lastMouseX <= gearRight() + px(UiTheme.Space.S4)) {
             if (entry.open != null) entry.open.run();
             return;

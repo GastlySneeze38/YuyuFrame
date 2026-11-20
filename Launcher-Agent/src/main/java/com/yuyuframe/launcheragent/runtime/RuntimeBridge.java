@@ -83,6 +83,8 @@ public final class RuntimeBridge implements AgentBridge {
         com.yuyuframe.launcheragent.runtime.friends.GameFriends.tick();
         // Réponses du launcher pour l'onglet Missions du menu YuyuFrame.
         com.yuyuframe.launcheragent.runtime.friends.GameMissions.tick();
+        // Bannière, couleur et titre du profil, pour la carte de joueur de l'accueil.
+        com.yuyuframe.launcheragent.runtime.friends.GameProfile.tick();
         // Skin d'un compte hors ligne : celui du launcher, et sa pose sur le serveur de jeu.
         com.yuyuframe.launcheragent.runtime.skin.OwnSkin.tick();
         // Réglage « Police » : la police du jeu, dès que ses ressources sont lisibles.

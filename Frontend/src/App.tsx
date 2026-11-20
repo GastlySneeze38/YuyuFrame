@@ -384,6 +384,7 @@ export default function App() {
         for (const event of events ?? []) {
           if (event.name === 'game_state') onGameState(event.payload as Parameters<typeof onGameState>[0])
           else if (event.name === 'game_crashed') onGameCrashed(event.payload as Parameters<typeof onGameCrashed>[0])
+          else if (event.name === 'game_open_profile') openMyProfile()
         }
       })
       .catch(() => {})
@@ -462,6 +463,14 @@ export default function App() {
   useTauriEvent<string>('deep_link_join', (url) => {
     handleDeepLink(url)
   })
+
+  /** « Personnaliser » sur la carte de joueur du menu en jeu : mon profil,
+   *  dans le panneau des amis de l'accueil (bannière, couleur, titre). */
+  function openMyProfile() {
+    useFriends.getState().askMyProfile()
+    if (!window.location.href.includes('/home')) navigate('/home')
+  }
+  useTauriEvent('game_open_profile', () => openMyProfile())
 
   // Les trois demandes de démarrage sont déposées sans se soucier les unes
   // des autres : l'ordre appartient à la file, plus à ce bloc. C'est le seul

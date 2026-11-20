@@ -87,6 +87,11 @@ function PanelBody({ onClose }: { onClose: () => void }) {
     setPrefill({ code, n: addSeq })
   }, [addSeq])
 
+  const profileSeq = useFriends((s) => s.profileRequest)
+  useEffect(() => {
+    if (profileSeq > 0) setView({ kind: 'me' })
+  }, [profileSeq])
+
   useEffect(() => {
     markRequestsSeen()
     if (signedIn) {
