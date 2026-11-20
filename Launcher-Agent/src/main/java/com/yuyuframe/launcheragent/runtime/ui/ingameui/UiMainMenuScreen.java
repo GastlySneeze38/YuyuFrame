@@ -97,6 +97,8 @@ public class UiMainMenuScreen extends UiScreenBase {
     /** Filtre de l'onglet Modules : 0 tous, 1 activés, 2 désactivés ; gardé d'une ouverture à l'autre. */
     private static int moduleFilter;
     private float quickTitleX = -1f, quickTitleBaseline;
+    /** Le panneau vertical de droite (accueil : missions et amis ; amis : la fiche) : la bande sombre s'aligne dessus. */
+    private TaffyLayoutResult.Rect homeRight;
 
     private int lastWidth = -1, lastHeight = -1;
     private float lastScale = -1f;
@@ -190,7 +192,18 @@ public class UiMainMenuScreen extends UiScreenBase {
         // il doit capturer le monde seul. Le voile du fond vient juste après.
         renderer.beginGlassFrame(UiTheme.GLASS_PASSES, screenWidth, screenHeight);
         layoutSearch(false);
-        if (renderer.isGlassAvailable()) UiAurora.draw(renderer, screenWidth, screenHeight);
+        if (renderer.isGlassAvailable()) {
+            UiAurora.draw(renderer, screenWidth, screenHeight);
+            // Derrière le panneau vertical de droite seulement (accueil : missions
+            // et amis ; amis : la fiche), la bande sombre et son illustration.
+            if (homeRight != null && (tab == Tab.HOME || tab == Tab.FRIENDS)) {
+                // Le passage en fondu se termine juste avant la colonne : elle est posée sur le fond plein.
+                float bandX = homeRight.x - px(UiTheme.Space.S32)
+                    - com.yuyuframe.launcheragent.runtime.ui.ingameui.component.BackdropWords.fadeWidth();
+                com.yuyuframe.launcheragent.runtime.ui.ingameui.component.BackdropWords.drawBand(renderer,
+                    bandX, 0f, screenWidth - bandX, screenHeight, screenWidth, screenHeight);
+            }
+        }
         super.uiDraw(mouseX, mouseY);
         try {
             if (modScroll != null) modScroll.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
@@ -224,6 +237,7 @@ public class UiMainMenuScreen extends UiScreenBase {
         float previousScroll = modScroll != null ? modScroll.scrollOffset() : 0f;
         modScroll = null;
         quickTitleX = -1f;
+        homeRight = null;
 
         float sideMargin = px(64f);
 
@@ -366,6 +380,7 @@ public class UiMainMenuScreen extends UiScreenBase {
             // Ses parties cliquables, posées dans la boîte résolue.
             card.place();
             widgets.addAll(card.children());
+            homeRight = parts.layout.rect(right);
             widgets.add(missionsCard);
             widgets.add(friendsCard);
             TaffyLayoutResult.Rect head = parts.layout.rect(quickHead);
@@ -536,6 +551,7 @@ public class UiMainMenuScreen extends UiScreenBase {
             TaffyLayoutResult.Rect d = parts.layout.rect(detailBox);
             if (d != null) {
                 detail.x = d.x; detail.y = d.y; detail.w = d.w; detail.h = d.h;
+                homeRight = d;
                 widgets.add(detail);
                 widgets.addAll(detail.children());
             }
