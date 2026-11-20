@@ -723,19 +723,41 @@ public final class UiRenderer {
 
     private static boolean glassChainFrozen;
 
-    public void beginGlassFrame(int passes, int vpWidth, int vpHeight) {
-        if (glassChainFrozen) return;
+    /**
+     * Pendant qu'il est posé, {@link #beginGlassFrame(int, int, int)} ne
+     * redessine pas le décor : l'écran l'a déjà posé lui-même, HORS de ses
+     * calques de transition (voir {@link #drawFrameBackdrop}).
+     */
+    public static void backdropDrawnOutside(boolean drawn) {
+        backdropDrawnOutside = drawn;
+    }
+
+    private static boolean backdropDrawnOutside;
+
+    /**
+     * Pose le décor de la frame ({@link #frameBackdrop}), s'il y en a un.
+     *
+     * <p>À appeler hors de tout calque : dessiné dans le calque d'un écran
+     * qui s'efface, le décor s'effaçait avec lui, et pendant tout le fondu
+     * vers l'écran suivant (qui ne recalcule pas le verre) on voyait du noir
+     * (2026-11-20, ouverture de l'éditeur de HUD depuis l'écran-titre).
+     */
+    public void drawFrameBackdrop(int vpWidth, int vpHeight) {
         FrameBackdrop backdrop = frameBackdrop;
-        if (backdrop != null) {
-            try {
-                backdrop.draw(this, vpWidth, vpHeight);
-            } catch (Throwable error) {
-                if (!backdropErrorLogged) {
-                    backdropErrorLogged = true;
-                    com.yuyuframe.launcheragent.base.log.LauncherLog.err("[UiRenderer] décor de fond impossible", error);
-                }
+        if (backdrop == null) return;
+        try {
+            backdrop.draw(this, vpWidth, vpHeight);
+        } catch (Throwable error) {
+            if (!backdropErrorLogged) {
+                backdropErrorLogged = true;
+                com.yuyuframe.launcheragent.base.log.LauncherLog.err("[UiRenderer] décor de fond impossible", error);
             }
         }
+    }
+
+    public void beginGlassFrame(int passes, int vpWidth, int vpHeight) {
+        if (glassChainFrozen) return;
+        if (!backdropDrawnOutside) drawFrameBackdrop(vpWidth, vpHeight);
         // Voie vanilla : la chaîne est calculée TOUT DE SUITE et non mise en
         // file — sinon elle arriverait après la soumission de la GUI, et les
         // panneaux échantillonneraient le flou de la frame précédente.

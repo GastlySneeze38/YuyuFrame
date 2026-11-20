@@ -188,6 +188,12 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
             }
             framedBefore = true;
 
+            // Le décor (faux monde hors d'un monde) d'abord, hors des calques :
+            // il ne doit ni s'effacer avec l'écran qui part, ni attendre le
+            // suivant. Remis à faux dans le finally.
+            renderer.drawFrameBackdrop(screenWidth, screenHeight);
+            UiRenderer.backdropDrawnOutside(true);
+
             if (!exiting) {
                 pushEnterLayer(renderer);
                 try {
@@ -231,6 +237,7 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
         } catch (Throwable t) {
             LauncherLog.err("[UiScreenBase] uiFrame: " + t);
         } finally {
+            UiRenderer.backdropDrawnOutside(false);
             // Un calque laissé ouvert par une exception détournerait tout le
             // dessin suivant.
             while (renderer.layerDepth() > depth) renderer.popLayer();

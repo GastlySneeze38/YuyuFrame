@@ -9,6 +9,7 @@ import com.yuyuframe.launcheragent.apigraphic.value.UiTheme;
 import com.yuyuframe.launcheragent.apigraphic.widget.UiWidget;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.i18n.Lang;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiAurora;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiPanel;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiScreenHeader;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiScrollContainer;
@@ -69,6 +70,17 @@ abstract class UiConfigScreenBase extends UiScreenBase {
     /** Dessin d'appoint, après la liste. */
     protected void drawExtras(UiRenderer renderer) {}
 
+    /**
+     * Comme l'accueil (2026-11-20) : pas de voile uniforme presque opaque, le
+     * monde reste visible derrière ; {@code UiAurora} l'assombrit en dégradé.
+     * Sans verre, le fond opaque reste, sinon le texte serait illisible.
+     */
+    @Override
+    protected com.yuyuframe.launcheragent.apigraphic.value.UiColor overlayColor() {
+        return UiRenderer.get(getClass().getClassLoader()).isGlassAvailable()
+            ? com.yuyuframe.launcheragent.apigraphic.value.UiColor.TRANSPARENT : UiTheme.OVERLAY_BG;
+    }
+
     @Override
     public void uiDraw(double mouseX, double mouseY) {
         if (screenWidth > 0 && screenHeight > 0
@@ -79,8 +91,10 @@ abstract class UiConfigScreenBase extends UiScreenBase {
             rebuild();
         }
         UiRenderer renderer = UiRenderer.get(getClass().getClassLoader());
-        // Le flou partagé de l'image, AVANT tout dessin.
+        // Le flou partagé de l'image, AVANT tout dessin, puis le même fond que
+        // l'accueil : le monde reste visible, assombri en dégradé.
         renderer.beginGlassFrame(UiTheme.GLASS_PASSES, screenWidth, screenHeight);
+        if (renderer.isGlassAvailable()) UiAurora.draw(renderer, screenWidth, screenHeight);
         super.uiDraw(mouseX, mouseY);
         try {
             updateActiveSection();
