@@ -203,20 +203,32 @@ public class UiMainMenuScreen extends UiScreenBase {
             UiAurora.draw(renderer, screenWidth, screenHeight);
             // Derrière le panneau vertical de droite seulement (accueil : missions
             // et amis ; amis : la fiche), la bande sombre et son illustration.
+            // Entrée du décor à chaque ouverture de la page. Décor seulement :
+            // rien n'attend la fin, les panneaux sont déjà cliquables.
+            long now = System.nanoTime();
+            // Pas dessiné depuis un moment : on revient sur l'écran (après les
+            // réglages, le jeu…), c'est une nouvelle ouverture.
+            if (bandEnterNanos == 0L || now - bandLastFrame > 300_000_000L) bandEnterNanos = now;
+            bandLastFrame = now;
+            float e = com.yuyuframe.launcheragent.apigraphic.anim.UiEasing.UI_OUT.apply(
+                Math.min(1f, (now - bandEnterNanos) / 1e9f / BAND_ENTER_S));
+            // Pages horizontales (modules, missions) : les losanges montent du
+            // bas en apparaissant (y vers le haut : un décalage négatif = plus bas).
+            if (tab == Tab.MODULES || tab == Tab.MISSIONS) {
+                float peaksH = screenHeight * com.yuyuframe.launcheragent.runtime.ui.ingameui.component.BackdropPeaks.HEIGHT_SHARE;
+                renderer.pushLayer(e, 1f, screenWidth / 2f, 0f, 0f, -(1f - e) * peaksH * 0.35f);
+                try {
+                    com.yuyuframe.launcheragent.runtime.ui.ingameui.component.BackdropPeaks.draw(renderer,
+                        0f, 0f, screenWidth, peaksH, screenWidth, screenHeight);
+                } finally {
+                    renderer.popLayer();
+                }
+            }
             if (homeRight != null && (tab == Tab.HOME || tab == Tab.FRIENDS)) {
                 // Le passage en fondu se termine juste avant la colonne : elle est posée sur le fond plein.
                 float bandX = homeRight.x - px(UiTheme.Space.S32)
                     - com.yuyuframe.launcheragent.runtime.ui.ingameui.component.BackdropWords.fadeWidth();
-                // Entrée à chaque ouverture de la page : la bande glisse de la
-                // droite vers sa place en apparaissant. Décor seulement : rien
-                // n'attend la fin, les panneaux sont déjà cliquables.
-                long now = System.nanoTime();
-                // Pas dessinée depuis un moment : on revient sur l'écran (après les
-                // réglages, le jeu…), c'est une nouvelle ouverture.
-                if (bandEnterNanos == 0L || now - bandLastFrame > 300_000_000L) bandEnterNanos = now;
-                bandLastFrame = now;
-                float t = Math.min(1f, (now - bandEnterNanos) / 1e9f / BAND_ENTER_S);
-                float e = com.yuyuframe.launcheragent.apigraphic.anim.UiEasing.UI_OUT.apply(t);
+                // La bande glisse de la droite vers sa place en apparaissant.
                 float bandW = screenWidth - bandX;
                 renderer.pushLayer(e, 1f, screenWidth, screenHeight / 2f, (1f - e) * bandW * 0.35f, 0f);
                 try {
