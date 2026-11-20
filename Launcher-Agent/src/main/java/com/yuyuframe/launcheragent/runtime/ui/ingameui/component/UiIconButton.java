@@ -33,6 +33,14 @@ public class UiIconButton extends UiInteractive {
         return this;
     }
 
+    private boolean round;
+
+    /** Bulle ronde au lieu du carré : les boutons de la navigation flottante de l'accueil. */
+    public UiIconButton round() {
+        this.round = true;
+        return this;
+    }
+
     @Override
     public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
         if (w <= 0f || h <= 0f) return;
@@ -43,7 +51,9 @@ public class UiIconButton extends UiInteractive {
 
         UiColor hot = danger ? UiTheme.DANGER.multiplyAlpha(0.45f) : UiTheme.CARD_HOVER;
         UiColor rim = danger ? UiTheme.DANGER : UiTheme.GLASS_BORDER_HOVER;
+        float radius = round ? Math.min(bw, bh) / 2f : UiTheme.RADIUS_SM;
         UiSurface.field(UiColor.lerp(UiTheme.CARD_BG, hot, hover))
+            .radius(radius)
             .border(UiColor.lerp(UiTheme.GLASS_BORDER, rim, hover))
             .draw(renderer, bx, by, bw, bh, vpWidth, vpHeight);
 
@@ -51,7 +61,7 @@ public class UiIconButton extends UiInteractive {
         if (pulse >= 0f) {
             float spread = UiTheme.px(UiTheme.Space.S4) * pulse;
             renderer.drawRoundedRect(bx - spread, by - spread, bx + bw + spread, by + bh + spread,
-                UiTheme.RADIUS_SM + spread,
+                radius + spread,
                 (danger ? UiTheme.DANGER : UiTheme.ACCENT).withAlpha(0.30f * Math.max(0f, 1f - pulse)), vpWidth, vpHeight);
         }
 

@@ -13,9 +13,10 @@ import java.util.function.IntSupplier;
 import static com.yuyuframe.launcheragent.apigraphic.value.UiTheme.px;
 
 /**
- * Un onglet de la barre du haut : un mot, et une pilule teintée d'accent
- * quand il est ouvert. Un compteur facultatif (missions en cours) se pose
- * après le mot, en pastille d'accent.
+ * Un onglet de la navigation flottante : un mot, blanc quand il est ouvert
+ * (la pastille d'accent sous lui est celle de {@link TopBar}, qui glisse
+ * d'un onglet à l'autre). Un compteur facultatif (missions en cours) se pose
+ * après le mot, en pastille dégradée.
  */
 public final class NavTab extends UiInteractive {
 
@@ -30,6 +31,8 @@ public final class NavTab extends UiInteractive {
         this.count = count;
         this.action = action;
     }
+
+    public boolean isActive() { return active; }
 
     /** Largeur voulue : le mot, la pastille, et le rembourrage. */
     public float preferredWidth() {
@@ -52,15 +55,16 @@ public final class NavTab extends UiInteractive {
     public void draw(UiRenderer r, double mouseX, double mouseY, int vw, int vh) {
         if (w <= 0f || h <= 0f) return;
         updateStates(mouseX, mouseY);
-        float radius = px(UiTheme.Space.S12);
-        if (active) {
-            r.drawRoundedRect(x, y, x + w, y + h, radius, UiTheme.ACCENT.withAlpha(0.26f), vw, vh);
-        } else if (hover > 0.01f) {
-            // Un cran sous l'onglet ouvert : même teinte, moitié moins dense.
-            r.drawRoundedRect(x, y, x + w, y + h, radius, UiTheme.ACCENT.withAlpha(0.13f * hover), vw, vh);
+        // L'onglet ouvert n'a pas de fond à lui : la pastille qui glisse
+        // d'un onglet à l'autre est dessinée par la barre (TopBar). Les
+        // autres prennent un voile clair au survol, et s'enfoncent au clic.
+        float sink = press * px(UiTheme.Space.S1);
+        float bx0 = x + sink, by0 = y + sink, bx1 = x + w - sink, by1 = y + h - sink;
+        if (!active && hover > 0.01f) {
+            r.drawRoundedRect(bx0, by0, bx1, by1, (by1 - by0) / 2f, new UiColor(255, 255, 255, Math.round(16 * hover)), vw, vh);
         }
         float s = scale();
-        UiColor color = active ? UiTheme.TEXT_PRIMARY : UiColor.lerp(UiTheme.TEXT_MUTED, UiTheme.TEXT_PRIMARY, hover);
+        UiColor color = active ? UiTheme.TEXT_ON_ACCENT : UiColor.lerp(UiTheme.TEXT_MUTED, UiTheme.TEXT_PRIMARY, hover);
         String text = Lang.tr(label);
         float tx = x + px(UiTheme.Space.S18);
         r.drawText(UiFont.BOLD, text, tx, UiText.centeredBaseline(UiFont.BOLD, y, h, s), color, s, vw, vh);
@@ -69,7 +73,13 @@ public final class NavTab extends UiInteractive {
         if (n > 0) {
             float bw = badgeWidth(n), bh = px(UiTheme.Space.S20);
             float bx = tx + UiText.width(UiFont.BOLD, text, s) + px(UiTheme.Space.S8), by = y + (h - bh) / 2f;
-            r.drawRoundedRect(bx, by, bx + bw, by + bh, px(UiTheme.Space.S6), UiTheme.ACCENT, vw, vh);
+            if (active) {
+                r.drawRoundedRect(bx, by, bx + bw, by + bh, bh / 2f, new UiColor(255, 255, 255, 60), vw, vh);
+            } else {
+                // Pastille en dégradé, du rose vers l'accent.
+                UiColor pink = new UiColor(255, 138, 216, 255);
+                r.drawGradientRect2D(bx, by, bx + bw, by + bh, bh / 2f, pink, UiTheme.ACCENT, pink, UiTheme.ACCENT, vw, vh);
+            }
             float bs = px(UiTheme.Text.XS);
             UiText.drawCentered(r, UiFont.BOLD, String.valueOf(n), bx, bw,
                 UiText.centeredBaseline(UiFont.BOLD, by, bh, bs), UiTheme.TEXT_ON_ACCENT, bs, vw, vh);

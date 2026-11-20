@@ -2,6 +2,7 @@ package com.yuyuframe.launcheragent.runtime.ui.ingameui.component;
 
 import com.yuyuframe.launcheragent.apigraphic.anim.UiAnimatedFloat;
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
+import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
 import com.yuyuframe.launcheragent.apigraphic.widget.UiHitTest;
 import com.yuyuframe.launcheragent.apigraphic.widget.UiOverlayStack;
 import com.yuyuframe.launcheragent.apigraphic.platform.UiInputPoller;
@@ -72,9 +73,32 @@ public class UiScrollContainer {
     // un bord du viewport — voir clipFade dans la javadoc de classe.
     private final float EDGE_FADE_ZONE = UiTheme.scaled(46f);
 
-    private final float SCROLLBAR_W = UiTheme.scaled(6f);
-    private final float SCROLLBAR_MARGIN = UiTheme.scaled(4f);
-    private final float SCROLLBAR_MIN_H = UiTheme.scaled(24f);
+    // La barre de défilement (refaite le 2026-11-20) : au repos un fil de
+    // 2 px à moitié transparent ; au survol, en défilant ou en la tirant,
+    // elle s'élargit en dégradé d'accent lumineux et sa piste apparaît. Une
+    // liste découpée en sections y pose un point par section (voir
+    // setSections) : le point de la section courante s'allume, son nom
+    // apparaît au survol, un clic y saute.
+    private final float RAIL_IDLE_W = UiTheme.scaled(2f);
+    private final float RAIL_ACTIVE_W = UiTheme.scaled(6f);
+    private final float RAIL_DRAG_W = UiTheme.scaled(8f);
+    /** Demi-largeur de la zone qu'on survole et qu'on clique autour du fil. */
+    private final float RAIL_HIT = UiTheme.scaled(11f);
+    private final float RAIL_INSET = UiTheme.scaled(6f);
+    private final float MARK_SIZE = UiTheme.scaled(8f);
+    private final float SCROLLBAR_MIN_H = UiTheme.scaled(40f);
+
+    /** Abscisse du fil (écran) ; {@code NaN} = juste à l'intérieur du bord droit de la liste. */
+    private float railCenterX = Float.NaN;
+    private final UiAnimatedFloat railActive = new UiAnimatedFloat(0f, UiTheme.Motion.HOVER);
+    private final UiAnimatedFloat railDrag = new UiAnimatedFloat(0f, UiTheme.Motion.HOVER);
+
+    private final List<String> sectionNames = new ArrayList<>();
+    private final List<Float> sectionAnchors = new ArrayList<>();
+    private final List<UiAnimatedFloat> sectionLit = new ArrayList<>();
+    private int hoveredMark = -1;
+    private final UiAnimatedFloat labelAnim = new UiAnimatedFloat(0f, UiTheme.Motion.HOVER);
+    private int labelMark = -1;
 
     // Accélération molette — deux crans consécutifs dans la MÊME direction en
     // moins de ACCEL_WINDOW_MS augmentent le pas effectif, jusqu'à un
@@ -87,12 +111,9 @@ public class UiScrollContainer {
     private int lastScrollSign;
     private float scrollVelocity = 1f;
 
-    // Fondu d'activité de la scrollbar (façon overlay scrollbar macOS/Win11) —
-    // pleine opacité pendant/juste après une interaction, sinon estompée sans
-    // jamais disparaître complètement (reste repérable).
+    // La barre s'éveille pendant une interaction et juste après, puis
+    // redevient un fil (sans jamais disparaître : elle reste repérable).
     private static final long IDLE_FADE_DELAY_MS = 900L;
-    private static final float IDLE_ALPHA = 0.35f;
-    private final UiAnimatedFloat scrollbarAlpha = new UiAnimatedFloat(1f, 6f);
     private long lastActivityAtMs;
 
     private final UiAnimatedFloat thumbHoverAnim = new UiAnimatedFloat(0f, 14f);
@@ -124,6 +145,59 @@ public class UiScrollContainer {
         }
         content.add(w);
         baseY.add(w.y);
+    }
+
+    /**
+     * Pose le fil de la barre à cette abscisse (écran) au lieu du bord de la
+     * liste — l'accueil le colle au bord droit de la fenêtre.
+     */
+    public UiScrollContainer railAt(float centerX) {
+        this.railCenterX = centerX;
+        return this;
+    }
+
+    /**
+     * Les sections de la liste, dans l'ordre : leur nom (déjà traduit) et le
+     * haut de leur en-tête, dans le même repère que {@link #scrollToAnchor}.
+     * Un point par section sur la barre.
+     */
+    public void setSections(List<String> names, List<Float> anchorTops) {
+        sectionNames.clear();
+        sectionAnchors.clear();
+        sectionLit.clear();
+        int n = Math.min(names.size(), anchorTops.size());
+        for (int i = 0; i < n; i++) {
+            sectionNames.add(names.get(i));
+            sectionAnchors.add(anchorTops.get(i));
+            sectionLit.add(new UiAnimatedFloat(0f, UiTheme.Motion.HOVER));
+        }
+    }
+
+    /** Ajoute une section : {@code header} est son en-tête, déjà ajouté à la liste. */
+    public void addSection(String name, UiWidget header) {
+        sectionNames.add(name);
+        sectionAnchors.add(header.y + header.h);
+        sectionLit.add(new UiAnimatedFloat(0f, UiTheme.Motion.HOVER));
+    }
+
+    private float railX() {
+        return Float.isNaN(railCenterX) ? vx + vw - RAIL_INSET : railCenterX;
+    }
+
+    /** Hauteur (écran) du point de la section {@code i} sur la barre. */
+    private float markY(int i) {
+        return vy + vh - baseYFraction(sectionAnchors.get(i)) * vh;
+    }
+
+    /** La section où l'on se trouve : la dernière dont l'en-tête est passé sous le haut de la liste. */
+    private int currentSection() {
+        if (sectionAnchors.isEmpty()) return -1;
+        if (scrollProgress() >= 0.999f) return sectionAnchors.size() - 1;
+        int current = 0;
+        for (int i = 0; i < sectionAnchors.size(); i++) {
+            if (contentTop - sectionAnchors.get(i) <= lastAnimatedScroll + UiTheme.scaled(40f)) current = i;
+        }
+        return current;
     }
 
     public void clear() {
@@ -284,19 +358,27 @@ public class UiScrollContainer {
         }
 
         boolean overScrollbarArea = false;
+        hoveredMark = -1;
         if (hasScrollbar()) {
             float th = thumbHeight();
-            float tx = vx + vw - SCROLLBAR_W - SCROLLBAR_MARGIN;
-            float hitPad = UiTheme.scaled(3f);
-            overScrollbarArea = input.mouseX >= tx - hitPad && input.mouseX <= tx + SCROLLBAR_W + hitPad
+            float cx = railX();
+            overScrollbarArea = Math.abs(input.mouseX - cx) <= RAIL_HIT
                 && input.mouseY >= vy && input.mouseY <= vy + vh;
+            if (overScrollbarArea && !thumbDragging) {
+                for (int i = 0; i < sectionAnchors.size(); i++) {
+                    if (Math.abs(input.mouseY - markY(i)) <= MARK_SIZE) hoveredMark = i;
+                }
+            }
 
             if (!thumbDragging) {
                 float ty = thumbY(lastAnimatedScroll);
                 boolean overThumb = overScrollbarArea && input.mouseY >= ty && input.mouseY <= ty + th;
                 thumbHoverAnim.setTarget(overThumb ? 1f : 0f);
 
-                if (input.leftClicked && overThumb) {
+                if (input.leftClicked && hoveredMark >= 0) {
+                    // Un point de section : on y saute.
+                    scrollToAnchor(sectionAnchors.get(hoveredMark));
+                } else if (input.leftClicked && overThumb) {
                     thumbDragging = true;
                     lastDragMouseY = (float) input.mouseY;
                     markActivity();
@@ -332,7 +414,8 @@ public class UiScrollContainer {
 
         if (overScrollbarArea || thumbDragging) markActivity();
         boolean idle = System.currentTimeMillis() - lastActivityAtMs > IDLE_FADE_DELAY_MS;
-        scrollbarAlpha.setTarget(idle ? IDLE_ALPHA : 1f);
+        railActive.setTarget(idle ? 0f : 1f);
+        railDrag.setTarget(thumbDragging ? 1f : 0f);
 
         applyOffsets();
 
@@ -391,7 +474,9 @@ public class UiScrollContainer {
             // la liste déroulée traite son clic elle-même, puis cette recherche
             // trouvait le réglage qu'elle RECOUVRE et lui envoyait le même clic.
             // Un clic sur un panneau flottant ne touche plus rien d'autre.
-            UiWidget clicked = overViewport && !overFloating ? UiHitTest.find(visibleNow, input.mouseX, input.mouseY) : null;
+            // Un clic sur la barre (fil, point de section) est pour elle seule.
+            UiWidget clicked = overViewport && !overFloating && !overScrollbarArea
+                ? UiHitTest.find(visibleNow, input.mouseX, input.mouseY) : null;
 
             // PERTE DE FOCUS au clic extérieur — même règle que
             // UiScreenBase.dispatchClick, qui ne pouvait pas l'appliquer ici :
@@ -462,15 +547,67 @@ public class UiScrollContainer {
 
     private void drawScrollbar(UiRenderer renderer, int vpWidth, int vpHeight) {
         if (!hasScrollbar()) return;
-        float alpha = scrollbarAlpha.get();
+        float a = railActive.get();
+        float drag = railDrag.get();
+        float hoverThumb = thumbHoverAnim.get();
+        float cx = railX();
+
+        // La piste : un trait fin, seulement quand la barre est éveillée.
+        float trackW = UiTheme.hairline() * 2f;
+        if (a > 0.01f) {
+            renderer.drawRoundedRect(cx - trackW / 2f, vy, cx + trackW / 2f, vy + vh, trackW / 2f,
+                new UiColor(255, 255, 255, Math.round(18 * a)), vpWidth, vpHeight);
+        }
+
+        // Les points de section, sous le pouce : petits au repos, pleins éveillés.
+        int current = currentSection();
+        for (int i = 0; i < sectionAnchors.size(); i++) {
+            UiAnimatedFloat lit = sectionLit.get(i);
+            lit.setTarget(i == current ? 1f : 0f);
+            float l = lit.get();
+            float hov = i == hoveredMark ? 1f : 0f;
+            float size = MARK_SIZE * (0.55f + 0.45f * Math.max(a, hov));
+            float my = markY(i);
+            UiColor dot = UiColor.lerp(new UiColor(255, 255, 255, 60), UiTheme.accentLight(), Math.max(l, hov));
+            renderer.drawRoundedRect(cx - size / 2f, my - size / 2f, cx + size / 2f, my + size / 2f, size / 2f,
+                dot.multiplyAlpha(0.5f + 0.5f * Math.max(a, l)), vpWidth, vpHeight);
+        }
+
+        // Le pouce : un fil au repos, une gélule en dégradé d'accent éveillée.
+        float w = RAIL_IDLE_W + (RAIL_ACTIVE_W - RAIL_IDLE_W) * Math.max(a, hoverThumb)
+            + (RAIL_DRAG_W - RAIL_ACTIVE_W) * drag;
         float th = thumbHeight();
-        float tx = vx + vw - SCROLLBAR_W - SCROLLBAR_MARGIN;
         float ty = thumbY(lastAnimatedScroll);
-        renderer.drawRoundedRect(tx, vy, tx + SCROLLBAR_W, vy + vh, SCROLLBAR_W / 2f,
-            UiTheme.TRACK_OFF.multiplyAlpha(alpha), vpWidth, vpHeight);
-        UiColor thumbColor = thumbDragging ? UiTheme.ACCENT
-            : UiColor.lerp(UiTheme.TEXT_MUTED, UiTheme.TEXT_SECONDARY, thumbHoverAnim.get());
-        renderer.drawRoundedRect(tx, ty, tx + SCROLLBAR_W, ty + th, SCROLLBAR_W / 2f,
-            thumbColor.multiplyAlpha(alpha), vpWidth, vpHeight);
+        float alpha = 0.45f + 0.55f * Math.max(a, hoverThumb);
+        if (a > 0.01f) {
+            renderer.drawGlow(cx - w / 2f, ty, cx + w / 2f, ty + th, w / 2f, 0.55f * a,
+                UiTheme.ACCENT.withAlpha(0.55f), vpWidth, vpHeight);
+        }
+        renderer.drawGradientRect(cx - w / 2f, ty, cx + w / 2f, ty + th, w / 2f,
+            UiTheme.ACCENT.multiplyAlpha(alpha), UiTheme.accentLight().multiplyAlpha(alpha), vpWidth, vpHeight);
+
+        // Le nom de la section survolée, dans une bulle à gauche du fil.
+        if (hoveredMark >= 0) labelMark = hoveredMark;
+        labelAnim.setTarget(hoveredMark >= 0 ? 1f : 0f);
+        float la = labelAnim.get();
+        if (la > 0.02f && labelMark >= 0 && labelMark < sectionNames.size()) {
+            String name = sectionNames.get(labelMark);
+            float s = UiTheme.px(UiTheme.Text.SM);
+            float pad = UiTheme.px(UiTheme.Space.S10);
+            float bw = UiText.width(UiFont.BOLD, name, s) + pad * 2f;
+            float bh = UiTheme.px(UiTheme.Space.S28);
+            float my = markY(labelMark);
+            // Elle sort du point vers la gauche : glisse de quelques pixels en apparaissant.
+            float bx2 = cx - RAIL_HIT - UiTheme.px(UiTheme.Space.S4) + (1f - la) * UiTheme.px(UiTheme.Space.S6);
+            float bx1 = bx2 - bw, by1 = my - bh / 2f;
+            renderer.drawShadow(bx1, by1, bx2, by1 + bh, bh / 2f, 12f, 0f, new UiColor(0, 0, 0, Math.round(110 * la)),
+                vpWidth, vpHeight);
+            renderer.drawRoundedRect(bx1, by1, bx2, by1 + bh, bh / 2f, UiTheme.PANEL_BG_ALT.multiplyAlpha(la),
+                vpWidth, vpHeight);
+            renderer.drawRoundedRectBorder(bx1, by1, bx2, by1 + bh, bh / 2f, UiTheme.hairline(),
+                UiTheme.ACCENT.withAlpha(0.35f * la), vpWidth, vpHeight);
+            renderer.drawText(UiFont.BOLD, name, bx1 + pad, UiText.centeredBaseline(UiFont.BOLD, by1, bh, s),
+                UiTheme.TEXT_PRIMARY.multiplyAlpha(la), s, vpWidth, vpHeight);
+        }
     }
 }

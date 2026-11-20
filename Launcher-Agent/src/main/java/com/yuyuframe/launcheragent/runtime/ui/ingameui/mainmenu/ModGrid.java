@@ -167,6 +167,8 @@ public final class ModGrid {
         title.w = r.w;
         title.h = r.h;
         scroll.add(title);
+        // Un point sur la barre de défilement, qui mène à cette section.
+        scroll.addSection(Lang.tr(label), title);
     }
 
     private void emit(UiScrollContainer scroll, UiLayout.Result result, Slot slot, float ox, int layoutMode, int index) {

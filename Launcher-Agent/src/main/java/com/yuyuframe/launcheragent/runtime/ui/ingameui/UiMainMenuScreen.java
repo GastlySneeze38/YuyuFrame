@@ -51,7 +51,7 @@ import static com.yuyuframe.launcheragent.apigraphic.value.UiTheme.px;
 /**
  * Le menu YuyuFrame, en plein écran : une barre de verre en haut (la marque,
  * les onglets, la recherche, les réglages, la croix), et dessous l'onglet
- * ouvert, posé sur le monde flouté et ses lueurs d'accent ({@link UiAurora}).
+ * ouvert, posé sur le monde net et légèrement voilé ({@link UiAurora}).
  *
  * <h2>Les onglets</h2>
  *
@@ -112,7 +112,30 @@ public class UiMainMenuScreen extends UiScreenBase {
             // Chercher, c'est vouloir la grille : l'onglet Modules s'ouvre de lui-même.
             if (!v.trim().isEmpty() && tab != Tab.MODULES) tab = Tab.MODULES;
             requestRebuild();
-        }).searchIcon();
+        }).searchIcon().pill();
+    }
+
+    /** Ouverture de la recherche : 0 = bulle ronde (la loupe), 1 = champ déplié. */
+    private final com.yuyuframe.launcheragent.apigraphic.anim.UiAnimatedFloat searchOpen =
+        new com.yuyuframe.launcheragent.apigraphic.anim.UiAnimatedFloat(0f, UiTheme.Motion.UNFOLD);
+    /** La place réservée à la recherche dépliée (bord droit fixe, la bulle s'étire vers la gauche). */
+    private float searchSlotRight, searchSlotW;
+
+    /**
+     * La recherche est une bulle qui s'étire en champ quand on clique dessus,
+     * et se replie quand elle perd le focus sans texte. Rien de plus qu'un
+     * champ dont on anime la largeur : un clic sur la bulle lui donne le
+     * focus comme à n'importe quel champ.
+     */
+    private void layoutSearch(boolean snap) {
+        if (searchSlotW <= 0f) return;
+        float target = searchField.focused() || !searchField.text().isEmpty() ? 1f : 0f;
+        if (snap) searchOpen.snapTo(target); else searchOpen.setTarget(target);
+        float o = searchOpen.get();
+        float h = searchField.h;
+        float width = h + (searchSlotW - h) * o;
+        searchField.x = searchSlotRight - width;
+        searchField.w = width;
     }
 
     /** Refaire la mise en page à la prochaine image (jamais au milieu d'une distribution de clics). */
@@ -134,8 +157,8 @@ public class UiMainMenuScreen extends UiScreenBase {
     }
 
     /**
-     * Pas de voile uniforme : {@link UiAurora} assombrit le monde en dégradé
-     * et y pose ses lueurs. Sans verre (pas de flou possible), le fond opaque
+     * Pas de voile uniforme : {@link UiAurora} assombrit légèrement le monde
+     * en dégradé. Sans verre (pas de flou possible), le fond opaque
      * d'avant reste, sinon le texte serait illisible sur le jeu en mouvement.
      */
     @Override
@@ -164,8 +187,9 @@ public class UiMainMenuScreen extends UiScreenBase {
         if (tab == Tab.FRIENDS) GameFriends.keepFresh();
         UiRenderer renderer = UiRenderer.get(getClass().getClassLoader());
         // Le flou partagé par toutes les surfaces de verre, AVANT tout dessin :
-        // il doit capturer le monde seul. Les lueurs viennent juste après.
+        // il doit capturer le monde seul. Le voile du fond vient juste après.
         renderer.beginGlassFrame(UiTheme.GLASS_PASSES, screenWidth, screenHeight);
+        layoutSearch(false);
         if (renderer.isGlassAvailable()) UiAurora.draw(renderer, screenWidth, screenHeight);
         super.uiDraw(mouseX, mouseY);
         try {
@@ -201,11 +225,9 @@ public class UiMainMenuScreen extends UiScreenBase {
         modScroll = null;
         quickTitleX = -1f;
 
-        float barH = px(76f);
-        float control = px(42f);
         float sideMargin = px(64f);
 
-        // ── La barre du haut ─────────────────────────────────────────────
+        // ── La navigation flottante (voir TopBar) ────────────────────────
         TopBar bar = new TopBar();
         NavTab home = new NavTab("Accueil", tab == Tab.HOME, null, () -> open(Tab.HOME));
         NavTab modules = new NavTab("Modules", tab == Tab.MODULES, null, () -> open(Tab.MODULES));
@@ -213,20 +235,35 @@ public class UiMainMenuScreen extends UiScreenBase {
         NavTab friends = new NavTab("Amis", tab == Tab.FRIENDS, null, () -> open(Tab.FRIENDS));
         NavTab hud = new NavTab("HUD", false, null, () -> closeTo(new UiHudEditorScreen(this)));
         UiIconButton settings = new UiIconButton(LauncherModule.icons8("settings"),
-            () -> closeTo(new UiModConfigScreen(this, GlobalUiSettings.INSTANCE)));
+            () -> closeTo(new UiModConfigScreen(this, GlobalUiSettings.INSTANCE))).round();
         settings.tooltip(Lang.tr("Paramètres"));
-        UiCloseButton close = new UiCloseButton(() -> closeTo(lastScreen));
+        UiIconButton close = new UiCloseButton(() -> closeTo(lastScreen)).round();
+
+        float bubble = TopBar.bubbleSize();
+        float capPad = TopBar.capsulePad();
+        float tabH = bubble - capPad * 2f;
+        float tabGap = px(UiTheme.Space.S2);
+        NavTab[] navTabs = { home, modules, missions, friends, hud };
 
         Box root = UiLayout.column().size(screenWidth, screenHeight);
-        Box barBox = root.add(UiLayout.row().widthPct(100f).height(barH).rigid().alignItems("center").gap(px(UiTheme.Space.S6))
-            .pad(0f, px(UiTheme.Space.S32), 0f, px(UiTheme.Space.S40) + TopBar.brandWidth()).bind(bar));
-        for (NavTab t : new NavTab[]{ home, modules, missions, friends, hud }) {
-            barBox.add(UiLayout.fixed(t.preferredWidth(), control).bind(t));
-        }
+        // Pas de bande : une rangée transparente, décollée du haut.
+        Box barBox = root.add(UiLayout.row().widthPct(100f).height(bubble).rigid().alignItems("center")
+            .margin(px(UiTheme.Space.S18), 0f, 0f, 0f).pad(0f, px(UiTheme.Space.S28), 0f, px(UiTheme.Space.S28)).bind(bar));
+        Box brandBox = barBox.add(UiLayout.fixed(bubble, bubble));
         barBox.add(UiLayout.spacer());
-        barBox.add(UiLayout.box().width(px(300f)).height(control).shrink(1f).minWidth(px(140f)).bind(searchField));
-        barBox.add(UiLayout.fixed(control, control).margin(0f, 0f, 0f, px(UiTheme.Space.S6)).bind(settings));
-        barBox.add(UiLayout.fixed(control, control).bind(close));
+        // À droite : la recherche (une bulle qui s'étire, voir layoutSearch), puis les boutons.
+        Box tools = barBox.add(UiLayout.row().rigid().alignItems("center").gap(px(UiTheme.Space.S8)));
+        tools.add(UiLayout.box().width(px(280f)).height(bubble).rigid().bind(searchField));
+        tools.add(UiLayout.fixed(bubble, bubble).bind(settings));
+        tools.add(UiLayout.fixed(bubble, bubble).bind(close));
+        // Au centre : la capsule des onglets, centrée sur la fenêtre et non entre les deux côtés.
+        float capW = capPad * 2f + tabGap * (navTabs.length - 1);
+        for (NavTab t : navTabs) capW += t.preferredWidth();
+        Box capsule = barBox.add(UiLayout.row().absolute(0f, null, null, (screenWidth - capW) / 2f).size(capW, bubble)
+            .alignItems("center").gap(tabGap).pad(0f, capPad, 0f, capPad));
+        for (NavTab t : navTabs) {
+            capsule.add(UiLayout.fixed(t.preferredWidth(), tabH).bind(t));
+        }
 
         // ── L'onglet ─────────────────────────────────────────────────────
         Box content = root.add(UiLayout.box().grow(1f).widthPct(100f));
@@ -243,6 +280,12 @@ public class UiMainMenuScreen extends UiScreenBase {
             // Déjà journalisé : sans mise en page, seul Échap ferme l'écran.
             return;
         }
+
+        bar.brand(layout.rect(brandBox));
+        bar.capsule(layout.rect(capsule), java.util.Arrays.asList(navTabs));
+        searchSlotRight = searchField.x + searchField.w;
+        searchSlotW = searchField.w;
+        layoutSearch(true);
 
         // Ordre d'ajout = ordre de dessin ; le clic va au plus petit widget sous la souris.
         widgets.add(bar);
@@ -410,10 +453,11 @@ public class UiMainMenuScreen extends UiScreenBase {
                 (e.isFavorite() ? favorites : others).add(e);
             }
             boolean separated = GlobalUiSettings.INSTANCE.separateFavorites && !favorites.isEmpty() && !others.isEmpty();
-            modScroll = new UiScrollContainer(vp.x, vp.y, vp.w, Math.max(1f, vp.h));
-            // La barre de défilement se dessine au bord droit du cadre : les cartes lui laissent sa place.
-            float scrollbarReserve = px(UiTheme.Space.S20);
-            grid.build(modScroll, vp.x, vp.w - scrollbarReserve, favorites, others, separated, GlobalUiSettings.INSTANCE.cardLayout);
+            // La barre de défilement est collée au bord droit de la fenêtre,
+            // dans la marge : les cartes gardent toute la largeur.
+            modScroll = new UiScrollContainer(vp.x, vp.y, vp.w, Math.max(1f, vp.h))
+                .railAt(screenWidth - px(UiTheme.Space.S16));
+            grid.build(modScroll, vp.x, vp.w, favorites, others, separated, GlobalUiSettings.INSTANCE.cardLayout);
             modScroll.restoreScroll(parts.previousScroll);
         });
     }

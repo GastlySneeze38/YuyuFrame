@@ -71,6 +71,18 @@ public class UiTextField extends UiWidget implements UiFocusable {
         return this;
     }
 
+    private boolean pill;
+
+    /** Gélule (coins ronds sur toute la hauteur) au lieu du rectangle arrondi. Fluent. */
+    public UiTextField pill() {
+        this.pill = true;
+        return this;
+    }
+
+    private float radius() {
+        return pill ? h / 2f : UiTheme.RADIUS_SM;
+    }
+
     /**
      * Masque le contenu à l'affichage (mot de passe) — le texte RÉEL reste
      * intact, seul le rendu change. Fluent.
@@ -283,12 +295,12 @@ public class UiTextField extends UiWidget implements UiFocusable {
         UiColor ringColor = UiColor.lerp(
             renderer.isGlassAvailable() ? UiTheme.GLASS_BORDER : UiColor.TRANSPARENT,
             UiTheme.ACCENT, Math.max(ringT, hoverT * 0.45f));
-        renderer.drawGlassPanel(x, y, x + w, y + h, UiTheme.RADIUS_SM,
+        renderer.drawGlassPanel(x, y, x + w, y + h, radius(),
             UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_FIELD, UiTheme.PANEL_BG_ALT,
             ringColor, Math.max(1f, UiTheme.scaled(1f)) + ringT * 0.5f, vpWidth, vpHeight);
         // Le fond du focus arrive et repart en fondu.
         if (ringT > 0.01f) {
-            renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, UiTheme.ACCENT_DIM.multiplyAlpha(ringT), vpWidth, vpHeight);
+            renderer.drawRoundedRect(x, y, x + w, y + h, radius(), UiTheme.ACCENT_DIM.multiplyAlpha(ringT), vpWidth, vpHeight);
         }
 
 
@@ -300,13 +312,20 @@ public class UiTextField extends UiWidget implements UiFocusable {
         if (searchIcon) {
             float iconSize = h * 0.5f;
             float iconX = x + UiTheme.scaled(8f) + (iconAreaWidth() - iconSize) / 2f;
+            // Repliée en bulle (pas plus large que haute) : la loupe au centre.
+            if (w <= h * 1.25f) iconX = x + (w - iconSize) / 2f;
             float iconY = y + (h - iconSize) / 2f;
             renderer.drawIcon(focused ? "ui:search-glyph-active" : "ui:search-glyph-muted",
                 searchGlyph(focused), iconX, iconY, iconSize, vpWidth, vpHeight);
         }
 
         if (text.length() == 0 && !focused) {
-            if (placeholder != null) renderer.drawText(placeholder, x + textPad, baseline, UiTheme.TEXT_MUTED, scale, vpWidth, vpHeight);
+            // Un champ qui se replie (la recherche de l'accueil) : le texte
+            // d'invite n'apparaît que s'il tient, sinon il déborderait.
+            if (placeholder != null
+                    && renderer.textWidth(UiFont.REGULAR, placeholder, scale) <= w - textPad - UiTheme.scaled(8f)) {
+                renderer.drawText(placeholder, x + textPad, baseline, UiTheme.TEXT_MUTED, scale, vpWidth, vpHeight);
+            }
             return;
         }
 

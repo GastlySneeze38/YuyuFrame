@@ -91,6 +91,7 @@ public final class FriendsList {
             title.w = width;
             title.h = titleH;
             scroll.add(title);
+            scroll.addSection(Lang.tr((String) s[0]), title);
             y -= titleH + px(UiTheme.Space.S12);
 
             int cols = Math.max(1, Math.min(maxCols, (int) Math.floor((width + gap) / (minW + gap))));
