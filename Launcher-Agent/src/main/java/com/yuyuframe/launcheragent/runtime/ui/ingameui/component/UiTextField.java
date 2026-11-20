@@ -49,7 +49,7 @@ public class UiTextField extends UiWidget implements UiFocusable {
     /** Ancre de sélection ; {@code -1} = pas de sélection. Plage sélectionnée = [min(anchor,caret), max(anchor,caret)]. */
     private int selAnchor = -1;
     private final UiAnimatedFloat clearHoverAnim = new UiAnimatedFloat(0f, 16f);
-    private final UiAnimatedFloat focusAnim = new UiAnimatedFloat(0f, 10f);
+    private final UiAnimatedFloat focusAnim = new UiAnimatedFloat(0f, UiTheme.Motion.HOVER);
     private final UiAnimatedFloat fieldHoverAnim = new UiAnimatedFloat(0f, 16f);
     /** Position affichée du curseur, en pixels depuis le début du texte visible — elle glisse vers la vraie. */
     private final UiAnimatedFloat caretX = new UiAnimatedFloat(0f, 30f);

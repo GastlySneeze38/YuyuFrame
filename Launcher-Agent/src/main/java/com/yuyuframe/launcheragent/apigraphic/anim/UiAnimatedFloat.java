@@ -17,11 +17,22 @@ public final class UiAnimatedFloat {
     private float target;
     private long lastNanos;
     private final float speed;
+    /** Vitesse quand la valeur redescend (relâchement, fin de survol). */
+    private final float speedDown;
 
     public UiAnimatedFloat(float initial, float speed) {
+        this(initial, speed, speed);
+    }
+
+    /**
+     * Vitesses différentes à la montée et à la descente : un appui doit
+     * claquer, son relâchement se reposer.
+     */
+    public UiAnimatedFloat(float initial, float speedUp, float speedDown) {
         this.current = initial;
         this.target = initial;
-        this.speed = speed;
+        this.speed = speedUp;
+        this.speedDown = speedDown;
         this.lastNanos = System.nanoTime();
     }
 
@@ -43,7 +54,8 @@ public final class UiAnimatedFloat {
         if (Math.abs(diff) < 0.001f) {
             current = target;
         } else {
-            current += diff * (1f - (float) Math.exp(-speed * dt));
+            float k = diff > 0f ? speed : speedDown;
+            current += diff * (1f - (float) Math.exp(-k * dt));
         }
         return current;
     }

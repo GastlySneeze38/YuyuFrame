@@ -354,18 +354,40 @@ public final class UiTheme {
     /** Vitesses et durées d'animation — mêmes réglages partout pour que tout « réponde » pareil. */
     public static final class Motion {
         private Motion() {}
-        /** Vitesse d'approche du survol (voir {@code UiAnimatedFloat}). */
+        // Vitesses d'approche (UiAnimatedFloat) : 95 % du chemin en 3 / vitesse
+        // secondes. 16 = 0,19 s, 22 = 0,14 s, 36 = 0,08 s.
+
+        /** Survol, focus, onglet actif, interrupteur : tout ce qui suit la souris. */
         public static final float HOVER = 16f;
-        /** Vitesse de l'enfoncement d'un bouton. */
-        public static final float PRESS = 22f;
-        /** Vitesse d'apparition/disparition d'une modale ou d'un panneau flottant. */
-        public static final float OVERLAY = 14f;
-        /** Éclat de clic (rebond). */
-        public static final float CLICK_PULSE_S = 0.42f;
+        /** Enfoncement d'un bouton : l'appui claque... */
+        public static final float PRESS = 36f;
+        /** ...le relâchement se repose. */
+        public static final float RELEASE = 20f;
+        /** Liste déroulante, tiroir, panneau qui se déplie (≈ 0,17 s). */
+        public static final float UNFOLD = 18f;
+        /** Apparition/disparition d'un panneau flottant piloté par une vitesse. */
+        public static final float OVERLAY = 18f;
+
+        // Durées fixes (UiTransition, écrans, fenêtres), toutes sous 300 ms.
+
+        /** Éclat de clic : bref, sans rebond — il se joue des dizaines de fois. */
+        public static final float CLICK_PULSE_S = 0.18f;
         /** Glissement d'une carte qui change de place. */
-        public static final float MOVE_S = 0.38f;
-        /** Entrée d'une carte. */
-        public static final float ENTER_S = 0.5f;
+        public static final float MOVE_S = 0.28f;
+        /** Entrée d'une carte ou d'une ligne dans une liste. */
+        public static final float ENTER_S = 0.22f;
+        /** Écart entre deux éléments d'une cascade, et attente maximale du dernier. */
+        public static final float STAGGER_S = 0.03f;
+        public static final float STAGGER_MAX_S = 0.15f;
+        /** Ouverture d'un écran depuis le jeu (au clavier, souvent) : presque immédiat. */
+        public static final float SCREEN_OPEN_S = 0.18f;
+        /** Passage d'un écran à l'autre. */
+        public static final float SCREEN_NAV_S = 0.24f;
+        /** Retour au jeu. */
+        public static final float SCREEN_CLOSE_S = 0.16f;
+        /** Fenêtre (modale), entrée puis sortie. */
+        public static final float MODAL_IN_S = 0.22f;
+        public static final float MODAL_OUT_S = 0.15f;
         /** Délai de fermeture d'une bulle de survol, le temps d'y amener la souris. */
         public static final long BUBBLE_GRACE_MS = 160L;
     }

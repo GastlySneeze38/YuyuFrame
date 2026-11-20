@@ -634,8 +634,8 @@ public final class ModrinthContentScreen extends UiScreenBase {
     // légèrement après la précédente plutôt que toutes d'un coup. Plafonné
     // (ENTRANCE_MAX_DELAY) : une longue liste de catégories n'attend plus
     // indéfiniment avant que ses derniers éléments n'apparaissent.
-    private static final float ENTRANCE_PER_ITEM_DELAY = 0.028f;
-    private static final float ENTRANCE_MAX_DELAY = 0.32f;
+    private static final float ENTRANCE_PER_ITEM_DELAY = UiTheme.Motion.STAGGER_S;
+    private static final float ENTRANCE_MAX_DELAY = UiTheme.Motion.STAGGER_MAX_S;
 
     private void buildDrawer() {
         drawerContent.clear();
@@ -765,7 +765,7 @@ public final class ModrinthContentScreen extends UiScreenBase {
             this.label = label;
             this.active = active;
             this.onToggle = onToggle;
-            entrance = new UiTransition(0.26f, entranceDelay, UiEasing.EASE_OUT_CUBIC);
+            entrance = new UiTransition(UiTheme.Motion.ENTER_S, entranceDelay, UiEasing.UI_OUT);
             entrance.show();
         }
 

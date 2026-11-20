@@ -135,7 +135,7 @@ final class PvpFamilyModal implements com.yuyuframe.launcheragent.apigraphic.wid
     private void pushBlock(UiRenderer r, float delay, float pivotY) {
         float t = PvpScoreUi.linear(openedAt, 0.12f + delay, 0.45f);
         float e = PvpScoreUi.ease(openedAt, 0.12f + delay, 0.45f);
-        r.pushLayer(t, 0.94f + 0.06f * PvpScoreUi.backOut(t), px + pw / 2f, pivotY, 0f, -(1f - e) * UiTheme.scaled(22f));
+        r.pushLayer(t, 0.98f + 0.02f * e, px + pw / 2f, pivotY, 0f, -(1f - e) * UiTheme.scaled(8f));
     }
 
     void draw(UiRenderer r, double mouseX, double mouseY, int vw, int vh) {
@@ -148,13 +148,10 @@ final class PvpFamilyModal implements com.yuyuframe.launcheragent.apigraphic.wid
 
         r.drawRoundedRect(0f, 0f, vw, vh, 0f, UiTheme.GLASS_SCRIM.multiplyAlpha(p), vw, vh);
         float y1 = py, y2 = py + ph;
-        // La fenêtre entière dans un calque : elle jaillit du centre avec un
-        // petit rebond, puis ses blocs arrivent l'un après l'autre ; elle
-        // recule en s'effaçant à la fermeture.
-        float scale = closingAt != 0L
-            ? 0.92f + 0.08f * p
-            : 0.84f + 0.16f * PvpScoreUi.backOut(PvpScoreUi.linear(openedAt, 0f, OPEN_SECS));
-        r.pushLayer(p, scale, px + pw / 2f, py + ph / 2f, 0f, -(1f - p) * UiTheme.scaled(16f));
+        // La fenêtre entière dans un calque : elle apparaît au centre en
+        // grandissant à peine, puis ses blocs arrivent l'un après l'autre ;
+        // elle s'efface à la fermeture.
+        r.pushLayer(p, 0.96f + 0.04f * p, px + pw / 2f, py + ph / 2f, 0f, 0f);
         try {
             r.drawShadow(px, y1, px + pw, y2, UiTheme.scaled(14f), 30f, 0f, new UiColor(0, 0, 0, 150), vw, vh);
             r.drawGlassPanel(px, y1, px + pw, y2, UiTheme.scaled(14f),

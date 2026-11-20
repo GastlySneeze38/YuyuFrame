@@ -21,7 +21,7 @@ public final class UiTabItem extends UiInteractive {
     private final BooleanSupplier active;
     private final Runnable action;
     /** L'état actif suit le défilement à chaque image : transition douce plutôt que saut. */
-    private final UiAnimatedFloat activeAnim = new UiAnimatedFloat(0f, 12f);
+    private final UiAnimatedFloat activeAnim = new UiAnimatedFloat(0f, UiTheme.Motion.HOVER);
 
     /** @param label déjà traduit */
     public UiTabItem(String label, BooleanSupplier active, Runnable action) {

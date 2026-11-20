@@ -29,9 +29,9 @@ public interface UiOverlay {
     boolean modal();
 
     /**
-     * Dessine l'élément. {@code appear} va de 0 (fermé) à 1 (ouvert), en
-     * linéaire, aussi bien à l'ouverture qu'à la fermeture : l'élément y
-     * accroche ses propres animations. La pile pose déjà le voile.
+     * Dessine l'élément. {@code appear} va de 0 (fermé) à 1 (ouvert),
+     * DÉJÀ passé dans la courbe commune (UiEasing.UI_OUT), à l'ouverture
+     * comme à la fermeture : l'élément s'en sert tel quel, sans rajouter de courbe. La pile pose déjà le voile.
      */
     void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight, float appear);
 
@@ -57,10 +57,10 @@ public interface UiOverlay {
     default void onClosed() {}
 
     /** Durée d'apparition, en secondes. */
-    default float enterSeconds() { return 0.42f; }
+    default float enterSeconds() { return com.yuyuframe.launcheragent.apigraphic.value.UiTheme.Motion.MODAL_IN_S; }
 
     /** Durée de disparition, en secondes. */
-    default float exitSeconds() { return 0.2f; }
+    default float exitSeconds() { return com.yuyuframe.launcheragent.apigraphic.value.UiTheme.Motion.MODAL_OUT_S; }
 
     /** Voile posé sous une bloquante (opaque à son maximum), {@code null} = aucun. */
     default UiColor scrim() { return modal() ? DEFAULT_SCRIM : null; }

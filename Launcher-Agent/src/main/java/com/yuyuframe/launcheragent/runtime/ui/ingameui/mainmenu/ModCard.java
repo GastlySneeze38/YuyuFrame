@@ -75,7 +75,7 @@ final class ModCard extends UiInteractive {
      * réordonnée (technique FLIP : la carte est déjà à sa place, on réinjecte
      * l'écart et on le résorbe). Sans rebond : elle cognerait ses voisines.
      */
-    private final UiTransition moveAnim = new UiTransition(UiTheme.Motion.MOVE_S, 0f, UiEasing.CUBIC_OUT);
+    private final UiTransition moveAnim = new UiTransition(UiTheme.Motion.MOVE_S, 0f, UiEasing.UI_IN_OUT);
     private float moveDx, moveDy;
     private boolean moving;
 
@@ -96,7 +96,7 @@ final class ModCard extends UiInteractive {
     ModCard(GridEntry entry, int layoutMode, float enterDelay) {
         this.entry = entry;
         this.layoutMode = layoutMode;
-        this.enterAnim = new UiTransition(UiTheme.Motion.ENTER_S, enterDelay, UiEasing.QUART_OUT);
+        this.enterAnim = new UiTransition(UiTheme.Motion.ENTER_S, enterDelay, UiEasing.UI_OUT);
         this.enterAnim.show();
         this.onAnim = new UiAnimatedFloat(on() ? 1f : 0f, UiTheme.Motion.HOVER);
     }
@@ -142,11 +142,9 @@ final class ModCard extends UiInteractive {
         return true;
     }
 
-    /** Montée d'entrée : rapide, léger dépassement, puis se pose. */
+    /** Montée d'entrée : part tout de suite et se pose, sans rebond. */
     private static float enterRise(float t) {
-        t = Math.max(0f, Math.min(1f, t));
-        float c1 = 1.2f, c3 = c1 + 1f, u = t - 1f;
-        return 1f + c3 * u * u * u + c1 * u * u;
+        return UiEasing.UI_OUT.apply(Math.max(0f, Math.min(1f, t)));
     }
 
     @Override
@@ -168,7 +166,7 @@ final class ModCard extends UiInteractive {
         // La bande survolée soulève aussi la carte : c'est la même carte.
         boolean bandOver = bandContains(mouseX, mouseY);
         float lift = Math.max(hover, bandOver ? 1f : 0f) * HOVER_LIFT_PX;
-        float drawY = y + mdy - (1f - rise) * px(34f) + lift;
+        float drawY = y + mdy - (1f - rise) * px(8f) + lift;
 
         // Les widgets appariés suivent : X en absolu depuis leur base, Y en
         // relatif (la liste vient de le poser pour cette image).
@@ -321,8 +319,10 @@ final class ModCard extends UiInteractive {
         UiColor boxFill = UiColor.lerp(new UiColor(255, 255, 255, 16), UiTheme.ACCENT.withAlpha(0.62f), k);
 
         if (layoutMode == 2) {
-            // Grille d'icônes : l'icône au-dessus, puis le nom et une ligne de description.
-            this.tooltip = description;
+            // Grille d'icônes : l'icône au-dessus, puis le nom et une ligne de
+            // description. Pas de bulle au survol : elle recouvrait la carte
+            // voisine pour répéter ce qui est déjà écrit (retirée le 2026-11-20).
+            this.tooltip = null;
             float bx = drawX + pad, by = top - box;
             drawIconBox(r, bx, by, box, boxFill, initial, k, alpha, vw, vh);
             float maxW = w - 2f * pad;

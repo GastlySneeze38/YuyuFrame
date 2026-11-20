@@ -77,9 +77,9 @@ public final class UiModalForm implements com.yuyuframe.launcheragent.apigraphic
             lastW = vpWidth; lastH = vpHeight; lastScale = UiTheme.UI_SCALE; builtStep = step;
         }
 
-        // Le panneau jaillit du centre avec un petit rebond (et y retourne en se fermant).
+        // Le panneau apparaît au centre en grandissant à peine (appear porte déjà la courbe).
         float open = appear;
-        renderer.pushLayer(Math.min(1f, open * 2.2f), 0.84f + 0.16f * backOut(open), px + pw / 2f, py + ph / 2f, 0f, 0f);
+        renderer.pushLayer(open, 0.96f + 0.04f * open, px + pw / 2f, py + ph / 2f, 0f, 0f);
         try {
             renderer.drawShadow(px, py, px + pw, py + ph, UiTheme.RADIUS_MD, 24f, 0f, new UiColor(0, 0, 0, 140), vpWidth, vpHeight);
             renderer.drawGlassPanel(px, py, px + pw, py + ph, UiTheme.RADIUS_MD,
@@ -105,8 +105,8 @@ public final class UiModalForm implements com.yuyuframe.launcheragent.apigraphic
 
             // Le contenu de l'étape glisse dans le sens où l'on va, en fondu.
             float s = clamp01((System.nanoTime() - stepAt) / 1e9f / STEP_S);
-            float e = 1f - (1f - s) * (1f - s) * (1f - s);
-            renderer.pushLayer(s, 1f, px + pw / 2f, py + ph / 2f, stepDir * (1f - e) * UiTheme.scaled(40f), 0f);
+            float e = com.yuyuframe.launcheragent.apigraphic.anim.UiEasing.UI_OUT.apply(s);
+            renderer.pushLayer(e, 1f, px + pw / 2f, py + ph / 2f, stepDir * (1f - e) * UiTheme.scaled(16f), 0f);
             try {
                 SettingModal.Step current = modal.steps.get(step);
                 renderer.drawText(Lang.tr(current.title), px + pad, py + ph - UiTheme.scaled(68f),
@@ -123,8 +123,8 @@ public final class UiModalForm implements com.yuyuframe.launcheragent.apigraphic
         }
     }
 
-    private static final float OPEN_S = 0.42f;
-    private static final float STEP_S = 0.32f;
+    private static final float OPEN_S = UiTheme.Motion.MODAL_IN_S;
+    private static final float STEP_S = UiTheme.Motion.SCREEN_NAV_S;
     /** Dernier changement d'étape, et son sens : +1 en avançant, −1 en revenant. */
     private long stepAt = System.nanoTime();
     private int stepDir;
@@ -147,11 +147,6 @@ public final class UiModalForm implements com.yuyuframe.launcheragent.apigraphic
 
     private static float clamp01(float v) {
         return Math.max(0f, Math.min(1f, v));
-    }
-
-    private static float backOut(float t) {
-        float c1 = 1.3f, c3 = c1 + 1f, u = t - 1f;
-        return 1f + c3 * u * u * u + c1 * u * u;
     }
 
     private void build(int vpWidth, int vpHeight) {

@@ -1,6 +1,7 @@
 package com.yuyuframe.launcheragent.apigraphic.widget;
 
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
+import com.yuyuframe.launcheragent.apigraphic.anim.UiEasing;
 import com.yuyuframe.launcheragent.apigraphic.platform.UiInputPoller;
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
@@ -39,13 +40,21 @@ public final class UiOverlayStack {
 
         boolean closing() { return closedAt != 0L; }
 
+        /**
+         * Ouverture, de 0 à 1, DÉJÀ passée dans la courbe commune
+         * ({@link UiEasing#UI_OUT}) — à l'ouverture comme à la fermeture, qui
+         * part donc tout de suite au lieu de traîner. Un élément ne rajoute
+         * pas sa propre courbe par-dessus (2026-11-20).
+         */
         float appear(long now) {
             if (!closing()) {
                 float d = Math.max(0.01f, overlay.enterSeconds());
-                return Math.min(1f, (now - openedAt) / 1e9f / d);
+                return UiEasing.UI_OUT.apply(Math.min(1f, (now - openedAt) / 1e9f / d));
             }
-            float d = Math.max(0.01f, overlay.exitSeconds());
-            return Math.max(0f, appearAtClose - (now - closedAt) / 1e9f / d);
+            // Refermé à moitié ouvert : le chemin restant prend moins de temps.
+            float d = Math.max(0.01f, overlay.exitSeconds()) * Math.max(0.2f, appearAtClose);
+            float frac = Math.min(1f, (now - closedAt) / 1e9f / d);
+            return appearAtClose * (1f - UiEasing.UI_OUT.apply(frac));
         }
 
         boolean covers(double mx, double my) {

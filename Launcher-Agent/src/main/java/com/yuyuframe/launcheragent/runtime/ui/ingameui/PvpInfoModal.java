@@ -161,12 +161,9 @@ final class PvpInfoModal implements com.yuyuframe.launcheragent.apigraphic.widge
 
         r.drawRoundedRect(0f, 0f, vw, vh, 0f, UiTheme.GLASS_SCRIM.multiplyAlpha(p), vw, vh);
         float y1 = py, y2 = py + ph;
-        // La fenêtre entière dans un calque : elle jaillit du centre avec un
-        // petit rebond en s'ouvrant, et recule en s'effaçant en se fermant.
-        float scale = closingAt != 0L
-            ? 0.92f + 0.08f * p
-            : 0.84f + 0.16f * PvpScoreUi.backOut(PvpScoreUi.linear(openedAt, 0f, OPEN_SECS));
-        r.pushLayer(p, scale, px + pw / 2f, py + ph / 2f, 0f, -(1f - p) * UiTheme.scaled(16f));
+        // La fenêtre entière dans un calque : elle apparaît au centre en
+        // grandissant à peine, et s'efface en se fermant.
+        r.pushLayer(p, 0.96f + 0.04f * p, px + pw / 2f, py + ph / 2f, 0f, 0f);
         try {
             r.drawShadow(px, y1, px + pw, y2, UiTheme.scaled(14f), 30f, 0f, new UiColor(0, 0, 0, 150), vw, vh);
             // L'opacité du repli pilote aussi celle du verre (voir UiRenderer.drawGlassPanel).
@@ -194,7 +191,7 @@ final class PvpInfoModal implements com.yuyuframe.launcheragent.apigraphic.widge
             // Le texte d'un sujet entre en glissant un peu, à chaque changement.
             float t = PvpScoreUi.ease(topicAt, 0f, 0.38f);
             PvpScoreUi.alpha = t;
-            float slide = (1f - t) * UiTheme.scaled(28f);
+            float slide = (1f - t) * UiTheme.scaled(12f);
             drawTopic(r, topics.get(selected), listRight + pad * 1.6f + slide, px + pw - pad * 1.4f + slide,
                 y2 - pad, y1 + pad + UiTheme.scaled(48f), vw, vh);
         } finally {

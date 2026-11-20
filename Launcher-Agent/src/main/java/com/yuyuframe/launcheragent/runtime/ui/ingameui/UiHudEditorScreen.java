@@ -65,12 +65,6 @@ public class UiHudEditorScreen extends UiScreenBase {
         return EDITOR_OVERLAY;
     }
 
-    /** Les boîtes sont là où le HUD sera : elles ne montent pas en cascade à l'ouverture. */
-    @Override
-    protected boolean cascadeWidgets() {
-        return false;
-    }
-
     /**
      * Un geste qui reconstruit l'écran (moment choisi, module éteint), remis
      * au début de l'image suivante : il naît pendant la lecture des clics, qui

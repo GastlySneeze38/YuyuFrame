@@ -193,32 +193,38 @@ public final class PvpScoreUi {
     }
 
     /**
-     * L'avancement d'une animation partie à {@code startNanos}, après
-     * {@code delay} secondes et sur {@code duration} secondes, de 0 à 1, en
-     * ralentissant sur la fin.
+     * Tempo de toute la chorégraphie des écrans PvP : chaque délai et chaque
+     * durée écrits dans ces écrans est multiplié par lui. Ils avaient été
+     * réglés pour une entrée d'environ 1,5 s ; à 0,5, la plus longue (le
+     * dévoilement de la note) se pose vers 0,6 s, et les fenêtres s'ouvrent
+     * en 0,22 s (2026-11-20). Les rapports entre les étapes ne changent pas.
      */
-    static float ease(long startNanos, float delay, float duration) {
-        float t = ((System.nanoTime() - startNanos) / 1e9f - delay) / duration;
-        return UiEasing.CUBIC_OUT.apply(Math.max(0f, Math.min(1f, t)));
+    static final float TEMPO = 0.5f;
+
+    private static float raw(long startNanos, float delay, float duration) {
+        float t = ((System.nanoTime() - startNanos) / 1e9f - delay * TEMPO) / (duration * TEMPO);
+        return Math.max(0f, Math.min(1f, t));
     }
 
-    /** Comme {@link #ease}, avec un léger dépassement avant de se poser : pour ce qui « saute » à sa place. */
+    /**
+     * L'avancement d'une animation partie à {@code startNanos}, après
+     * {@code delay} secondes et sur {@code duration} secondes (au
+     * {@link #TEMPO} près), de 0 à 1, sur la courbe commune de l'interface.
+     */
+    static float ease(long startNanos, float delay, float duration) {
+        return UiEasing.UI_OUT.apply(raw(startNanos, delay, duration));
+    }
+
+    /** Comme {@link #ease}, avec un léger dépassement avant de se poser : réservé au dévoilement d'un résultat. */
     static float pop(long startNanos, float delay, float duration) {
-        float t = ((System.nanoTime() - startNanos) / 1e9f - delay) / duration;
-        return UiEasing.BACK_OUT.apply(Math.max(0f, Math.min(1f, t)));
+        return UiEasing.BACK_OUT.apply(raw(startNanos, delay, duration));
     }
 
     /** Avancement brut (sans courbe) d'une animation, de 0 à 1. */
     static float linear(long startNanos, float delay, float duration) {
-        float t = ((System.nanoTime() - startNanos) / 1e9f - delay) / duration;
-        return Math.max(0f, Math.min(1f, t));
+        return raw(startNanos, delay, duration);
     }
 
-    /** Courbe à léger dépassement sur un avancement déjà calculé : pour ce qui « saute » à sa taille. */
-    static float backOut(float t) {
-        float c1 = 1.3f, c3 = c1 + 1f, u = t - 1f;
-        return 1f + c3 * u * u * u + c1 * u * u;
-    }
 
     /** Un nombre qui monte de 0 à sa valeur pendant que {@code progress} va de 0 à 1. */
     static long count(double value, float progress) {

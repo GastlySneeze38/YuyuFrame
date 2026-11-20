@@ -15,6 +15,7 @@ import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.widget.UiWidget;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiKeybindButton;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTextField;
+import com.yuyuframe.launcheragent.apigraphic.anim.UiEasing;
 import com.yuyuframe.launcheragent.apigraphic.value.UiTheme;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTooltip;
 import net.minecraft.client.gui.screens.Screen;
@@ -72,23 +73,25 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
     // widget n'en sache rien. Remplace l'ancien « rideau » sombre qui
     // s'estompait, et la montée sèche des widgets.
     //
-    //   - ouverture depuis le jeu : l'écran arrive en zoomant légèrement,
-    //     avec un tout petit dépassement, pendant que le fond apparaît ;
+    //   - ouverture depuis le jeu : fondu et zoom de 0,98 à 1, sans rebond —
+    //     le menu s'ouvre au clavier, très souvent, il doit être là presque
+    //     tout de suite ;
     //   - d'un écran à l'autre : FONDU ENCHAÎNÉ, les deux écrans dessinés
     //     ensemble pendant la transition — c'est closeTo() qui retarde la
     //     vraie navigation jusqu'à la fin, et l'ancien écran dessine le
-    //     nouveau par-dessus lui. En avançant, l'ancien recule en grossissant
-    //     et le nouveau arrive de la droite ; en revenant, l'inverse ;
-    //   - fermeture vers le jeu : l'écran s'éloigne en se fondant.
+    //     nouveau par-dessus lui. En avançant, le nouveau arrive de la
+    //     droite ; en revenant, de la gauche — sur peu de distance, sinon les
+    //     deux écrans se voient en double ;
+    //   - fermeture vers le jeu : l'écran s'efface.
     //
-    // Les widgets entrent ensuite en cascade, chacun dans son propre calque :
-    // fondu, montée et léger zoom depuis leur centre.
+    // Toutes sur la courbe commune (UiEasing.UI_OUT) : la sortie part tout
+    // de suite, comme l'entrée. Durées dans UiTheme.Motion (2026-11-20).
 
     /** Ouverture depuis le jeu, avance vers un nouvel écran, retour vers un écran déjà vu. */
     private static final int ENTER_OPEN = 0, ENTER_FORWARD = 1, ENTER_BACK = 2;
-    private static final float OPEN_S = 0.46f;
-    private static final float NAV_S = 0.38f;
-    private static final float CLOSE_S = 0.24f;
+    private static final float OPEN_S = UiTheme.Motion.SCREEN_OPEN_S;
+    private static final float NAV_S = UiTheme.Motion.SCREEN_NAV_S;
+    private static final float CLOSE_S = UiTheme.Motion.SCREEN_CLOSE_S;
 
     /** Début de l'entrée de cet écran ; 0 = au premier dessin. */
     private long enterStartNanos;
@@ -111,21 +114,8 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
         return Math.max(0f, Math.min(1f, v));
     }
 
-    /** Ralentit fort sur la fin : le mouvement « se pose ». */
-    private static float easeOutQuint(float t) {
-        float u = 1f - t;
-        return 1f - u * u * u * u * u;
-    }
-
-    /** Arrive avec un léger dépassement, puis se pose. */
-    private static float easeOutBack(float t) {
-        float c1 = 1.25f, c3 = c1 + 1f;
-        float u = t - 1f;
-        return 1f + c3 * u * u * u + c1 * u * u;
-    }
-
-    private static float easeInCubic(float t) {
-        return t * t * t;
+    private static float ease(float t) {
+        return UiEasing.UI_OUT.apply(t);
     }
 
     /** Avancement de l'entrée, 0 à 1 (linéaire). */
@@ -146,46 +136,38 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
     private void pushEnterLayer(UiRenderer r) {
         float t = enterProgress();
         float cx = screenWidth / 2f, cy = screenHeight / 2f;
+        float p = ease(t);
         switch (enterKind) {
-            case ENTER_FORWARD: {
-                float p = easeOutQuint(t);
-                r.pushLayer(clamp01(t * 1.6f), 0.94f + 0.06f * p, cx, cy, (1f - p) * UiTheme.scaled(48f), 0f);
+            case ENTER_FORWARD:
+                r.pushLayer(p, 0.99f + 0.01f * p, cx, cy, (1f - p) * UiTheme.scaled(16f), 0f);
                 break;
-            }
-            case ENTER_BACK: {
-                float p = easeOutQuint(t);
-                r.pushLayer(clamp01(t * 1.6f), 1.06f - 0.06f * p, cx, cy, -(1f - p) * UiTheme.scaled(48f), 0f);
+            case ENTER_BACK:
+                r.pushLayer(p, 1.01f - 0.01f * p, cx, cy, -(1f - p) * UiTheme.scaled(16f), 0f);
                 break;
-            }
-            default: {
-                float p = easeOutBack(t);
-                r.pushLayer(clamp01(t * 2.2f), 0.9f + 0.1f * p, cx, cy, 0f, -(1f - easeOutQuint(t)) * UiTheme.scaled(26f));
+            default:
+                r.pushLayer(p, 0.98f + 0.02f * p, cx, cy, 0f, -(1f - p) * UiTheme.scaled(6f));
                 break;
-            }
         }
     }
 
     /** Ouvre le calque de sortie de cet écran (à refermer par popLayer). */
     private void pushExitLayer(UiRenderer r, float t) {
         float cx = screenWidth / 2f, cy = screenHeight / 2f;
+        float p = ease(t);
+        // L'ancien s'efface plus vite que le nouveau n'arrive : pas de double
+        // exposition au milieu du fondu.
+        float fade = 1f - clamp01(p * 1.5f);
         switch (exitKind) {
-            case ENTER_FORWARD: {
-                // L'ancien écran recule « vers nous » et s'efface sous le nouveau.
-                float p = easeOutQuint(t);
-                r.pushLayer(1f - clamp01(t * 1.3f), 1f + 0.05f * p, cx, cy, -p * UiTheme.scaled(36f), 0f);
+            case ENTER_FORWARD:
+                r.pushLayer(fade, 1f, cx, cy, -p * UiTheme.scaled(12f), 0f);
                 break;
-            }
-            case ENTER_BACK: {
-                float p = easeOutQuint(t);
-                r.pushLayer(1f - clamp01(t * 1.3f), 1f - 0.05f * p, cx, cy, p * UiTheme.scaled(36f), 0f);
+            case ENTER_BACK:
+                r.pushLayer(fade, 1f, cx, cy, p * UiTheme.scaled(12f), 0f);
                 break;
-            }
-            default: {
-                // Vers le jeu : il s'éloigne en se fondant, et glisse un peu vers le bas.
-                float p = easeInCubic(t);
-                r.pushLayer(1f - t, 1f - 0.06f * p, cx, cy, 0f, -p * UiTheme.scaled(18f));
+            default:
+                // Vers le jeu : il s'efface en reculant à peine.
+                r.pushLayer(1f - p, 1f - 0.02f * p, cx, cy, 0f, 0f);
                 break;
-            }
         }
     }
 
@@ -339,31 +321,10 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
         return overlays.blocksInput();
     }
 
-    /**
-     * Entrée en cascade des widgets, après celle de l'écran : chacun dans son
-     * propre calque, il apparaît en fondu, monte et grandit depuis son centre,
-     * un peu après le précédent. Seul le DESSIN bouge : le clic garde la vraie
-     * position, ce qui ne se sent pas sur une demi-seconde.
-     */
-    private static final float CASCADE_DELAY_S = 0.08f;
-    private static final float CASCADE_STEP_S = 0.035f;
-    private static final float CASCADE_DURATION_S = 0.42f;
-    private static final int CASCADE_MAX_STEPS = 16;
-
-    /**
-     * {@code false} pour un écran dont les widgets sont des positions réelles
-     * à l'écran (l'éditeur de HUD) : ils ne doivent pas bouger à l'ouverture.
-     */
-    protected boolean cascadeWidgets() {
-        return true;
-    }
-
-    /** Avancement de l'entrée du widget n°{@code index}, 0 à 1 (linéaire). */
-    private float cascadeProgress(int index) {
-        if (enterStartNanos == 0L) return 0f;
-        float elapsed = (System.nanoTime() - enterStartNanos) / 1e9f;
-        return clamp01((elapsed - CASCADE_DELAY_S - Math.min(index, CASCADE_MAX_STEPS) * CASCADE_STEP_S) / CASCADE_DURATION_S);
-    }
+    // Plus de cascade des widgets (retirée le 2026-11-20) : elle s'ajoutait à
+    // l'entrée de l'écran ET à celle des cartes, trois animations empilées
+    // pendant plus d'une seconde, à chaque ouverture du menu au clavier.
+    // Seules les listes (cartes, lignes) entrent en cascade, chacune la sienne.
 
     /**
      * Constructeur no-arg de Screen (PAS Screen(Component title)) — ce dernier
@@ -702,25 +663,9 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
         try {
             renderer.drawRoundedRect(0, 0, screenWidth, screenHeight, 0, overlayColor(), screenWidth, screenHeight);
 
-            boolean cascade = cascadeWidgets();
             for (int i = 0; i < widgets.size(); i++) {
                 UiWidget w = widgets.get(i);
-                float t = cascade ? cascadeProgress(i) : 1f;
-                // Les listes défilantes ne sont pas dans {@code widgets} (chaque
-                // écran les dessine lui-même) : elles ont leurs propres entrées.
-                if (t < 1f) {
-                    float p = easeOutQuint(t);
-                    float pop = easeOutBack(t);
-                    renderer.pushLayer(clamp01(t * 1.8f), 0.86f + 0.14f * pop,
-                        w.x + w.w / 2f, w.y + w.h / 2f, 0f, -(1f - p) * UiTheme.scaled(22f));
-                    try {
-                        w.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
-                    } finally {
-                        renderer.popLayer();
-                    }
-                } else {
-                    w.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
-                }
+                w.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
                 // Dessinée par drawFrame, après tout le reste de l'image.
                 if (w.tooltip != null && w.contains(mouseX, mouseY)) hoveredTooltip = w.tooltip;
             }

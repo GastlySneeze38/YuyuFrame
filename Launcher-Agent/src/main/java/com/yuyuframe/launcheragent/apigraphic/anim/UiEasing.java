@@ -42,6 +42,46 @@ public final class UiEasing {
 
     public static final Curve LINEAR = t -> t;
 
+    /**
+     * Courbe de Bézier cubique, comme {@code cubic-bezier(x1, y1, x2, y2)} en
+     * CSS : on cherche le paramètre dont l'abscisse vaut {@code t} (Newton,
+     * puis dichotomie si la pente est trop faible), et on rend son ordonnée.
+     */
+    public static Curve bezier(float x1, float y1, float x2, float y2) {
+        final float cx = 3f * x1, bx = 3f * (x2 - x1) - cx, ax = 1f - cx - bx;
+        final float cy = 3f * y1, by = 3f * (y2 - y1) - cy, ay = 1f - cy - by;
+        return t -> {
+            if (t <= 0f) return 0f;
+            if (t >= 1f) return 1f;
+            float u = t;
+            for (int i = 0; i < 8; i++) {
+                float x = ((ax * u + bx) * u + cx) * u - t;
+                if (Math.abs(x) < 1e-5f) return ((ay * u + by) * u + cy) * u;
+                float d = (3f * ax * u + 2f * bx) * u + cx;
+                if (Math.abs(d) < 1e-6f) break;
+                u -= x / d;
+            }
+            float lo = 0f, hi = 1f;
+            u = t;
+            for (int i = 0; i < 20; i++) {
+                float x = ((ax * u + bx) * u + cx) * u;
+                if (Math.abs(x - t) < 1e-5f) break;
+                if (x < t) lo = u; else hi = u;
+                u = (lo + hi) / 2f;
+            }
+            return ((ay * u + by) * u + cy) * u;
+        };
+    }
+
+    /**
+     * LA courbe de l'interface : part tout de suite, se pose longuement —
+     * {@code cubic-bezier(0.23, 1, 0.32, 1)}. Pour toute entrée et toute
+     * sortie. Les courbes de Penner plus bas restent pour des cas à part.
+     */
+    public static final Curve UI_OUT = bezier(0.23f, 1f, 0.32f, 1f);
+    /** Un élément qui se déplace à l'écran (carte qui change de place) : {@code cubic-bezier(0.77, 0, 0.175, 1)}. */
+    public static final Curve UI_IN_OUT = bezier(0.77f, 0f, 0.175f, 1f);
+
     // ── Dérivation générique (voir javadoc de classe) ─────────────────────
     private static Curve out(Curve in) { return t -> 1f - in.apply(1f - t); }
     private static Curve inOutFromIn(Curve in) {

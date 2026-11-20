@@ -26,7 +26,7 @@ public class UiDropdown extends UiWidget {
     private final IntConsumer onChange;
     private final UiAnimatedFloat hoverAnim = new UiAnimatedFloat(0f, UiTheme.Motion.HOVER);
     /** Ouverture vue par l'en-tête (flèche, anneau), de 0 à 1. */
-    private final UiAnimatedFloat unfold = new UiAnimatedFloat(0f, 11f);
+    private final UiAnimatedFloat unfold = new UiAnimatedFloat(0f, UiTheme.Motion.UNFOLD);
     /** Position de la pastille de survol dans la liste, en lignes — elle glisse d'une option à l'autre. */
     private final UiAnimatedFloat hoverRow = new UiAnimatedFloat(-1f, 24f);
     private final UiAnimatedFloat hoverRowAlpha = new UiAnimatedFloat(0f, 18f);
@@ -120,11 +120,6 @@ public class UiDropdown extends UiWidget {
         return mx >= x && mx <= x + w && my >= panelBottom() && my <= panelTop();
     }
 
-    /** Arrive avec un léger dépassement, puis se pose. */
-    private static float backOut(float t) {
-        float c1 = 1.4f, c3 = c1 + 1f, u = t - 1f;
-        return 1f + c3 * u * u * u + c1 * u * u;
-    }
 
     /** La liste dépliée. Elle suit l'en-tête : sa position est relue à chaque image (liste qui défile). */
     private final UiOverlay list = new UiOverlay() {
@@ -138,10 +133,10 @@ public class UiDropdown extends UiWidget {
         }
 
         @Override
-        public float enterSeconds() { return 0.3f; }
+        public float enterSeconds() { return 0.2f; }
 
         @Override
-        public float exitSeconds() { return 0.18f; }
+        public float exitSeconds() { return 0.14f; }
 
         @Override
         public void click(double mx, double my, int button, boolean doubleClick) {
@@ -159,14 +154,13 @@ public class UiDropdown extends UiWidget {
 
         @Override
         public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight, float appear) {
-            // Décélération (comme l'ancienne approche exponentielle de la liste).
-            float open = 1f - (1f - appear) * (1f - appear) * (1f - appear);
+            // appear porte déjà la courbe ; la liste sort de son en-tête (pivot en haut), sans rebond.
+            float open = appear;
             if (open < 0.02f) return;
             float rowH = rowH(), top = panelTop(), bottom = panelBottom();
             float scale = textScale(), pad = textPad(), voff = textVOff();
-            float grow = backOut(open);
-            renderer.pushLayer(Math.min(1f, open * 1.6f), 0.82f + 0.18f * grow, x + w / 2f, top,
-                0f, (1f - open) * UiTheme.px(UiTheme.Space.S10));
+            renderer.pushLayer(open, 0.96f + 0.04f * open, x + w / 2f, top,
+                0f, (1f - open) * UiTheme.px(UiTheme.Space.S4));
             try {
                 // Tout ce qui flotte est du verre de modale, bordé d'accent pour dire d'où il sort.
                 UiSurface.of(UiTheme.Glass.MODAL).radius(UiTheme.RADIUS_MD).fill(UiTheme.PANEL_BG_ALT)

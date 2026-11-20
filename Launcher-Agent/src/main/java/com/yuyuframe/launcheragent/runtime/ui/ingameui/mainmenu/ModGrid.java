@@ -176,8 +176,10 @@ public final class ModGrid {
         float cx = c.x + ox, cy = c.y;
         positions.put(entry.id, new float[]{ cx, cy });
 
-        // Cascade d'entrée, après l'arrivée de l'écran ; elle repart de zéro à chaque section.
-        float enterDelay = 0.12f + UiStagger.delayFor(index, 0.04f, 0.45f);
+        // Cascade d'entrée, en même temps que l'arrivée de l'écran (plus
+        // d'attente : l'écran ne fait plus qu'un fondu court) ; elle repart
+        // de zéro à chaque section.
+        float enterDelay = UiStagger.delayFor(index, UiTheme.Motion.STAGGER_S, UiTheme.Motion.STAGGER_MAX_S);
         ModCard card = new ModCard(entry, layoutMode, enterDelay);
         card.x = cx; card.y = cy; card.w = c.w; card.h = c.h;
         // La carte d'abord (dessinée dessous), ses contrôles ensuite (par-dessus).

@@ -17,9 +17,10 @@ import com.yuyuframe.launcheragent.apigraphic.widget.UiWidget;
 public abstract class UiInteractive extends UiWidget {
 
     private final UiAnimatedFloat hoverAnim = new UiAnimatedFloat(0f, UiTheme.Motion.HOVER);
-    private final UiAnimatedFloat pressAnim = new UiAnimatedFloat(0f, UiTheme.Motion.PRESS);
-    /** Événement ponctuel qui dépasse sa cible puis revient : le « rebond » du clic. */
-    private final UiTransition clickAnim = new UiTransition(UiTheme.Motion.CLICK_PULSE_S, 0f, UiEasing.BACK_OUT);
+    /** L'appui claque, le relâchement se repose. */
+    private final UiAnimatedFloat pressAnim = new UiAnimatedFloat(0f, UiTheme.Motion.PRESS, UiTheme.Motion.RELEASE);
+    /** Éclat du clic : bref et sans rebond, il se joue des dizaines de fois par partie. */
+    private final UiTransition clickAnim = new UiTransition(UiTheme.Motion.CLICK_PULSE_S, 0f, UiEasing.UI_OUT);
     private boolean leftDown;
     private float pulseValue;
     private boolean pulsing;
