@@ -24,6 +24,8 @@ import { ShareTab } from './ShareTab'
 import { CompatTab } from './CompatTab'
 import { ClientOptionsTransfer, OptionsLinkApply, OptionsLinkCreate } from './OptionsShare'
 import { useT } from '@/i18n'
+import { useStorePick } from '@/stores/useStore'
+import { HorizonVersionPicker, horizonChoiceLabel } from './HorizonVersionPicker'
 
 /**
  * Les réglages d'une instance, en un seul endroit.
@@ -1454,6 +1456,7 @@ function InstallationTab({
   suggestedVersion?: string | null
 }) {
   const t = useT()
+  const { language } = useStorePick('language')
   const [editing, setEditing] = useState(false)
   const [mcVersion, setMcVersion] = useState(instance.mc_version)
   const [loader, setLoader] = useState<Loader>(instance.loader)
@@ -1545,7 +1548,9 @@ function InstallationTab({
   /** Un loader peut n'exister pour aucune version du jeu choisi — NeoForge
    *  avant 1.20.2, Quilt et Fabric sur les très vieilles versions. Rien à
    *  recommander alors, et rien à installer non plus. */
-  const unavailable = loader !== 'vanilla' && loaderVersions?.length === 0
+  // Horizon fait exception : une liste vide veut dire « GitHub injoignable »,
+  // et choisir un canal (Stable, Nightly) n'a pas besoin de la liste.
+  const unavailable = loader !== 'vanilla' && loader !== 'horizon' && loaderVersions?.length === 0
 
   const save = async () => {
     setSaving(true)
@@ -1621,7 +1626,9 @@ function InstallationTab({
                       « Recommandée » sans pouvoir dire laquelle serait une
                       promesse vide, et c'est le cas quand le loader n'existe
                       pas pour cette version du jeu. */}
-                  {instance.loader_version || (recommended || !unavailable ? defaultLabel : '—')}
+                  {instance.loader === 'horizon'
+                    ? horizonChoiceLabel(instance.loader_version, loaderVersions, language, t)
+                    : instance.loader_version || (recommended || !unavailable ? defaultLabel : '—')}
                 </span>
               </Line>
             )}
@@ -1710,6 +1717,10 @@ function InstallationTab({
                     {t('instancesPage.loaderUnavailable', { loader: label(loader), mc: mcVersion })}
                   </p>
                 </div>
+              ) : loader === 'horizon' ? (
+                // Horizon ne publie plus que des Nightly : on choisit d'abord
+                // un canal, une version figée ensuite (voir HorizonVersionPicker).
+                <HorizonVersionPicker value={loaderVersion} onChange={setLoaderVersion} versions={loaderVersions} />
               ) : (
                 <>
                   <Select

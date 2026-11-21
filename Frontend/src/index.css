@@ -141,6 +141,17 @@ option {
   color: rgb(var(--txt-primary));
 }
 
+/* Reflet qui parcourt la partie remplie de la barre de lancement : il dit
+ * « ça travaille » même quand une étape longue ne fait plus bouger le
+ * pourcentage (préparation d'Horizon, démarrage de la JVM). */
+@keyframes launch-sheen {
+  from { transform: translateX(-120%); }
+  to { transform: translateX(320%); }
+}
+.launch-sheen {
+  animation: launch-sheen 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
 /* Boucles décoratives de la bannière d'accueil, en CSS pour tourner hors du
  * fil principal (framer-motion 13 anime `x`/`y` en JavaScript). */
 .skyline-breathe {

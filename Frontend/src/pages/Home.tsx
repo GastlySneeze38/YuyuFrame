@@ -19,6 +19,7 @@ import { HomeBanner, Confetti, useHomeBanner } from '@/components/home/HomeBanne
 import { HomeRail } from '@/components/home/HomeRail'
 import { InstanceShelf } from '@/components/home/shelf/InstanceShelf'
 import { LaunchTips } from '@/components/home/LaunchTips'
+import { LaunchProgress } from '@/components/home/LaunchProgress'
 import { HomeShortcuts } from '@/components/home/ChallengeShortcuts'
 import { HalloweenButtonFx, HalloweenGround, HalloweenLaunchBurst, HalloweenSky, playHalloweenLaunchSound } from '@/components/home/Halloween'
 import { ProCard } from '@/components/home/ProCard'
@@ -535,6 +536,10 @@ export default function Home() {
       playHalloweenLaunchSound()
       setSpookBurst((n) => n + 1)
     }
+    // Une première étape tout de suite : sans elle, le bloc de progression
+    // prendrait le lancement pour une partie déjà commencée le temps que le
+    // premier message du launcher arrive.
+    setProgress(instanceId, { current: 0, total: 100, message: t('home.preparingLaunch') })
     try {
       // Choix « avec / sans le client intégré », pris dans sa fenêtre et
       // retenu par instance. Le Rust l'ignore là où l'agent ne peut pas se
@@ -556,6 +561,7 @@ export default function Home() {
       // diagnostiquer le problème (cf. même bug corrigé sur Login.tsx).
       const message = e instanceof Error ? e.message : typeof e === 'string' ? e : t('home.launchError')
       showError(message)
+      resetLaunchUi(instanceId)
     }
   }
 
@@ -962,30 +968,15 @@ export default function Home() {
           <div ref={launchRowRef} className="flex w-full gap-2">
             {halloween && spookBurst > 0 && <HalloweenLaunchBurst key={spookBurst} anchor={launchRowRef} />}
             {gameRunning ? (
-              <div
-                // Même rayon que le bouton de lancement : c'est le même
-                // emplacement, il ne doit pas changer de forme quand la
-                // partie démarre.
-                className={`relative overflow-hidden font-bold text-white transition-all duration-200 flex-1 flex flex-col items-center justify-center gap-[clamp(3px,0.8vh,6px)] rounded-xl text-[clamp(11px,1.7vh,13px)] tracking-[0.04em] py-[clamp(5px,1.4vh,10px)] ${launchBtnBg} ${launchBtnShadow}`}
-              >
-                {progress && (
-                  <span
-                    className="absolute inset-y-0 left-0 z-0 bg-[rgba(255,255,255,0.22)] transition-all duration-300 ease-out"
-                    style={{ width: `${percent}%` }}
-                  />
-                )}
-                <span className="relative z-10 flex items-center justify-center gap-2">
-                  <span className="h-4 w-4 animate-spin-slow rounded-full border-2 border-[rgba(255,255,255,0.2)] border-t-white" />
-                  {t('home.launching')}
-                </span>
-                <button
-                  onClick={handleCancelLaunch}
-                  disabled={cancelling}
-                  className={`relative z-10 rounded-full px-4 py-1 text-[10px] font-semibold transition-all duration-150 border ${cancelling ? 'text-[rgba(255,255,255,0.3)] border-[rgba(255,255,255,0.08)] bg-transparent cursor-not-allowed' : 'text-[rgba(252,165,165,0.9)] border-[rgba(248,113,113,0.35)] bg-[rgba(200,50,50,0.14)] cursor-pointer hover:bg-[rgba(200,50,50,0.26)]'}`}
-                >
-                  {cancelling ? t('home.cancelling') : t('home.cancel')}
-                </button>
-              </div>
+              // Même emplacement et même hauteur que le bouton Jouer : l'étape
+              // en cours, le pourcentage, le temps écoulé, puis « En jeu ».
+              <LaunchProgress
+                key={selectedInstanceId ?? ''}
+                progress={progress}
+                cancelling={cancelling}
+                onCancel={handleCancelLaunch}
+                toneClass={`${launchBtnBg} ${launchBtnShadow}`}
+              />
             ) : (
               <span className="relative flex flex-1">
 
