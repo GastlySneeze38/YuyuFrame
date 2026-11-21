@@ -108,9 +108,4 @@ public final class UiText {
         float lineH = lineHeight(font, scale);
         return UiBackdropTone.luminance(x, baseline - lineH * 0.2f, x + width(font, text, scale), baseline + lineH * 0.8f, vw, vh);
     }
-
-    /** Une couleur de texte posé sur le fond sous ce rectangle : voir {@link UiBackdropTone#adapt}. */
-    public static UiColor onBackdrop(UiColor color, float x1, float y1, float x2, float y2, int vw, int vh) {
-        return UiBackdropTone.adapt(color, UiBackdropTone.luminance(x1, y1, x2, y2, vw, vh));
-    }
 }

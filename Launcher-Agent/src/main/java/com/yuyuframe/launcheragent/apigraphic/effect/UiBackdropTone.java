@@ -61,7 +61,6 @@ public final class UiBackdropTone {
     public static void beginFrame() {
         covers.clear();
         float tone = screenTone();
-        boolean was = pageIsLight;
         if (tone >= 0f) {
             // Un écart pour basculer : un fond à la limite ne fait pas clignoter la page.
             if (!pageIsLight && tone > LIGHT_ON) pageIsLight = true;
@@ -69,12 +68,6 @@ public final class UiBackdropTone {
         } else {
             // Rien de mesuré (pas de verre, relevé trop vieux) : le blanc d'avant.
             pageIsLight = false;
-        }
-        // Journalisé à chaque bascule et au premier relevé : de quoi régler les seuils sur un vrai monde.
-        if (was != pageIsLight || (tone >= 0f && !toneLogged)) {
-            toneLogged = tone >= 0f;
-            LauncherLog.ui(1, "[UiBackdropTone] clarté du fond " + (tone < 0f ? "inconnue" : String.format(java.util.Locale.ROOT, "%.3f", tone))
-                + " -> texte " + (pageIsLight ? "encre" : "blanc"));
         }
         long now = System.nanoTime();
         float dt = lastFrameNanos == 0L ? 1f : Math.min(1f, (now - lastFrameNanos) / 1e9f);
@@ -88,19 +81,18 @@ public final class UiBackdropTone {
     /**
      * La teinte de la page, de 0 (blanc) à 1 (encre). UNE décision pour toute
      * la page (2026-11-21) : un titre noir au-dessus d'un compte blanc ne se
-     * lit pas comme une page. Elle vient de la clarté moyenne de tout le fond
-     * sous le voile ({@link #screenTone}), sans les décors propres à une page
-     * (bande, losanges) : sur le même monde, toutes les pages prennent la
-     * même teinte. (D'abord un vote des textes : l'accueil, dont les seuls
-     * textes posés sur le décor sont bas, sur le sol plus sombre, restait
-     * blanc quand les autres pages passaient au noir.)
+     * lit pas comme une page. Elle vient de la clarté du haut du fond
+     * ({@link #screenTone}), sans les décors propres à une page (bande,
+     * losanges) : sur le même monde, toutes les pages prennent la même
+     * teinte. (D'abord un vote des textes : l'accueil, dont les seuls textes
+     * posés sur le décor sont bas, sur le sol plus sombre, restait blanc
+     * quand les autres pages passaient au noir.)
      */
     private static float pageLight;
-    private static boolean pageIsLight, toneLogged;
-    private static long lastDebugNanos;
+    private static boolean pageIsLight;
     private static long lastFrameNanos;
 
-    /** Le voile commun à tous les écrans ({@code UiAurora}) : il compte dans la teinte de la page. */
+    /** Le voile commun à tous les écrans ({@code UiAurora}), compté dans la clarté sous un texte ({@link #luminance}). */
     private static volatile Cover veil;
 
     /** Le voile posé sur tout le fond, le même à chaque image. */
@@ -109,54 +101,31 @@ public final class UiBackdropTone {
     }
 
     /**
-     * La clarté moyenne de tout le fond, voile compris, en lumière LINÉAIRE
-     * (comme le contraste du WCAG : un bleu ciel pastel paraît clair même si
-     * sa valeur brute est moyenne) ; {@code -1} sans relevé.
+     * La clarté BRUTE relue sur les 60 % du haut de l'écran (la rangée 0 est
+     * en bas) — là où sont les titres et les commandes ; {@code -1} sans
+     * relevé.
+     *
+     * <p>Mesuré en jeu le 2026-11-21 : un gris très clair donne 0,62, un ciel
+     * bleu autour de 0,63, une nuit ou une grotte de 0,1 à 0,3. Lui retirer
+     * le voile puis la passer en lumière linéaire ramenait le gris clair à
+     * 0,19 — la page restait blanche : la valeur brute sépare mieux les fonds.
      */
     private static float screenTone() {
         float[] g = grid;
         if (g == null || System.nanoTime() - updatedNanos > STALE_NANOS) return -1f;
         int w = gridW, h = gridH;
-        Cover v = veil;
+        int from = Math.max(0, (int) Math.floor(h * (1f - TONE_SHARE)));
         float sum = 0f;
         int n = 0;
-        // Les 60 % du haut seulement (la rangée 0 est en bas) : c'est là que
-        // sont les titres et les commandes ; le bas, sous le voile le plus
-        // dense, rendait « moyen » un fond franchement clair (2026-11-21).
-        int from = (int) Math.floor(h * (1f - TONE_SHARE));
-        float rawSum = 0f, dimSum = 0f, allSum = 0f;
-        for (int y = 0; y < h; y++) {
-            float dim = v == null ? 0f : Math.max(0f, Math.min(1f, v.alphaAt(0.5f, (y + 0.5f) / h)));
+        for (int y = from; y < h; y++) {
             for (int x = 0; x < w; x++) {
-                float raw = g[y * w + x];
-                allSum += raw;
-                if (y < from) continue;
-                sum += (float) Math.pow(raw * (1f - dim), 2.2);
-                rawSum += raw;
-                dimSum += dim;
+                sum += g[y * w + x];
                 n++;
             }
         }
-        // La décision porte sur la clarté BRUTE relue (2026-11-21, mesuré en
-        // jeu) : sur un gris très clair, elle valait 0,618, et lui retirer le
-        // voile puis la passer en lumière linéaire la ramenait à 0,19 — sous
-        // le seuil, la page restait blanche. La correction comptait deux fois
-        // l'assombrissement ; la valeur brute sépare bien les fonds (ciel ou
-        // gris clair vers 0,6, nuit ou grotte entre 0,1 et 0,3).
-        float tone = n > 0 ? rawSum / n : -1f;
-        // DÉBOGAGE (2026-11-21) : ce que voit la mesure, toutes les 3 s, pour
-        // régler la détection sur un vrai monde.
-        long now = System.nanoTime();
-        if (n > 0 && now - lastDebugNanos > 3_000_000_000L) {
-            lastDebugNanos = now;
-            LauncherLog.ui(1, String.format(java.util.Locale.ROOT,
-                "[UiBackdropTone] débogage : grille %dx%d (lue il y a %d ms), clarté brute haut %.3f / écran %.3f, voile moyen %.2f, "
-                    + "clarté linéaire sous le voile %.3f (décision sur la brute, seuils %.2f / %.2f) -> %s",
-                w, h, (now - updatedNanos) / 1_000_000L, rawSum / n, allSum / (w * h), dimSum / n, sum / n,
-                LIGHT_ON, LIGHT_OFF, pageIsLight ? "encre" : "blanc"));
-        }
-        return tone;
+        return n > 0 ? sum / n : -1f;
     }
+
     /**
      * Seuils de bascule vers l'encre et de retour au blanc, sur la clarté
      * brute relue (0 à 1) ; un écart entre les deux pour ne pas clignoter.

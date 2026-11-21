@@ -37,9 +37,9 @@ import com.yuyuframe.launcheragent.runtime.ui.ingameui.RankTiles;
  * d'exemple tant qu'aucun vrai duel n'a été noté. En jeu, il n'apparaît que
  * les quelques secondes qui suivent un duel.
  *
- * <p>La carte du module ouvre l'historique ({@code UiPvpScoreScreen}) : la
- * moyenne des notes, puis les duels, chacun menant à son détail. Son seul
- * réglage, « Partager mes duels », est un interrupteur de cette page.
+ * <p>Le module n'a plus de carte dans la grille des modules (2026-11-21) :
+ * c'est l'onglet Compétitif du menu ({@code CompetitiveTab}) qui montre le
+ * rang et les duels, et son bouton de réglages mène aux réglages du module.
  *
  * <p>Éteint par défaut : tant que le score n'est pas calibré, personne ne
  * doit se retrouver avec des journaux écrits sans l'avoir demandé.
@@ -176,9 +176,9 @@ public final class PvpScoreModule extends LauncherModule implements HudElementOw
      * Allumé par défaut (décision du 2026-10-18 : la calibration a besoin des
      * duels de tout le monde), et rien ne part sans compte YuyuFrame connecté.
      *
-     * <p>Le module n'a pas d'écran de réglages — sa carte ouvre l'historique :
-     * l'interrupteur est sur cette page ({@code UiPvpScoreScreen}). Le
-     * réglage est déclaré ici pour être sauvegardé comme les autres.
+     * <p>Réglé depuis les réglages du module, ouverts par l'onglet Compétitif
+     * du menu ({@code CompetitiveTab}). Déclaré ici pour être sauvegardé comme
+     * les autres.
      */
     private boolean shareDuels = true;
 

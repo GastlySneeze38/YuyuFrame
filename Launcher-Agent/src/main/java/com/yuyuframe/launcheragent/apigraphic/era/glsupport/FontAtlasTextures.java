@@ -105,30 +105,14 @@ public final class FontAtlasTextures {
         }
         buf.flip();
 
-        // DIAG-FONTCORRUPT (era E, bug "texte corrompu une fois sur deux" —
-        // stable sur TOUTE une session, jamais un flicker en cours de route,
-        // donc lié à CETTE création unique/mise en cache, pas au dessin par
-        // frame) : cette méthode n'est appelée QU'UNE SEULE FOIS par police
-        // par lancement (voir ensureFontTexture, résultat mis en cache) — un
-        // seul appel de log ici, aucun risque de perf, même motif que DIAG7
-        // (voir historique de session) mais volontairement gardé cette fois
-        // (pas par frame).
-        int activeUnitBefore = gl.glGetInteger(0x84E0); // GL_ACTIVE_TEXTURE
-        int boundTexBefore = gl.glGetInteger(0x8069);   // GL_TEXTURE_BINDING_2D
-        int errBefore = gl.drainGlErrors();
-
         int texId = gl.glGenTextures();
         gl.glBindTexture(0x0DE1, texId); // GL_TEXTURE_2D
-        int errAfterBind = gl.drainGlErrors();
         gl.glTexImage2D(0x0DE1, 0, 0x1908, w, h, 0, 0x1908, 0x1401, buf); // GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE
-        int errAfterTexImage = gl.drainGlErrors();
         gl.glGenerateMipmap(0x0DE1);
-        int errAfterMipmap = gl.drainGlErrors();
         gl.glTexParameteri(0x0DE1, 0x2801, 0x2703); // GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR
         gl.glTexParameteri(0x0DE1, 0x2800, 0x2601); // GL_TEXTURE_MAG_FILTER, GL_LINEAR
         gl.glTexParameteri(0x0DE1, 0x2802, 0x812F); // GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE
         gl.glTexParameteri(0x0DE1, 0x2803, 0x812F); // GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE
-        int errAfterParams = gl.drainGlErrors();
 
         // BUG TROUVÉ (era E, texte REGULAR corrompu de façon non-déterministe
         // — confirmé toujours présent MÊME en vanilla sans aucun mod, donc
@@ -171,13 +155,6 @@ public final class FontAtlasTextures {
         // buffer de lecture, jamais en supposant que w/h côté Java
         // correspondent forcément à ce que le pilote a alloué).
         gl.glBindTexture(0x0DE1, 0);
-
-        LauncherLog.info("[LauncherAgent] DIAG-FONTCORRUPT: texId=" + texId + " atlasW=" + w + " atlasH=" + h
-            + " activeUnitBefore=0x" + Integer.toHexString(activeUnitBefore)
-            + " boundTex2DBefore=" + boundTexBefore
-            + " glErr(before=" + errBefore + ", afterBind=" + errAfterBind
-            + ", afterTexImage=" + errAfterTexImage + ", afterMipmap=" + errAfterMipmap
-            + ", afterParams=" + errAfterParams + ")");
         return texId;
     }
 }

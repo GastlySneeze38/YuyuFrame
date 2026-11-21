@@ -156,7 +156,7 @@ final class CompetitiveTab {
 
     /** Un duel noté de ce mode, et du type affiché (en compétitif, ceux joués en casual n'ont pas compté). */
     private static boolean counts(DuelHistory.Duel duel, int code) {
-        return duel.score() >= 0 && duel.mode() == code && (!competitive || !UiPvpScoreScreen.isCasual(duel));
+        return duel.score() >= 0 && duel.mode() == code && (!competitive || !isCasual(duel));
     }
 
     /** En compétitif les duels classés du mode ; en casual TOUS ses duels notés (la liste casual les montre tous). */
@@ -164,7 +164,7 @@ final class CompetitiveTab {
         int n = 0;
         for (DuelHistory.Duel duel : history.duels) {
             if (duel.score() < 0 || duel.mode() != code()) continue;
-            if (!ranked || !UiPvpScoreScreen.isCasual(duel)) n++;
+            if (!ranked || !isCasual(duel)) n++;
         }
         return n;
     }
@@ -182,6 +182,53 @@ final class CompetitiveTab {
         DuelHistory.Rank rank = rank();
         if (!competitive) return PvpScoreUi.scoreColor(average);
         return rank != null && rank.placed ? PvpRank.color(rank.division) : UiTheme.ACCENT;
+    }
+
+    // ── Lecture d'un duel et des courbes (repris de l'ancienne page Score PvP) ─
+
+    /** Champ du classement d'un duel : 1 duel de placement, 2 joué pendant le placement sans y compter. */
+    private static final int RANKED_PLACEMENT = 7;
+
+    /** Joué en casual : noté, hors du classement. */
+    static boolean isCasual(DuelHistory.Duel duel) {
+        return duel.report[NativeCombat.REPORT_CASUAL] >= 1;
+    }
+
+    /** La place d'un duel dans le placement (0 s'il est joué après, en casual, ou sans classement). */
+    static int placementOf(DuelHistory.Duel duel) {
+        if (isCasual(duel)) return 0;
+        return duel.ranked != null && duel.ranked.length > RANKED_PLACEMENT ? (int) duel.ranked[RANKED_PLACEMENT] : 0;
+    }
+
+    /** Les paliers de la courbe des notes : au-delà de 330, puis de 420 (environ 21 % et 4 % des joueurs). */
+    private static final double TIER_HIGH = 330.0, TIER_TOP = 420.0;
+    /** Couleurs du trait de la courbe des notes : avant le premier palier, entre les deux, au-delà. */
+    private static final UiColor CURVE_LOW = new UiColor(110, 168, 186, 255);
+    private static final UiColor CURVE_HIGH = new UiColor(200, 130, 196, 255);
+    private static final UiColor CURVE_TOP = new UiColor(222, 204, 128, 255);
+
+    /** La hauteur de la cloche à une note, 1 à 250 : 100 points valent un écart habituel. */
+    static double bell(double score) {
+        double z = (score - 250.0) / 100.0;
+        return Math.exp(-0.5 * z * z);
+    }
+
+    /** La part d'une loi normale sous {@code z} (approximation d'Abramowitz et Stegun, largement assez précise ici). */
+    static double normalCdf(double z) {
+        double t = 1.0 / (1.0 + 0.2316419 * Math.abs(z));
+        double d = 0.3989423 * Math.exp(-z * z / 2.0);
+        double p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
+        return z > 0 ? 1.0 - p : p;
+    }
+
+    /** La couleur du trait à une note, fondue sur 20 points autour de chaque palier. */
+    static UiColor curveColor(double score) {
+        double blend = 20.0;
+        if (score < TIER_HIGH - blend) return CURVE_LOW;
+        if (score < TIER_HIGH + blend) return UiColor.lerp(CURVE_LOW, CURVE_HIGH, (float) ((score - TIER_HIGH + blend) / (2 * blend)));
+        if (score < TIER_TOP - blend) return CURVE_HIGH;
+        if (score < TIER_TOP + blend) return UiColor.lerp(CURVE_HIGH, CURVE_TOP, (float) ((score - TIER_TOP + blend) / (2 * blend)));
+        return CURVE_TOP;
     }
 
     // ── Les commandes de l'en-tête ───────────────────────────────────────────
@@ -492,7 +539,7 @@ final class CompetitiveTab {
         private int[] placementResults() {
             List<Integer> results = new ArrayList<>();
             for (DuelHistory.Duel duel : history.duels) {
-                if (duel.mode() == code() && UiPvpScoreScreen.placementOf(duel) == 1) results.add(0, duel.result());
+                if (duel.mode() == code() && placementOf(duel) == 1) results.add(0, duel.result());
             }
             int[] out = new int[results.size()];
             for (int i = 0; i < out.length; i++) out[i] = results.get(i);
@@ -566,10 +613,10 @@ final class CompetitiveTab {
                     px(0.3f), vw, vh);
             } else {
                 double max = NativeCombat.SCORE_MAX;
-                height = a -> UiPvpScoreScreen.bell(a * max);
-                color = a -> UiPvpScoreScreen.curveColor(a * max);
+                height = a -> bell(a * max);
+                color = a -> curveColor(a * max);
                 at = average >= 0 ? Math.max(0, Math.min(max, average)) / max : -1;
-                long better = average >= 0 ? Math.round(100.0 * UiPvpScoreScreen.normalCdf((average - 250.0) / 100.0)) : 0;
+                long better = average >= 0 ? Math.round(100.0 * normalCdf((average - 250.0) / 100.0)) : 0;
                 lead = average < 0 ? Lang.tr("Pas encore de duel noté")
                     : better >= 1 ? Lang.tr("Devant") + " " + better + " % " + Lang.tr("des joueurs") : Lang.tr("Ta place parmi les joueurs");
             }
@@ -721,15 +768,15 @@ final class CompetitiveTab {
         private String[] chip() {
             String letter = duel.result() == 1 ? Lang.tr("V") : duel.result() == 2 ? Lang.tr("D") : Lang.tr("N");
             if (!ranked) return new String[]{ PvpScoreUi.resultText(duel.result()).toUpperCase(Locale.ROOT) };
-            int placement = UiPvpScoreScreen.placementOf(duel);
+            int placement = placementOf(duel);
             if (placement != 0) return new String[]{ Lang.tr(placement == 1 ? "PLACEMENT" : "NON COMPTÉ") };
             boolean counted = duel.ranked != null && duel.ranked.length > 0;
             return new String[]{ counted ? letter + " " + PvpScoreUi.signedPoints(duel.ranked[0]) : letter };
         }
 
         private UiColor chipTone() {
-            if (ranked && UiPvpScoreScreen.placementOf(duel) == 1) return UiTheme.ACCENT;
-            if (ranked && UiPvpScoreScreen.placementOf(duel) == 2) return PvpScoreUi.NEUTRAL;
+            if (ranked && placementOf(duel) == 1) return UiTheme.ACCENT;
+            if (ranked && placementOf(duel) == 2) return PvpScoreUi.NEUTRAL;
             return PvpScoreUi.resultColor(duel.result());
         }
 

@@ -611,13 +611,22 @@ public class UiMainMenuScreen extends UiScreenBase {
         }
         CompetitiveTab.Banner banner = ct.banner();
         float control = px(44f);
+        // Le module n'a plus de carte dans la grille : éteint, c'est ici qu'on
+        // l'allume, à la place de ce qu'on joue (sans lui, aucun duel n'est noté).
+        boolean scoring = module == null || module.isEnabled();
+        FriendDetail.Button enable = scoring ? null : new FriendDetail.Button(() -> Lang.tr("Activer la notation des duels"), true,
+            () -> true, () -> {
+                module.setEnabled(true);
+                HudConfigStore.save();
+                requestRebuild();
+            });
 
         Box page = content.add(UiLayout.column().fill().gap(px(UiTheme.Space.S20))
             .pad(px(UiTheme.Space.S32), sideMargin, px(UiTheme.Space.S24), sideMargin));
         // Le titre et sa ligne d'aide à gauche ; à droite ce qu'on joue, puis ce qu'on regarde.
         Box head = page.add(UiLayout.row().height(headHeight()).rigid().alignItems("flex-end").gap(px(UiTheme.Space.S10)));
         head.add(UiLayout.spacer());
-        head.add(UiLayout.fixed(CompetitiveTab.switchWidth(), control).bind(playing));
+        head.add(UiLayout.fixed(CompetitiveTab.switchWidth(), control).bind(scoring ? playing : enable));
         head.add(UiLayout.fixed(CompetitiveTab.modeDropdownWidth(), control).bind(modes));
         head.add(UiLayout.fixed(types.preferredWidth(), control).bind(types));
         head.add(UiLayout.fixed(control, control).bind(help));
@@ -632,8 +641,12 @@ public class UiMainMenuScreen extends UiScreenBase {
         parts.afterSolve.add(() -> {
             TaffyLayoutResult.Rect headRect = parts.layout.rect(head);
             if (headRect != null) competitiveHintBaseline = placeHead(headRect);
-            widgets.add(playing);
-            widgets.add(playingPainter);
+            if (scoring) {
+                widgets.add(playing);
+                widgets.add(playingPainter);
+            } else {
+                widgets.add(enable);
+            }
             widgets.add(modes);
             widgets.add(types);
             widgets.add(help);
@@ -773,8 +786,9 @@ public class UiMainMenuScreen extends UiScreenBase {
                     return on;
                 }));
         }
-        for (LauncherModule m : ModuleRegistry.ungrouped()) out.add(moduleEntry(m));
-        for (LauncherModule m : ModuleRegistry.groupedFavorites()) out.add(moduleEntry(m));
+        // Le Score PvP n'a plus de carte : il a son onglet, Compétitif (2026-11-21).
+        for (LauncherModule m : ModuleRegistry.ungrouped()) if (!(m instanceof PvpScoreModule)) out.add(moduleEntry(m));
+        for (LauncherModule m : ModuleRegistry.groupedFavorites()) if (!(m instanceof PvpScoreModule)) out.add(moduleEntry(m));
         return out;
     }
 
@@ -784,10 +798,7 @@ public class UiMainMenuScreen extends UiScreenBase {
         // sa carte bascule simplement le module (sans refaire la grille, son
         // interrupteur suit l'état du module de lui-même).
         boolean hasSomethingToShow = owner != null || !mod.settings().isEmpty() || mod instanceof HudElementOwner;
-        Runnable open = mod instanceof PvpScoreModule
-            // Le Score PvP n'a pas d'écran de réglages à lui : sa carte ouvre l'onglet Compétitif (réglages dans son en-tête).
-            ? () -> open(Tab.COMPETITIVE)
-            : owner != null
+        Runnable open = owner != null
             // Membre d'un groupe : ses réglages sont dans l'écran du groupe, ouvert sur lui.
             ? () -> closeTo(new UiModGroupConfigScreen(this, owner, mod))
             : hasSomethingToShow
@@ -798,6 +809,6 @@ public class UiMainMenuScreen extends UiScreenBase {
             v -> { mod.setEnabled(v); HudConfigStore.save(); },
             () -> mod.favorite,
             v -> { mod.favorite = v; HudConfigStore.save(); })
-            .opensSettings(hasSomethingToShow || mod instanceof PvpScoreModule);
+            .opensSettings(hasSomethingToShow);
     }
 }

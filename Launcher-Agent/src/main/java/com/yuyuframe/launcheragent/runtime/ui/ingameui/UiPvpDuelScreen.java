@@ -16,8 +16,8 @@ import com.yuyuframe.launcheragent.runtime.module.gameplay.PvpScoreModule;
 import java.util.List;
 
 /**
- * La page d'un duel, en plein écran, ouverte depuis l'historique de
- * {@link UiPvpScoreScreen}. De haut en bas :
+ * La page d'un duel, en plein écran, ouverte depuis une carte de duel de
+ * l'onglet Compétitif ({@link CompetitiveTab}). De haut en bas :
  * <ol>
  *   <li>le bandeau, teinté par le résultat : l'adversaire, le résultat, la date ;</li>
  *   <li>la note en grand et sa confiance ; à côté, le <b>face-à-face</b> :

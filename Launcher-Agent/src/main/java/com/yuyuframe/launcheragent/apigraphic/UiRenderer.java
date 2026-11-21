@@ -210,15 +210,10 @@ public final class UiRenderer {
     public void ensureModernBuffersInit() {
         if (modernVao != -1 || modernBuffersInitFailed) return;
         try {
-            LauncherLog.info("[UiRenderer] DIAG3: avant glGenVertexArrays");
             modernVao = glBridge.glGenVertexArrays();
-            LauncherLog.info("[UiRenderer] DIAG3: avant glBindVertexArray vao=" + modernVao);
             glBridge.glBindVertexArray(modernVao);
-            LauncherLog.info("[UiRenderer] DIAG3: avant glGenBuffers");
             modernVbo = glBridge.glGenBuffers();
-            LauncherLog.info("[UiRenderer] DIAG3: avant glBindBuffer vbo=" + modernVbo);
             glBridge.glBindBuffer(0x8892, modernVbo); // GL_ARRAY_BUFFER
-            LauncherLog.info("[UiRenderer] DIAG3: avant glEnableVertexAttribArray/glVertexAttribPointer");
             glBridge.glEnableVertexAttribArray(0);
             glBridge.glVertexAttribPointer(0, 2, 0x1406, false, 16, 0L);  // GL_FLOAT, stride=4*4=16, offset=0
             glBridge.glEnableVertexAttribArray(1);
@@ -285,11 +280,8 @@ public final class UiRenderer {
         }
     }
 
-    private static boolean fboDiagLogged = false;
-
     public void uploadAndDraw(FloatBuffer verts, int glMode, int vertexCount) throws Exception {
-        // DIAGNOSTIC : quel framebuffer est actif à ce point précis (TAIL de
-        // GameRenderer.render()) ? 0x8CA6 = GL_FRAMEBUFFER_BINDING.
+        // Le framebuffer actif à ce point (TAIL de GameRenderer.render()).
         //
         // BUG TROUVÉ (comparaison 1.16.5 vs 1.20.4, voir historique de
         // session) : ce log vaut TOUJOURS 0 en 1.16.5 (le blit vers la
@@ -305,17 +297,6 @@ public final class UiRenderer {
         // point est, empiriquement sur les deux brackets testés, TOUJOURS
         // celui qui finit par être affiché — s'y fier plutôt que d'imposer
         // une cible fixe.
-        if (!fboDiagLogged) {
-            fboDiagLogged = true;
-            try {
-                int fb = glBridge.glGetInteger(0x8CA6);
-                LauncherLog.info("[UiRenderer] DIAG5: framebuffer actif au moment du dessin = " + fb
-                    + " (0 = framebuffer par défaut/fenêtre — non-zéro = FBO hors-écran, dessiné dedans quand même)");
-            } catch (Throwable t) {
-                LauncherLog.err("[UiRenderer] DIAG5: échec lecture framebuffer actif: " + t);
-            }
-        }
-
         glBridge.glBindVertexArray(modernVao);
         glBridge.glBindBuffer(0x8892, modernVbo); // GL_ARRAY_BUFFER
         // GL_DYNAMIC_DRAW (0x88E8) : contenu réécrit à chaque draw (HUD redessiné
@@ -343,7 +324,7 @@ public final class UiRenderer {
         // part. Log une seule fois si ça arrive, ça confirmerait direct la cause.
         if (uniformLoc < 0 && !loggedBadProjectionLoc) {
             loggedBadProjectionLoc = true;
-            LauncherLog.err("[UiRenderer] DIAG6: uProjection introuvable (location=" + uniformLoc
+            LauncherLog.err("[UiRenderer] uProjection introuvable (location=" + uniformLoc
                 + ") — la matrice ne sera JAMAIS appliquée, rendu invisible garanti");
         }
         FloatBuffer m = floatBuffer(16);

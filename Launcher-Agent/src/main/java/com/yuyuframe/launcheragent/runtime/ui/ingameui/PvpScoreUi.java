@@ -23,7 +23,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Ce que les pages du Score PvP ({@link UiPvpScoreScreen}, {@link UiPvpDuelScreen}),
+ * Ce que l'onglet Compétitif ({@link CompetitiveTab}), la page d'un duel ({@link UiPvpDuelScreen}),
  * leur fenêtre d'explication ({@link PvpInfoModal}) et le panneau de fin de
  * duel du HUD ont en commun : les couleurs, le cadre d'une page plein écran,
  * et quelques façons de poser du texte.
@@ -152,17 +152,6 @@ public final class PvpScoreUi {
     static UiWidget helpButton(Runnable open) {
         UiIconButton button = new UiIconButton(UiScreenHeader.ICON_INFO, open);
         button.tooltip = Lang.tr("Comment ça marche ?");
-        return button;
-    }
-
-    /**
-     * Les réglages du module (compétitif ou casual, sa touche, les mots, les
-     * sons, le partage des duels) — la carte du module ouvre cette page, pas
-     * ses réglages : c'est leur seule entrée.
-     */
-    static UiWidget settingsButton(Runnable open) {
-        UiIconButton button = new UiIconButton(com.yuyuframe.launcheragent.runtime.ui.LauncherModule.icons8("settings"), open);
-        button.tooltip = Lang.tr("Réglages : compétitif ou casual, sa touche, les mots, les sons, le partage des duels");
         return button;
     }
 
@@ -520,82 +509,20 @@ public final class PvpScoreUi {
         }
     }
 
-    // ── Casual / compétitif ──────────────────────────────────────────────────
-
-    /**
-     * Les deux façons de jouer le mode choisi dans la liste déroulante, dans
-     * l'ordre du sélecteur. Seul le casual est noté aujourd'hui.
-     */
-    static final String[] PLAY_TYPES = { "CASUAL", "COMPÉTITIF" };
-
-    /**
-     * Deux boutons collés, l'un allumé : casual ou compétitif, pour le mode
-     * de la liste déroulante d'à côté. La pastille de l'option choisie glisse
-     * d'un côté à l'autre.
-     */
-    static final class PlayTypeToggle extends UiWidget {
-        private final java.util.function.IntConsumer onChange;
-        private int selected;
-        private final UiAnimatedFloat slide;
-        private final UiAnimatedFloat hoverLeft = new UiAnimatedFloat(0f, 16f);
-        private final UiAnimatedFloat hoverRight = new UiAnimatedFloat(0f, 16f);
-        private double lastMouseX;
-
-        PlayTypeToggle(float x, float y, float w, float h, int selected, java.util.function.IntConsumer onChange) {
-            super(x, y, w, h);
-            this.selected = Math.max(0, Math.min(PLAY_TYPES.length - 1, selected));
-            this.slide = new UiAnimatedFloat(this.selected, 14f);
-            this.onChange = onChange;
-        }
-
-        @Override
-        public void draw(UiRenderer r, double mouseX, double mouseY, int vw, int vh) {
-            lastMouseX = mouseX;
-            float half = w / 2f;
-            boolean inside = contains(mouseX, mouseY);
-            hoverLeft.setTarget(inside && mouseX < x + half ? 1f : 0f);
-            hoverRight.setTarget(inside && mouseX >= x + half ? 1f : 0f);
-            slide.setTarget(selected);
-            float radius = UiTheme.scaled(9f);
-            float inset = UiTheme.scaled(4f);
-            r.drawGlassPanel(x, y, x + w, y + h, radius, UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_FIELD, a(UiTheme.CARD_BG),
-                r.isGlassAvailable() ? a(UiTheme.GLASS_BORDER) : null, Math.max(1f, UiTheme.scaled(1f)), vw, vh);
-            float pillLeft = x + inset + slide.get() * half;
-            r.drawRoundedRect(pillLeft, y + inset, pillLeft + half - inset * 2f, y + h - inset, radius - inset / 2f,
-                a(UiTheme.ACCENT.withAlpha(0.32f)), vw, vh);
-            float scale = UiTheme.scaled(0.46f);
-            float mid = y + h / 2f;
-            for (int i = 0; i < PLAY_TYPES.length; i++) {
-                float hovered = i == 0 ? hoverLeft.get() : hoverRight.get();
-                UiColor color = i == selected ? UiTheme.TEXT_PRIMARY
-                    : UiColor.lerp(UiTheme.TEXT_SECONDARY, UiTheme.TEXT_PRIMARY, hovered);
-                centered(r, UiFont.BOLD, Lang.tr(PLAY_TYPES[i]), x + half * i + half / 2f, middle(mid, scale),
-                    half - inset * 4f, color, scale, vw, vh);
-            }
-        }
-
-        @Override
-        public void onClick() {
-            int clicked = lastMouseX < x + w / 2f ? 0 : 1;
-            if (clicked == selected) return;
-            selected = clicked;
-            if (onChange != null) onChange.accept(clicked);
-        }
-    }
-
     // ── Ce que le joueur joue ────────────────────────────────────────────────
 
     /**
-     * Le choix compétitif / casual sur la carte du rang — ce que le joueur
-     * JOUE, pas ce qu'il regarde ({@link PlayTypeToggle}). En compétitif : une
+     * Le choix compétitif / casual dans l'en-tête de l'onglet Compétitif — ce
+     * que le joueur JOUE, pas ce qu'il regarde (les segments Casual /
+     * Compétitif de {@link CompetitiveTab}). En compétitif : une
      * pastille « TU JOUES EN COMPÉTITIF » dans la couleur du rang, interrupteur
      * allumé. En casual : un grand bouton « REPASSER EN COMPÉTITIF » qui
      * respire. Le réglage est celui du module
      * ({@code PvpScoreModule#competitive}).
      *
-     * <p>La carte du rang est dessinée APRÈS les widgets de la page : ce
-     * widget ne dessine donc rien dans {@link #draw}, la page l'appelle par
-     * {@link #paint} une fois la carte posée. Il garde la zone cliquable.
+     * <p>Ce widget ne dessine rien dans {@link #draw} : il garde la zone
+     * cliquable, et {@link #paint} le dessine, appelé par un widget peintre
+     * qui connaît la couleur du rang ({@code CompetitiveTab.switchPainter}).
      */
     static final class PlayingSwitch extends UiWidget {
         private final Runnable onChange;
