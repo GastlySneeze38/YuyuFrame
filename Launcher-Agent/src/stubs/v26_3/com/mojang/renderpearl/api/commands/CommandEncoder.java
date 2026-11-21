@@ -29,4 +29,8 @@ public interface CommandEncoder {
     void writeToTexture(GpuTexture target, NativeImage source);
 
     void writeToTexture(GpuTexture target, NativeImage source, int mipLevel, int depth, int destX, int destY);
+
+    /** Copie d'une texture vers un tampon ; {@code callback} quand le GPU a fini (javap 26.3, comme Screenshot). */
+    void copyTextureToBuffer(GpuTexture source, com.mojang.renderpearl.api.buffers.GpuBuffer target, long offset,
+                             Runnable callback, int mipLevel);
 }

@@ -4,15 +4,16 @@ import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
 import com.yuyuframe.launcheragent.apigraphic.value.UiTheme;
 import com.yuyuframe.launcheragent.apigraphic.widget.UiWidget;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.DisplayTitle;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiText;
 
 import static com.yuyuframe.launcheragent.apigraphic.value.UiTheme.px;
 
 /**
- * Titre d'une section de la grille (« Favoris », « Autres modules »), comme
- * « Accès rapide » à l'accueil : le titre en gras, et une précision grise
- * facultative à sa droite. Posé sur le décor, donc avec l'ombre de
- * {@link UiText#drawOnBackdrop}.
+ * Le titre d'une section dans une liste qui défile (« Favoris », « Hors
+ * ligne 7 ») : dans la police des titres (2026-11-21, {@link DisplayTitle}),
+ * et un complément court à côté (un compte). Posé sur le décor, il suit la
+ * clarté du fond.
  */
 final class SectionTitle extends UiWidget {
 
@@ -33,14 +34,15 @@ final class SectionTitle extends UiWidget {
 
     @Override
     public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
-        float s = px(UiTheme.Text.XL);
-        float baseline = UiText.centeredBaseline(UiFont.BOLD, y, h, s);
-        UiText.drawOnBackdrop(renderer, UiFont.BOLD, label, x, baseline, UiTheme.TEXT_PRIMARY.multiplyAlpha(clipFade), s,
-            vpWidth, vpHeight);
+        if (clipFade <= 0.01f) return;
+        float size = DisplayTitle.sectionSize();
+        // La ligne de base un peu au-dessus du bas de la boîte : les lettres de la police des titres descendent peu.
+        float baseline = y + h * 0.28f;
+        DisplayTitle.drawSection(renderer, label, x, baseline, size, clipFade, vpWidth, vpHeight);
         if (hint == null || hint.isEmpty()) return;
-        float hx = x + UiText.width(UiFont.BOLD, label, s) + px(UiTheme.Space.S16);
-        float hs = px(UiTheme.Text.MD);
-        UiText.drawOnBackdrop(renderer, UiFont.REGULAR, UiText.fit(UiFont.REGULAR, hint, x + w - hx, hs), hx, baseline,
-            UiTheme.TEXT_MUTED.multiplyAlpha(clipFade), hs, vpWidth, vpHeight);
+        float hx = x + DisplayTitle.width(label, size) + px(UiTheme.Space.S12);
+        float hs = px(UiTheme.Text.LG);
+        UiText.drawOnBackdrop(renderer, UiFont.BOLD, UiText.fit(UiFont.BOLD, hint, x + w - hx, hs), hx, baseline,
+            UiTheme.TEXT_SECONDARY.multiplyAlpha(clipFade), hs, vpWidth, vpHeight);
     }
 }

@@ -1,6 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.ui.ingameui.component;
 
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
+import com.yuyuframe.launcheragent.apigraphic.effect.UiBackdropTone;
 import com.yuyuframe.launcheragent.apigraphic.layout.UiLayout;
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
@@ -90,9 +91,26 @@ public final class UiText {
         r.drawText(font(font), text, x + (w - tw) / 2f, baseline, color, scale, vw, vh);
     }
 
-    /** Texte posé sur le décor (pas sur du verre) : ombre portée, lisible sur un ciel clair comme dans une grotte. */
+    /**
+     * Texte posé sur le décor (pas sur du verre) : il suit la clarté du fond
+     * sous lui (2026-11-21, {@link UiBackdropTone}) — blanc avec une ombre
+     * sur un fond sombre, l'encre sur un fond clair.
+     */
     public static void drawOnBackdrop(UiRenderer r, UiFont font, String text, float x, float baseline,
                                       UiColor color, float scale, int vw, int vh) {
-        r.drawTextShadowed(font(font), text, x, baseline, color, UiTheme.TEXT_SHADOW, scale, scale, scale, vw, vh);
+        float lum = backdropLuminance(font, text, x, baseline, scale, vw, vh);
+        r.drawTextShadowed(font(font), text, x, baseline, UiBackdropTone.adapt(color, lum),
+            UiBackdropTone.adaptShadow(UiTheme.TEXT_SHADOW, lum), scale, scale, scale, vw, vh);
+    }
+
+    /** La clarté du fond sous une ligne de texte (voir {@link UiBackdropTone#luminance}). */
+    public static float backdropLuminance(UiFont font, String text, float x, float baseline, float scale, int vw, int vh) {
+        float lineH = lineHeight(font, scale);
+        return UiBackdropTone.luminance(x, baseline - lineH * 0.2f, x + width(font, text, scale), baseline + lineH * 0.8f, vw, vh);
+    }
+
+    /** Une couleur de texte posé sur le fond sous ce rectangle : voir {@link UiBackdropTone#adapt}. */
+    public static UiColor onBackdrop(UiColor color, float x1, float y1, float x2, float y2, int vw, int vh) {
+        return UiBackdropTone.adapt(color, UiBackdropTone.luminance(x1, y1, x2, y2, vw, vh));
     }
 }

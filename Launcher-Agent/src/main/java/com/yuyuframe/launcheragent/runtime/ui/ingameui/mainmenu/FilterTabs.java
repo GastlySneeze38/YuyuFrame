@@ -1,6 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.ui.ingameui.mainmenu;
 
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
+import com.yuyuframe.launcheragent.apigraphic.effect.UiBackdropTone;
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
 import com.yuyuframe.launcheragent.apigraphic.value.UiTheme;
@@ -57,7 +58,11 @@ public final class FilterTabs extends UiInteractive {
         updateStates(mouseX, mouseY);
         lastMouseX = mouseX;
         float radius = px(UiTheme.Space.S14);
-        r.drawRoundedRect(x, y, x + w, y + h, radius, new UiColor(255, 255, 255, 13), vw, vh);
+        // Posé sur le décor : sur un fond clair, le fond et les mots passent à l'encre (UiBackdropTone).
+        float lum = UiBackdropTone.luminance(x, y, x + w, y + h, vw, vh);
+        float light = UiBackdropTone.lightness(lum);
+        r.drawRoundedRect(x, y, x + w, y + h, radius,
+            UiColor.lerp(new UiColor(255, 255, 255, 13), UiBackdropTone.INK.withAlpha(0.10f), light), vw, vh);
 
         int current = selected.getAsInt();
         float sx = x + pad();
@@ -72,7 +77,9 @@ public final class FilterTabs extends UiInteractive {
                 r.drawRoundedRect(sx, y + pad(), sx + sw, y + pad() + sh, px(UiTheme.Space.S10),
                     UiTheme.ACCENT.withAlpha(0.16f * hover), vw, vh);
             }
-            UiColor color = i == current ? UiTheme.TEXT_PRIMARY : over ? UiTheme.TEXT_PRIMARY : UiTheme.TEXT_MUTED;
+            // Le segment choisi est sur sa pilule d'accent : il reste blanc. Les autres suivent le fond.
+            UiColor color = i == current ? UiTheme.TEXT_PRIMARY
+                : UiBackdropTone.adapt(over ? UiTheme.TEXT_PRIMARY : UiTheme.TEXT_SECONDARY, lum);
             String label = Lang.tr(labels[i]);
             float ls = labelScale();
             float tx = sx + px(UiTheme.Space.S16);

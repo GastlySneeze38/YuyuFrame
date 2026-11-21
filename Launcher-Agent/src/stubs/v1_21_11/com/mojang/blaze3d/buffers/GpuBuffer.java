@@ -12,8 +12,10 @@ public abstract class GpuBuffer implements AutoCloseable {
     public static final int USAGE_VERTEX;
     public static final int USAGE_INDEX;
     public static final int USAGE_UNIFORM;
+    public static final int USAGE_MAP_READ;
 
     static {
+        USAGE_MAP_READ = stub();
         USAGE_COPY_DST = stub();
         USAGE_COPY_SRC = stub();
         USAGE_VERTEX = stub();
@@ -42,6 +44,14 @@ public abstract class GpuBuffer implements AutoCloseable {
     }
 
     public abstract boolean isClosed();
+
+    /** Tampon lu par le CPU (javap 1.21.11 : interface, {@code data()} + {@code close()}). */
+    public interface MappedView extends AutoCloseable {
+        java.nio.ByteBuffer data();
+
+        @Override
+        void close();
+    }
 
     @Override
     public abstract void close();

@@ -327,7 +327,8 @@ public final class Blaze3DBlur {
             }
         }
         int w = vpWidth, h = vpHeight;
-        int usage = gpu.usageTextureBinding() | gpu.usageTextureRenderAttachment();
+        // Copiable : le niveau le plus profond est relu pour la clarté du fond (UiBackdropTone).
+        int usage = gpu.usageTextureBinding() | gpu.usageTextureRenderAttachment() | gpu.usageTextureCopySrc();
         for (int i = 0; i < LEVELS; i++) {
             w = Math.max(1, w / 2);
             h = Math.max(1, h / 2);
@@ -438,6 +439,36 @@ public final class Blaze3DBlur {
     /** La dernière chaîne ne couvrait que des zones : hors d'elles, les niveaux ne valent rien. */
     private static boolean lastChainRegional;
 
+    /** Une relecture du fond est en route (asynchrone), depuis cet instant. */
+    private static boolean tonePending;
+    private static long toneStartNanos;
+    private static int toneFailures;
+
+    /**
+     * Relit le niveau le plus profond (déjà réduit au 1/16 de l'écran) pour la
+     * clarté du fond — voir {@code UiBackdropTone}. Une lecture à la fois ;
+     * une lecture restée sans réponse deux secondes est oubliée.
+     */
+    private static void readBackdropTone(Object device, Object encoder, int level) {
+        if (tonePending && System.nanoTime() - toneStartNanos < 2_000_000_000L) return;
+        if (!com.yuyuframe.launcheragent.apigraphic.effect.UiBackdropTone.readDue()) return;
+        if (levelTexture[level] == null || toneFailures >= 3) return;
+        int w = levelW[level], h = levelH[level];
+        tonePending = true;
+        toneStartNanos = System.nanoTime();
+        try {
+            gpu.readTexture(device, encoder, levelTexture[level], w, h, data -> {
+                tonePending = false;
+                com.yuyuframe.launcheragent.apigraphic.effect.UiBackdropTone.accept(data, w, h);
+            });
+        } catch (Throwable t) {
+            tonePending = false;
+            // Trois échecs : on n'insiste plus, le texte garde sa couleur d'origine.
+            toneFailures++;
+            LauncherLog.err("[UiRenderer] Blaze3DBlur: lecture du fond impossible (" + toneFailures + "/3)", t);
+        }
+    }
+
     /**
      * @param regions {@code null} = tout l'écran. Sinon des rectangles
      *        {@code {x1, y1, x2, y2}} en pixels de fenêtre (y vers le haut) :
@@ -498,6 +529,7 @@ public final class Blaze3DBlur {
                     regions, marginPx, vpWidth, vpHeight, "up" + i);
             }
             lastChainRegional = regions != null;
+            if (regions == null) readBackdropTone(device, encoder, deepest);
             return true;
         } catch (Throwable t) {
             if (failureLogCount < 5) {

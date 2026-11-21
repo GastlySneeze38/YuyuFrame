@@ -261,7 +261,7 @@ final class CompetitiveTab {
 
     /** « Diamant II en masse - 148 duels classés ». */
     void drawHint(UiRenderer r, float x, float baseline, int vw, int vh) {
-        float s = px(UiTheme.Text.MD);
+        float s = px(UiTheme.Text.LG);
         String modeName = Lang.tr(PvpScoreUi.MODES[clampMode(mode)]).toLowerCase(Locale.ROOT);
         String lead;
         if (competitive) {
@@ -279,16 +279,10 @@ final class CompetitiveTab {
             UiTheme.TEXT_MUTED, s, vw, vh);
     }
 
-    /** « Derniers duels  Clique un duel pour sa note détaillée », posé sur le décor. */
+    /** « Derniers duels », titre de section posé sur le décor. */
     static void drawGridTitle(UiRenderer r, float x, float baseline, int vw, int vh) {
-        float s = px(UiTheme.Text.XL);
-        String title = Lang.tr("Derniers duels");
-        com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiText.drawOnBackdrop(r, UiFont.BOLD, title, x, baseline,
-            UiTheme.TEXT_PRIMARY, s, vw, vh);
-        float tw = com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiText.width(UiFont.BOLD, title, s);
-        com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiText.drawOnBackdrop(r, UiFont.REGULAR,
-            Lang.tr("Clique un duel pour sa note détaillée"), x + tw + px(UiTheme.Space.S16), baseline, UiTheme.TEXT_MUTED,
-            px(UiTheme.Text.MD), vw, vh);
+        com.yuyuframe.launcheragent.runtime.ui.ingameui.component.DisplayTitle.drawSection(r, Lang.tr("Derniers duels"), x, baseline,
+            com.yuyuframe.launcheragent.runtime.ui.ingameui.component.DisplayTitle.sectionSize(), vw, vh);
     }
 
     // ── La grille ────────────────────────────────────────────────────────────

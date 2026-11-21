@@ -10,4 +10,19 @@ public final class GpuBufferSlice {
 
     private GpuBufferSlice() {
     }
+
+    /** Tampon lu par le CPU (javap 26.3 : record final, {@code data()} + {@code close()}). */
+    public static final class MappedView implements AutoCloseable {
+        private MappedView() {
+        }
+
+        public java.nio.ByteBuffer data() {
+            throw new UnsupportedOperationException("stub compile-only");
+        }
+
+        @Override
+        public void close() {
+            throw new UnsupportedOperationException("stub compile-only");
+        }
+    }
 }

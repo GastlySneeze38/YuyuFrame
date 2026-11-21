@@ -13,6 +13,12 @@ public interface GpuBuffer extends AutoCloseable {
     int USAGE_COPY_DST = Stub.value();
     int USAGE_VERTEX = Stub.value();
     int USAGE_UNIFORM = Stub.value();
+    int USAGE_MAP_READ = Stub.value();
+
+    /** Lecture CPU du tampon (javap 26.3 : {@code default}, rend {@code GpuBufferSlice.MappedView}). */
+    default GpuBufferSlice.MappedView map(boolean read, boolean write) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
 
     default GpuBufferSlice slice(long offset, long length) {
         throw new UnsupportedOperationException("stub compile-only");

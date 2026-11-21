@@ -34,4 +34,9 @@ public interface CommandEncoder {
                               int destX, int destY, int sourceX, int sourceY, int width, int height);
 
     void presentTexture(GpuTextureView texture);
+
+    /** Copie d'une texture vers un tampon ; {@code callback} quand le GPU a fini (javap 1.21.11). */
+    void copyTextureToBuffer(GpuTexture source, GpuBuffer target, long offset, Runnable callback, int mipLevel);
+
+    GpuBuffer.MappedView mapBuffer(GpuBuffer buffer, boolean read, boolean write);
 }

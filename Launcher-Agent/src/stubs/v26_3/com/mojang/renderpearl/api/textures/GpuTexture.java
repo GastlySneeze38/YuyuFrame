@@ -12,6 +12,7 @@ public interface GpuTexture extends AutoCloseable {
     int USAGE_COPY_DST = Stub.value();
     int USAGE_TEXTURE_BINDING = Stub.value();
     int USAGE_RENDER_ATTACHMENT = Stub.value();
+    int USAGE_COPY_SRC = Stub.value();
 
     @Override
     void close();

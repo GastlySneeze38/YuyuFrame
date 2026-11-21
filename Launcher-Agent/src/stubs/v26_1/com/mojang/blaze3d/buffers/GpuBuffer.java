@@ -9,13 +9,15 @@ package com.mojang.blaze3d.buffers;
  * {@code GpuTexture} malgré des noms identiques — bug historique
  * {@code USAGE_COPY_DST}.
  */
-public abstract class GpuBuffer {
+public abstract class GpuBuffer implements AutoCloseable {
 
     public static final int USAGE_COPY_DST;
     public static final int USAGE_VERTEX;
     public static final int USAGE_UNIFORM;
+    public static final int USAGE_MAP_READ;
 
     static {
+        USAGE_MAP_READ = stub();
         USAGE_COPY_DST = stub();
         USAGE_VERTEX = stub();
         USAGE_UNIFORM = stub();
@@ -31,5 +33,16 @@ public abstract class GpuBuffer {
 
     public GpuBufferSlice slice(long offset, long length) {
         throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    @Override
+    public abstract void close();
+
+    /** Tampon lu par le CPU (javap 26.1 / 26.1.1 / 26.1.2 : interface, {@code data()} + {@code close()}). */
+    public interface MappedView extends AutoCloseable {
+        java.nio.ByteBuffer data();
+
+        @Override
+        void close();
     }
 }

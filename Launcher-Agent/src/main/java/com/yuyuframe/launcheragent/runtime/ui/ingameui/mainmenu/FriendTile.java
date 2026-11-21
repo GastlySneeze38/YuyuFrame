@@ -71,8 +71,15 @@ public final class FriendTile extends UiInteractive {
         float radius = px(size == Size.OFFLINE ? UiTheme.Space.S14 : UiTheme.Space.S18);
 
         // ── Le fond ──────────────────────────────────────────────────────
+        // Hors ligne, la carte est presque transparente : elle et ses textes
+        // suivent la clarté du fond (UiBackdropTone). Les autres sont du verre.
+        float lum = size == Size.OFFLINE
+            ? com.yuyuframe.launcheragent.apigraphic.effect.UiBackdropTone.luminance(x, y, x + w, y + h, vw, vh) : -1f;
         if (size == Size.OFFLINE) {
-            r.drawRoundedRect(x, y, x + w, y + h, radius, new UiColor(255, 255, 255, 9).multiplyAlpha(a), vw, vh);
+            UiColor fill = UiColor.lerp(new UiColor(255, 255, 255, 9),
+                com.yuyuframe.launcheragent.apigraphic.effect.UiBackdropTone.INK.withAlpha(0.08f),
+                com.yuyuframe.launcheragent.apigraphic.effect.UiBackdropTone.lightness(lum));
+            r.drawRoundedRect(x, y, x + w, y + h, radius, fill.multiplyAlpha(a), vw, vh);
         } else {
             UiColor border = size == Size.IN_GAME ? FriendInfo.ONLINE.withAlpha(0.28f) : UiTheme.GLASS_BORDER;
             if (isSelected) border = UiTheme.accentLight().withAlpha(0.8f);
@@ -107,13 +114,15 @@ public final class FriendTile extends UiInteractive {
 
         if (size != Size.IN_GAME) {
             float nameScale = px(size == Size.ONLINE ? UiTheme.Text.MD : UiTheme.Text.SM);
-            UiColor nameColor = size == Size.OFFLINE ? UiTheme.TEXT_SECONDARY : UiTheme.TEXT_PRIMARY;
+            UiColor nameColor = com.yuyuframe.launcheragent.apigraphic.effect.UiBackdropTone.adapt(
+                size == Size.OFFLINE ? UiTheme.TEXT_SECONDARY : UiTheme.TEXT_PRIMARY, lum);
+            UiColor lineColor = com.yuyuframe.launcheragent.apigraphic.effect.UiBackdropTone.adapt(UiTheme.TEXT_MUTED, lum);
             float maxW = right - tx;
             r.drawText(UiFont.BOLD, UiText.fit(UiFont.BOLD, f.name, maxW, nameScale), tx, mid + px(UiTheme.Space.S3),
                 nameColor.multiplyAlpha(a), nameScale, vw, vh);
             float ls = px(UiTheme.Text.XS);
             r.drawText(UiFont.REGULAR, UiText.fit(UiFont.REGULAR, FriendInfo.line(f), maxW, ls), tx, mid - px(UiTheme.Space.S16),
-                UiTheme.TEXT_MUTED.multiplyAlpha(a), ls, vw, vh);
+                lineColor.multiplyAlpha(a), ls, vw, vh);
             inviteRect = null;
             return;
         }

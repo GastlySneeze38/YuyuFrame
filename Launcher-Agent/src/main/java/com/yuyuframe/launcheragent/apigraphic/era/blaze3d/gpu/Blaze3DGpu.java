@@ -61,6 +61,19 @@ public interface Blaze3DGpu {
 
     int usageTextureRenderAttachment();
 
+    /** Texture qu'on peut recopier dans un tampon (lecture du fond, voir {@code UiBackdropTone}). */
+    int usageTextureCopySrc();
+
+    /**
+     * Copie {@code texture} (RGBA8, {@code width} x {@code height}) dans un
+     * tampon lisible et, quand le GPU a fini, passe ses octets à {@code done}
+     * sur le fil de rendu : rangées serrées, la rangée 0 en BAS (comme
+     * {@code Screenshot}, javap sur chaque version). Le tampon est fermé
+     * ensuite ; {@code done} ne doit pas garder la référence.
+     */
+    void readTexture(Object device, Object encoder, Object texture, int width, int height,
+                     java.util.function.Consumer<ByteBuffer> done);
+
     // ── Tampons ───────────────────────────────────────────────────────────
 
     Object createBuffer(Object device, String label, int usage, long size);

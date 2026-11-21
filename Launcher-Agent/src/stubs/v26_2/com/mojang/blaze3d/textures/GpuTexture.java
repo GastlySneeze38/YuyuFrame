@@ -10,8 +10,10 @@ public abstract class GpuTexture {
     public static final int USAGE_COPY_DST;
     public static final int USAGE_TEXTURE_BINDING;
     public static final int USAGE_RENDER_ATTACHMENT;
+    public static final int USAGE_COPY_SRC;
 
     static {
+        USAGE_COPY_SRC = stub();
         USAGE_COPY_DST = stub();
         USAGE_TEXTURE_BINDING = stub();
         USAGE_RENDER_ATTACHMENT = stub();

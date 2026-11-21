@@ -148,10 +148,11 @@ abstract class UiConfigScreenBase extends UiScreenBase {
         }
         if (extra != null) extraLaidOut(layout.rect(extra), vp);
 
-        // La barre de défilement se dessine au bord droit du cadre : les lignes lui laissent sa place.
-        float scrollbarReserve = px(UiTheme.Space.S20);
-        scroll = new UiScrollContainer(vp.x, vp.y, vp.w, Math.max(1f, vp.h));
-        anchors = buildContent(scroll, vp.x, vp.w - scrollbarReserve);
+        // La barre de défilement est collée au bord droit de la fenêtre, comme
+        // sur le menu (2026-11-21) : les réglages gardent toute la largeur.
+        scroll = new UiScrollContainer(vp.x, vp.y, vp.w, Math.max(1f, vp.h))
+            .railAt(screenWidth - px(UiTheme.Space.S16));
+        anchors = buildContent(scroll, vp.x, vp.w);
         if (activeSection == null || !anchors.containsKey(activeSection)) {
             activeSection = anchors.isEmpty() ? null : anchors.keySet().iterator().next();
         }

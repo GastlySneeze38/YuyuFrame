@@ -84,7 +84,7 @@ public final class FriendsList {
 
             if (!first) y -= px(UiTheme.Space.S28);
             first = false;
-            float titleH = px(UiTheme.Space.S32);
+            float titleH = px(44f);
             SectionTitle title = new SectionTitle(Lang.tr((String) s[0]), String.valueOf(list.size()));
             title.x = x;
             title.y = y - titleH;

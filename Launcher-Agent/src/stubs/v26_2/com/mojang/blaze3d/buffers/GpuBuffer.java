@@ -9,13 +9,15 @@ package com.mojang.blaze3d.buffers;
  * {@code GpuTexture} malgré des noms identiques — bug historique
  * {@code USAGE_COPY_DST}.
  */
-public abstract class GpuBuffer {
+public abstract class GpuBuffer implements AutoCloseable {
 
     public static final int USAGE_COPY_DST;
     public static final int USAGE_VERTEX;
     public static final int USAGE_UNIFORM;
+    public static final int USAGE_MAP_READ;
 
     static {
+        USAGE_MAP_READ = stub();
         USAGE_COPY_DST = stub();
         USAGE_VERTEX = stub();
         USAGE_UNIFORM = stub();
@@ -37,4 +39,12 @@ public abstract class GpuBuffer {
     public GpuBufferSlice slice() {
         throw new UnsupportedOperationException("stub compile-only");
     }
+
+    /** 26.2 : la lecture CPU passe par le tampon lui-même, plus par l'encodeur (javap). */
+    public GpuBufferSlice.MappedView map(boolean read, boolean write) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    @Override
+    public abstract void close();
 }

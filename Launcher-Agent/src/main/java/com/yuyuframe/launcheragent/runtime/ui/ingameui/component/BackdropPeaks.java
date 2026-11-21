@@ -24,6 +24,8 @@ public final class BackdropPeaks {
     public static final float HEIGHT_SHARE = 0.62f;
     /** Opacité tout en bas : jamais 100 %, le monde se devine. */
     private static final float MAX_ALPHA = 0.92f;
+    /** Taille maximale de l'image composée. */
+    private static final float MAX_IMAGE_W = 960f, MAX_IMAGE_H = 420f;
 
     private static BufferedImage image;
     private static int imageW, imageH, imageAccent;
@@ -31,8 +33,12 @@ public final class BackdropPeaks {
 
     /** Le décor, dans le rectangle donné (coin bas-gauche, repère de l'écran). */
     public static void draw(UiRenderer r, float x, float y, float w, float h, int vw, int vh) {
-        int iw = Math.max(1, Math.round(w)), ih = Math.max(1, Math.round(h));
-        if (failed || iw < 64 || ih < 64) return;
+        // Composé au plus à 960 de large puis étiré : c'est un décor flou, et
+        // en pleine taille il remplissait l'atlas d'icônes (2048²), qui se
+        // vidait alors en pleine image (2026-11-21).
+        float k = Math.min(1f, Math.min(MAX_IMAGE_W / w, MAX_IMAGE_H / h));
+        int iw = Math.max(1, Math.round(w * k)), ih = Math.max(1, Math.round(h * k));
+        if (failed || iw < 32 || ih < 32) return;
         UiColor a = UiTheme.ACCENT;
         int accent = (Math.round(a.r * 255) << 16) | (Math.round(a.g * 255) << 8) | Math.round(a.b * 255);
         if (image == null || iw != imageW || ih != imageH || accent != imageAccent) {
@@ -48,6 +54,15 @@ public final class BackdropPeaks {
             }
         }
         r.drawIcon("yf-backdrop-peaks:" + iw + "x" + ih + ":" + accent, image, x, y, w, h, vw, vh);
+    }
+
+    /**
+     * Opacité du décor à une hauteur ({@code t} : 0 en haut du décor, 1 tout
+     * en bas) — la couverture sombre déclarée aux textes posés dessus
+     * ({@code UiBackdropTone.cover}).
+     */
+    public static float alphaAt(float t) {
+        return MAX_ALPHA * smooth(0f, 0.75f, Math.max(0f, Math.min(1f, t)));
     }
 
     private static float smooth(float e0, float e1, float v) {

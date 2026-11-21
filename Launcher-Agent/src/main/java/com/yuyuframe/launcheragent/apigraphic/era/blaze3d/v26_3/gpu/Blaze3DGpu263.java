@@ -155,6 +155,22 @@ final class Blaze3DGpu263 implements Blaze3DGpu {
     @Override public int usageTextureBinding() { return GpuTexture.USAGE_TEXTURE_BINDING; }
     @Override public int usageTextureCopyDst() { return GpuTexture.USAGE_COPY_DST; }
     @Override public int usageTextureRenderAttachment() { return GpuTexture.USAGE_RENDER_ATTACHMENT; }
+    @Override public int usageTextureCopySrc() { return GpuTexture.USAGE_COPY_SRC; }
+
+    /** Comme {@code Screenshot.takeScreenshot} (javap 26.3) : copie, puis lecture par le tampon lui-même. */
+    @Override
+    public void readTexture(Object device, Object encoder, Object texture, int width, int height,
+                            java.util.function.Consumer<ByteBuffer> done) {
+        GpuBuffer buffer = ((GpuDevice) device).createBuffer(() -> "yuyuframe_backdrop_readback",
+            GpuBuffer.USAGE_MAP_READ | GpuBuffer.USAGE_COPY_DST, (long) width * height * 4L);
+        ((CommandEncoder) encoder).copyTextureToBuffer((GpuTexture) texture, buffer, 0L, () -> {
+            try (GpuBufferSlice.MappedView view = buffer.map(true, false)) {
+                done.accept(view.data());
+            } finally {
+                buffer.close();
+            }
+        }, 0);
+    }
 
     // ── Tampons ───────────────────────────────────────────────────────────
 

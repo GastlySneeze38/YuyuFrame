@@ -40,7 +40,7 @@ public final class ModGrid {
     static float cardHeight() { return UiTheme.px(132f); }
     /** Tuile de la Grille d'icônes : icône, nom, une ligne de description, puis la bande. */
     static float tileHeight() { return UiTheme.px(172f); }
-    static float sectionHeaderHeight() { return UiTheme.px(UiTheme.Space.S32); }
+    static float sectionHeaderHeight() { return UiTheme.px(44f); }
     /** Largeur d'une carte Détaillé en dessous de laquelle on passe à une colonne. */
     static float minDetailedWidth() { return UiTheme.px(300f); }
     /** Taille visée d'une tuile en Grille d'icônes. */
@@ -127,7 +127,7 @@ public final class ModGrid {
             LauncherLog.err("[ModGrid] grille non calculée — cartes non créées");
             return;
         }
-        if (favHeader != null) addTitle(scroll, result, favHeader, "Favoris", "Le cœur les épingle ici et dans l'accès rapide", originX);
+        if (favHeader != null) addTitle(scroll, result, favHeader, "Favoris", null, originX);
         if (otherHeader != null) addTitle(scroll, result, otherHeader, "Autres modules", null, originX);
 
         int indexInSection = 0;

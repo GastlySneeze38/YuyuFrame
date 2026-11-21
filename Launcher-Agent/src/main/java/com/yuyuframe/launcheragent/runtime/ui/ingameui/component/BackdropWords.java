@@ -34,6 +34,8 @@ public final class BackdropWords {
     private static final float TOP_ALPHA = 0.55f, BOTTOM_ALPHA = 0.90f;
     /** Luminosité du fond de l'illustration (devient transparent) et celle à partir de laquelle un pixel est plein. */
     private static final float ART_FLOOR = 34f, ART_FULL = 78f;
+    /** Hauteur maximale de l'image composée : celle de l'illustration source. */
+    private static final float MAX_IMAGE_H = 640f;
 
     private static BufferedImage art;
     private static BufferedImage image;
@@ -57,11 +59,16 @@ public final class BackdropWords {
      */
     public static void drawBand(UiRenderer r, float x, float y, float w, float h, int vw, int vh) {
         if (w <= 0f || h <= 0f) return;
-        int iw = Math.max(1, Math.round(w)), ih = Math.max(1, Math.round(h));
-        if (failed || iw < 64 || ih < 64) return;
+        // Composée au plus à la hauteur de l'illustration (640) puis étirée :
+        // plus grande, elle n'aurait rien de plus net, et elle occupait une
+        // bonne part de l'atlas d'icônes (2048²), qui se vidait alors en
+        // pleine image — bande coupée, traits parasites (2026-11-21).
+        float k = Math.min(1f, MAX_IMAGE_H / h);
+        int iw = Math.max(1, Math.round(w * k)), ih = Math.max(1, Math.round(h * k));
+        if (failed || iw < 32 || ih < 32) return;
         if (image == null || iw != imageW || ih != imageH) {
             try {
-                image = render(iw, ih, Math.round(Math.min(fadeWidth(), w * 0.5f)));
+                image = render(iw, ih, Math.round(Math.min(fadeWidth(), w * 0.5f) * k));
                 imageW = iw;
                 imageH = ih;
             } catch (Throwable t) {
@@ -127,6 +134,17 @@ public final class BackdropWords {
             img.setRGB(0, py, w, 1, row, 0, w);
         }
         return img;
+    }
+
+    /**
+     * Opacité du noir de la bande en un point : {@code localX} depuis son bord
+     * gauche, {@code v} de 0 (bas) à 1 (haut) — la couverture sombre déclarée
+     * aux textes posés dessus ({@code UiBackdropTone.cover}).
+     */
+    public static float alphaAt(float localX, float bandW, float v) {
+        if (localX < 0f) return 0f;
+        float vertical = BOTTOM_ALPHA + (TOP_ALPHA - BOTTOM_ALPHA) * Math.max(0f, Math.min(1f, v));
+        return vertical * ramp(Math.round(localX), Math.round(Math.min(fadeWidth(), bandW * 0.5f)));
     }
 
     /** Montée du passage de gauche, départ et arrivée en douceur. */

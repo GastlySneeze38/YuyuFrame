@@ -43,4 +43,10 @@ public abstract class CommandEncoder {
     public void writeToTexture(GpuTexture target, NativeImage source, int mipLevel, int depth, int destX, int destY) {
         throw new UnsupportedOperationException("stub compile-only");
     }
+
+    /** Copie d'une texture vers un tampon ; {@code callback} quand le GPU a fini (javap 26.2). */
+    public void copyTextureToBuffer(GpuTexture source, com.mojang.blaze3d.buffers.GpuBuffer target, long offset,
+                                    Runnable callback, int mipLevel) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
 }

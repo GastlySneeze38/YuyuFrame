@@ -287,6 +287,7 @@ public final class Gl3Blur {
                         regions, marginPx, vpWidth, vpHeight);
                 }
             }
+            if (regions == null) readBackdropTone(deepest);
             resultLevel = COMPOSITE_LEVEL;
             chainRegional = regions != null;
             chainNanos = System.nanoTime();
@@ -299,6 +300,29 @@ public final class Gl3Blur {
             GL20.glUseProgram(0);
             offscreen.end();
         }
+    }
+
+    private java.nio.ByteBuffer toneBuffer;
+
+    /**
+     * Relit le niveau le plus profond (le 1/16 de l'écran, déjà flou) pour la
+     * clarté du fond — voir {@code UiBackdropTone}. Une lecture synchrone, de
+     * quelques dizaines de kilo-octets, une chaîne sur six.
+     */
+    private void readBackdropTone(int level) {
+        if (!com.yuyuframe.launcheragent.apigraphic.effect.UiBackdropTone.readDue()) return;
+        int w = levelW[level], h = levelH[level];
+        if (levelFbo[level] == -1 || w <= 0 || h <= 0) return;
+        int size = w * h * 4;
+        if (toneBuffer == null || toneBuffer.capacity() < size) {
+            toneBuffer = org.lwjgl.BufferUtils.createByteBuffer(size);
+        }
+        toneBuffer.clear();
+        GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, levelFbo[level]);
+        GL11.glPixelStorei(GL11.GL_PACK_ALIGNMENT, 1);
+        GL11.glReadPixels(0, 0, w, h, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, toneBuffer);
+        GL11.glPixelStorei(GL11.GL_PACK_ALIGNMENT, 4);
+        com.yuyuframe.launcheragent.apigraphic.effect.UiBackdropTone.accept(toneBuffer, w, h);
     }
 
     /**

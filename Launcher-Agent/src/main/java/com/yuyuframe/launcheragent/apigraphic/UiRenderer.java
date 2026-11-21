@@ -757,6 +757,8 @@ public final class UiRenderer {
 
     public void beginGlassFrame(int passes, int vpWidth, int vpHeight) {
         if (glassChainFrozen) return;
+        // Les décors posés après la capture redéclarent leur couverture à chaque image.
+        com.yuyuframe.launcheragent.apigraphic.effect.UiBackdropTone.beginFrame();
         if (!backdropDrawnOutside) drawFrameBackdrop(vpWidth, vpHeight);
         // Voie vanilla : la chaîne est calculée TOUT DE SUITE et non mise en
         // file — sinon elle arriverait après la soumission de la GUI, et les

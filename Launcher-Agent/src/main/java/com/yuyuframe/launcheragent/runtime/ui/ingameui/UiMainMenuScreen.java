@@ -216,7 +216,11 @@ public class UiMainMenuScreen extends UiScreenBase {
             long now = System.nanoTime();
             // Pas dessiné depuis un moment : on revient sur l'écran (après les
             // réglages, le jeu…), c'est une nouvelle ouverture.
-            if (bandEnterNanos == 0L || now - bandLastFrame > 300_000_000L) bandEnterNanos = now;
+            if (bandEnterNanos == 0L || now - bandLastFrame > 300_000_000L) {
+                bandEnterNanos = now;
+                // Même moment pour le contour du grand titre : il arrive avec la page.
+                com.yuyuframe.launcheragent.runtime.ui.ingameui.component.DisplayTitle.replay();
+            }
             bandLastFrame = now;
             float e = com.yuyuframe.launcheragent.apigraphic.anim.UiEasing.UI_OUT.apply(
                 Math.min(1f, (now - bandEnterNanos) / 1e9f / BAND_ENTER_S));
@@ -224,6 +228,10 @@ public class UiMainMenuScreen extends UiScreenBase {
             // bas en apparaissant (y vers le haut : un décalage négatif = plus bas).
             if (tab == Tab.MODULES || tab == Tab.MISSIONS || tab == Tab.COMPETITIVE) {
                 float peaksH = screenHeight * com.yuyuframe.launcheragent.runtime.ui.ingameui.component.BackdropPeaks.HEIGHT_SHARE;
+                // Les textes posés sur les losanges savent qu'ils assombrissent le fond.
+                final float enter = e, share = com.yuyuframe.launcheragent.runtime.ui.ingameui.component.BackdropPeaks.HEIGHT_SHARE;
+                com.yuyuframe.launcheragent.apigraphic.effect.UiBackdropTone.cover((u, v) -> v >= share ? 0f
+                    : enter * com.yuyuframe.launcheragent.runtime.ui.ingameui.component.BackdropPeaks.alphaAt(1f - v / share));
                 renderer.pushLayer(e, 1f, screenWidth / 2f, 0f, 0f, -(1f - e) * peaksH * 0.35f);
                 try {
                     com.yuyuframe.launcheragent.runtime.ui.ingameui.component.BackdropPeaks.draw(renderer,
@@ -238,6 +246,9 @@ public class UiMainMenuScreen extends UiScreenBase {
                     - com.yuyuframe.launcheragent.runtime.ui.ingameui.component.BackdropWords.fadeWidth();
                 // La bande glisse de la droite vers sa place en apparaissant.
                 float bandW = screenWidth - bandX;
+                final float enter = e, left = bandX, width = bandW, sw = screenWidth;
+                com.yuyuframe.launcheragent.apigraphic.effect.UiBackdropTone.cover((u, v) -> enter
+                    * com.yuyuframe.launcheragent.runtime.ui.ingameui.component.BackdropWords.alphaAt(u * sw - left, width, v));
                 renderer.pushLayer(e, 1f, screenWidth, screenHeight / 2f, (1f - e) * bandW * 0.35f, 0f);
                 try {
                     com.yuyuframe.launcheragent.runtime.ui.ingameui.component.BackdropWords.drawBand(renderer,
@@ -253,8 +264,9 @@ public class UiMainMenuScreen extends UiScreenBase {
             String title = tab == Tab.MODULES ? "Modules" : tab == Tab.MISSIONS ? "Missions"
                 : tab == Tab.COMPETITIVE ? "Compétitif" : tab == Tab.FRIENDS ? "Amis" : null;
             if (title != null) {
-                UiText.drawOnBackdrop(renderer, UiFont.BOLD, Lang.tr(title), titleX, titleBaseline, UiTheme.TEXT_PRIMARY,
-                    px(UiTheme.Text.XXL), screenWidth, screenHeight);
+                com.yuyuframe.launcheragent.runtime.ui.ingameui.component.DisplayTitle.drawPage(renderer, Lang.tr(title),
+                    titleX, titleBaseline, com.yuyuframe.launcheragent.runtime.ui.ingameui.component.DisplayTitle.pageSize(),
+                    screenWidth, screenHeight);
             }
             if (tab == Tab.HOME && quickTitleX >= 0f) drawQuickTitle(renderer);
             if (tab == Tab.MODULES && !moduleEntries.isEmpty()) drawModulesHint(renderer);
@@ -273,13 +285,21 @@ public class UiMainMenuScreen extends UiScreenBase {
     }
 
     private void drawQuickTitle(UiRenderer r) {
-        float s = px(UiTheme.Text.XL);
-        UiText.drawOnBackdrop(r, UiFont.BOLD, Lang.tr("Accès rapide"), quickTitleX, quickTitleBaseline, UiTheme.TEXT_PRIMARY, s,
+        com.yuyuframe.launcheragent.runtime.ui.ingameui.component.DisplayTitle.drawSection(r, Lang.tr("Accès rapide"),
+            quickTitleX, quickTitleBaseline, com.yuyuframe.launcheragent.runtime.ui.ingameui.component.DisplayTitle.sectionSize(),
             screenWidth, screenHeight);
-        float tw = UiText.width(UiFont.BOLD, Lang.tr("Accès rapide"), s);
-        UiText.drawOnBackdrop(r, UiFont.REGULAR, Lang.tr("Tes modules favoris, un clic pour les allumer"),
-            quickTitleX + tw + px(UiTheme.Space.S16), quickTitleBaseline, UiTheme.TEXT_MUTED, px(UiTheme.Text.MD),
-            screenWidth, screenHeight);
+    }
+
+    /** Hauteur de l'en-tête d'une page : le grand titre, et sous lui une ligne courte (un compte). */
+    private static float headHeight() {
+        return px(104f);
+    }
+
+    /** Le titre en haut de l'en-tête, la ligne courte à son pied ; rend la ligne de base de cette dernière. */
+    private float placeHead(TaffyLayoutResult.Rect head) {
+        titleX = head.x;
+        titleBaseline = head.y + px(40f);
+        return head.y + px(UiTheme.Space.S4);
     }
 
     // ── Mise en page ─────────────────────────────────────────────────────────
@@ -397,12 +417,6 @@ public class UiMainMenuScreen extends UiScreenBase {
         float previousScroll;
     }
 
-    /** Pose le titre d'un onglet (sur le décor) au-dessus de la boîte {@code titleBox}. */
-    private void placeTitle(TaffyLayoutResult.Rect rect) {
-        if (rect == null) return;
-        titleX = rect.x;
-        titleBaseline = UiText.centeredBaseline(UiFont.BOLD, rect.y, rect.h, px(UiTheme.Text.XXL));
-    }
 
     // ── Accueil ──────────────────────────────────────────────────────────────
 
@@ -422,7 +436,7 @@ public class UiMainMenuScreen extends UiScreenBase {
 
         // L'accès rapide juste dessous : deux rangées de tuiles, moins si la
         // place manque (elles sont posées à la main dans la boîte résolue).
-        float quickHeadH = px(UiTheme.Space.S36);
+        float quickHeadH = px(44f);
         Box quickHead = left.add(UiLayout.row().height(quickHeadH).rigid().margin(px(UiTheme.Space.S40), 0f, 0f, 0f));
         quickHead.add(UiLayout.spacer());
         TextLink edit = new TextLink("Modifier", () -> open(Tab.MODULES));
@@ -448,7 +462,7 @@ public class UiMainMenuScreen extends UiScreenBase {
             TaffyLayoutResult.Rect head = parts.layout.rect(quickHead);
             if (head != null) {
                 quickTitleX = head.x;
-                quickTitleBaseline = UiText.centeredBaseline(UiFont.BOLD, head.y, head.h, px(UiTheme.Text.XL));
+                quickTitleBaseline = head.y + px(UiTheme.Space.S10);
                 widgets.add(edit);
             }
             layoutQuick(parts.layout.rect(quick));
@@ -498,8 +512,8 @@ public class UiMainMenuScreen extends UiScreenBase {
         float control = px(44f);
         Box page = content.add(UiLayout.column().fill().gap(px(UiTheme.Space.S24))
             .pad(px(UiTheme.Space.S32), sideMargin, px(UiTheme.Space.S24), sideMargin));
-        // Le titre et sa ligne d'aide à gauche, les filtres et l'agencement à droite.
-        Box head = page.add(UiLayout.row().height(px(64f)).rigid().alignItems("flex-end").gap(px(UiTheme.Space.S10)));
+        // Le grand titre et son compte à gauche, les filtres et l'agencement à droite.
+        Box head = page.add(UiLayout.row().height(headHeight()).rigid().alignItems("flex-end").gap(px(UiTheme.Space.S10)));
         head.add(UiLayout.spacer());
         head.add(UiLayout.fixed(filters.preferredWidth(), control).bind(filters));
         head.add(UiLayout.fixed(control, control).bind(layoutButton));
@@ -508,12 +522,7 @@ public class UiMainMenuScreen extends UiScreenBase {
 
         parts.afterSolve.add(() -> {
             TaffyLayoutResult.Rect headRect = parts.layout.rect(head);
-            if (headRect != null) {
-                // Le titre en haut de la boîte, la ligne d'aide sous lui.
-                titleX = headRect.x;
-                titleBaseline = headRect.y + headRect.h - px(UiTheme.Space.S28);
-                modulesHintBaseline = headRect.y + px(UiTheme.Space.S4);
-            }
+            if (headRect != null) modulesHintBaseline = placeHead(headRect);
             widgets.add(filters);
             widgets.add(layoutButton);
             TaffyLayoutResult.Rect vp = parts.layout.rect(viewport);
@@ -546,17 +555,17 @@ public class UiMainMenuScreen extends UiScreenBase {
         return n;
     }
 
-    /** « 8 actifs sur 26 · la bande du bas allume un module, la carte ouvre ses réglages ». */
+    /** « 8 actifs sur 26 » : le compte seul, l'explication est retirée (2026-11-21). */
     private void drawModulesHint(UiRenderer r) {
-        float s = px(UiTheme.Text.MD);
+        float s = px(UiTheme.Text.LG);
         int on = countModules(true);
         int total = on + countModules(false);
         String count = on + " " + Lang.tr(on > 1 ? "actifs" : "actif");
         UiText.drawOnBackdrop(r, UiFont.BOLD, count, titleX, modulesHintBaseline, new UiColor(92, 210, 128, 255), s,
             screenWidth, screenHeight);
         float x = titleX + UiText.width(UiFont.BOLD, count, s);
-        String rest = " " + Lang.tr("sur") + " " + total + "   -   " + Lang.tr("La bande du bas allume ou éteint un module, la carte ouvre ses réglages");
-        UiText.drawOnBackdrop(r, UiFont.REGULAR, rest, x, modulesHintBaseline, UiTheme.TEXT_MUTED, s, screenWidth, screenHeight);
+        UiText.drawOnBackdrop(r, UiFont.REGULAR, " " + Lang.tr("sur") + " " + total, x, modulesHintBaseline,
+            UiTheme.TEXT_SECONDARY, s, screenWidth, screenHeight);
     }
 
     // ── Missions et amis ─────────────────────────────────────────────────────
@@ -565,10 +574,14 @@ public class UiMainMenuScreen extends UiScreenBase {
         MissionsPanel panel = new MissionsPanel();
         Box page = content.add(UiLayout.column().fill().gap(px(UiTheme.Space.S24))
             .pad(px(UiTheme.Space.S32), sideMargin, px(UiTheme.Space.S24), sideMargin));
-        Box head = page.add(UiLayout.box().height(px(UiTheme.Space.S36)).rigid());
+        Box head = page.add(UiLayout.box().height(px(64f)).rigid());
         page.add(UiLayout.box().grow(1f).bind(panel));
         parts.afterSolve.add(() -> {
-            placeTitle(parts.layout.rect(head));
+            TaffyLayoutResult.Rect headRect = parts.layout.rect(head);
+            if (headRect != null) {
+                titleX = headRect.x;
+                titleBaseline = headRect.y + px(UiTheme.Space.S12);
+            }
             widgets.add(panel);
         });
     }
@@ -602,7 +615,7 @@ public class UiMainMenuScreen extends UiScreenBase {
         Box page = content.add(UiLayout.column().fill().gap(px(UiTheme.Space.S20))
             .pad(px(UiTheme.Space.S32), sideMargin, px(UiTheme.Space.S24), sideMargin));
         // Le titre et sa ligne d'aide à gauche ; à droite ce qu'on joue, puis ce qu'on regarde.
-        Box head = page.add(UiLayout.row().height(px(64f)).rigid().alignItems("flex-end").gap(px(UiTheme.Space.S10)));
+        Box head = page.add(UiLayout.row().height(headHeight()).rigid().alignItems("flex-end").gap(px(UiTheme.Space.S10)));
         head.add(UiLayout.spacer());
         head.add(UiLayout.fixed(CompetitiveTab.switchWidth(), control).bind(playing));
         head.add(UiLayout.fixed(CompetitiveTab.modeDropdownWidth(), control).bind(modes));
@@ -618,11 +631,7 @@ public class UiMainMenuScreen extends UiScreenBase {
 
         parts.afterSolve.add(() -> {
             TaffyLayoutResult.Rect headRect = parts.layout.rect(head);
-            if (headRect != null) {
-                titleX = headRect.x;
-                titleBaseline = headRect.y + headRect.h - px(UiTheme.Space.S28);
-                competitiveHintBaseline = headRect.y + px(UiTheme.Space.S4);
-            }
+            if (headRect != null) competitiveHintBaseline = placeHead(headRect);
             widgets.add(playing);
             widgets.add(playingPainter);
             widgets.add(modes);
@@ -633,7 +642,7 @@ public class UiMainMenuScreen extends UiScreenBase {
             TaffyLayoutResult.Rect gh = parts.layout.rect(gridHead);
             if (gh != null) {
                 gridTitleX = gh.x;
-                gridTitleBaseline = UiText.centeredBaseline(UiFont.BOLD, gh.y, gh.h, px(UiTheme.Text.XL));
+                gridTitleBaseline = gh.y + px(UiTheme.Space.S10);
             }
             widgets.add(results);
             TaffyLayoutResult.Rect vp = parts.layout.rect(viewport);
@@ -671,7 +680,7 @@ public class UiMainMenuScreen extends UiScreenBase {
 
         Box page = content.add(UiLayout.column().fill().gap(px(UiTheme.Space.S24))
             .pad(px(UiTheme.Space.S32), sideMargin, px(UiTheme.Space.S24), sideMargin));
-        Box head = page.add(UiLayout.row().height(px(64f)).rigid().alignItems("flex-end").gap(px(UiTheme.Space.S10)));
+        Box head = page.add(UiLayout.row().height(headHeight()).rigid().alignItems("flex-end").gap(px(UiTheme.Space.S10)));
         head.add(UiLayout.spacer());
         head.add(UiLayout.box().width(px(280f)).height(control).shrink(1f).minWidth(px(160f)).bind(friendSearch));
         head.add(UiLayout.fixed(addW, control).bind(add));
@@ -681,11 +690,7 @@ public class UiMainMenuScreen extends UiScreenBase {
 
         parts.afterSolve.add(() -> {
             TaffyLayoutResult.Rect headRect = parts.layout.rect(head);
-            if (headRect != null) {
-                titleX = headRect.x;
-                titleBaseline = headRect.y + headRect.h - px(UiTheme.Space.S28);
-                friendsHintBaseline = headRect.y + px(UiTheme.Space.S4);
-            }
+            if (headRect != null) friendsHintBaseline = placeHead(headRect);
             widgets.add(friendSearch);
             widgets.add(add);
             TaffyLayoutResult.Rect d = parts.layout.rect(detailBox);
@@ -711,7 +716,7 @@ public class UiMainMenuScreen extends UiScreenBase {
 
     /** « 3 en ligne sur 8 - clique sur un ami pour voir ce qu'il fait », ou pourquoi la liste est vide. */
     private void drawFriendsHint(UiRenderer r) {
-        float s = px(UiTheme.Text.MD);
+        float s = px(UiTheme.Text.LG);
         List<GameFriends.Friend> friends = GameFriends.friends();
         String rest;
         float x = titleX;
@@ -730,9 +735,9 @@ public class UiMainMenuScreen extends UiScreenBase {
             UiText.drawOnBackdrop(r, UiFont.BOLD, count, x, friendsHintBaseline, new UiColor(92, 210, 128, 255), s,
                 screenWidth, screenHeight);
             x += UiText.width(UiFont.BOLD, count, s);
-            rest = " " + Lang.tr("sur") + " " + friends.size() + "   -   " + Lang.tr("Clique sur un ami pour voir ce qu'il fait");
+            rest = " " + Lang.tr("sur") + " " + friends.size();
         }
-        UiText.drawOnBackdrop(r, UiFont.REGULAR, rest, x, friendsHintBaseline, UiTheme.TEXT_MUTED, s, screenWidth, screenHeight);
+        UiText.drawOnBackdrop(r, UiFont.REGULAR, rest, x, friendsHintBaseline, UiTheme.TEXT_SECONDARY, s, screenWidth, screenHeight);
     }
 
     // ── Les cartes ───────────────────────────────────────────────────────────
