@@ -246,6 +246,20 @@ pub fn instance_all_ids(conn: &Connection) -> Result<Vec<String>> {
     Ok(rows)
 }
 
+/// Les versions d'Horizon épinglées par une instance, tous comptes
+/// confondus : la mise à jour automatique n'efface jamais l'une d'elles.
+/// Sans objet sur téléphone, où le moteur est celui de l'APK.
+#[cfg_attr(target_os = "android", allow(dead_code))]
+pub fn horizon_pinned_versions(conn: &Connection) -> Result<Vec<String>> {
+    let mut stmt = conn.prepare(
+        "SELECT DISTINCT loader_version FROM instances WHERE loader = 'horizon' AND loader_version != ''",
+    )?;
+    let rows = stmt
+        .query_map([], |r| r.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(rows)
+}
+
 /// Reassigne les instances et les configurations JVM sans compte
 /// (yuyu_user_id = 0) à l'utilisateur qui vient de se connecter.
 pub fn instance_claim_unclaimed(conn: &Connection, user_id: i64) -> Result<()> {

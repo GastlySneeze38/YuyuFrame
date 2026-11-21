@@ -36,6 +36,10 @@ pub(super) struct Lock {
     manifest_sha1: String,
     /// Les autres republications de ce JSON par Mojang qu'elle accepte.
     accepted_manifests: Vec<String>,
+    /// Les jars client et serveur épinglés : deux versions d'Horizon qui
+    /// épinglent les mêmes peuvent partager une préparation (`reuse_prepared`).
+    client_sha1: String,
+    server_sha1: String,
 }
 
 impl Lock {
@@ -64,7 +68,116 @@ pub(super) fn read_lock(dir: &Path) -> Result<Lock> {
             .flatten()
             .filter_map(|v| v.as_str().map(str::to_string))
             .collect(),
+        client_sha1: mc["client_sha1"].as_str().unwrap_or_default().to_string(),
+        server_sha1: mc["server_sha1"].as_str().unwrap_or_default().to_string(),
     })
+}
+
+/// Le fichier que la préparation écrit à côté de ses ressources et qui nomme
+/// son propre dossier : il ne se recopie pas, le jeu le refait.
+const DATA_FILE: &str = "horizon-data.bin";
+
+/// Après l'installation d'une nouvelle version : reprend la préparation d'une
+/// autre version installée au lieu de tout refaire depuis le Minecraft du
+/// joueur — plusieurs minutes, et un compte Microsoft exigé, à chaque Nightly
+/// sinon. Même règle que leur launcher (`backend::reuse_prepared`), avec un
+/// juge plus sûr : la copie n'est gardée que si le préparateur de la NOUVELLE
+/// version la déclare complète et à jour (`horizon-prepare --check`, qui ne
+/// lance pas Java et ne lit aucun fichier du jeu). Sinon elle est effacée et
+/// la préparation normale suit.
+///
+/// Candidates : les versions préparées qui recréent le même Minecraft avec
+/// les mêmes jars épinglés. Copiée à côté puis renommée : une copie
+/// interrompue n'est jamais prise pour une préparation.
+pub(super) async fn reuse_prepared(dir: &Path, lock: &Lock, app: &tauri::AppHandle, console: &str) -> bool {
+    let target = resources_dir(dir, lock);
+    if is_prepared(&target) || lock.client_sha1.is_empty() || lock.server_sha1.is_empty() {
+        return false;
+    }
+    let Some(versions) = dir.parent() else { return false };
+    let mut candidates: Vec<PathBuf> = std::fs::read_dir(versions)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p != dir && !p.file_name().is_some_and(|n| n.to_string_lossy().starts_with('.')))
+        .collect();
+    // Les plus récentes d'abord : leur préparation a le plus de chances
+    // d'être celle que la nouvelle version attend.
+    candidates.sort();
+    candidates.reverse();
+
+    for other in candidates {
+        let Ok(other_lock) = read_lock(&other) else { continue };
+        if other_lock.version != lock.version
+            || other_lock.client_sha1 != lock.client_sha1
+            || other_lock.server_sha1 != lock.server_sha1
+        {
+            continue;
+        }
+        let source = resources_dir(&other, &other_lock);
+        if !is_prepared(&source) {
+            continue;
+        }
+        log_to_console(
+            app,
+            console,
+            &format!("[Horizon] Reprise de la préparation de {}", other.file_name().unwrap_or_default().to_string_lossy()),
+            "out",
+        );
+        let partial = target.with_file_name(format!(".{}.reuse", lock.version));
+        let copied = {
+            let (source, partial, target) = (source.clone(), partial.clone(), target.clone());
+            tokio::task::spawn_blocking(move || -> std::io::Result<()> {
+                let _ = std::fs::remove_dir_all(&partial);
+                copy_dir(&source, &partial)?;
+                let _ = std::fs::remove_dir_all(&target);
+                std::fs::rename(&partial, &target)
+            })
+            .await
+        };
+        if !matches!(copied, Ok(Ok(()))) {
+            let _ = tokio::fs::remove_dir_all(&partial).await;
+            continue;
+        }
+        if check_prepared(dir).await {
+            return true;
+        }
+        log_to_console(app, console, "[Horizon] Cette préparation ne convient pas à la nouvelle version : préparation complète", "out");
+        let _ = tokio::fs::remove_dir_all(&target).await;
+    }
+    false
+}
+
+/// `horizon-prepare --check` : la préparation est-elle complète et à jour pour
+/// ce préparateur ? Faux s'il ne sait pas répondre (ancienne version sans
+/// l'option, programme absent).
+async fn check_prepared(dir: &Path) -> bool {
+    let mut cmd = crate::app::process::hidden_command(dir.join(PREPARER));
+    cmd.current_dir(dir)
+        .arg("--check")
+        .arg("--root")
+        .arg(dir)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .kill_on_drop(true);
+    matches!(cmd.status().await, Ok(status) if status.success())
+}
+
+/// Copie récursive, sans le fichier de données qui nomme son dossier d'origine.
+fn copy_dir(from: &Path, to: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(to)?;
+    for entry in std::fs::read_dir(from)? {
+        let entry = entry?;
+        let target = to.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_dir(&entry.path(), &target)?;
+        } else if entry.file_name() != DATA_FILE {
+            std::fs::copy(entry.path(), &target)?;
+        }
+    }
+    Ok(())
 }
 
 /// Le dossier que `horizon-client --resources` attend.
@@ -122,12 +235,21 @@ pub(super) async fn ensure_prepared(
         .ok_or_else(|| anyhow!("Dossier Java introuvable pour {java}"))?
         .to_path_buf();
 
-    set_progress_monotonic(app, floor, 75, 100, &format!("Préparation d'Horizon depuis Minecraft {}...", lock.version));
+    let label = format!("Préparation d'Horizon depuis Minecraft {}", lock.version);
+    set_progress_monotonic(app, floor, 75, 100, &format!("{label}..."));
     log_to_console(app, console, "[Horizon] Préparation des ressources depuis ton Minecraft (une seule fois, quelques minutes)", "out");
     let preparer = dir.join(PREPARER);
     let mut args: Vec<std::ffi::OsString> = vec!["--prepare".into(), "--server-jar".into(), server_jar.into()];
     args.extend(["--minecraft-dir".into(), mc_dir.clone().into_os_string(), "--root".into(), dir.as_os_str().to_owned()]);
-    run_preparer(&preparer, dir, &java_home, &args, app, console, cancel).await?;
+    // L'avancement de la préparation dans la barre du launcher, de 75 à 91 %,
+    // quand le préparateur sait le donner.
+    let bar = if supports_json_progress(&preparer).await {
+        args.extend(["--progress".into(), "json".into()]);
+        Some(Bar { floor: floor.clone(), from: 75, to: 91, label })
+    } else {
+        None
+    };
+    run_preparer(&preparer, dir, &java_home, &args, app, console, cancel, bar).await?;
 
     // Les sons ne font pas partie de la préparation : sans eux le jeu est
     // muet, mais il démarre. Un échec ici ne bloque donc rien.
@@ -139,7 +261,7 @@ pub(super) async fn ensure_prepared(
         "--root".into(),
         dir.as_os_str().to_owned(),
     ];
-    if let Err(e) = run_preparer(&preparer, dir, &java_home, &sounds, app, console, cancel).await {
+    if let Err(e) = run_preparer(&preparer, dir, &java_home, &sounds, app, console, cancel, None).await {
         if e.to_string() == LAUNCH_CANCELLED_MSG {
             return Err(e);
         }
@@ -277,7 +399,54 @@ async fn server_jar(
     Ok(path)
 }
 
-/// Lance `horizon-prepare` avec ce Java, sa sortie dans la console.
+/// Où poser l'avancement de `--progress json` dans la barre de lancement.
+struct Bar {
+    floor: Arc<ProgressFloor>,
+    /// Pourcentage de la barre au début et à la fin de cette étape.
+    from: u64,
+    to: u64,
+    /// Ce que la barre affiche, suivi du pourcentage de l'étape.
+    label: String,
+}
+
+/// Le préparateur de cette version connaît-il `--progress json` ? La v0.2.97,
+/// qu'une instance peut encore épingler, refuserait l'option et échouerait.
+async fn supports_json_progress(preparer: &Path) -> bool {
+    let mut cmd = crate::app::process::hidden_command(preparer);
+    cmd.arg("--help")
+        .stdin(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .kill_on_drop(true);
+    match cmd.output().await {
+        Ok(out) => String::from_utf8_lossy(&out.stdout).contains("--progress json"),
+        Err(_) => false,
+    }
+}
+
+/// Une ligne de `--progress json` : `{"fraction": F}` (de 0 à 1),
+/// `{"message": "…"}` ou `{"error": "…"}` — le contrat de leur
+/// `docs/api/launch.md`, figé par un test chez eux. `None` pour toute autre ligne.
+enum ProgressLine {
+    Fraction(f64),
+    Message(String),
+    Error(String),
+}
+
+fn parse_progress_line(line: &str) -> Option<ProgressLine> {
+    let value: serde_json::Value = serde_json::from_str(line.trim()).ok()?;
+    if let Some(f) = value["fraction"].as_f64() {
+        return Some(ProgressLine::Fraction(f.clamp(0.0, 1.0)));
+    }
+    if let Some(m) = value["message"].as_str() {
+        return Some(ProgressLine::Message(m.to_string()));
+    }
+    value["error"].as_str().map(|e| ProgressLine::Error(e.to_string()))
+}
+
+/// Lance `horizon-prepare` avec ce Java, sa sortie dans la console. Avec
+/// `bar`, sa sortie est en `--progress json` : l'avancement va dans la barre
+/// du launcher, les messages dans la console.
+#[allow(clippy::too_many_arguments)]
 async fn run_preparer(
     preparer: &Path,
     dir: &Path,
@@ -286,6 +455,7 @@ async fn run_preparer(
     app: &tauri::AppHandle,
     console: &str,
     cancel: &watch::Receiver<bool>,
+    bar: Option<Bar>,
 ) -> Result<()> {
     let mut path = vec![java_home.join("bin")];
     path.extend(std::env::var_os("PATH").iter().flat_map(std::env::split_paths));
@@ -302,11 +472,28 @@ async fn run_preparer(
 
     let last_error = Arc::new(std::sync::Mutex::new(String::new()));
     if let Some(out) = child.stdout.take() {
-        let (app, console) = (app.clone(), console.to_string());
+        let (app, console, last) = (app.clone(), console.to_string(), last_error.clone());
         tokio::spawn(async move {
             let mut lines = BufReader::new(out).lines();
             while let Ok(Some(line)) = lines.next_line().await {
-                log_to_console(&app, &console, &format!("[Horizon] {line}"), "out");
+                let Some(bar) = &bar else {
+                    log_to_console(&app, &console, &format!("[Horizon] {line}"), "out");
+                    continue;
+                };
+                match parse_progress_line(&line) {
+                    Some(ProgressLine::Fraction(f)) => {
+                        let at = bar.from + ((bar.to - bar.from) as f64 * f).round() as u64;
+                        let percent = (f * 100.0).round() as u64;
+                        set_progress_monotonic(&app, &bar.floor, at, 100, &format!("{} — {percent} %", bar.label));
+                    }
+                    Some(ProgressLine::Message(m)) => log_to_console(&app, &console, &format!("[Horizon] {m}"), "out"),
+                    Some(ProgressLine::Error(e)) => {
+                        *last.lock().unwrap() = e.clone();
+                        log_to_console(&app, &console, &format!("[Horizon] {e}"), "err");
+                    }
+                    None if line.trim().is_empty() => {}
+                    None => log_to_console(&app, &console, &format!("[Horizon] {line}"), "out"),
+                }
             }
         });
     }
@@ -342,4 +529,20 @@ async fn run_preparer(
         "La préparation d'Horizon a échoué{}",
         if reason.is_empty() { String::new() } else { format!(" : {reason}") }
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Les trois formes que leur test `progress_json_lines_keep_their_shape`
+    /// fige (Nightly du 2026-11-21).
+    #[test]
+    fn lignes_de_progression() {
+        assert!(matches!(parse_progress_line(r#"{"fraction": 0.050}"#), Some(ProgressLine::Fraction(f)) if (f - 0.05).abs() < 1e-9));
+        assert!(matches!(parse_progress_line(r#"{"fraction": 1.000}"#), Some(ProgressLine::Fraction(f)) if f == 1.0));
+        assert!(matches!(parse_progress_line(r#"{"message": "Copying \"sounds\"\nnext"}"#), Some(ProgressLine::Message(m)) if m == "Copying \"sounds\"\nnext"));
+        assert!(matches!(parse_progress_line(r#"{"error": "no Java 25"}"#), Some(ProgressLine::Error(e)) if e == "no Java 25"));
+        assert!(parse_progress_line("Checked the game files").is_none());
+    }
 }

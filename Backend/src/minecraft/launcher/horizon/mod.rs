@@ -3,15 +3,15 @@
 //!
 //! Ce n'est pas un loader : il n'y a ni JVM, ni classpath, ni agent. Une
 //! instance Horizon a sa propre chaîne de lancement :
-//! 1. `release` installe une version stable signée (une seule fois) ;
-//! 2. `prepare` lui donne les ressources du vrai Minecraft du joueur (une
-//!    seule fois par version d'Horizon) ;
+//! 1. `release` installe le build signé que désigne l'instance — canal Stable
+//!    (une Nightly par semaine), canal Nightly (la dernière) ou un build précis ;
+//! 2. `prepare` lui donne les ressources du vrai Minecraft du joueur, ou
+//!    reprend celles d'une version déjà préparée quand le jeu épinglé est le même ;
 //! 3. ce fichier démarre `horizon-client.exe` dans le dossier de l'instance.
 //!
 //! Rien de ce qui vit dans le jeu Java ne s'applique : le client intégré, le
 //! canal du jeu, la présence en jeu. Les mods d'Horizon (le registre
-//! `horizon-mods`) ne sont pas gérés : presque tous doivent être recompilés
-//! avec le jeu, ce que seul leur launcher sait faire aujourd'hui.
+//! `horizon-mods`) ne sont pas encore gérés.
 
 #[cfg(target_os = "android")]
 pub mod android;
@@ -126,8 +126,15 @@ async fn desktop_launch(app: tauri::AppHandle, run: HorizonLaunch<'_>, cancel: w
             .build()?,
     );
 
-    let pinned = (!run.pinned.is_empty()).then_some(run.pinned);
-    let installed = release::ensure_installed(&client, &app, &floor, pinned).await?;
+    // Les versions qu'une instance épingle : une mise à jour par canal ne les
+    // supprime jamais.
+    let keep = {
+        let state = app.state::<crate::state::SharedState>();
+        let db = state.read().await.db.clone();
+        let conn = db.lock().await;
+        crate::db::horizon_pinned_versions(&conn).unwrap_or_default()
+    };
+    let installed = release::ensure_installed(&client, &app, &floor, run.pinned, &keep).await?;
     let lock = prepare::read_lock(&installed.dir)?;
     if lock.version != run.mc_version {
         return Err(anyhow!(
@@ -140,6 +147,10 @@ async fn desktop_launch(app: tauri::AppHandle, run: HorizonLaunch<'_>, cancel: w
     }
 
     let online = run.session.access_token != "offline";
+    // Une nouvelle Nightly reprend la préparation de la précédente quand le
+    // jeu épinglé n'a pas changé : pas de nouvelle préparation à chaque mise à jour.
+    set_progress_monotonic(&app, &floor, 70, 100, "Vérification des ressources d'Horizon...");
+    prepare::reuse_prepared(&installed.dir, &lock, &app, run.console_label).await;
     let resources = prepare::ensure_prepared(
         &installed.dir,
         &lock,
@@ -152,15 +163,17 @@ async fn desktop_launch(app: tauri::AppHandle, run: HorizonLaunch<'_>, cancel: w
     )
     .await?;
 
-    set_progress_monotonic(&app, &floor, 100, 100, &format!("Démarrage d'Horizon {}...", installed.tag));
-    log_to_console(&app, run.console_label, &format!("[Horizon] Version {} — Minecraft {}", installed.tag, lock.version), "out");
+    let shown = release::display_name(&installed.tag);
+    set_progress_monotonic(&app, &floor, 100, 100, &format!("Démarrage d'Horizon — {shown}..."));
+    log_to_console(&app, run.console_label, &format!("[Horizon] {shown} — Minecraft {}", lock.version), "out");
 
-    // Options de ligne de commande : seulement celles que lit `horizon-client`
-    // depuis ses premières versions stables (relevées dans le code de la
-    // v0.2.97, `game.rs`). Leur documentation décrit déjà des options plus
-    // récentes (`--game-dir`, `--home`, `--session-stdin`, `--fullscreen`)
-    // que la v0.2.97 refuse d'un « unknown option » ; ce qui suit marche
-    // pour les deux.
+    // Options de ligne de commande : seulement celles que lisent à la fois la
+    // v0.2.97 (`game.rs`) et la Nightly du 2026-11-21
+    // (`game/runtime/launch_options.rs`) — `--resources`, `--width`,
+    // `--height`, `--quickPlayMultiplayer`, `--name`, `--session-file`. Les
+    // Nightly en ont d'autres (`--session-stdin`, `--fullscreen`) que la
+    // v0.2.97 refuse d'un « unknown option », et une instance peut encore
+    // l'épingler.
     //
     // - Dossier de jeu (mondes, options.txt) : le dossier courant.
     // - Journaux et rapports de plantage : `HORIZON_HOME`, ici dans
@@ -177,6 +190,10 @@ async fn desktop_launch(app: tauri::AppHandle, run: HorizonLaunch<'_>, cancel: w
         // comme pour une partie Java : celui d'Horizon le remplaçait pendant
         // la partie, les deux se disputaient l'affichage.
         .env("HORIZON_NO_DISCORD", "1")
+        // Le signal « je joue » qu'Horizon envoie à ses serveurs (allumé par
+        // défaut chez eux, éteint par leur launcher quand le joueur refuse) :
+        // on ne peut pas demander l'accord ici, donc on ne l'envoie pas.
+        .env("HORIZON_NO_HEARTBEAT", "1")
         .arg("--resources")
         .arg(&resources)
         .stdin(Stdio::null())
