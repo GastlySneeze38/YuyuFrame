@@ -882,6 +882,22 @@ export const fr = {
       server: 'Serveur',
       competitive: 'Compétitif',
     },
+    // Rail de navigation à gauche (components/home/HomeRail.tsx).
+    rail: {
+      expand: 'Ouvrir le panneau',
+      collapse: 'Réduire le panneau',
+      groupPlay: 'Jouer',
+      groupProgress: 'Progresser',
+      groupStyle: 'Personnaliser',
+      servers: 'Serveurs',
+      missions: 'Missions',
+      pass: 'Passe de saison',
+      skins: 'Skins',
+      skinCatalog: 'Catalogue',
+      skinEditor: 'Éditeur',
+      inGame: 'En jeu',
+      ready: 'Prête à lancer',
+    },
     copyright: '© 2025 YuyuFrame — Tous droits réservés',
     legal: {
       licence: 'Licence',

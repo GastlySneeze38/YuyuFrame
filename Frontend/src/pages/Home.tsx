@@ -16,6 +16,7 @@ import { InstanceSwitchModal } from '@/components/instances/InstanceSwitchModal'
 import { WelcomeSequence } from '@/components/home/WelcomeSequence'
 import { homeGreeting } from '@/lib/greeting'
 import { HomeBanner, Confetti, useHomeBanner } from '@/components/home/HomeBanner'
+import { HomeRail } from '@/components/home/HomeRail'
 import { HomeShortcuts } from '@/components/home/ChallengeShortcuts'
 import { HalloweenButtonFx, HalloweenGround, HalloweenLaunchBurst, HalloweenSky, playHalloweenLaunchSound } from '@/components/home/Halloween'
 import { ProCard } from '@/components/home/ProCard'
@@ -618,7 +619,15 @@ export default function Home() {
     : 'shadow-none'
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-[rgb(var(--bg-primary))]">
+    <div className="flex h-full overflow-hidden bg-[rgb(var(--bg-primary))]">
+    {/* Rail de navigation à gauche (essai) : remplace la barre du bas. */}
+    <HomeRail
+      supportBadge={supportUnread + crashUpdates}
+      instanceCount={instances.length}
+      instanceName={instance?.name ?? null}
+      running={gameRunning}
+    />
+    <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
 
       {/* ── Zone principale ──
           Une seule colonne, plus deux panneaux côte à côte. La bannière
@@ -1161,53 +1170,6 @@ export default function Home() {
           )}
         </motion.div>
 
-        {/* Barre de navigation — seule occupante de sa ligne.
-            overflow-x-auto en filet de sécurité : si les 7 liens ne tiennent
-            plus même à leur taille clamp() minimale, la ligne devient
-            défilable au lieu de couper les derniers. */}
-        <div className="flex overflow-x-auto">
-
-          {/* La marque, l'accroche et la pastille de compte ont quitté cette
-              ligne : le nom est déjà sur la bannière, et « Compte » dans la
-              barre mène à l'écran qui gère les comptes, déconnexion comprise.
-              Le pied de page n'a plus qu'un rôle : naviguer. */}
-          {/* `w-full` obligatoire : `container-type: inline-size` rend la
-              largeur indépendante du contenu, donc sans largeur définie la
-              barre s'effondrerait. Elle la tenait de sa colonne de grille
-              avant, elle la tient de la ligne maintenant. */}
-          {/* L'écart suit la largeur disponible, au lieu des 8 px fixes qui
-              tassaient sept liens devenus plus grands. Il reste borné : au
-              delà, la barre se disloque en éléments isolés. */}
-          <div className="flex w-full min-w-0 items-center justify-center gap-[clamp(4px,0.65vw,16px)] py-[clamp(0px,0.8vh,10px)] [container-type:inline-size]">
-            <NavLink label={t('home.nav.instances')} onClick={() => navigate('/instances')} distance={3}>
-              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 16.5c0 .38-.21.71-.53.88l-7.9 4.44c-.16.12-.36.18-.57.18s-.41-.06-.57-.18l-7.9-4.44A1 1 0 013 16.5v-9c0-.38.21-.71.53-.88l7.9-4.44c.16-.12.36-.18.57-.18s.41.06.57.18l7.9 4.44c.32.17.53.5.53.88v9z" /></svg>
-            </NavLink>
-            <NavLink label={t('home.nav.settings')} onClick={() => navigate('/settings')} distance={2}>
-              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" /></svg>
-            </NavLink>
-            {/* Sync et Stats ne sont plus dans la barre : elles vivent
-                désormais dans la page Fonctionnalités, qui les regroupe avec
-                celles à venir. */}
-            <NavLink label={t('home.nav.features')} onClick={() => navigate('/features')} distance={1} accent>
-              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h7v7H4V4zm9 0h7v7h-7V4zM4 13h7v7H4v-7zm9 0h7v7h-7v-7z" /></svg>
-            </NavLink>
-            <NavLink label={t('home.nav.plans')} onClick={() => navigate('/plans')} distance={0} plans>
-              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" /></svg>
-            </NavLink>
-            <NavLink label={t('home.nav.support')} onClick={() => navigate('/support')} distance={1} accent badge={supportUnread + crashUpdates}>
-              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a9 9 0 00-9 9v5a3 3 0 003 3h1a1 1 0 001-1v-5a1 1 0 00-1-1H5v-1a7 7 0 1114 0v1h-2a1 1 0 00-1 1v5a1 1 0 001 1h1a3 3 0 003-3v-5a9 9 0 00-9-9z" /></svg>
-            </NavLink>
-            <NavLink label={t('home.nav.account')} onClick={() => navigate('/login')} distance={2}>
-              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z" /></svg>
-            </NavLink>
-            <NavLink label={t('home.nav.competitive')} onClick={() => navigate('/competitive')} distance={3}>
-              {/* Un trophée. */}
-              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 4h-2V3a1 1 0 00-1-1H8a1 1 0 00-1 1v1H5a2 2 0 00-2 2v1a5 5 0 004.6 4.98A5.01 5.01 0 0011 15.9V18H8a1 1 0 00-1 1v2h10v-2a1 1 0 00-1-1h-3v-2.1a5.01 5.01 0 003.4-3.92A5 5 0 0021 7V6a2 2 0 00-2-2zM5 7V6h2v3.82A3 3 0 015 7zm14 0a3 3 0 01-2 2.82V6h2v1z" /></svg>
-            </NavLink>
-          </div>
-
-        </div>
-
         </div>{/* fin zone principale */}
 
         {/* Divider — collé en bas */}
@@ -1267,97 +1229,6 @@ export default function Home() {
         />
       )}
     </div>
-  )
-}
-
-
-/**
- * Les quatre étages de la pyramide, taille de police seulement.
- *
- * Un lien n'a plus de hauteur imposée : sa police décide de tout le reste —
- * marges intérieures, écart texte/icône et icône sont exprimés en `em` dans
- * le composant. Avant, la hauteur venait de `vh` et la police de `cqw` : deux
- * mesures sans rapport l'une avec l'autre, d'où des boutons hauts au texte
- * minuscule dès que la fenêtre était large et basse, et une barre qui ne
- * remplissait jamais sa ligne.
- *
- * L'unité de référence est la largeur de la fenêtre — c'est elle qui décide
- * si sept liens tiennent côte à côte. Le plancher est haut (11,5 px sur les
- * liens extérieurs) : en dessous, la barre devient illisible bien avant de
- * manquer de place.
- *
- * `max(vw, vh)` et non `vw` seul : la bannière et le bouton de lancement ont
- * été réduits, donc le pied de page dispose désormais de hauteur en trop. La
- * barre s'en sert — sur une fenêtre haute mais étroite, c'est la hauteur qui
- * commande, et les liens grossissent au lieu de laisser ce vide. Le plafond
- * reste là pour qu'ils ne deviennent pas des pavés sur un grand écran.
- */
-const NAV_SIZE_CLASSES = [
-  'text-[clamp(13px,max(1.32vw,2.35vh),24px)] font-[700]',
-  'text-[clamp(12.5px,max(1.20vw,2.15vh),21.5px)] font-[650]',
-  'text-[clamp(12px,max(1.08vw,1.94vh),19.5px)] font-[600]',
-  'text-[clamp(11.5px,max(0.97vw,1.74vh),17.5px)] font-[550]',
-]
-
-/** Temps passé sur un même lien avant que le repère ne s'étire. */
-function NavLink({ label, onClick, plans, accent, distance = 0, badge = 0, children }: {
-  label: string; onClick: () => void; plans?: boolean; accent?: boolean; distance?: number
-  /** Nombre d'éléments en attente sur cet écran. 0 = rien à signaler. */
-  badge?: number
-  children: React.ReactNode
-}) {
-  // Tailles relatives à la fenêtre via clamp — s'adaptent à toutes les largeurs
-  // Unités cqw : relatives à la largeur réellement disponible pour la nav (container query),
-  // plutôt qu'à la largeur de toute la fenêtre — la nav s'adapte donc à la place qui lui est laissée.
-  const d = Math.min(distance, 3)
-  const baseColorClass = plans ? 'text-[rgb(var(--accent-text))]' : 'text-[rgba(255,255,255,0.9)]'
-  const bgBorderShadow = plans
-    ? 'bg-[rgb(var(--accent)/0.1)] border border-[rgb(var(--accent-hover)/0.22)] shadow-[0_0_18px_rgb(var(--accent)/0.12)_inset]'
-    : 'bg-transparent border border-transparent shadow-none'
-  const hoverClasses = plans
-    ? 'hover:text-[#e9d5ff] hover:bg-[rgb(var(--accent)/0.22)] hover:border-[rgba(139,92,246,0.48)]'
-    : accent
-      ? 'hover:text-[rgb(var(--accent-text))] hover:bg-[rgba(139,92,246,0.22)] hover:border-[rgba(139,92,246,0.60)]'
-      : 'hover:text-[rgba(255,255,255,0.92)] hover:bg-[rgba(255,255,255,0.06)]'
-
-  return (
-    <motion.button
-      onClick={onClick}
-      // La pyramide se monte depuis son sommet : le lien central d'abord, les
-      // autres en s'écartant. C'est la forme de la barre qui donne l'ordre,
-      // pas celui du code.
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0, transition: { duration: 0.36, ease: EASE_OUT, delay: 0.08 + d * 0.05 } }}
-      whileHover={{ y: -3 }}
-      whileTap={{ scale: 0.95 }}
-      // Ressort raide et léger : le survol d'un lien de nav doit répondre
-      // tout de suite, pas accompagner le curseur.
-      transition={SNAP}
-      // `transition-colors`, surtout pas `transition-all` : celui-ci animait
-      // aussi `transform`, la propriété que le ressort ci-dessus pilote déjà.
-      // Les deux se disputaient la même valeur à chaque image et le survol
-      // répondait mou. Le CSS ne garde que ce que framer ne touche pas.
-      // Marges, écart et icône en `em` : tout suit la police de l'étage, donc
-      // la hauteur du bouton est celle de son contenu et jamais un nombre posé
-      // à côté.
-      className={`group relative flex items-center gap-[0.45em] rounded-xl px-[0.85em] py-[0.62em] transition-colors duration-150 whitespace-nowrap cursor-pointer ${NAV_SIZE_CLASSES[d]} ${baseColorClass} ${bgBorderShadow} ${hoverClasses}`}
-    >
-      <span className={`relative flex h-[1.35em] w-[1.35em] flex-shrink-0 transition-transform duration-150 ease-out group-hover:scale-110 ${plans ? 'text-[rgb(var(--accent-text))]' : 'text-inherit'}`}>
-        {children}
-        {/* Posée sur l'icône et non à côté du libellé : elle reste au même
-            endroit quelle que soit la longueur du mot, dans une barre dont
-            les sept entrées n'ont pas la même largeur. Dimensions en `em`,
-            comme le reste du bouton — elle suit la taille de la barre. */}
-        {badge > 0 && (
-          // Même pastille que le bouton Amis. Les `em` de ses dimensions
-          // sont ceux de SA police (0.62em du bouton) : 1.75em ≈ un caractère
-          // du libellé, la taille de la pastille des amis à cette échelle.
-          <span className="absolute -right-[0.9em] -top-[0.85em] flex h-[1.75em] min-w-[1.75em] items-center justify-center rounded-full bg-danger px-[0.35em] text-[0.62em] font-black leading-none tabular-nums text-white shadow-[0_0_0_0.28em_rgba(10,10,14,0.9)]">
-            {badge > 9 ? '9+' : badge}
-          </span>
-        )}
-      </span>
-      {label}
-    </motion.button>
+    </div>
   )
 }
