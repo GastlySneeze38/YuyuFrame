@@ -10,7 +10,7 @@ import {
   type ModrinthInfo, type ModUpdate,
 } from '@/components/mods/modUtils'
 import type { Instance, Mod } from '@/types'
-import { DeleteButton, ShelfPanel, Switch, prettyName, useFileDrop, useStackCapacity } from './shared'
+import { DeleteButton, ShelfPanel, Switch, prettyName, queueIcon, useFileDrop, useStackCapacity } from './shared'
 
 /**
  * Panneau des mods de l'accueil.
@@ -142,7 +142,8 @@ export function ModsPanel({ instance, running, open, onOpen, onClose }: {
   // Zone de dépôt : la ligne du bas fermé, tout le panneau ouvert.
   const headerRef = useRef<HTMLDivElement>(null)
   const dropping = useFileDrop(
-    () => (open ? headerRef.current?.parentElement ?? null : headerRef.current),
+    // Le panneau ouvert est la couche juste avant la ligne d'en-tête.
+    () => (open ? (headerRef.current?.previousElementSibling as HTMLElement | null) ?? null : headerRef.current),
     (p) => /\.jar$/i.test(p),
     (paths) => { if (!running) void importJars(paths) },
   )
@@ -238,7 +239,9 @@ export function ModsPanel({ instance, running, open, onOpen, onClose }: {
           const u = updateOf.get(m.name)
           const busy = updating.has(m.sha1)
           return (
-            <div key={displayName(m.name)} className="group flex h-10 items-center gap-2.5 rounded-lg px-2 transition-colors duration-150 hover:bg-[rgba(255,255,255,0.04)]">
+            // `content-visibility` : une ligne hors de vue n'est ni mise en
+            // page ni peinte, même avec deux cents mods.
+            <div key={displayName(m.name)} className="group flex h-10 items-center [contain-intrinsic-size:auto_40px] [content-visibility:auto] gap-2.5 rounded-lg px-2 transition-colors duration-150 hover:bg-[rgba(255,255,255,0.04)]">
               <span className={`transition-[opacity,filter] duration-200 ${m.enabled ? '' : 'opacity-40 grayscale'}`}>
                 <ModIcon instanceId={id} mod={m} name={nameOf(m)} size={26} />
               </span>
@@ -322,7 +325,7 @@ function ModIcon({ instanceId, mod, name, size, ring }: { instanceId: string; mo
   useEffect(() => {
     if (cacheKey in _iconCache) { setIcon(_iconCache[cacheKey]); return }
     let cancelled = false
-    api.mods.icon(instanceId, mod.name)
+    queueIcon(() => api.mods.icon(instanceId, mod.name))
       .then((uri) => { _iconCache[cacheKey] = uri; if (!cancelled) setIcon(uri) })
       .catch(() => { _iconCache[cacheKey] = null; if (!cancelled) setIcon(null) })
     return () => { cancelled = true }

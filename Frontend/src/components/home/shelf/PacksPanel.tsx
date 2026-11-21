@@ -5,7 +5,7 @@ import { useT } from '@/i18n'
 import { formatBytes } from '@/lib/format'
 import { showError } from '@/stores/useErrorToast'
 import type { Instance, PackInfo, PackKind } from '@/types'
-import { DeleteButton, ShelfPanel, prettyName, tintFor, useFileDrop, useStackCapacity } from './shared'
+import { DeleteButton, ShelfPanel, prettyName, queueIcon, tintFor, useFileDrop, useStackCapacity } from './shared'
 import { Chip, PanelTitle } from './ModsPanel'
 
 /**
@@ -71,7 +71,8 @@ export function PacksPanel({ instance, running, open, onOpen, onClose }: {
 
   const headerRef = useRef<HTMLDivElement>(null)
   const dropping = useFileDrop(
-    () => (open ? headerRef.current?.parentElement ?? null : headerRef.current),
+    // Le panneau ouvert est la couche juste avant la ligne d'en-tête.
+    () => (open ? (headerRef.current?.previousElementSibling as HTMLElement | null) ?? null : headerRef.current),
     (p) => /\.zip$/i.test(p),
     (paths) => void importZips(paths),
   )
@@ -145,7 +146,7 @@ export function PacksPanel({ instance, running, open, onOpen, onClose }: {
 
       <div className="min-h-0 flex-1 overflow-y-auto px-1.5">
         {current.map((p) => (
-          <div key={p.name} className="group flex h-10 items-center gap-2.5 rounded-lg px-2 transition-colors duration-150 hover:bg-[rgba(255,255,255,0.04)]" title={p.name}>
+          <div key={p.name} className="group flex h-10 items-center [contain-intrinsic-size:auto_40px] [content-visibility:auto] gap-2.5 rounded-lg px-2 transition-colors duration-150 hover:bg-[rgba(255,255,255,0.04)]" title={p.name}>
             <Cover instanceId={id} pack={p} size={26} round={tab === 'shader'} />
             <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-[rgba(255,255,255,0.9)]">{prettyName(p.name)}</span>
             <span className="flex-shrink-0 text-[11.5px] tabular-nums text-[rgba(255,255,255,0.35)]">{formatBytes(p.size)}</span>
@@ -192,7 +193,7 @@ function Cover({ instanceId, pack, size, round, ring }: { instanceId: string; pa
   useEffect(() => {
     if (iconCache.has(key)) { setIcon(iconCache.get(key)); return }
     let cancelled = false
-    api.packs.icon(instanceId, pack.kind, pack.name)
+    queueIcon(() => api.packs.icon(instanceId, pack.kind, pack.name))
       .then((uri) => { iconCache.set(key, uri); if (!cancelled) setIcon(uri) })
       .catch(() => { iconCache.set(key, null); if (!cancelled) setIcon(null) })
     return () => { cancelled = true }

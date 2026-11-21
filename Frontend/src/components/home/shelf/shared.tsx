@@ -16,13 +16,21 @@ const EASE_OUT = 'cubic-bezier(0.23, 1, 0.32, 1)'
 
 /**
  * Le panneau : l'en-tête est EN BAS, là où il est posé sur l'accueil, et le
- * contenu se déploie au-dessus de lui. Ouvrir ne déplace donc pas ce qu'on
+ * contenu apparaît au-dessus de lui. Ouvrir ne déplace donc pas ce qu'on
  * vient de cliquer.
  *
- * Toujours rendu à sa hauteur ouverte ; seul un `clip-path` montre la ligne
- * du bas quand il est fermé. On anime le découpage et pas la hauteur : rien
- * n'est remis en page pendant le mouvement, et la zone découpée ne reçoit
- * aucun clic.
+ * Deux couches. La ligne d'en-tête, toujours là. Et, derrière elle, le
+ * panneau ouvert, à sa hauteur finale dès le départ, qui n'anime que
+ * `transform` et `opacity` : il monte de quelques pixels en grandissant
+ * depuis le bas (comme une bulle depuis ce qui l'ouvre), sans rien remettre
+ * en page et sans repeindre à chaque image.
+ *
+ * Remplace un `clip-path` animé : celui-ci repeignait tout le panneau à
+ * chaque image et, dans WebView2, faisait clignoter en blanc le bord du haut
+ * pendant le dépliage.
+ *
+ * Le contenu n'est monté qu'à la première ouverture, puis gardé : fermé, un
+ * panneau ne coûte que sa ligne.
  */
 export function ShelfPanel({ open, onToggle, header, children, dropping, headerRef }: {
   open: boolean
@@ -34,61 +42,95 @@ export function ShelfPanel({ open, onToggle, header, children, dropping, headerR
   /** Ligne d'en-tête : sert de zone de dépôt quand le panneau est fermé. */
   headerRef: RefObject<HTMLDivElement | null>
 }) {
-  const bodyRef = useRef<HTMLDivElement>(null)
+  const layerRef = useRef<HTMLDivElement>(null)
+  const [mounted, setMounted] = useState(open)
+  useEffect(() => { if (open) setMounted(true) }, [open])
 
-  // Fermé, le contenu est découpé mais toujours là : `inert` le retire aussi
-  // du parcours au clavier.
+  // Fermé, le panneau est transparent mais toujours là : `inert` le retire
+  // du parcours au clavier et des clics.
   useEffect(() => {
-    const el = bodyRef.current
+    const el = layerRef.current
     if (!el) return
     if (open) el.removeAttribute('inert')
     else el.setAttribute('inert', '')
-  }, [open])
+  }, [open, mounted])
 
   return (
-    <div className="relative h-full min-w-0" style={{ height: CLOSED_H }}>
-      <div
-        className={`absolute inset-x-0 bottom-0 z-40 flex flex-col rounded-xl border bg-bg-secondary transition-[clip-path,border-color] duration-[260ms] ${
-          dropping ? 'border-[rgb(var(--accent-hover)/0.7)]' : open ? 'border-[rgb(var(--accent)/0.35)]' : 'border-[rgba(255,255,255,0.07)]'
-        }`}
-        style={{
-          height: OPEN_H,
-          transitionTimingFunction: EASE_OUT,
-          clipPath: open ? 'inset(0 0 0 0 round 12px)' : `inset(calc(100% - ${CLOSED_H}px) 0 0 0 round 12px)`,
-        }}
-      >
+    <div className="relative min-w-0" style={{ height: CLOSED_H }}>
+      {mounted && (
         <div
-          ref={bodyRef}
-          className="flex min-h-0 flex-1 flex-col transition-opacity duration-150"
-          style={{ opacity: open ? 1 : 0, transitionDelay: open ? '80ms' : '0ms' }}
+          ref={layerRef}
+          className={`absolute inset-x-0 bottom-0 z-40 flex origin-bottom flex-col rounded-xl border bg-bg-secondary shadow-[0_-12px_40px_rgba(0,0,0,0.45)] ${
+            dropping ? 'border-[rgb(var(--accent-hover)/0.7)]' : 'border-[rgb(var(--accent)/0.35)]'
+          }`}
+          style={{
+            height: OPEN_H,
+            paddingBottom: CLOSED_H,
+            opacity: open ? 1 : 0,
+            transform: open ? 'none' : 'translateY(10px) scale(0.97)',
+            // Fermer va plus vite qu'ouvrir : le système répond, il ne se
+            // met pas en scène.
+            transition: open
+              ? `transform 240ms ${EASE_OUT}, opacity 160ms ${EASE_OUT}`
+              : `transform 160ms ${EASE_OUT}, opacity 120ms ease-out`,
+            pointerEvents: open ? 'auto' : 'none',
+            willChange: 'transform, opacity',
+          }}
         >
           {children}
         </div>
-        <div
-          ref={headerRef}
-          role="button"
-          tabIndex={0}
-          aria-expanded={open}
-          onClick={onToggle}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle() } }}
-          style={{ height: CLOSED_H }}
-          // Fermé, le bord du haut est découpé : ce filet le remplace.
-          className={`flex flex-shrink-0 cursor-pointer items-center gap-2.5 rounded-b-xl px-3 outline-none transition-colors duration-150 focus-visible:bg-[rgba(255,255,255,0.04)] ${
-            open ? 'border-t border-[rgba(255,255,255,0.06)]' : 'shadow-[inset_0_1px_0_rgba(255,255,255,0.07)] hover:bg-[rgba(255,255,255,0.025)]'
-          } ${dropping ? 'bg-[rgb(var(--accent)/0.1)]' : ''}`}
+      )}
+      <div
+        ref={headerRef}
+        role="button"
+        tabIndex={0}
+        aria-expanded={open}
+        onClick={onToggle}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle() } }}
+        // Au-dessus du panneau ouvert : fermé, elle porte son propre fond et
+        // sa bordure ; ouvert, elle devient transparente et se fond dans le
+        // panneau, séparée du contenu par un filet.
+        className={`absolute inset-0 z-50 flex cursor-pointer items-center gap-2.5 rounded-xl border px-3 outline-none transition-[background-color,border-color] duration-150 focus-visible:ring-1 focus-visible:ring-[rgb(var(--accent)/0.5)] ${
+          dropping
+            ? 'border-[rgb(var(--accent-hover)/0.7)] bg-[rgb(var(--accent)/0.12)]'
+            : open
+              ? 'rounded-t-none border-transparent border-t-[rgba(255,255,255,0.07)] bg-transparent'
+              : 'border-[rgba(255,255,255,0.07)] bg-bg-secondary hover:border-[rgba(255,255,255,0.12)]'
+        }`}
+      >
+        {header}
+        <svg
+          viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+          className="ml-auto h-4 w-4 flex-shrink-0 text-[rgba(255,255,255,0.4)] transition-transform duration-200"
+          style={{ transform: open ? 'rotate(180deg)' : 'none', transitionTimingFunction: EASE_OUT }}
         >
-          {header}
-          <svg
-            viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
-            className="ml-auto h-4 w-4 flex-shrink-0 text-[rgba(255,255,255,0.4)] transition-transform duration-[260ms]"
-            style={{ transform: open ? 'rotate(180deg)' : 'none', transitionTimingFunction: EASE_OUT }}
-          >
-            <path d="M6 15l6-6 6 6" />
-          </svg>
-        </div>
+          <path d="M6 15l6-6 6 6" />
+        </svg>
       </div>
     </div>
   )
+}
+
+/**
+ * File d'attente des lectures d'icônes (jars, `pack.png`) : quatre à la fois.
+ * Une instance de 200 mods lançait sinon 200 lectures de fichier ensemble,
+ * qui se disputaient le disque et bloquaient le pont avec Rust.
+ */
+const ICON_CONCURRENCY = 4
+let iconRunning = 0
+const iconWaiting: (() => void)[] = []
+export function queueIcon<T>(load: () => Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const run = () => {
+      iconRunning++
+      load().then(resolve, reject).finally(() => {
+        iconRunning--
+        iconWaiting.shift()?.()
+      })
+    }
+    if (iconRunning < ICON_CONCURRENCY) run()
+    else iconWaiting.push(run)
+  })
 }
 
 /**
