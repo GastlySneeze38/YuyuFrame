@@ -17,6 +17,7 @@ import { WelcomeSequence } from '@/components/home/WelcomeSequence'
 import { homeGreeting } from '@/lib/greeting'
 import { HomeBanner, Confetti, useHomeBanner } from '@/components/home/HomeBanner'
 import { HomeRail } from '@/components/home/HomeRail'
+import { InstanceShelf } from '@/components/home/shelf/InstanceShelf'
 import { HomeShortcuts } from '@/components/home/ChallengeShortcuts'
 import { HalloweenButtonFx, HalloweenGround, HalloweenLaunchBurst, HalloweenSky, playHalloweenLaunchSound } from '@/components/home/Halloween'
 import { ProCard } from '@/components/home/ProCard'
@@ -146,6 +147,12 @@ const LAUNCH_HOVER_SHADOW_HALLOWEEN = [
 
 /** Pourcentage à partir duquel on efface le launcher, faute d'agent. */
 const HIDE_AT_PERCENT = 90
+
+/** Marges latérales communes à la zone principale et au pied de page. */
+const HOME_GUTTER = 'px-[clamp(12px,1.5vw,28px)]'
+/** Largeur maximale du contenu : au-delà, sur un écran très large, cartes et
+ *  bannière s'étireraient sans rien montrer de plus. */
+const HOME_MAX_W = 'max-w-[1680px]'
 
 const STARS = Array.from({ length: 55 }, (_, i) => ({
   x: (i * 37 + ((i * 7 + 13) % 100) * 1.7) % 100,
@@ -635,7 +642,12 @@ export default function Home() {
           étroit le second devenait une bande verticale où plus rien ne
           tenait. Empilés et centrés, les deux blocs gardent la même forme
           quelle que soit la largeur ; c'est la hauteur, elle, qui défile. */}
-      <div className="flex min-h-0 flex-[1_1_0] flex-col gap-[clamp(8px,1.8vh,18px)] overflow-y-auto p-[clamp(8px,1.7vh,16px)]">
+      {/* Mêmes marges latérales que le pied de page (`HOME_GUTTER`) : la
+          bannière et les rangées du bas s'alignent au pixel. Le bloc est
+          centré en hauteur par des marges automatiques (`mt-auto` sur la
+          bannière, `mb-auto` sur le bloc de lancement) et non par `justify-center`,
+          qui couperait le haut si la fenêtre devenait trop basse. */}
+      <div className={`flex min-h-0 flex-[1_1_0] flex-col gap-[clamp(8px,1.8vh,20px)] overflow-y-auto pt-[clamp(10px,1.8vh,22px)] pb-[clamp(6px,1.2vh,14px)] ${HOME_GUTTER}`}>
 
         {/* Bannière — pleine largeur, hauteur bornée */}
         <motion.div
@@ -648,7 +660,9 @@ export default function Home() {
           // rétrécit sur un petit écran (plutôt que de faire défiler la page)
           // et grandit sur un grand, jusqu'à un plafond — au-delà, c'est le
           // bloc de lancement qui se centre dans ce qui reste.
-          className="relative min-h-[150px] max-h-[540px] flex-[1_1_0] overflow-hidden rounded-[20px] border border-[rgba(200,200,220,0.08)] shadow-[0_8px_40px_rgba(0,0,0,0.7)]"
+          // Plafond à 40 % de la fenêtre : la bannière est un décor, la place
+          // va à l'étagère de l'instance en dessous.
+          className={`relative mx-auto mt-auto w-full min-h-[140px] max-h-[min(40vh,460px)] flex-[1_1_0] overflow-hidden rounded-[20px] border border-[rgba(200,200,220,0.08)] shadow-[0_8px_40px_rgba(0,0,0,0.7)] ${HOME_MAX_W}`}
         >
           <div className="absolute inset-0 bg-[linear-gradient(180deg,#020208_0%,#06041a_18%,#0e0932_40%,#1c1250_58%,#130d35_76%,#070512_100%)]" />
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_38%_55%,rgb(var(--accent)/0.09)_0%,transparent_55%)]" />
@@ -831,7 +845,9 @@ export default function Home() {
           variants={panelVariants}
           initial="initial"
           animate="animate"
-          className="mx-auto my-auto flex w-full max-w-[560px] flex-shrink-0 flex-col"
+          // Seul et centré, largeur bornée : le vide de part et d'autre est
+          // voulu, il donne au bouton Jouer toute la place du regard.
+          className="mx-auto mb-auto flex w-full max-w-[clamp(440px,36vw,640px)] flex-shrink-0 flex-col"
         >
 
           {/* Le titre, le bouton d'information et l'avatar ont rejoint la
@@ -1057,7 +1073,7 @@ export default function Home() {
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: EASE_OUT, delay: 0.12 }}
-        className="flex flex-shrink-0 flex-col px-6 py-[clamp(8px,2vh,16px)] bg-[rgb(var(--bg-primary))] border-t border-t-[rgba(255,255,255,0.06)] gap-[clamp(6px,1.2vh,12px)]"
+        className={`flex flex-shrink-0 flex-col py-[clamp(8px,1.6vh,16px)] bg-[rgb(var(--bg-primary))] border-t border-t-[rgba(255,255,255,0.06)] gap-[clamp(8px,1.4vh,14px)] ${HOME_GUTTER}`}
       >
 
         {/* Zone principale — sa hauteur est celle de son contenu.
@@ -1065,8 +1081,8 @@ export default function Home() {
             lui-même était dicté par les colonnes latérales et leurs pastilles
             à hauteur fixe : le résultat ne suivait plus rien. Chaque élément
             se met maintenant à l'échelle pour son compte, et le pied de page
-            fait la somme. */}
-        <div className="flex flex-col gap-[clamp(8px,1.6vh,16px)]">
+            fait la somme. Même largeur maximale que la bannière. */}
+        <div className={`mx-auto flex w-full flex-col gap-2 ${HOME_MAX_W}`}>
 
         {/* Feature cards — explicatif — remplacées par les raccourcis serveurs
             si l'utilisateur a activé "Afficher mes serveurs sur l'accueil"
@@ -1170,13 +1186,24 @@ export default function Home() {
           )}
         </motion.div>
 
+        {/* Les panneaux de l'instance, sous les serveurs : mods et packs,
+            une ligne chacun, dépliables vers le haut. En opacité seule : un
+            `transform` resté sur un ancêtre rendrait le voile `fixed` du
+            panneau relatif à lui. */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.32, ease: EASE_OUT, delay: 0.28 }}
+          className="min-w-0"
+        >
+          <InstanceShelf instance={instance} running={gameRunning} />
+        </motion.div>
+
         </div>{/* fin zone principale */}
 
-        {/* Divider — collé en bas */}
-        <div className="mt-auto h-px bg-[rgba(255,255,255,0.06)]" />
-
-        {/* Copyright + legal */}
-        <div className="flex items-center justify-between">
+        {/* Copyright + legal — le trait du haut du pied de page suffit à
+            séparer : celui qui était ici le doublait. */}
+        <div className={`mx-auto flex w-full items-center justify-between ${HOME_MAX_W}`}>
           <span className="text-[clamp(9px,1.2vh,11px)] text-[rgba(255,255,255,0.15)] font-medium">
             {t('home.copyright')}
           </span>

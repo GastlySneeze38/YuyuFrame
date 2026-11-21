@@ -1091,6 +1091,9 @@ export const api = {
   packs: {
     list: (instanceId: string, kind: PackKind) =>
       invoke<PackInfo[]>('packs_list', { instanceId, kind }),
+    /** Vignette `pack.png` en data URI, `null` si le pack n'en a pas. */
+    icon: (instanceId: string, kind: PackKind, name: string) =>
+      invoke<string | null>('packs_icon', { instanceId, kind, name }),
     install: (instanceId: string, kind: PackKind, url: string, filename: string) =>
       invoke<PackInfo>('packs_install', { instanceId, kind, url, filename }),
     delete: (instanceId: string, kind: PackKind, name: string) =>

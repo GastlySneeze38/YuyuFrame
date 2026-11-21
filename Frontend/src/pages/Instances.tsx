@@ -17,6 +17,10 @@ import { SNAP, listItemVariants, listVariants, press } from '@/lib/motion'
 import { showError } from '@/stores/useErrorToast'
 import { useT } from '@/i18n'
 
+/** Onglets de l'écran des mods qu'une adresse `?content=` peut demander. */
+const CONTENT_TABS = ['installed', 'browse', 'packs-installed', 'packs-resourcepack', 'packs-shader'] as const
+type ContentTab = (typeof CONTENT_TABS)[number]
+
 export default function Instances() {
   const t = useT()
   const navigate = useNavigate()
@@ -103,6 +107,17 @@ export default function Instances() {
     setSettingsTargetId(target)
     setSettingsTab(searchParams.get('tab') ?? undefined)
     setSearchParams({}, { replace: true })
+  }, [searchParams, setSearchParams])
+
+  // `?content=installed|packs-installed|browse` : onglet d'arrivée de l'écran
+  // des mods, demandé par les raccourcis de l'accueil. Lu au premier rendu
+  // (l'écran des mods ne lit son onglet qu'au montage), retiré ensuite.
+  const [contentTab] = useState<ContentTab | undefined>(() => {
+    const asked = searchParams.get('content')
+    return CONTENT_TABS.find((x) => x === asked)
+  })
+  useEffect(() => {
+    if (searchParams.has('content')) setSearchParams({}, { replace: true })
   }, [searchParams, setSearchParams])
 
   const releaseVersions = versions
@@ -328,7 +343,7 @@ export default function Instances() {
         {/* Right panel — mods */}
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           {selectedInstance ? (
-            <ModsContent key={`${selectedInstance.id}-${selectedInstance.mc_version}`} instance={selectedInstance} />
+            <ModsContent key={`${selectedInstance.id}-${selectedInstance.mc_version}`} instance={selectedInstance} initialTab={contentTab} />
           ) : (
             <motion.div
               initial={{ opacity: 0, y: 10 }}

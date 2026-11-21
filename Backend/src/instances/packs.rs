@@ -123,6 +123,46 @@ pub async fn packs_list(instance_id: String, kind: PackKind) -> Result<Vec<PackI
     Ok(packs)
 }
 
+/// Taille maximale d'un `pack.png` rendu à l'interface : au-delà, ce n'est
+/// plus une vignette et la data URI alourdirait la page pour rien.
+const PACK_ICON_MAX: u64 = 512 * 1024;
+
+/// Vignette d'un pack (`pack.png` à la racine de l'archive), en data URI.
+/// `None` quand le pack n'en a pas — fréquent pour les shaders. Sert aux
+/// raccourcis de l'accueil, qui montrent ce que contient l'instance.
+///
+/// L'archive est ouverte par le fichier (lecture du répertoire central puis
+/// de la seule entrée voulue) et non lue en entier : un pack de ressources
+/// pèse souvent plusieurs centaines de Mo.
+#[tauri::command]
+pub async fn packs_icon(instance_id: String, kind: PackKind, name: String) -> Result<Option<String>, String> {
+    let dir = packs_dir(&instance_id, kind);
+    let path = dir.join(safe_file_name(&name, ""));
+    if !path.exists() || !inside(&path, &dir) {
+        return Ok(None);
+    }
+    tokio::task::spawn_blocking(move || -> Option<String> {
+        use base64::Engine as _;
+        use std::io::Read;
+        let file = std::fs::File::open(&path).ok()?;
+        let mut archive = zip::ZipArchive::new(file).ok()?;
+        let entry = archive.by_name("pack.png").ok()?;
+        if entry.size() > PACK_ICON_MAX {
+            return None;
+        }
+        let mut bytes = Vec::with_capacity(entry.size() as usize);
+        entry.take(PACK_ICON_MAX).read_to_end(&mut bytes).ok()?;
+        // Signature PNG : un fichier nommé pack.png qui n'en est pas un ne
+        // devient pas une image cassée dans l'interface.
+        if !bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+            return None;
+        }
+        Some(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(&bytes)))
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub async fn packs_delete(instance_id: String, kind: PackKind, name: String) -> Result<(), String> {
     let dir = packs_dir(&instance_id, kind);

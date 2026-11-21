@@ -172,6 +172,7 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         crate::instances::mods::mods_check_update_safety,
         crate::instances::mods::mods_check_conflicts,
         crate::instances::packs::packs_list,
+        crate::instances::packs::packs_icon,
         crate::instances::packs::packs_install,
         crate::instances::packs::packs_delete,
         crate::instances::packs::packs_import_paths,

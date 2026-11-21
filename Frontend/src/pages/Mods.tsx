@@ -88,7 +88,11 @@ function onlyLicenseChanged(prev: ModrinthSearchFilters, next: ModrinthSearchFil
 
 // ── ModsContent — embeddable in any page ──────────────────────────────────────
 
-export function ModsContent({ instance }: { instance: Instance }) {
+export function ModsContent({ instance, initialTab }: {
+  instance: Instance
+  /** Onglet d'arrivée (raccourcis de l'accueil). Lu au montage seulement. */
+  initialTab?: Tab
+}) {
   const t = useT()
   const navigate = useNavigate()
   const mobile = useIsMobile()
@@ -113,7 +117,12 @@ export function ModsContent({ instance }: { instance: Instance }) {
   // proposait le menu « Mods » ne s'y installe. Il est retiré de la barre
   // (voir plus bas), donc l'écran d'arrivée ne peut pas être celui des mods —
   // on tomberait sur une liste vide sans aucun moyen d'en repartir.
-  const [tab, setTab] = useState<Tab>(isPlugin ? 'packs-installed' : 'installed')
+  // Un onglet de mods demandé pour une instance sans chargeur retombe sur les
+  // packs, pour la même raison.
+  const [tab, setTab] = useState<Tab>(() => {
+    if (initialTab && (!isPlugin || initialTab.startsWith('packs-'))) return initialTab
+    return isPlugin ? 'packs-installed' : 'installed'
+  })
   const [mods, setMods] = useState<Mod[]>([])
   const [loadingMods, setLoadingMods] = useState(true)
   const [modsError, setModsError] = useState('')
