@@ -11,6 +11,7 @@ import { showError } from '@/stores/useErrorToast'
 import { formatRam } from '@/lib/format'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { Toggle } from '@/components/ui/Toggle'
+import { HorizonNativeSettings } from '@/components/mods/HorizonContentTab'
 import type { SharedOptionsStatus } from '@/types'
 import { SettingsNav, useSectionSpy } from '@/components/settings/SettingsNav'
 import { PageGlow } from '@/components/PageGlow'
@@ -693,6 +694,8 @@ export default function Settings() {
                   </div>
                 </div>
               )}
+
+              <HorizonNativeSettings />
             </div>
           </SCard>
           </div>

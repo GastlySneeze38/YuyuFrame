@@ -55,6 +55,14 @@ sha1 = "0.10"
 # Licence hors ligne (security/license.rs) : vérification seule, jamais de signature
 # ici — la clé privée ne quitte pas le serveur.
 ed25519-dalek = "2"
+# Signatures minisign des mods du registre d'Horizon (horizon/content.rs) :
+# vérification seule, sans dépendance.
+minisign-verify = "0.2"
+# Mods natifs d'Horizon (horizon/native/) : le compilateur Rust arrive en
+# .tar.gz, le SDK du jeu en .tar.xz. Déjà compilées pour d'autres dépendances.
+tar = "0.4"
+flate2 = "1"
+xz2 = "0.1"
 sha2 = "0.10"
 tungstenite = "0.24"
 uuid = { version = "1", features = ["v4"] }

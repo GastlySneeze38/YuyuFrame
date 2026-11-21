@@ -10,11 +10,46 @@
 //! 3. ce fichier démarre `horizon-client.exe` dans le dossier de l'instance.
 //!
 //! Rien de ce qui vit dans le jeu Java ne s'applique : le client intégré, le
-//! canal du jeu, la présence en jeu. Les mods d'Horizon (le registre
-//! `horizon-mods`) ne sont pas encore gérés.
+//! canal du jeu, la présence en jeu.
+//!
+//! Le contenu du registre `horizon-mods` (mods, shaders, packs) s'installe par
+//! `content` ; les mods natifs sont compilés au lancement par `native`, qui
+//! remplace alors l'exécutable d'origine par un jeu assemblé avec eux.
 
 #[cfg(target_os = "android")]
 pub mod android;
+pub mod content;
+#[cfg(not(target_os = "android"))]
+pub mod native;
+
+/// Sur téléphone, le moteur est celui de l'APK : pas de compilation de mods
+/// natifs. Les commandes existent pour que l'interface reste la même.
+#[cfg(target_os = "android")]
+pub mod native {
+    #[tauri::command]
+    pub async fn horizon_native_status() -> Result<serde_json::Value, String> {
+        Ok(serde_json::json!({ "allowed": false, "toolchain": false, "download_bytes": 0, "unsupported": true }))
+    }
+    #[tauri::command]
+    pub async fn horizon_native_allow(allow: bool) -> Result<(), String> {
+        let _ = allow;
+        Err("Les mods natifs ne sont pas disponibles sur téléphone".into())
+    }
+    #[tauri::command]
+    pub async fn horizon_native_prefetch(loader_version: String) -> Result<(), String> {
+        let _ = loader_version;
+        Ok(())
+    }
+    #[tauri::command]
+    pub async fn horizon_native_report(instance_id: String) -> Result<Option<serde_json::Value>, String> {
+        let _ = instance_id;
+        Ok(None)
+    }
+    #[tauri::command]
+    pub async fn horizon_native_clear() -> Result<(), String> {
+        Ok(())
+    }
+}
 #[cfg(not(target_os = "android"))]
 mod prepare;
 #[cfg(not(target_os = "android"))]
@@ -146,6 +181,42 @@ async fn desktop_launch(app: tauri::AppHandle, run: HorizonLaunch<'_>, cancel: w
         return Err(anyhow!(LAUNCH_CANCELLED_MSG));
     }
 
+    // Ce que le registre a retiré depuis son installation est éteint, et les
+    // mods natifs allumés sont compilés contre ce build : le jeu à lancer est
+    // alors celui assemblé avec eux, sinon l'exécutable d'origine.
+    for (name, reason) in content::enforce_revocations(run.game_dir).await {
+        log_to_console(&app, run.console_label, &format!("[Horizon] {name} retiré du registre, désactivé : {reason}"), "err");
+    }
+    let game_exe = match native::prepare(
+        &app,
+        &floor,
+        &client,
+        &installed.dir,
+        &installed.tag,
+        run.game_dir,
+        run.instance_id,
+        run.console_label,
+        &cancel,
+    )
+    .await
+    {
+        Ok(Some(dir)) => dir.join(release::CLIENT),
+        Ok(None) => installed.dir.join(release::CLIENT),
+        Err(e) => {
+            if *cancel.borrow() {
+                return Err(anyhow!(LAUNCH_CANCELLED_MSG));
+            }
+            // Une panne de la compilation ne doit jamais empêcher de jouer :
+            // la partie part sans les mods natifs, et on le dit.
+            log_to_console(&app, run.console_label, &format!("[Horizon] Mods natifs non compilés : {e}"), "err");
+            let _ = app.emit("horizon_native_error", serde_json::json!({ "instance_id": run.instance_id, "error": e.to_string() }));
+            installed.dir.join(release::CLIENT)
+        }
+    };
+    if *cancel.borrow() {
+        return Err(anyhow!(LAUNCH_CANCELLED_MSG));
+    }
+
     let online = run.session.access_token != "offline";
     // Une nouvelle Nightly reprend la préparation de la précédente quand le
     // jeu épinglé n'a pas changé : pas de nouvelle préparation à chaque mise à jour.
@@ -183,7 +254,7 @@ async fn desktop_launch(app: tauri::AppHandle, run: HorizonLaunch<'_>, cancel: w
     let home = run.game_dir.join("horizon");
     tokio::fs::create_dir_all(&home).await?;
 
-    let mut cmd = crate::app::process::hidden_command(installed.dir.join(release::CLIENT));
+    let mut cmd = crate::app::process::hidden_command(&game_exe);
     cmd.current_dir(run.game_dir)
         .env("HORIZON_HOME", &home)
         // Le statut Discord est celui du launcher (`integrations::discord`),

@@ -4,6 +4,7 @@ import type { ApiReceivedInvite, DiscordLink, FriendEvent, FriendList, FriendSet
 import type { LocalCrashReport, LocalCrashSummary, RemoteCrashSummary } from '@/types/crash'
 import type { ApiBoard, ApiFriendCompetitive, ApiHistoryPage, ApiOverview, ApiPass, ApiSummary, ModeKey } from '@/lib/competitive'
 import type { BackupDetail, BackupOverview, BackupSettings, BackupSummary, InstanceBackupSettings } from '@/types/backup'
+import type { HorizonInstalled, HorizonNativeReport, HorizonNativeStatus, HorizonRegistry } from '@/types/horizon'
 import type { AuthStatus, CompatResult, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, HealthCheck, JavaReport, JavaStatus, JvmProfile, LoaderVersion, McOption, OptionsSummary, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PackInfo, PackKind, PollResponse, SaveInfo, OptionsLinkInfo, ScanResult, SharedOptionsStatus, ShareExport, ShareLinkStatus, ShareImport, SharePreview, ShareScan, ShareSource, StatsData, StatsQuery, ReferencedMod, SyncDiff, SyncInstance, SyncManifest, SystemMemoryInfo, Version } from '@/types'
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -1100,6 +1101,29 @@ export const api = {
       invoke<void>('packs_delete', { instanceId, kind, name }),
     importPaths: (instanceId: string, kind: PackKind, paths: string[]) =>
       invoke<PackInfo[]>('packs_import_paths', { instanceId, kind, paths }),
+  },
+
+  /** Horizon : registre `horizon-mods`, contenu installé, mods natifs
+   *  (`minecraft/launcher/horizon/content.rs` et `native/`). `loaderVersion`
+   *  = `instance.loader_version`, pour savoir quel build d'Horizon jouera. */
+  horizon: {
+    registry: (loaderVersion: string) =>
+      invoke<HorizonRegistry>('horizon_registry', { loaderVersion }),
+    installed: (instanceId: string, loaderVersion: string) =>
+      invoke<HorizonInstalled[]>('horizon_content_list', { instanceId, loaderVersion }),
+    install: (instanceId: string, projectId: string, loaderVersion: string, version?: string, replace?: string) =>
+      invoke<string[]>('horizon_content_install', { instanceId, projectId, version, loaderVersion, replace }),
+    toggle: (instanceId: string, file: string, enabled: boolean, loaderVersion: string) =>
+      invoke<void>('horizon_content_toggle', { instanceId, file, enabled, loaderVersion }),
+    remove: (instanceId: string, file: string) =>
+      invoke<void>('horizon_content_delete', { instanceId, file }),
+    pickShader: (instanceId: string, file: string | null) =>
+      invoke<void>('horizon_shader_pick', { instanceId, file }),
+    nativeStatus: () => invoke<HorizonNativeStatus>('horizon_native_status'),
+    nativeAllow: (allow: boolean) => invoke<void>('horizon_native_allow', { allow }),
+    nativePrefetch: (loaderVersion: string) => invoke<void>('horizon_native_prefetch', { loaderVersion }),
+    nativeReport: (instanceId: string) => invoke<HorizonNativeReport | null>('horizon_native_report', { instanceId }),
+    nativeClear: () => invoke<void>('horizon_native_clear'),
   },
 
   /** `options.txt` de l'instance. `read` rend une liste vide tant que le jeu

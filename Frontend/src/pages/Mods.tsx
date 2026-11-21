@@ -25,6 +25,7 @@ import { TOOLBAR_ICON } from '@/components/mods/toolbarIcons'
 import { useIsMobile } from '@/mobile/useIsMobile'
 import { PacksTab } from '@/components/mods/PacksTab'
 import { OptionsTab } from '@/components/mods/OptionsTab'
+import { HorizonContentTab } from '@/components/mods/HorizonContentTab'
 import {
   fetchCurseforgeSearch, fetchCurseforgeFiles, findFileForLoader, fetchCurseforgeInstalled, fetchCurseforgeModDetail,
   _curseforgeCache, type CurseforgeHit, type CurseforgeMatch,
@@ -102,6 +103,10 @@ export function ModsContent({ instance, initialTab }: {
   // Vanilla et Horizon : aucun chargeur de mods Java. Les packs de ressources
   // et les shaders restent : Horizon lit aussi les shaders (vérifié en jeu).
   const isPlugin = !isModLoader(loader)
+  // Horizon a ses propres mods (registre `horizon-mods`), sur ordinateur : la
+  // famille Mods y mène à `HorizonContentTab` au lieu de Modrinth/CurseForge.
+  const isHorizon = loader === 'horizon' && !mobile
+  const [horizonCount, setHorizonCount] = useState(0)
   const { avoidBetaDependencies, pinnedMods } = useStorePick('avoidBetaDependencies', 'pinnedMods')
 
   const pinnedProjectIds = useMemo(() => {
@@ -120,8 +125,9 @@ export function ModsContent({ instance, initialTab }: {
   // Un onglet de mods demandé pour une instance sans chargeur retombe sur les
   // packs, pour la même raison.
   const [tab, setTab] = useState<Tab>(() => {
+    if (isHorizon && (initialTab === 'installed' || initialTab === 'browse')) return initialTab
     if (initialTab && (!isPlugin || initialTab.startsWith('packs-'))) return initialTab
-    return isPlugin ? 'packs-installed' : 'installed'
+    return isPlugin && !isHorizon ? 'packs-installed' : 'installed'
   })
   const [mods, setMods] = useState<Mod[]>([])
   const [loadingMods, setLoadingMods] = useState(true)
@@ -1289,6 +1295,18 @@ export function ModsContent({ instance, initialTab }: {
               toute façon des greffons de serveur, qui n'ont rien à faire dans
               une instance de jeu. Restent les packs et les options, qui, eux,
               marchent en vanilla. */}
+          {isHorizon && (
+            <ToolbarMenu
+              label={t('mods.menuMods')}
+              icon={TOOLBAR_ICON.mods}
+              active={tab === 'installed' || tab === 'browse'}
+              activeId={tab}
+              items={[
+                { id: 'browse', icon: TOOLBAR_ICON.search, label: t('mods.horizon.browseMenu'), onSelect: () => setTab('browse') },
+                { id: 'installed', icon: TOOLBAR_ICON.list, label: t('mods.menuInstalledMods'), badge: horizonCount, onSelect: () => setTab('installed') },
+              ]}
+            />
+          )}
           {!isPlugin && (
             <ToolbarMenu
               label={t('mods.menuMods')}
@@ -1464,9 +1482,16 @@ export function ModsContent({ instance, initialTab }: {
 
         {/* Pas pendant une installation de pack : la liste est à moitié posée,
             et une incompatibilité vue là peut disparaître au fichier suivant. */}
-        {tab === 'installed' && !packInstallingHere && <ConflictBanner conflicts={conflicts} instanceId={instanceId} />}
+        {tab === 'installed' && !isHorizon && !packInstallingHere && <ConflictBanner conflicts={conflicts} instanceId={instanceId} />}
 
-        {tab === 'installed' ? (
+        {isHorizon && (tab === 'installed' || tab === 'browse') ? (
+          <HorizonContentTab
+            instance={instance}
+            mode={tab}
+            onBrowse={() => setTab('browse')}
+            onCount={setHorizonCount}
+          />
+        ) : tab === 'installed' ? (
           <InstalledTab
             mods={mods}
             modpackMeta={modpackMeta}

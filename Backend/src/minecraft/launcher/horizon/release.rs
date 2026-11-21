@@ -57,6 +57,10 @@ const SUMS: &str = "SHA256SUMS";
 const SIGNATURE: &str = "SHA256SUMS.sig";
 /// Signature d'une Nightly, faite pour sa version complète.
 const SIGNATURE_V2: &str = "SHA256SUMS.v2.sig";
+/// L'index du SDK du build, que chaque Nightly porte dans ses sommes signées :
+/// gardé dans le dossier de version, il donne le commit complet du build
+/// (`native/`, mods natifs).
+const SDK_INDEX: &str = "sdk.json";
 
 /// Valeur de `instances.loader_version` qui suit la dernière Nightly.
 pub const CHANNEL_NIGHTLY: &str = "nightly";
@@ -151,7 +155,7 @@ fn order_key(version: &str, published: &str) -> (u8, Vec<u64>, String) {
 
 /// Le SHA-256 signé de `asset`, ou pourquoi l'archive doit être refusée.
 /// `signed_for` : le tag d'une version numérotée, la version complète d'une Nightly.
-fn signed_digest(signed_for: &str, asset: &str, sums: &[u8], signature: &str, keys: &[[u8; 32]]) -> Result<String> {
+pub(super) fn signed_digest(signed_for: &str, asset: &str, sums: &[u8], signature: &str, keys: &[[u8; 32]]) -> Result<String> {
     use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 
     let mut message = format!("horizon release {signed_for}\n").into_bytes();
@@ -184,7 +188,7 @@ fn signed_digest(signed_for: &str, asset: &str, sums: &[u8], signature: &str, ke
         .ok_or_else(|| anyhow!("{asset} n'est pas dans la liste signée d'Horizon {signed_for}"))
 }
 
-fn release_key() -> [u8; 32] {
+pub(super) fn release_key() -> [u8; 32] {
     STANDARD
         .decode(RELEASE_KEY)
         .ok()
@@ -249,6 +253,64 @@ async fn releases(client: &reqwest::Client) -> Result<Vec<Release>> {
     Ok(out)
 }
 
+/// La version publiée d'Horizon qui est le build `commit`, s'il en reste
+/// une : ce qu'on propose au joueur dont un mod natif est fait pour ce build.
+pub(super) async fn version_for_commit(client: &reqwest::Client, commit: &str) -> Option<String> {
+    let list = releases(client).await.ok()?;
+    list.into_iter()
+        .map(|r| r.version)
+        .find(|v| is_build(v) && v.rsplit('-').next().is_some_and(|short| short.len() >= 7 && commit.starts_with(short)))
+}
+
+/// Le commit complet du build installé dans `dir` : celui de son `sdk.json`
+/// (gardé à l'installation depuis le 2026-11-21), sinon retrouvé parmi les
+/// publications `sdk-<commit>` d'après le commit court de son nom, puis gardé.
+pub(super) async fn build_commit(client: &reqwest::Client, dir: &Path, version: &str) -> Result<String> {
+    if let Some(commit) = std::fs::read(dir.join(SDK_INDEX))
+        .ok()
+        .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+        .and_then(|v| v["build"]["commit"].as_str().map(str::to_string))
+    {
+        return Ok(commit);
+    }
+    let kept = dir.join(".build-commit");
+    if let Ok(text) = std::fs::read_to_string(&kept) {
+        let text = text.trim();
+        if text.len() == 40 {
+            return Ok(text.to_string());
+        }
+    }
+    let short = version
+        .rsplit('-')
+        .next()
+        .filter(|s| is_build(version) && s.len() >= 7)
+        .ok_or_else(|| anyhow!("{} est trop ancienne pour les mods natifs : passe sur une Nightly", display_name(version)))?;
+    for page in 1..=3 {
+        let url = format!("https://api.github.com/repos/{REPO}/releases?per_page=100&page={page}");
+        let list: serde_json::Value = client
+            .get(&url)
+            .header("Accept", "application/vnd.github+json")
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+        let Some(items) = list.as_array() else { break };
+        if items.is_empty() {
+            break;
+        }
+        for r in items {
+            if let Some(commit) = r["tag_name"].as_str().and_then(|t| t.strip_prefix("sdk-")) {
+                if commit.len() == 40 && commit.starts_with(short) {
+                    let _ = std::fs::write(&kept, commit);
+                    return Ok(commit.to_string());
+                }
+            }
+        }
+    }
+    Err(anyhow!("Le SDK de {} n'est pas publié : les mods natifs ne peuvent pas être compilés", display_name(version)))
+}
+
 /// Le build qu'un canal désigne dans `list` (triée, la plus récente d'abord).
 fn pick(channel: Channel, list: &[Release]) -> Option<&Release> {
     let nightlies = || list.iter().filter(|r| is_build(&r.version));
@@ -308,6 +370,18 @@ fn newest_installed_for(channel: Channel) -> Option<Installed> {
         Channel::Stable => list.first(),
     };
     found.and_then(|(v, _)| installed_at(v))
+}
+
+/// Sans réseau : le dossier de la version que prendrait une instance épinglée
+/// sur `pinned`, si elle est déjà installée. Sert à demander au jeu ce qu'il
+/// sait charger (`content.rs`), jamais à lancer.
+pub(super) fn installed_for(pinned: &str) -> Option<PathBuf> {
+    let found = match pinned {
+        "" => newest_installed_for(Channel::Stable),
+        CHANNEL_NIGHTLY => newest_installed_for(Channel::Nightly),
+        exact => installed_at(exact),
+    };
+    found.map(|i| i.dir)
 }
 
 /// Les versions d'Horizon proposables, pour l'onglet Installation.
@@ -517,6 +591,15 @@ async fn install(client: &reqwest::Client, app: &tauri::AppHandle, floor: &Progr
     let target = root.join(&release.version);
     let _ = tokio::fs::remove_dir_all(&target).await;
     tokio::fs::rename(&top, &target).await?;
+    // Le commit complet du build, pour les mods natifs ; facultatif (une
+    // version numérotée n'en a pas), et vérifié par la même liste signée.
+    if let Ok(digest) = signed_digest(signed_for, SDK_INDEX, &sums, &String::from_utf8_lossy(&signature), &[release_key()]) {
+        if let Ok(bytes) = fetch_small(client, &asset_url(&release.tag, SDK_INDEX)).await {
+            if format!("{:x}", Sha256::digest(&bytes)).eq_ignore_ascii_case(&digest) {
+                let _ = tokio::fs::write(target.join(SDK_INDEX), &bytes).await;
+            }
+        }
+    }
     tokio::fs::write(target.join(COMPLETE), &release.published).await?;
     let _ = tokio::fs::remove_dir_all(&partial).await;
     Ok(Installed { tag: release.version.clone(), dir: target })

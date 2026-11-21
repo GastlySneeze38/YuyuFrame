@@ -505,6 +505,20 @@ export default function Home() {
   // modale qui propose d'envoyer le rapport, et cette modale doit s'afficher
   // même si on a quitté l'accueil entre-temps.
 
+  // Mods natifs d'Horizon : ce que la compilation a laissé de côté se dit
+  // tout de suite, sans arrêter la partie, avec un lien vers l'écran des mods.
+  useTauriEvent<{ instance_id: string; left_out: unknown[]; not_allowed: boolean }>('horizon_native_report', (r) => {
+    if (r.left_out.length === 0 && !r.not_allowed) return
+    const name = instances.find((i) => i.id === r.instance_id)?.name ?? ''
+    const text = r.not_allowed
+      ? t('mods.horizon.reportNotAllowed')
+      : t(r.left_out.length === 1 ? 'mods.horizon.launchNoticeOne' : 'mods.horizon.launchNoticeMany', { n: r.left_out.length, name })
+    showNotice(text, { label: t('mods.horizon.see'), run: () => navigate('/instances?content=installed') })
+  })
+  useTauriEvent<{ instance_id: string; error: string }>('horizon_native_error', ({ error }) => {
+    showError(t('mods.horizon.nativeError', { error }))
+  })
+
   useTauriEvent<string>('launch_cancelled', (instanceId) => {
     showNotice(t('home.launchCancelled'))
     resetLaunchUi(instanceId)
