@@ -926,6 +926,30 @@ export const de: TranslationSchema = {
       browse: 'Suchen',
       fullScreen: 'Vollansicht',
     },
+    tips: {
+      kicker: 'Tipp',
+      mobile: {
+        title: 'YuyuFrame auf deinem Handy',
+        text: 'Dein Konto und deine Instanzen, auch auf Android.',
+        cta: 'Entdecken',
+      },
+      pro: {
+        title: 'YuyuFrame Pro',
+        text: 'Unbegrenzte Synchronisierung deiner Welten und erweiterte Statistiken.',
+        cta: 'Pläne ansehen',
+      },
+      horizon: {
+        title: 'Horizon wird unterstützt',
+        text: 'Minecraft 26.3, in Rust neu geschrieben, ohne Java: wähle Horizon als Plattform einer neuen Instanz.',
+        cta: 'Instanz erstellen',
+      },
+      menu: {
+        title: 'Das YuyuFrame-Menü im Spiel',
+        before: 'Drücke',
+        key: 'Umschalt rechts',
+        after: 'für Module, HUD, Freunde und Missionen.',
+      },
+    },
     copyright: '© 2025 YuyuFrame — Alle Rechte vorbehalten',
     legal: {
       licence: 'Lizenz',

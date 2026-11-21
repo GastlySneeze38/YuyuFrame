@@ -18,6 +18,7 @@ import { homeGreeting } from '@/lib/greeting'
 import { HomeBanner, Confetti, useHomeBanner } from '@/components/home/HomeBanner'
 import { HomeRail } from '@/components/home/HomeRail'
 import { InstanceShelf } from '@/components/home/shelf/InstanceShelf'
+import { LaunchTips } from '@/components/home/LaunchTips'
 import { HomeShortcuts } from '@/components/home/ChallengeShortcuts'
 import { HalloweenButtonFx, HalloweenGround, HalloweenLaunchBurst, HalloweenSky, playHalloweenLaunchSound } from '@/components/home/Halloween'
 import { ProCard } from '@/components/home/ProCard'
@@ -180,6 +181,7 @@ export default function Home() {
     confirmServerLaunch,
     favoriteServers,
     isAgentEnabled, setAgentEnabled,
+    yuyuPlan,
   } = useStorePick(
     'username', 'uuid',
     'instances', 'setInstances',
@@ -195,6 +197,7 @@ export default function Home() {
     'confirmServerLaunch',
     'favoriteServers',
     'isAgentEnabled', 'setAgentEnabled',
+    'yuyuPlan',
     // Lus par `isInstanceRunning` / `isAgentEnabled` : sans eux, la page ne
     // se redessinerait pas quand une partie démarre ou que l'agent change.
     'runningInstances', 'agentOptOut',
@@ -1093,8 +1096,16 @@ export default function Home() {
           variants={cardsVariants}
           initial="initial"
           animate="animate"
-          className="flex items-stretch gap-2"
+          className="relative flex items-stretch gap-2"
         >
+          {/* Pendant que l'instance choisie tourne, les astuces recouvrent la
+              rangée : on ne relance pas, les serveurs n'ont rien à offrir. */}
+          <LaunchTips
+            visible={gameRunning}
+            showPro={yuyuPlan === 'free'}
+            showHorizon={instance?.loader !== 'horizon'}
+            showMenu={!!instance && instance.loader !== 'horizon' && isAgentEnabled(instance.id) && !agentBlocked}
+          />
           {/* L'offre ouvre la rangée, au format des cartes voisines. */}
           <motion.div variants={cardItem} className="flex flex-1">
             <ProCard onOpen={() => navigate('/plans')} />

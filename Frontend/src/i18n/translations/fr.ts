@@ -928,6 +928,31 @@ export const fr = {
       browse: 'Chercher',
       fullScreen: 'Écran complet',
     },
+    // Bandeau d'astuces pendant une partie (components/home/LaunchTips.tsx).
+    tips: {
+      kicker: 'Astuce',
+      mobile: {
+        title: 'YuyuFrame sur ton téléphone',
+        text: 'Ton compte et tes instances, aussi sur Android.',
+        cta: 'Découvrir',
+      },
+      pro: {
+        title: 'YuyuFrame Pro',
+        text: 'Synchronisation illimitée de tes mondes et statistiques avancées.',
+        cta: 'Voir les plans',
+      },
+      horizon: {
+        title: 'Horizon est compatible',
+        text: 'Minecraft 26.3 réécrit en Rust, sans Java : choisis Horizon comme plateforme d’une nouvelle instance.',
+        cta: 'Créer une instance',
+      },
+      menu: {
+        title: 'Le menu YuyuFrame en jeu',
+        before: 'Appuie sur',
+        key: 'Maj droite',
+        after: 'pour ouvrir les modules, le HUD, tes amis et tes missions.',
+      },
+    },
     copyright: '© 2025 YuyuFrame — Tous droits réservés',
     legal: {
       licence: 'Licence',

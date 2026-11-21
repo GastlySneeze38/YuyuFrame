@@ -34,6 +34,7 @@ const ICONS = {
   missions: 'M5 21V4M5 4h12l-2 4 2 4H5',
   skins: 'M8 3l4 2 4-2 4 3-2.5 4H16v11H8V10H5.5L3 6z',
   tools: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',
+  accounts: 'M9 11a4 4 0 100-8 4 4 0 000 8zM3 21v-1a6 6 0 0112 0v1M16 3.1a4 4 0 010 7.8M21 21v-1a6 6 0 00-4-5.7',
   support: 'M4 14v-3a8 8 0 0116 0v3M4 14a2 2 0 002 2h1v-5H6a2 2 0 00-2 2zM20 14a2 2 0 01-2 2h-1v-5h1a2 2 0 012 2zM17 16v1a3 3 0 01-3 3h-2',
   settings: 'M12 9a3 3 0 100 6 3 3 0 000-6zM19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 01-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 010-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 014 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 010 4h-.1a1.7 1.7 0 00-1.5 1z',
 } as const
@@ -100,6 +101,9 @@ export function HomeRail({ supportBadge, instanceCount, instanceName, running }:
       <div className="mt-auto" />
       <RailItem open={open} icon={ICONS.tools} label={t('home.nav.features')} onClick={() => navigate('/features')} />
       <RailItem open={open} icon={ICONS.support} label={t('home.nav.support')} badge={supportBadge} onClick={() => navigate('/support')} />
+      {/* Les comptes Minecraft (ajout, changement, hors ligne) : l'écran que
+          menait « Compte » dans l'ancienne barre du bas. */}
+      <RailItem open={open} icon={ICONS.accounts} label={t('home.nav.account')} active={pathname === '/login'} onClick={() => navigate('/login')} />
       <RailItem open={open} icon={ICONS.settings} label={t('home.nav.settings')} onClick={() => navigate('/settings')} />
 
       {/* L'instance choisie et son état : l'anneau vire au vert pendant une
