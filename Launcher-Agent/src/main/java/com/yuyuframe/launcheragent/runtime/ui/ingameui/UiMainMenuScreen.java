@@ -72,7 +72,7 @@ import static com.yuyuframe.launcheragent.apigraphic.value.UiTheme.px;
  */
 public class UiMainMenuScreen extends UiScreenBase {
 
-    private enum Tab { HOME, MODULES, MISSIONS, FRIENDS }
+    private enum Tab { HOME, MODULES, MISSIONS, COMPETITIVE, FRIENDS }
 
     /** Onglet ouvert, gardé d'une ouverture à l'autre. */
     private static Tab tab = Tab.HOME;
@@ -99,6 +99,11 @@ public class UiMainMenuScreen extends UiScreenBase {
     private float quickTitleX = -1f, quickTitleBaseline;
     /** Le panneau vertical de droite (accueil : missions et amis ; amis : la fiche) : la bande sombre s'aligne dessus. */
     private TaffyLayoutResult.Rect homeRight;
+    /** Onglet Compétitif : son état (l'historique, lu une fois par ouverture du menu), sa ligne d'aide, le titre de la grille, le message d'une grille vide. */
+    private CompetitiveTab competitiveTab;
+    private float competitiveHintBaseline, gridTitleX = -1f, gridTitleBaseline;
+    private String competitiveEmpty;
+    private float competitiveEmptyX, competitiveEmptyBaseline;
 
     private int lastWidth = -1, lastHeight = -1;
     private float lastScale = -1f;
@@ -150,6 +155,7 @@ public class UiMainMenuScreen extends UiScreenBase {
         tab = next;
         // La bande du fond rejoue son entrée sur la page qui s'ouvre.
         bandEnterNanos = 0L;
+        if (next == Tab.COMPETITIVE && competitiveTab != null) competitiveTab.replay();
         requestRebuild();
     }
 
@@ -177,6 +183,8 @@ public class UiMainMenuScreen extends UiScreenBase {
 
     @Override
     public void uiDraw(double mouseX, double mouseY) {
+        // Le serveur de classement vient d'être joint (ou perdu) : rang et pastille suivent sans rouvrir.
+        if (tab == Tab.COMPETITIVE && competitiveTab != null && competitiveTab.pollReady()) rebuildRequested = true;
         if (screenWidth > 0 && screenHeight > 0
                 && (rebuildRequested || screenWidth != lastWidth || screenHeight != lastHeight
                     || UiTheme.UI_SCALE != lastScale || ModuleRegistry.favoritesRevision() != lastFavoritesRevision
@@ -214,7 +222,7 @@ public class UiMainMenuScreen extends UiScreenBase {
                 Math.min(1f, (now - bandEnterNanos) / 1e9f / BAND_ENTER_S));
             // Pages horizontales (modules, missions) : les losanges montent du
             // bas en apparaissant (y vers le haut : un décalage négatif = plus bas).
-            if (tab == Tab.MODULES || tab == Tab.MISSIONS) {
+            if (tab == Tab.MODULES || tab == Tab.MISSIONS || tab == Tab.COMPETITIVE) {
                 float peaksH = screenHeight * com.yuyuframe.launcheragent.runtime.ui.ingameui.component.BackdropPeaks.HEIGHT_SHARE;
                 renderer.pushLayer(e, 1f, screenWidth / 2f, 0f, 0f, -(1f - e) * peaksH * 0.35f);
                 try {
@@ -242,7 +250,8 @@ public class UiMainMenuScreen extends UiScreenBase {
         super.uiDraw(mouseX, mouseY);
         try {
             if (modScroll != null) modScroll.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
-            String title = tab == Tab.MODULES ? "Modules" : tab == Tab.MISSIONS ? "Missions" : tab == Tab.FRIENDS ? "Amis" : null;
+            String title = tab == Tab.MODULES ? "Modules" : tab == Tab.MISSIONS ? "Missions"
+                : tab == Tab.COMPETITIVE ? "Compétitif" : tab == Tab.FRIENDS ? "Amis" : null;
             if (title != null) {
                 UiText.drawOnBackdrop(renderer, UiFont.BOLD, Lang.tr(title), titleX, titleBaseline, UiTheme.TEXT_PRIMARY,
                     px(UiTheme.Text.XXL), screenWidth, screenHeight);
@@ -250,6 +259,14 @@ public class UiMainMenuScreen extends UiScreenBase {
             if (tab == Tab.HOME && quickTitleX >= 0f) drawQuickTitle(renderer);
             if (tab == Tab.MODULES && !moduleEntries.isEmpty()) drawModulesHint(renderer);
             if (tab == Tab.FRIENDS) drawFriendsHint(renderer);
+            if (tab == Tab.COMPETITIVE && competitiveTab != null) {
+                competitiveTab.drawHint(renderer, titleX, competitiveHintBaseline, screenWidth, screenHeight);
+                if (gridTitleX >= 0f) CompetitiveTab.drawGridTitle(renderer, gridTitleX, gridTitleBaseline, screenWidth, screenHeight);
+                if (competitiveEmpty != null) {
+                    UiText.drawOnBackdrop(renderer, UiFont.REGULAR, competitiveEmpty, competitiveEmptyX, competitiveEmptyBaseline,
+                        UiTheme.TEXT_MUTED, px(UiTheme.Text.MD), screenWidth, screenHeight);
+                }
+            }
         } catch (Throwable t) {
             LauncherLog.err("[UiMainMenuScreen] uiDraw: " + t);
         }
@@ -273,6 +290,8 @@ public class UiMainMenuScreen extends UiScreenBase {
         modScroll = null;
         quickTitleX = -1f;
         homeRight = null;
+        gridTitleX = -1f;
+        competitiveEmpty = null;
 
         float sideMargin = px(64f);
 
@@ -281,6 +300,7 @@ public class UiMainMenuScreen extends UiScreenBase {
         NavTab home = new NavTab("Accueil", tab == Tab.HOME, null, () -> open(Tab.HOME));
         NavTab modules = new NavTab("Modules", tab == Tab.MODULES, null, () -> open(Tab.MODULES));
         NavTab missions = new NavTab("Missions", tab == Tab.MISSIONS, UiMainMenuScreen::openMissions, () -> open(Tab.MISSIONS));
+        NavTab competitive = new NavTab("Compétitif", tab == Tab.COMPETITIVE, null, () -> open(Tab.COMPETITIVE));
         NavTab friends = new NavTab("Amis", tab == Tab.FRIENDS, null, () -> open(Tab.FRIENDS));
         NavTab hud = new NavTab("HUD", false, null, () -> closeTo(new UiHudEditorScreen(this)));
         UiIconButton settings = new UiIconButton(LauncherModule.icons8("settings"),
@@ -292,7 +312,7 @@ public class UiMainMenuScreen extends UiScreenBase {
         float capPad = TopBar.capsulePad();
         float tabH = bubble - capPad * 2f;
         float tabGap = px(UiTheme.Space.S2);
-        NavTab[] navTabs = { home, modules, missions, friends, hud };
+        NavTab[] navTabs = { home, modules, missions, competitive, friends, hud };
 
         Box root = UiLayout.column().size(screenWidth, screenHeight);
         // Pas de bande : une rangée transparente, décollée du haut.
@@ -321,6 +341,7 @@ public class UiMainMenuScreen extends UiScreenBase {
             case HOME: buildHome(content, parts, sideMargin); break;
             case MODULES: buildModules(content, parts, sideMargin); break;
             case MISSIONS: buildMissions(content, parts, sideMargin); break;
+            case COMPETITIVE: buildCompetitive(content, parts, sideMargin); break;
             case FRIENDS: buildFriends(content, parts, sideMargin); break;
         }
 
@@ -341,6 +362,7 @@ public class UiMainMenuScreen extends UiScreenBase {
         widgets.add(home);
         widgets.add(modules);
         widgets.add(missions);
+        widgets.add(competitive);
         widgets.add(friends);
         widgets.add(hud);
         widgets.add(searchField);
@@ -390,7 +412,12 @@ public class UiMainMenuScreen extends UiScreenBase {
 
         // Colonne de gauche : la carte de joueur, et l'accès rapide en bas.
         Box left = page.add(UiLayout.column().grow(1f).heightPct(100f).minWidth(0f));
-        PlayerCard card = new PlayerCard(stats, mode -> closeTo(new UiPvpScoreScreen(this, mode)));
+        PlayerCard card = new PlayerCard(stats, mode -> {
+            CompetitiveTab.preselect(mode);
+            // Recréé sur ce mode : ses comptes en dépendent.
+            competitiveTab = null;
+            open(Tab.COMPETITIVE);
+        });
         left.add(UiLayout.box().widthPct(100f).height(PlayerCard.preferredHeight()).rigid().bind(card));
 
         // L'accès rapide juste dessous : deux rangées de tuiles, moins si la
@@ -547,6 +574,84 @@ public class UiMainMenuScreen extends UiScreenBase {
     }
 
     /**
+     * L'onglet Compétitif (2026-11-21), voir {@link CompetitiveTab} : en haut
+     * ce qu'on joue, le mode, Casual / Compétitif, l'aide et les réglages du
+     * module ; le bandeau du rang ; puis les duels en grille, filtrés par
+     * résultat.
+     */
+    private void buildCompetitive(Box content, TabParts parts, float sideMargin) {
+        if (competitiveTab == null) competitiveTab = new CompetitiveTab();
+        CompetitiveTab ct = competitiveTab;
+        PvpScoreUi.ModeDropdown modes = ct.modeDropdown(this::requestRebuild);
+        FilterTabs types = ct.typeTabs(this::requestRebuild);
+        FilterTabs results = ct.resultTabs(this::requestRebuild);
+        PvpScoreUi.PlayingSwitch playing = ct.playingSwitch(this::requestRebuild);
+        com.yuyuframe.launcheragent.apigraphic.widget.UiWidget playingPainter = ct.switchPainter(playing);
+        UiIconButton help = new UiIconButton(com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiScreenHeader.ICON_INFO,
+            () -> overlays.open(new PvpInfoModal(null, PvpInfoModal.OVERVIEW))).round();
+        help.tooltip(Lang.tr("Comment ça marche ?"));
+        PvpScoreModule module = PvpScoreModule.instance();
+        UiIconButton moduleSettings = module == null ? null
+            : new UiIconButton(LauncherModule.icons8("settings"), () -> closeTo(new UiModConfigScreen(this, module))).round();
+        if (moduleSettings != null) {
+            moduleSettings.tooltip(Lang.tr("Réglages : compétitif ou casual, sa touche, les mots, les sons, le partage des duels"));
+        }
+        CompetitiveTab.Banner banner = ct.banner();
+        float control = px(44f);
+
+        Box page = content.add(UiLayout.column().fill().gap(px(UiTheme.Space.S20))
+            .pad(px(UiTheme.Space.S32), sideMargin, px(UiTheme.Space.S24), sideMargin));
+        // Le titre et sa ligne d'aide à gauche ; à droite ce qu'on joue, puis ce qu'on regarde.
+        Box head = page.add(UiLayout.row().height(px(64f)).rigid().alignItems("flex-end").gap(px(UiTheme.Space.S10)));
+        head.add(UiLayout.spacer());
+        head.add(UiLayout.fixed(CompetitiveTab.switchWidth(), control).bind(playing));
+        head.add(UiLayout.fixed(CompetitiveTab.modeDropdownWidth(), control).bind(modes));
+        head.add(UiLayout.fixed(types.preferredWidth(), control).bind(types));
+        head.add(UiLayout.fixed(control, control).bind(help));
+        if (moduleSettings != null) head.add(UiLayout.fixed(control, control).bind(moduleSettings));
+        page.add(UiLayout.box().widthPct(100f).height(CompetitiveTab.bannerHeight()).rigid().bind(banner));
+        Box gridHead = page.add(UiLayout.row().height(control).rigid().alignItems("center").margin(px(UiTheme.Space.S8), 0f, 0f, 0f));
+        gridHead.add(UiLayout.spacer());
+        gridHead.add(UiLayout.fixed(results.preferredWidth(), control).bind(results));
+        // Comme Modules : plus grand que la zone de fondu de la liste, une carte qui s'estompe ne touche pas l'en-tête.
+        Box viewport = page.add(UiLayout.box().grow(1f).margin(px(UiTheme.Space.S4), 0f, 0f, 0f));
+
+        parts.afterSolve.add(() -> {
+            TaffyLayoutResult.Rect headRect = parts.layout.rect(head);
+            if (headRect != null) {
+                titleX = headRect.x;
+                titleBaseline = headRect.y + headRect.h - px(UiTheme.Space.S28);
+                competitiveHintBaseline = headRect.y + px(UiTheme.Space.S4);
+            }
+            widgets.add(playing);
+            widgets.add(playingPainter);
+            widgets.add(modes);
+            widgets.add(types);
+            widgets.add(help);
+            if (moduleSettings != null) widgets.add(moduleSettings);
+            widgets.add(banner);
+            TaffyLayoutResult.Rect gh = parts.layout.rect(gridHead);
+            if (gh != null) {
+                gridTitleX = gh.x;
+                gridTitleBaseline = UiText.centeredBaseline(UiFont.BOLD, gh.y, gh.h, px(UiTheme.Text.XL));
+            }
+            widgets.add(results);
+            TaffyLayoutResult.Rect vp = parts.layout.rect(viewport);
+            if (vp == null) return;
+            modScroll = new UiScrollContainer(vp.x, vp.y, vp.w, Math.max(1f, vp.h))
+                .railAt(screenWidth - px(UiTheme.Space.S16));
+            if (ct.buildGrid(modScroll, vp.x, vp.w, duel -> closeTo(new UiPvpDuelScreen(this, duel)))) {
+                modScroll.restoreScroll(parts.previousScroll);
+            } else {
+                modScroll = null;
+                competitiveEmpty = ct.emptyMessage();
+                competitiveEmptyX = vp.x;
+                competitiveEmptyBaseline = vp.y + vp.h - px(UiTheme.Space.S28);
+            }
+        });
+    }
+
+    /**
      * L'onglet Amis (refonte du 2026-11-20) : à gauche les amis en trois
      * sections ({@link FriendsList}), à droite la fiche de celui qu'on a choisi
      * ({@link FriendDetail}). En haut, la recherche et « Ajouter un ami », qui
@@ -675,8 +780,8 @@ public class UiMainMenuScreen extends UiScreenBase {
         // interrupteur suit l'état du module de lui-même).
         boolean hasSomethingToShow = owner != null || !mod.settings().isEmpty() || mod instanceof HudElementOwner;
         Runnable open = mod instanceof PvpScoreModule
-            // Le Score PvP n'a aucun réglage, mais un écran à lui : l'historique des duels.
-            ? () -> closeTo(new UiPvpScoreScreen(this))
+            // Le Score PvP n'a pas d'écran de réglages à lui : sa carte ouvre l'onglet Compétitif (réglages dans son en-tête).
+            ? () -> open(Tab.COMPETITIVE)
             : owner != null
             // Membre d'un groupe : ses réglages sont dans l'écran du groupe, ouvert sur lui.
             ? () -> closeTo(new UiModGroupConfigScreen(this, owner, mod))

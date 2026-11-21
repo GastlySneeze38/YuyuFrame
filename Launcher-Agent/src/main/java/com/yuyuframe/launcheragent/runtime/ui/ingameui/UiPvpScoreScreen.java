@@ -849,13 +849,13 @@ public final class UiPvpScoreScreen extends UiScreenBase {
     }
 
     /** La hauteur de la cloche à une note, 1 à 250 : 100 points valent un écart habituel. */
-    private static double bell(double score) {
+    static double bell(double score) {
         double z = (score - 250.0) / 100.0;
         return Math.exp(-0.5 * z * z);
     }
 
     /** La part d'une loi normale sous {@code z} (approximation d'Abramowitz et Stegun, largement assez précise ici). */
-    private static double normalCdf(double z) {
+    static double normalCdf(double z) {
         double t = 1.0 / (1.0 + 0.2316419 * Math.abs(z));
         double d = 0.3989423 * Math.exp(-z * z / 2.0);
         double p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
@@ -863,7 +863,7 @@ public final class UiPvpScoreScreen extends UiScreenBase {
     }
 
     /** La couleur du trait à une note, fondue sur 20 points autour de chaque palier. */
-    private static UiColor curveColor(double score) {
+    static UiColor curveColor(double score) {
         double blend = 20.0;
         if (score < TIER_HIGH - blend) return CURVE_LOW;
         if (score < TIER_HIGH + blend) return UiColor.lerp(CURVE_LOW, CURVE_HIGH, (float) ((score - TIER_HIGH + blend) / (2 * blend)));
