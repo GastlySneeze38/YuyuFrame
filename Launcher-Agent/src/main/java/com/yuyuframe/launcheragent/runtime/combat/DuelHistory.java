@@ -97,9 +97,64 @@ public final class DuelHistory {
         return null;
     }
 
-    /** L'historique de l'instance courante ; vide si le noyau ne répond pas. */
+    /**
+     * L'historique de l'instance courante ; vide si le noyau ne répond pas.
+     *
+     * <p><b>Lent</b> : le noyau relit et renote chaque journal, quelques
+     * millisecondes par duel. Jamais sur le fil du jeu — les écrans passent
+     * par {@link #cached()}.
+     */
     public static DuelHistory load() {
         return parse(NativeCombat.history(System.getProperty("user.dir", "")));
+    }
+
+    // ── L'historique partagé, relu en arrière-plan ───────────────────────────
+    //
+    // Les écrans (accueil et onglet Compétitif du menu, raccourcis de
+    // l'écran-titre et du menu Échap) le lisaient à leur ouverture, sur le fil
+    // du jeu : avec quelques centaines de duels, ouvrir le menu Échap ou le
+    // menu YuyuFrame figeait le jeu un long moment (retour du 2026-11-21).
+    // Ils montrent désormais la dernière lecture, tout de suite, et se
+    // refont quand la suivante arrive ({@link #revision()}).
+
+    private static volatile DuelHistory shared = parse(null);
+    private static volatile int revision;
+    private static volatile long loadedAt;
+    private static volatile boolean loading;
+
+    /** La dernière lecture ; vide tant que la première n'est pas finie. */
+    public static DuelHistory cached() {
+        return shared;
+    }
+
+    /** Augmente à chaque nouvelle lecture : un écran qui l'a vue changer se refait. */
+    public static int revision() {
+        return revision;
+    }
+
+    /** Relit l'historique sur un fil à part, si la dernière lecture a plus de {@code maxAgeMs}. Une seule à la fois. */
+    public static void refreshIfOlderThan(long maxAgeMs) {
+        if (loading || (loadedAt != 0L && System.currentTimeMillis() - loadedAt < maxAgeMs)) return;
+        refresh();
+    }
+
+    /** Relit l'historique sur un fil à part, maintenant (un duel vient de finir, le classement vient d'arriver). */
+    public static synchronized void refresh() {
+        if (loading) return;
+        loading = true;
+        Thread thread = new Thread(() -> {
+            try {
+                shared = load();
+                loadedAt = System.currentTimeMillis();
+                revision++;
+            } catch (Throwable error) {
+                com.yuyuframe.launcheragent.base.log.LauncherLog.err("[COMBAT] Historique des duels illisible", error);
+            } finally {
+                loading = false;
+            }
+        }, "yf-duel-history");
+        thread.setDaemon(true);
+        thread.start();
     }
 
     static DuelHistory parse(String text) {

@@ -112,7 +112,7 @@ public final class ShortcutOverlay {
     private static boolean errorLogged;
     private static String shownAccountError;
     private static boolean accountsAsked;
-    /** Le meilleur rang, relu à chaque ouverture d'un écran (le noyau lit des fichiers). */
+    /** Le meilleur rang, tiré de la dernière lecture partagée de l'historique ({@link DuelHistory#cached()}). */
     private static DuelHistory.Rank bestRank;
     private static boolean anyRankedDuel;
 
@@ -169,14 +169,25 @@ public final class ShortcutOverlay {
         open = null;
         dragging = null;
         panelDragging = false;
-        if (kind != null) loadRank();
+        // Relue à côté : le noyau renote chaque duel, ce qui figeait l'ouverture du menu Échap.
+        if (kind != null) {
+            DuelHistory.refreshIfOlderThan(10_000L);
+            // Un pack de ressources activé depuis : boutons et objets relus.
+            McTexture.checkPack();
+        }
     }
 
-    private static void loadRank() {
+    /** La lecture de l'historique d'où vient {@link #bestRank} ; une nouvelle lecture le refait. */
+    private static int rankRevision = -1;
+
+    private static void updateRank() {
+        int revision = DuelHistory.revision();
+        if (revision == rankRevision) return;
+        rankRevision = revision;
         bestRank = null;
         anyRankedDuel = false;
         try {
-            DuelHistory history = DuelHistory.load();
+            DuelHistory history = DuelHistory.cached();
             double bestKey = -1;
             for (int code : PvpScoreUi.MODE_CODES) {
                 DuelHistory.Rank rank = history.rank(code);
@@ -205,6 +216,7 @@ public final class ShortcutOverlay {
         mx = (float) in.mouseX / gs;
         my = (vh - (float) in.mouseY) / gs;
         style = ShortcutLayout.style();
+        updateRank();
 
         List<ScreenButtons.Button> buttons = ScreenButtons.read(screen);
         ScreenButtons.Row row = ScreenButtons.findRow(buttons, sw, sh);
@@ -440,16 +452,16 @@ public final class ShortcutOverlay {
                 return;
             }
             case MENU: image(r, "yf-logo", logo(), x, y, size, size, 1f); return;
-            case MISSIONS: image(r, "mc:experience_bottle", McTexture.item("experience_bottle", "experience_bottle"), x, y, size, size, 1f); return;
+            case MISSIONS: image(r, McTexture.key("experience_bottle"), McTexture.item("experience_bottle", "experience_bottle"), x, y, size, size, 1f); return;
             case RANKED: {
                 float[] f = fb(x, y, size, size);
                 if (bestRank != null && bestRank.placed) PvpRank.badge(r, bestRank.division, f[0], f[1], size * gs, 0f, 1f, vw, vh);
                 else if (anyRankedDuel) PvpRank.placementBadge(r, f[0], f[1], size * gs, 1f, vw, vh);
-                else image(r, "mc:mace", HomeIcons.mace(), x, y, size, size, 1f);
+                else image(r, McTexture.key("mace"), HomeIcons.mace(), x, y, size, size, 1f);
                 return;
             }
-            case MODULES: image(r, "mc:redstone_torch", McTexture.item("redstone_torch", "redstone_torch_on"), x, y, size, size, 1f); return;
-            case FRIENDS: image(r, "mc:face-steve", McTexture.defaultFace(), x, y, size, size, 1f); return;
+            case MODULES: image(r, McTexture.key("redstone_torch"), McTexture.item("redstone_torch", "redstone_torch_on"), x, y, size, size, 1f); return;
+            case FRIENDS: image(r, McTexture.key("face-steve"), McTexture.defaultFace(), x, y, size, size, 1f); return;
             default:
         }
     }
@@ -471,7 +483,7 @@ public final class ShortcutOverlay {
             }
         }
         if (head == null) {
-            key = "mc:face-steve";
+            key = McTexture.key("face-steve");
             head = McTexture.defaultFace();
         }
         image(r, key, head, x, y, size, size, 1f);
@@ -531,14 +543,8 @@ public final class ShortcutOverlay {
     private static void drawButton(UiRenderer r, float x, float y, float w, float h, boolean hover, boolean lifted) {
         float[] f = fb(x, y, w, h);
         if (minecraft()) {
-            BufferedImage tex = h == 20 || w == h ? McTexture.button(Math.round(w), hover, Math.round(gs)) : null;
-            if (tex != null && h == 20) {
-                r.drawIcon("mc-button:" + Math.round(w) + ":" + hover + ":" + Math.round(gs), tex, f[0], f[1], f[2] - f[0], f[3] - f[1], 1f, vw, vh);
-            } else if (tex != null) {
-                // Icône carrée hors des 20 pixels du jeu : la texture d'un bouton de 20, étirée.
-                BufferedImage sq = McTexture.button(20, hover, Math.round(gs));
-                r.drawIcon("mc-button:20:" + hover + ":" + Math.round(gs), sq, f[0], f[1], f[2] - f[0], f[3] - f[1], 1f, vw, vh);
-            } else {
+            // La texture du pack actif, découpée comme le jeu la découpe.
+            if (!McTexture.drawButton(r, f[0], f[1], f[2] - f[0], f[3] - f[1], gs, hover, 1f, vw, vh)) {
                 r.drawRoundedRect(f[0], f[1], f[2], f[3], 0f, hover ? new UiColor(140, 140, 160, 255) : new UiColor(110, 110, 110, 255), vw, vh);
             }
             if (lifted) outline(r, x, y, w, h, MC_TEXT);

@@ -609,9 +609,15 @@ public final class Blaze3DCore {
         gpu.write(encoder, slice, data);
         projectionVpWidth = vpWidth;
         projectionVpHeight = vpHeight;
-        LauncherLog.ui(1, "[UiRenderer] UiTextBlaze3D: projection orthographique (re)écrite, " + vpWidth + "x" + vpHeight);
+        // Une seule fois par taille : les étages du flou du verre changent de taille plusieurs fois par image,
+        // et cette ligne remplissait le journal (47 000 lignes en quatre minutes, une écriture disque à chaque fois).
+        if (PROJECTION_SIZES_LOGGED.add(((long) vpWidth << 32) | (vpHeight & 0xFFFFFFFFL))) {
+            LauncherLog.ui(1, "[UiRenderer] UiTextBlaze3D: projection orthographique (re)écrite, " + vpWidth + "x" + vpHeight);
+        }
         return projectionBuffer;
     }
+
+    private static final java.util.Set<Long> PROJECTION_SIZES_LOGGED = new java.util.HashSet<>();
 
     static int failureLogCount;
 

@@ -64,9 +64,10 @@ public final class HomeStats {
         this.preferred = preferred;
     }
 
+    /** À partir de la dernière lecture de l'historique ({@link DuelHistory#cached()}) : instantané, jamais le noyau. */
     public static HomeStats load() {
         try {
-            DuelHistory history = DuelHistory.load();
+            DuelHistory history = DuelHistory.cached();
             Mode[] modes = new Mode[MODE_CODES.length];
             int preferred = 0, best = -1;
             for (int i = 0; i < MODE_CODES.length; i++) {

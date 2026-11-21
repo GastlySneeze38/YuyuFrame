@@ -86,7 +86,9 @@ public class UiMainMenuScreen extends UiScreenBase {
     private String lastFriendsSignature = "";
     private float friendsHintBaseline;
     private final ModGrid grid = new ModGrid(this::requestRebuild);
-    private final HomeStats stats = HomeStats.load();
+    /** Les chiffres de l'accueil, refaits quand une nouvelle lecture de l'historique arrive ({@link #lastDuelRevision}). */
+    private HomeStats stats = HomeStats.load();
+    private int lastDuelRevision = com.yuyuframe.launcheragent.runtime.combat.DuelHistory.revision();
     private UiScrollContainer modScroll;
 
     /** Titres posés sur le décor, calculés par la mise en page. */
@@ -128,6 +130,10 @@ public class UiMainMenuScreen extends UiScreenBase {
         super("YuyuFrame");
         this.lastScreen = lastScreen;
         this.escapeTarget = lastScreen;
+        // Un duel a pu finir depuis la dernière lecture : relue à côté, l'écran s'ouvre sans l'attendre.
+        com.yuyuframe.launcheragent.runtime.combat.DuelHistory.refreshIfOlderThan(10_000L);
+        // Un pack de ressources activé depuis la dernière ouverture : les textures du jeu sont relues.
+        com.yuyuframe.launcheragent.runtime.ui.ingameui.component.McTexture.checkPack();
         this.searchField = new UiTextField(0, 0, 0, 0, Lang.tr("Rechercher un module"), v -> {
             // Chercher, c'est vouloir la grille : l'onglet Modules s'ouvre de lui-même.
             if (!v.trim().isEmpty() && tab != Tab.MODULES) tab = Tab.MODULES;
@@ -198,6 +204,14 @@ public class UiMainMenuScreen extends UiScreenBase {
     public void uiDraw(double mouseX, double mouseY) {
         // Le serveur de classement vient d'être joint (ou perdu) : rang et pastille suivent sans rouvrir.
         if (tab == Tab.COMPETITIVE && competitiveTab != null && competitiveTab.pollReady()) rebuildRequested = true;
+        // L'historique des duels est relu en arrière-plan : une nouvelle lecture refait l'accueil et l'onglet Compétitif.
+        int duelRevision = com.yuyuframe.launcheragent.runtime.combat.DuelHistory.revision();
+        if (duelRevision != lastDuelRevision) {
+            lastDuelRevision = duelRevision;
+            stats = HomeStats.load();
+            if (competitiveTab != null) competitiveTab.historyChanged();
+            rebuildRequested = true;
+        }
         if (screenWidth > 0 && screenHeight > 0
                 && (rebuildRequested || screenWidth != lastWidth || screenHeight != lastHeight
                     || UiTheme.UI_SCALE != lastScale || ModuleRegistry.favoritesRevision() != lastFavoritesRevision

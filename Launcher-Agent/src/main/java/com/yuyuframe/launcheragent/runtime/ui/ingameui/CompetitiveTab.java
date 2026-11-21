@@ -56,7 +56,8 @@ final class CompetitiveTab {
     /** Filtre des cartes : 0 tous, 1 victoires, 2 défaites. Les trois gardés d'une ouverture à l'autre. */
     private static int resultFilter;
 
-    private DuelHistory history = DuelHistory.load();
+    /** La dernière lecture partagée ({@link DuelHistory#cached()}) : relue à côté, jamais sur le fil du jeu. */
+    private DuelHistory history = DuelHistory.cached();
     private int rankedReady = NativeCombat.rankedReady();
     /** Départ des animations du bandeau : rejouées à l'ouverture de l'onglet et au changement de mode. */
     private long shownAt = System.nanoTime();
@@ -67,7 +68,8 @@ final class CompetitiveTab {
     private double average = -1, best = -1;
 
     CompetitiveTab() {
-        if (mode < 0) mode = mostAdvancedMode();
+        // Le mode le plus avancé ne se choisit que sur un historique déjà lu ; sinon à son arrivée (historyChanged).
+        if (mode < 0 && !history.duels.isEmpty()) mode = mostAdvancedMode();
         refresh();
     }
 
@@ -94,11 +96,16 @@ final class CompetitiveTab {
         int ready = NativeCombat.rankedReady();
         if (ready == rankedReady) return false;
         rankedReady = ready;
-        if (ready == NativeCombat.RANKED_READY_YES) {
-            history = DuelHistory.load();
-            refresh();
-        }
+        // Le rang vient du serveur : l'historique est relu à côté, et la page se refait à son arrivée (historyChanged).
+        if (ready == NativeCombat.RANKED_READY_YES) DuelHistory.refresh();
         return true;
+    }
+
+    /** Une nouvelle lecture de l'historique est arrivée : les chiffres de l'onglet se refont. */
+    void historyChanged() {
+        history = DuelHistory.cached();
+        if (mode < 0 && !history.duels.isEmpty()) mode = mostAdvancedMode();
+        refresh();
     }
 
     /**
