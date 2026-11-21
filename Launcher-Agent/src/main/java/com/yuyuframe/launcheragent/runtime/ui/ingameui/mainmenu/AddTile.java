@@ -31,17 +31,14 @@ public final class AddTile extends UiInteractive {
         if (w <= 0f || h <= 0f) return;
         updateStates(mouseX, mouseY);
         float radius = px(UiTheme.Space.S18);
-        // Presque transparente, posée sur le décor : elle suit la clarté du fond (UiBackdropTone).
-        float lum = com.yuyuframe.launcheragent.apigraphic.effect.UiBackdropTone.luminance(x, y, x + w, y + h, vw, vh);
-        float light = com.yuyuframe.launcheragent.apigraphic.effect.UiBackdropTone.lightness(lum);
+        // Presque transparente, posée sur le décor : sur une page claire, son fond
+        // s'assombrit et le texte reste blanc (UiBackdropTone).
         r.drawRoundedRect(x, y, x + w, y + h, radius,
-            UiColor.lerp(new UiColor(255, 255, 255, 8), com.yuyuframe.launcheragent.apigraphic.effect.UiBackdropTone.INK.withAlpha(0.08f), light),
-            vw, vh);
+            com.yuyuframe.launcheragent.apigraphic.effect.UiBackdropTone.controlFill(new UiColor(255, 255, 255, 8)), vw, vh);
         UiSurface.hoverWash(r, x, y, w, h, radius, hover, vw, vh);
         float s = px(UiTheme.Text.LG);
         String text = "+  " + Lang.tr(label);
-        UiColor color = com.yuyuframe.launcheragent.apigraphic.effect.UiBackdropTone.adapt(
-            UiColor.lerp(UiTheme.TEXT_SECONDARY, UiTheme.TEXT_PRIMARY, hover), lum);
+        UiColor color = UiTheme.TEXT_PRIMARY;
         UiText.drawCentered(r, UiFont.REGULAR, text, x, w, UiText.centeredBaseline(UiFont.REGULAR, y, h, s), color, s, vw, vh);
     }
 

@@ -27,7 +27,7 @@ public final class UiAurora {
         r.drawMultiStopGradientRect(0, 0, vw, vh, 0f, UiGradientType.LINEAR, 0, vh, 0, 0,
             new UiColor[]{ base.withAlpha(TOP_ALPHA), base.withAlpha(BOTTOM_ALPHA) }, VEIL, vw, vh);
         // Le voile assombrit le fond : les textes posés dessus le savent.
-        com.yuyuframe.launcheragent.apigraphic.effect.UiBackdropTone.cover(
+        com.yuyuframe.launcheragent.apigraphic.effect.UiBackdropTone.veil(
             (u, v) -> BOTTOM_ALPHA + (TOP_ALPHA - BOTTOM_ALPHA) * v);
     }
 }

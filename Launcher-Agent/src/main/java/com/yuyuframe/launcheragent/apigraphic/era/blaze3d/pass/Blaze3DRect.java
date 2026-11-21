@@ -123,11 +123,18 @@ public final class Blaze3DRect {
 
         Object device = gpu.device();
         ensureAtlasTexture(device);
-        Object nativeImage = bufferedImageToNativeImage(img, w, h);
+        // L'image est envoyée AVEC sa marge, transparente (2026-11-21) : après
+        // un vidage, les marges gardaient des morceaux des images d'avant, et
+        // le filtrage bilinéaire les tirait au bord de la nouvelle — un trait
+        // parasite au-dessus d'un titre, au bord d'une carte.
+        int b = ATLAS_PADDING;
+        BufferedImage padded = new BufferedImage(w + 2 * b, h + 2 * b, BufferedImage.TYPE_INT_ARGB);
+        padded.setRGB(b, b, w, h, img.getRGB(0, 0, w, h, null, 0, w), 0, w);
+        Object nativeImage = bufferedImageToNativeImage(padded, w + 2 * b, h + 2 * b);
         Object encoder = gpu.encoder(device);
         // uploadImageRegion(mipLevel, depth, destX, destY, width, height, skipPixels, skipRows)
-        // — écrit SEULEMENT le sous-rect de cette icône, pas l'atlas entier.
-        gpu.uploadImageRegion(encoder, atlasTexture, nativeImage, 0, 0, px, py, w, h, 0, 0);
+        // — écrit SEULEMENT le sous-rect de cette icône (et sa marge), pas l'atlas entier.
+        gpu.uploadImageRegion(encoder, atlasTexture, nativeImage, 0, 0, px - b, py - b, w + 2 * b, h + 2 * b, 0, 0);
 
         float[] uv = {
             px / (float) ATLAS_SIZE, py / (float) ATLAS_SIZE,

@@ -71,14 +71,11 @@ public final class FriendTile extends UiInteractive {
         float radius = px(size == Size.OFFLINE ? UiTheme.Space.S14 : UiTheme.Space.S18);
 
         // ── Le fond ──────────────────────────────────────────────────────
-        // Hors ligne, la carte est presque transparente : elle et ses textes
-        // suivent la clarté du fond (UiBackdropTone). Les autres sont du verre.
-        float lum = size == Size.OFFLINE
-            ? com.yuyuframe.launcheragent.apigraphic.effect.UiBackdropTone.luminance(x, y, x + w, y + h, vw, vh) : -1f;
+        // Hors ligne, la carte est presque transparente : sur une page claire,
+        // son fond s'assombrit et ses textes restent clairs (UiBackdropTone).
+        // Les autres sont du verre.
         if (size == Size.OFFLINE) {
-            UiColor fill = UiColor.lerp(new UiColor(255, 255, 255, 9),
-                com.yuyuframe.launcheragent.apigraphic.effect.UiBackdropTone.INK.withAlpha(0.08f),
-                com.yuyuframe.launcheragent.apigraphic.effect.UiBackdropTone.lightness(lum));
+            UiColor fill = com.yuyuframe.launcheragent.apigraphic.effect.UiBackdropTone.controlFill(new UiColor(255, 255, 255, 9));
             r.drawRoundedRect(x, y, x + w, y + h, radius, fill.multiplyAlpha(a), vw, vh);
         } else {
             UiColor border = size == Size.IN_GAME ? FriendInfo.ONLINE.withAlpha(0.28f) : UiTheme.GLASS_BORDER;
@@ -114,9 +111,8 @@ public final class FriendTile extends UiInteractive {
 
         if (size != Size.IN_GAME) {
             float nameScale = px(size == Size.ONLINE ? UiTheme.Text.MD : UiTheme.Text.SM);
-            UiColor nameColor = com.yuyuframe.launcheragent.apigraphic.effect.UiBackdropTone.adapt(
-                size == Size.OFFLINE ? UiTheme.TEXT_SECONDARY : UiTheme.TEXT_PRIMARY, lum);
-            UiColor lineColor = com.yuyuframe.launcheragent.apigraphic.effect.UiBackdropTone.adapt(UiTheme.TEXT_MUTED, lum);
+            UiColor nameColor = size == Size.OFFLINE ? UiTheme.TEXT_SECONDARY : UiTheme.TEXT_PRIMARY;
+            UiColor lineColor = UiTheme.TEXT_MUTED;
             float maxW = right - tx;
             r.drawText(UiFont.BOLD, UiText.fit(UiFont.BOLD, f.name, maxW, nameScale), tx, mid + px(UiTheme.Space.S3),
                 nameColor.multiplyAlpha(a), nameScale, vw, vh);

@@ -52,10 +52,9 @@ public final class BackdropWords {
      * {@link #fadeWidth()} premiers pixels sont le passage depuis le jeu
      * clair — aucune coupure nette.
      *
-     * <p>Le noir est peint dans la MÊME image que l'illustration, pixel par
-     * pixel : fait en deux dégradés du moteur, leur jointure laissait un trait
-     * vertical. Pas de verre non plus : un flou ne se dégrade pas, son bord
-     * faisait une coupure nette.
+     * <p>Le noir est de la géométrie à couleurs de sommet ({@link #drawBlack}),
+     * l'illustration une image par-dessus, à bords doux. Pas de verre : un
+     * flou ne se dégrade pas, son bord faisait une coupure nette.
      */
     public static void drawBand(UiRenderer r, float x, float y, float w, float h, int vw, int vh) {
         if (w <= 0f || h <= 0f) return;
@@ -77,7 +76,58 @@ public final class BackdropWords {
                 return;
             }
         }
+        drawBlack(r, x, y, w, h, Math.min(fadeWidth(), w * 0.5f), vw, vh);
         r.drawIcon("yf-backdrop-words:" + iw + "x" + ih, image, x, y, w, h, vw, vh);
+    }
+
+    /** Une texture d'un pixel blanc : la géométrie du noir n'a que des couleurs de sommet. */
+    private static final BufferedImage WHITE = whitePixel();
+
+    private static BufferedImage whitePixel() {
+        BufferedImage img = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
+        img.setRGB(0, 0, 0xFFFFFFFF);
+        return img;
+    }
+
+    /** Colonnes du passage de gauche : assez pour que la courbe en S ne se voie pas en segments. */
+    private static final int FADE_COLUMNS = 48;
+
+    /**
+     * Le noir de la bande, en GÉOMÉTRIE et non plus dans l'image (2026-11-21) :
+     * des colonnes verticales collées, une couleur par sommet — l'opacité suit
+     * la montée de gauche et le dégradé du haut vers le bas, et la carte
+     * graphique l'interpole sans palier. Dans une image passée par l'atlas de
+     * Blaze3D, le dégradé apparaissait en marches à bords nets (pas en
+     * 1.8.9). Les colonnes partagent exactement leurs sommets : pas de
+     * jointure, contrairement à deux rectangles du moteur dont les bords sont
+     * adoucis.
+     */
+    private static void drawBlack(UiRenderer r, float x, float y, float w, float h, float fade, int vw, int vh) {
+        com.yuyuframe.launcheragent.apigraphic.draw.mesh.UiMeshBatch batch =
+            new com.yuyuframe.launcheragent.apigraphic.draw.mesh.UiMeshBatch();
+        int columns = fade > 1f ? FADE_COLUMNS : 0;
+        float prevX = x, prevRamp = 0f;
+        for (int i = 1; i <= columns + 1; i++) {
+            // Les colonnes du passage, puis une seule pour tout le reste, à pleine opacité.
+            float cx = i <= columns ? x + fade * i / columns : x + w;
+            float t = i <= columns ? i / (float) columns : 1f;
+            float ramp = t * t * (3f - 2f * t);
+            if (cx > prevX) {
+                int bl = blackArgb(BOTTOM_ALPHA * prevRamp), br = blackArgb(BOTTOM_ALPHA * ramp);
+                int tr = blackArgb(TOP_ALPHA * ramp), tl = blackArgb(TOP_ALPHA * prevRamp);
+                // Sens inverse des aiguilles d'une montre, y vers le haut : bas-gauche, bas-droit, haut-droit, haut-gauche.
+                batch.add(prevX, y, cx, y, cx, y + h, prevX, y + h,
+                    0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, bl, br, tr, tl);
+            }
+            prevX = cx;
+            prevRamp = ramp;
+        }
+        if (batch.quads() > 0) r.drawTexturedQuads("yf-backdrop-white", WHITE, batch, vw, vh);
+    }
+
+    private static int blackArgb(float alpha) {
+        int a = Math.round(Math.max(0f, Math.min(1f, alpha)) * 255f);
+        return (a << 24) | BLACK_RGB;
     }
 
     private static BufferedImage loadArt() throws Exception {
@@ -103,15 +153,12 @@ public final class BackdropWords {
         float br = (BLACK_RGB >> 16) & 255, bg = (BLACK_RGB >> 8) & 255, bb = BLACK_RGB & 255;
         for (int py = 0; py < h; py++) {
             // Image : y vers le bas, donc py = 0 est le haut de la bande.
-            float vertical = TOP_ALPHA + (BOTTOM_ALPHA - TOP_ALPHA) * (py / (float) Math.max(1, h - 1));
             float vfade = Math.min(1f, Math.min(py, h - 1 - py) / edge);
             vfade = vfade * vfade * (3f - 2f * vfade);
             int sy = (int) Math.floor((py - oy) / scale);
             for (int px = 0; px < w; px++) {
-                float ramp = ramp(px, leftFade);
-                // 1. Le noir.
-                float aBlack = vertical * ramp;
-                float r = br, g = bg, b = bb, a = aBlack;
+                // Le noir n'est plus dans l'image (voir drawBlack) : elle ne porte que l'illustration.
+                float r = br, g = bg, b = bb, a = 0f;
                 // 2. L'illustration par-dessus, son fond rendu transparent.
                 int sx = (int) Math.floor((px - ox) / scale);
                 if (sx >= 0 && sx < sw && sy >= 0 && sy < sh) {
@@ -119,7 +166,12 @@ public final class BackdropWords {
                     float cr = (c >> 16) & 255, cg = (c >> 8) & 255, cb = c & 255;
                     float light = 0.3f * cr + 0.59f * cg + 0.11f * cb;
                     float t = Math.max(0f, Math.min(1f, (light - ART_FLOOR) / (ART_FULL - ART_FLOOR)));
-                    float aArt = t * ramp(px, Math.round(leftFade * 1.4f)) * vfade;
+                    // L'illustration arrive aussi en fondu sur SON bord gauche : quand la
+                    // bande est plus large qu'elle, ce bord tombe au milieu du noir, et
+                    // l'opacité de son fond y sautait d'un coup — une coupure nette
+                    // (2026-11-21, vue en 26.x).
+                    float artEdge = ramp(Math.round(px - (float) ox), Math.max(1, Math.round((float) drawnW * 0.35f)));
+                    float aArt = t * ramp(px, Math.round(leftFade * 1.4f)) * vfade * artEdge;
                     if (aArt > 0f) {
                         // Composition « par-dessus » de l'illustration sur le noir.
                         float outA = aArt + a * (1f - aArt);

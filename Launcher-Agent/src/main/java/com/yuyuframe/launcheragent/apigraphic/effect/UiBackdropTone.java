@@ -53,10 +53,117 @@ public final class UiBackdropTone {
     private static final List<Cover> covers = new ArrayList<>();
     private static int frameCounter;
 
-    /** Début d'une image : les décors redéclarent leurs couvertures. */
+    /**
+     * Début d'une image : les décors redéclarent leurs couvertures, et la page
+     * tranche sa teinte d'après la clarté de TOUT le fond (voir
+     * {@link #pageLight}).
+     */
     public static void beginFrame() {
         covers.clear();
+        float tone = screenTone();
+        boolean was = pageIsLight;
+        if (tone >= 0f) {
+            // Un écart pour basculer : un fond à la limite ne fait pas clignoter la page.
+            if (!pageIsLight && tone > LIGHT_ON) pageIsLight = true;
+            else if (pageIsLight && tone < LIGHT_OFF) pageIsLight = false;
+        } else {
+            // Rien de mesuré (pas de verre, relevé trop vieux) : le blanc d'avant.
+            pageIsLight = false;
+        }
+        // Journalisé à chaque bascule et au premier relevé : de quoi régler les seuils sur un vrai monde.
+        if (was != pageIsLight || (tone >= 0f && !toneLogged)) {
+            toneLogged = tone >= 0f;
+            LauncherLog.ui(1, "[UiBackdropTone] clarté du fond " + (tone < 0f ? "inconnue" : String.format(java.util.Locale.ROOT, "%.3f", tone))
+                + " -> texte " + (pageIsLight ? "encre" : "blanc"));
+        }
+        long now = System.nanoTime();
+        float dt = lastFrameNanos == 0L ? 1f : Math.min(1f, (now - lastFrameNanos) / 1e9f);
+        lastFrameNanos = now;
+        float target = pageIsLight ? 1f : 0f;
+        // Le passage d'une teinte à l'autre en un fondu court plutôt qu'un saut.
+        pageLight += (target - pageLight) * (1f - (float) Math.exp(-dt * 10f));
+        if (Math.abs(target - pageLight) < 0.002f) pageLight = target;
     }
+
+    /**
+     * La teinte de la page, de 0 (blanc) à 1 (encre). UNE décision pour toute
+     * la page (2026-11-21) : un titre noir au-dessus d'un compte blanc ne se
+     * lit pas comme une page. Elle vient de la clarté moyenne de tout le fond
+     * sous le voile ({@link #screenTone}), sans les décors propres à une page
+     * (bande, losanges) : sur le même monde, toutes les pages prennent la
+     * même teinte. (D'abord un vote des textes : l'accueil, dont les seuls
+     * textes posés sur le décor sont bas, sur le sol plus sombre, restait
+     * blanc quand les autres pages passaient au noir.)
+     */
+    private static float pageLight;
+    private static boolean pageIsLight, toneLogged;
+    private static long lastDebugNanos;
+    private static long lastFrameNanos;
+
+    /** Le voile commun à tous les écrans ({@code UiAurora}) : il compte dans la teinte de la page. */
+    private static volatile Cover veil;
+
+    /** Le voile posé sur tout le fond, le même à chaque image. */
+    public static void veil(Cover cover) {
+        veil = cover;
+    }
+
+    /**
+     * La clarté moyenne de tout le fond, voile compris, en lumière LINÉAIRE
+     * (comme le contraste du WCAG : un bleu ciel pastel paraît clair même si
+     * sa valeur brute est moyenne) ; {@code -1} sans relevé.
+     */
+    private static float screenTone() {
+        float[] g = grid;
+        if (g == null || System.nanoTime() - updatedNanos > STALE_NANOS) return -1f;
+        int w = gridW, h = gridH;
+        Cover v = veil;
+        float sum = 0f;
+        int n = 0;
+        // Les 60 % du haut seulement (la rangée 0 est en bas) : c'est là que
+        // sont les titres et les commandes ; le bas, sous le voile le plus
+        // dense, rendait « moyen » un fond franchement clair (2026-11-21).
+        int from = (int) Math.floor(h * (1f - TONE_SHARE));
+        float rawSum = 0f, dimSum = 0f, allSum = 0f;
+        for (int y = 0; y < h; y++) {
+            float dim = v == null ? 0f : Math.max(0f, Math.min(1f, v.alphaAt(0.5f, (y + 0.5f) / h)));
+            for (int x = 0; x < w; x++) {
+                float raw = g[y * w + x];
+                allSum += raw;
+                if (y < from) continue;
+                sum += (float) Math.pow(raw * (1f - dim), 2.2);
+                rawSum += raw;
+                dimSum += dim;
+                n++;
+            }
+        }
+        // La décision porte sur la clarté BRUTE relue (2026-11-21, mesuré en
+        // jeu) : sur un gris très clair, elle valait 0,618, et lui retirer le
+        // voile puis la passer en lumière linéaire la ramenait à 0,19 — sous
+        // le seuil, la page restait blanche. La correction comptait deux fois
+        // l'assombrissement ; la valeur brute sépare bien les fonds (ciel ou
+        // gris clair vers 0,6, nuit ou grotte entre 0,1 et 0,3).
+        float tone = n > 0 ? rawSum / n : -1f;
+        // DÉBOGAGE (2026-11-21) : ce que voit la mesure, toutes les 3 s, pour
+        // régler la détection sur un vrai monde.
+        long now = System.nanoTime();
+        if (n > 0 && now - lastDebugNanos > 3_000_000_000L) {
+            lastDebugNanos = now;
+            LauncherLog.ui(1, String.format(java.util.Locale.ROOT,
+                "[UiBackdropTone] débogage : grille %dx%d (lue il y a %d ms), clarté brute haut %.3f / écran %.3f, voile moyen %.2f, "
+                    + "clarté linéaire sous le voile %.3f (décision sur la brute, seuils %.2f / %.2f) -> %s",
+                w, h, (now - updatedNanos) / 1_000_000L, rawSum / n, allSum / (w * h), dimSum / n, sum / n,
+                LIGHT_ON, LIGHT_OFF, pageIsLight ? "encre" : "blanc"));
+        }
+        return tone;
+    }
+    /**
+     * Seuils de bascule vers l'encre et de retour au blanc, sur la clarté
+     * brute relue (0 à 1) ; un écart entre les deux pour ne pas clignoter.
+     */
+    private static final float LIGHT_ON = 0.50f, LIGHT_OFF = 0.42f;
+    /** Part de la hauteur de l'écran, depuis le haut, qui décide la teinte de la page. */
+    private static final float TONE_SHARE = 0.6f;
 
     /** Un décor sombre posé par-dessus le monde à cette image. */
     public static void cover(Cover cover) {
@@ -132,6 +239,8 @@ public final class UiBackdropTone {
             float a = Math.max(0f, Math.min(1f, c.alphaAt(u, v)));
             lum *= 1f - a;
         }
+        Cover dim = veil;
+        if (dim != null) lum *= 1f - Math.max(0f, Math.min(1f, dim.alphaAt(u, v)));
         return lum;
     }
 
@@ -142,42 +251,42 @@ public final class UiBackdropTone {
     /** L'encre du texte sur fond clair : un noir légèrement violet, comme l'encre du site. */
     public static final UiColor INK = new UiColor(18, 16, 26, 255);
 
-    /** De 0 (fond sombre : la couleur d'origine) à 1 (fond clair : l'encre). Inconnu = 0. */
-    public static float lightness(float luminance) {
-        if (luminance < 0f) return 0f;
-        float t = Math.max(0f, Math.min(1f, (luminance - LIGHT_FROM) / (LIGHT_TO - LIGHT_FROM)));
-        return t * t * (3f - 2f * t);
-    }
-
-    /** Bornes du passage blanc → noir : un fond franchement clair seulement. */
-    private static final float LIGHT_FROM = 0.42f, LIGHT_TO = 0.58f;
+    /** Le blanc du texte sur fond sombre : un blanc franc, pas le gris clair de l'interface. */
+    public static final UiColor PAPER = new UiColor(248, 247, 252, 255);
 
     /**
-     * La couleur d'un texte posé sur ce fond. Sur fond sombre, celle
-     * d'origine. Sur fond clair : un gris ou un blanc devient l'encre (un
-     * texte secondaire un peu moins opaque que le principal, pour garder la
-     * hiérarchie) ; une couleur (le vert d'un compteur) est assombrie.
+     * La teinte de la page : 0 blanc, 1 encre (voir {@link #pageLight}). Le
+     * paramètre est la clarté sous l'appelant, gardée pour la lisibilité des
+     * appels : la décision est celle de la page, pas du point.
      */
-    public static UiColor adapt(UiColor color, float luminance) {
-        float t = lightness(luminance);
-        if (t <= 0f || color == null) return color;
-        float max = Math.max(color.r, Math.max(color.g, color.b));
-        float min = Math.min(color.r, Math.min(color.g, color.b));
-        UiColor onLight;
-        if (max - min < 0.15f) {
-            float l = (max + min) / 2f;
-            onLight = INK.withAlpha(color.a * (0.62f + 0.38f * l));
-        } else {
-            onLight = new UiColor(Math.round(color.r * 255 * 0.5f), Math.round(color.g * 255 * 0.5f),
-                Math.round(color.b * 255 * 0.5f), Math.round(color.a * 255));
-        }
-        return UiColor.lerp(color, onLight, t);
+    public static float lightness(float luminance) {
+        return pageLight;
     }
 
-    /** L'ombre d'un texte sur ce fond : sombre sur fond sombre, à peine un halo clair sur fond clair. */
+    /**
+     * La couleur d'un texte posé sur le décor : DEUX teintes seulement, le
+     * blanc ou l'encre, celle de la page — plus de gris ni de couleur
+     * (2026-11-21 : « si c'est noir toute la page est en noir »). Seule
+     * l'opacité d'origine reste (le fondu au bord d'une liste).
+     */
+    public static UiColor adapt(UiColor color, float luminance) {
+        if (color == null) return null;
+        return UiColor.lerp(PAPER, INK, pageLight).withAlpha(color.a);
+    }
+
+    /**
+     * Le fond d'un contrôle presque transparent posé sur le décor (segments
+     * de filtre, carte d'ami hors ligne, « Ajouter un favori ») : sur une page
+     * claire, c'est LUI qui s'assombrit, et son texte reste blanc
+     * (2026-11-21) — un mot noir sur un voile clair ne se distinguait plus
+     * du fond.
+     */
+    public static UiColor controlFill(UiColor onDark) {
+        return UiColor.lerp(onDark, INK.withAlpha(0.62f), pageLight);
+    }
+
+    /** L'ombre d'un texte sur ce fond : sombre sous le blanc, aucune sous l'encre. */
     public static UiColor adaptShadow(UiColor shadow, float luminance) {
-        float t = lightness(luminance);
-        if (t <= 0f) return shadow;
-        return UiColor.lerp(shadow, new UiColor(255, 255, 255, 40), t);
+        return UiColor.lerp(shadow, new UiColor(255, 255, 255, 0), pageLight);
     }
 }

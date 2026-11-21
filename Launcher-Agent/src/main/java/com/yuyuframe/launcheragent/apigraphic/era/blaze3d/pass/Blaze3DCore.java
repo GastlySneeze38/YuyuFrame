@@ -114,7 +114,12 @@ public final class Blaze3DCore {
         "out vec4 fragColor;\n" +
         "void main() {\n" +
         "    vec4 color = texture(Sampler0, texCoord0) * vertexColor * ColorModulator;\n" +
-        "    if (color.a < 0.1) {\n" +
+        // 0,1 dans rendertype_text.fsh : bon pour des lettres, mais ce
+        // pipeline sert aux icônes et aux maillages des écrans, et tout
+        // dégradé d'opacité y perdait son début — il commençait d'un coup à
+        // 10 %, une coupure nette (bande et losanges du décor, 2026-11-21 ;
+        // la 1.8.9 jette sous 0,004, d'où l'absence du défaut).
+        "    if (color.a < 0.004) {\n" +
         "        discard;\n" +
         "    }\n" +
         "    fragColor = color;\n" +
