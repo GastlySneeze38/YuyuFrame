@@ -254,6 +254,32 @@ public final class AccessorBindings189 {
             c.setScreen((net.minecraft.client.gui.screen.Screen) a[0]);
             return Boolean.TRUE;
         });
+        // Boutons d'un écran du jeu, pour les raccourcis (runtime/ui/shortcuts).
+        AccessorRegistry.bind(AccessPoint.SCREEN_WIDGETS, (r, a) -> {
+            java.util.List<Object> out = new java.util.ArrayList<>();
+            if (!(r instanceof com.yuyuframe.launcheragent.apimixin.v1_8_9.screen.ScreenButtonsAccessor189)) return out;
+            java.util.List<?> buttons = ((com.yuyuframe.launcheragent.apimixin.v1_8_9.screen.ScreenButtonsAccessor189) r).la$buttons();
+            if (buttons == null) return out;
+            for (Object button : buttons) {
+                if (button instanceof com.yuyuframe.launcheragent.apimixin.v1_8_9.screen.WidgetAccessor189) out.add(button);
+            }
+            return out;
+        });
+        AccessorRegistry.bind(AccessPoint.WIDGET_BOUNDS, (r, a) -> {
+            if (!(r instanceof com.yuyuframe.launcheragent.apimixin.v1_8_9.screen.WidgetAccessor189)) return null;
+            com.yuyuframe.launcheragent.apimixin.v1_8_9.screen.WidgetAccessor189 w = (com.yuyuframe.launcheragent.apimixin.v1_8_9.screen.WidgetAccessor189) r;
+            return new int[]{ w.la$x(), w.la$y(), w.la$width(), w.la$height(), w.la$visible() ? 1 : 0, w.la$active() ? 1 : 0 };
+        });
+        AccessorRegistry.bind(AccessPoint.WIDGET_SET_X, (r, a) -> {
+            if (!(r instanceof com.yuyuframe.launcheragent.apimixin.v1_8_9.screen.WidgetAccessor189) || a.length < 1) return null;
+            ((com.yuyuframe.launcheragent.apimixin.v1_8_9.screen.WidgetAccessor189) r).la$setX(((Number) a[0]).intValue());
+            return Boolean.TRUE;
+        });
+        AccessorRegistry.bind(AccessPoint.WIDGET_SET_ACTIVE, (r, a) -> {
+            if (!(r instanceof com.yuyuframe.launcheragent.apimixin.v1_8_9.screen.WidgetAccessor189) || a.length < 1) return null;
+            ((com.yuyuframe.launcheragent.apimixin.v1_8_9.screen.WidgetAccessor189) r).la$setActive(Boolean.TRUE.equals(a[0]));
+            return Boolean.TRUE;
+        });
         AccessorRegistry.bind(AccessPoint.CLIENT_GUI, (r, a) -> { MinecraftClient c = mc(r); return c == null ? null : c.inGameHud; });
         AccessorRegistry.bind(AccessPoint.CLIENT_MOUSE_HANDLER, (r, a) -> { MinecraftClient c = mc(r); return c == null ? null : c.mouse; });
         AccessorRegistry.bind(AccessPoint.CLIENT_RESOURCE_MANAGER, (r, a) -> { MinecraftClient c = mc(r); return c == null ? null : c.getResourceManager(); });

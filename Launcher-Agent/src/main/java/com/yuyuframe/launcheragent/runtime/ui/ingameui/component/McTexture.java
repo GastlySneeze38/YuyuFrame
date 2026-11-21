@@ -86,6 +86,63 @@ public final class McTexture {
             "textures/gui/sprites/hud/experience_bar_progress.png", "textures/gui/icons.png");
     }
 
+    /**
+     * Le bouton du jeu à une largeur donnée, en pixels de GUI (20 de haut),
+     * agrandi {@code k} fois au plus proche voisin, ou {@code null}.
+     *
+     * <p>Comme le jeu : la moitié gauche est prise au début de la texture
+     * (200 x 20), la moitié droite à sa fin — les bords restent ceux du
+     * dessin quelle que soit la largeur. Le sprite {@code widget/button}
+     * des versions récentes, ou la planche {@code widgets.png} de la 1.8.9.
+     */
+    public static BufferedImage button(int guiWidth, boolean hover, int k) {
+        int w = Math.max(4, Math.min(200, guiWidth));
+        k = Math.max(1, Math.min(8, k));
+        String key = "button:" + w + ":" + hover + ":" + k;
+        BufferedImage cached = cached(key);
+        if (cached != null || failedRecently(key)) return cached;
+        BufferedImage src = buttonSource(hover);
+        if (src == null) {
+            markMissing(key);
+            return null;
+        }
+        int left = w / 2, right = w - left;
+        // Un pack en haute définition multiplie la texture : on lit un pixel du jeu sur f.
+        int f = Math.max(1, src.getWidth() / 200);
+        BufferedImage out = new BufferedImage(w * k, 20 * k, BufferedImage.TYPE_INT_ARGB);
+        for (int y = 0; y < 20; y++) {
+            for (int x = 0; x < w; x++) {
+                int sx = (x < left ? x : 200 - right + (x - left)) * f;
+                int argb = src.getRGB(Math.min(src.getWidth() - 1, sx), Math.min(src.getHeight() - 1, y * f));
+                for (int j = 0; j < k; j++) {
+                    for (int i = 0; i < k; i++) out.setRGB(x * k + i, y * k + j, argb);
+                }
+            }
+        }
+        return store(key, out);
+    }
+
+    /** La texture entière du bouton (200 x 20 en pixels du jeu), sans agrandissement. */
+    private static BufferedImage buttonSource(boolean hover) {
+        String key = "button-src:" + hover;
+        BufferedImage cached = cached(key);
+        if (cached != null || failedRecently(key)) return cached;
+        BufferedImage img = raw(hover ? "textures/gui/sprites/widget/button_highlighted.png" : "textures/gui/sprites/widget/button.png");
+        if (img == null) {
+            BufferedImage sheet = raw("textures/gui/widgets.png");
+            if (sheet != null && sheet.getWidth() >= 200) {
+                // 1.8.9 : planche de 256, le bouton à (0, 66), survolé à (0, 86). Un pack en haute définition la multiplie.
+                int f = sheet.getWidth() / 256;
+                img = sheet.getSubimage(0, (hover ? 86 : 66) * f, 200 * f, 20 * f);
+            }
+        }
+        if (img == null) {
+            markMissing(key);
+            return null;
+        }
+        return store(key, img);
+    }
+
     /** Dessine une texture sans la déformer ; rien si elle manque. */
     public static void draw(UiRenderer r, BufferedImage img, String key, float x, float y, float w, float h,
                             float alpha, int vw, int vh) {

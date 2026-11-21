@@ -103,6 +103,32 @@ public final class AccessorBindings262 {
             g.la$setScreen((net.minecraft.client.gui.screens.Screen) a[0]);
             return Boolean.TRUE;
         });
+        // Boutons d'un écran du jeu, pour les raccourcis (runtime/ui/shortcuts).
+        AccessorRegistry.bind(AccessPoint.SCREEN_WIDGETS, (r, a) -> {
+            java.util.List<Object> out = new java.util.ArrayList<>();
+            if (!(r instanceof com.yuyuframe.launcheragent.apimixin.v26_2.screen.ScreenChildrenAccessor262)) return out;
+            java.util.List<?> children = ((com.yuyuframe.launcheragent.apimixin.v26_2.screen.ScreenChildrenAccessor262) r).la$children();
+            if (children == null) return out;
+            for (Object child : children) {
+                if (child instanceof com.yuyuframe.launcheragent.apimixin.v26_2.screen.WidgetAccessor262) out.add(child);
+            }
+            return out;
+        });
+        AccessorRegistry.bind(AccessPoint.WIDGET_BOUNDS, (r, a) -> {
+            if (!(r instanceof com.yuyuframe.launcheragent.apimixin.v26_2.screen.WidgetAccessor262)) return null;
+            com.yuyuframe.launcheragent.apimixin.v26_2.screen.WidgetAccessor262 w = (com.yuyuframe.launcheragent.apimixin.v26_2.screen.WidgetAccessor262) r;
+            return new int[]{ w.la$x(), w.la$y(), w.la$width(), w.la$height(), w.la$visible() ? 1 : 0, w.la$active() ? 1 : 0 };
+        });
+        AccessorRegistry.bind(AccessPoint.WIDGET_SET_X, (r, a) -> {
+            if (!(r instanceof com.yuyuframe.launcheragent.apimixin.v26_2.screen.WidgetAccessor262) || a.length < 1) return null;
+            ((com.yuyuframe.launcheragent.apimixin.v26_2.screen.WidgetAccessor262) r).la$setX(((Number) a[0]).intValue());
+            return Boolean.TRUE;
+        });
+        AccessorRegistry.bind(AccessPoint.WIDGET_SET_ACTIVE, (r, a) -> {
+            if (!(r instanceof com.yuyuframe.launcheragent.apimixin.v26_2.screen.WidgetAccessor262) || a.length < 1) return null;
+            ((com.yuyuframe.launcheragent.apimixin.v26_2.screen.WidgetAccessor262) r).la$setActive(Boolean.TRUE.equals(a[0]));
+            return Boolean.TRUE;
+        });
         // « HUD vanilla » (voir AccessPoint) : en 26.2 c'est Hud, champ hud du
         // nouveau Gui — Minecraft.gui n'est plus que le gestionnaire d'écrans.
         AccessorRegistry.bind(AccessPoint.CLIENT_GUI, (r, a) -> hudOf(r));

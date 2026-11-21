@@ -258,6 +258,22 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
             "net/minecraft/client/MinecraftClient", "gameProfileFuture"),
         RefmapEntry.field("com/yuyuframe/launcheragent/apimixin/v1_21_11/core/HungerManagerAccessor1211",
             "net/minecraft/entity/player/HungerManager", "exhaustion"),
+        // Boutons des écrans du jeu, pour les raccourcis (runtime/ui/shortcuts).
+        // javap + yarn-1.21.11-mergedv2 : gsb.d, gjc.a/b/g/h/k/l.
+        RefmapEntry.field("com/yuyuframe/launcheragent/apimixin/v1_21_11/screen/ScreenChildrenAccessor1211",
+            "net/minecraft/client/gui/screen/Screen", "children"),
+        RefmapEntry.field("com/yuyuframe/launcheragent/apimixin/v1_21_11/screen/WidgetAccessor1211",
+            "net/minecraft/client/gui/widget/ClickableWidget", "x"),
+        RefmapEntry.field("com/yuyuframe/launcheragent/apimixin/v1_21_11/screen/WidgetAccessor1211",
+            "net/minecraft/client/gui/widget/ClickableWidget", "y"),
+        RefmapEntry.field("com/yuyuframe/launcheragent/apimixin/v1_21_11/screen/WidgetAccessor1211",
+            "net/minecraft/client/gui/widget/ClickableWidget", "width"),
+        RefmapEntry.field("com/yuyuframe/launcheragent/apimixin/v1_21_11/screen/WidgetAccessor1211",
+            "net/minecraft/client/gui/widget/ClickableWidget", "height"),
+        RefmapEntry.field("com/yuyuframe/launcheragent/apimixin/v1_21_11/screen/WidgetAccessor1211",
+            "net/minecraft/client/gui/widget/ClickableWidget", "visible"),
+        RefmapEntry.field("com/yuyuframe/launcheragent/apimixin/v1_21_11/screen/WidgetAccessor1211",
+            "net/minecraft/client/gui/widget/ClickableWidget", "active"),
         // Troisième champ privé : l'historique du chat. addMessage() et
         // refresh() sont PUBLIQUES sur cette version (javap sur le jar réel),
         // donc pas d'Invoker à déclarer — contrairement à la 26.1.2.
@@ -653,6 +669,15 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
             "net/minecraft/client/MinecraftClient", "session"),
         RefmapEntry.field(M189 + "chat/ChatHudAccessor189",
             "net/minecraft/client/gui/hud/ChatHud", "messages"),
+        // Boutons des écrans du jeu, pour les raccourcis (runtime/ui/shortcuts).
+        // javap + yarn-1.8.9-mergedv2 : axu.n, avs.f/g/h/i/l/m.
+        RefmapEntry.field(M189 + "screen/ScreenButtonsAccessor189", "net/minecraft/client/gui/screen/Screen", "buttons"),
+        RefmapEntry.field(M189 + "screen/WidgetAccessor189", "net/minecraft/client/gui/widget/ButtonWidget", "x"),
+        RefmapEntry.field(M189 + "screen/WidgetAccessor189", "net/minecraft/client/gui/widget/ButtonWidget", "y"),
+        RefmapEntry.field(M189 + "screen/WidgetAccessor189", "net/minecraft/client/gui/widget/ButtonWidget", "width"),
+        RefmapEntry.field(M189 + "screen/WidgetAccessor189", "net/minecraft/client/gui/widget/ButtonWidget", "height"),
+        RefmapEntry.field(M189 + "screen/WidgetAccessor189", "net/minecraft/client/gui/widget/ButtonWidget", "visible"),
+        RefmapEntry.field(M189 + "screen/WidgetAccessor189", "net/minecraft/client/gui/widget/ButtonWidget", "active"),
         RefmapEntry.field(M189 + "item/FoodItemAccessor189",
             "net/minecraft/item/FoodItem", "alwaysEdible"),
         // Modèles du jeu pour la brique 3D (VANILLA_MODEL, apimixin/v1_8_9/model).

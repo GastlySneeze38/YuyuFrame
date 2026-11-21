@@ -235,6 +235,24 @@ public final class HudConfigStore {
     }
 
     /**
+     * Une valeur libre rangée dans le même fichier que les modules, pour ce
+     * qui n'est pas un module (les raccourcis de l'écran-titre et du menu
+     * Échap : {@code shortcuts.*}). {@code fallback} si elle n'existe pas.
+     */
+    public static synchronized String loadText(String key, String fallback) {
+        ensureLoaded();
+        return DATA.getProperty(key, fallback);
+    }
+
+    /** Voir {@link #loadText} — écrite à la prochaine sauvegarde différée ({@link #save()}). */
+    public static synchronized void saveText(String key, String value) {
+        ensureLoaded();
+        if (value == null) DATA.remove(key);
+        else DATA.setProperty(key, value);
+        save();
+    }
+
+    /**
      * Demande une sauvegarde — <b>différée</b>, pas écrite tout de suite.
      *
      * <p>AUDIT PERF (2026-08-31) : cette méthode est appelée depuis CHAQUE

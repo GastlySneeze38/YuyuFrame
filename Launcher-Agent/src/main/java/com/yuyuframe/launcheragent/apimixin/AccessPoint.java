@@ -85,6 +85,24 @@ public enum AccessPoint {
      * C'est ce qui permet à ce point de n'accepter qu'un {@code Object}.
      */
     CLIENT_SET_SCREEN,
+    /**
+     * Les boutons de l'écran passé en receveur, dans une liste neuve : ceux du
+     * jeu et ceux des autres mods (champ {@code children} de {@code Screen},
+     * {@code buttons} en 1.8.9), filtrés sur ce qui est un bouton. Liste vide
+     * si le receveur n'est pas un écran du jeu. Les poignées se donnent à
+     * {@link #WIDGET_BOUNDS}, {@link #WIDGET_SET_X} et {@link #WIDGET_SET_ACTIVE}.
+     */
+    SCREEN_WIDGETS,
+    /**
+     * Rectangle et état d'un bouton : {@code int[]{x, y, largeur, hauteur,
+     * visible, actif}}, en pixels de GUI, y vers le BAS comme le jeu ; visible
+     * et actif valent 0 ou 1.
+     */
+    WIDGET_BOUNDS,
+    /** Déplace un bouton horizontalement. Argument : le nouveau {@code x}, en pixels de GUI. */
+    WIDGET_SET_X,
+    /** Rend un bouton actif ou inactif (un bouton inactif ignore les clics et se dessine grisé). Argument : {@code Boolean}. */
+    WIDGET_SET_ACTIVE,
     /** HUD vanilla — champ {@code gui}. */
     CLIENT_GUI,
     /** Fenêtre du jeu — champ {@code window}. */

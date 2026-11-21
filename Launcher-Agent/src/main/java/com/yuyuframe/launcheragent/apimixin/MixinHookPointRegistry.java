@@ -125,6 +125,10 @@ public final class MixinHookPointRegistry {
         // Jamais gatés — ce sont eux qui font exister notre UI et nos accès
         // typés au jeu ; les gater reviendrait à gater l'agent lui-même.
         always("26.1.2", "v26_1_2.core.TitleScreenMixin261");
+        // Raccourcis de l'écran-titre et du menu Échap (runtime/ui/shortcuts).
+        always("26.1.2", "v26_1_2.screen.PauseScreenTagMixin261");
+        always("26.1.2", "v26_1_2.screen.ScreenChildrenAccessor261");
+        always("26.1.2", "v26_1_2.screen.WidgetAccessor261");
         always("26.1.2", "v26_1_2.core.MinecraftAccessor261");
         always("26.1.2", "v26_1_2.core.GlobalUiRenderMixin261");
         always("26.1.2", "v26_1_2.core.GlobalUiPresentMixin261");
@@ -285,6 +289,10 @@ public final class MixinHookPointRegistry {
 
         // ── Infrastructure : hub de rendu, cycle d'écran, accessors ────────
         always("26.1", "v26_1_0.core.TitleScreenMixin2610");
+        // Raccourcis de l'écran-titre et du menu Échap (runtime/ui/shortcuts).
+        always("26.1", "v26_1_0.screen.PauseScreenTagMixin2610");
+        always("26.1", "v26_1_0.screen.ScreenChildrenAccessor2610");
+        always("26.1", "v26_1_0.screen.WidgetAccessor2610");
         always("26.1", "v26_1_0.core.MinecraftAccessor2610");
         always("26.1", "v26_1_0.core.GlobalUiRenderMixin2610");
         always("26.1", "v26_1_0.core.GlobalUiPresentMixin2610");
@@ -398,6 +406,10 @@ public final class MixinHookPointRegistry {
 
         // ── Infrastructure : hub de rendu, cycle d'écran, accessors ────────
         always("26.1.1", "v26_1_1.core.TitleScreenMixin2611");
+        // Raccourcis de l'écran-titre et du menu Échap (runtime/ui/shortcuts).
+        always("26.1.1", "v26_1_1.screen.PauseScreenTagMixin2611");
+        always("26.1.1", "v26_1_1.screen.ScreenChildrenAccessor2611");
+        always("26.1.1", "v26_1_1.screen.WidgetAccessor2611");
         always("26.1.1", "v26_1_1.core.MinecraftAccessor2611");
         always("26.1.1", "v26_1_1.core.GlobalUiRenderMixin2611");
         always("26.1.1", "v26_1_1.core.GlobalUiPresentMixin2611");
@@ -514,6 +526,10 @@ public final class MixinHookPointRegistry {
 
         // ── Infrastructure : hub de rendu, cycle d'écran, accessors ────────
         always("26.2", "v26_2.core.TitleScreenMixin262");
+        // Raccourcis de l'écran-titre et du menu Échap (runtime/ui/shortcuts).
+        always("26.2", "v26_2.screen.PauseScreenTagMixin262");
+        always("26.2", "v26_2.screen.ScreenChildrenAccessor262");
+        always("26.2", "v26_2.screen.WidgetAccessor262");
         always("26.2", "v26_2.core.MinecraftAccessor262");
         // 26.2 : écrans portés par le nouveau Gui, HUD renommé Hud.
         always("26.2", "v26_2.core.GuiAccessor262");
@@ -634,6 +650,10 @@ public final class MixinHookPointRegistry {
 
         // ── Infrastructure : hub de rendu, cycle d'écran, accessors ────────
         always("26.3", "v26_3.core.TitleScreenMixin263");
+        // Raccourcis de l'écran-titre et du menu Échap (runtime/ui/shortcuts).
+        always("26.3", "v26_3.screen.PauseScreenTagMixin263");
+        always("26.3", "v26_3.screen.ScreenChildrenAccessor263");
+        always("26.3", "v26_3.screen.WidgetAccessor263");
         always("26.3", "v26_3.core.MinecraftAccessor263");
         // 26.3 (hérité de 26.2) : écrans portés par le nouveau Gui, HUD renommé Hud.
         always("26.3", "v26_3.core.GuiAccessor263");
@@ -791,6 +811,10 @@ public final class MixinHookPointRegistry {
 
         // ── Infrastructure : hub de rendu, écran-titre ─────────────────────
         always("1.21.11", "v1_21_11.core.TitleScreenMixin1211");
+        // Raccourcis de l'écran-titre et du menu Échap (runtime/ui/shortcuts).
+        always("1.21.11", "v1_21_11.screen.PauseScreenTagMixin1211");
+        always("1.21.11", "v1_21_11.screen.ScreenChildrenAccessor1211");
+        always("1.21.11", "v1_21_11.screen.WidgetAccessor1211");
         always("1.21.11", "v1_21_11.core.SoundEventAccessor1211");
         always("1.21.11", "v1_21_11.core.GlobalUiRenderMixin1211");
         always("1.21.11", "v1_21_11.core.GlobalUiPresentMixin1211");
@@ -920,6 +944,10 @@ public final class MixinHookPointRegistry {
 
         // ── Infrastructure ────────────────────────────────────────────────
         always("1.8.9", "v1_8_9.core.TitleScreenMixin189");
+        // Raccourcis de l'écran-titre et du menu Échap (runtime/ui/shortcuts).
+        always("1.8.9", "v1_8_9.screen.PauseScreenTagMixin189");
+        always("1.8.9", "v1_8_9.screen.ScreenButtonsAccessor189");
+        always("1.8.9", "v1_8_9.screen.WidgetAccessor189");
         always("1.8.9", "v1_8_9.core.GlobalUiRenderMixin189");
         // Accessors des trois seuls champs privés que lit AccessorBindings189.
         always("1.8.9", "v1_8_9.core.HungerManagerAccessor189");

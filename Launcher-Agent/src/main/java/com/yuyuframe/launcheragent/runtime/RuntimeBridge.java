@@ -135,7 +135,7 @@ public final class RuntimeBridge implements AgentBridge {
     public void signalReady(String eventProperty) {
         ReadyEventSignal.signalOnce(eventProperty);
         // Appelé à chaque initialisation de l'écran-titre : c'est le moment où l'on apprend à le reconnaître.
-        com.yuyuframe.launcheragent.runtime.ui.ingameui.TitleAccountBar.titleScreenSeen();
+        com.yuyuframe.launcheragent.runtime.ui.shortcuts.ShortcutOverlay.titleScreenSeen();
     }
 
     @Override
@@ -144,7 +144,8 @@ public final class RuntimeBridge implements AgentBridge {
             || !(inputPoller instanceof com.yuyuframe.launcheragent.apigraphic.platform.UiInputPoller)) {
             return;
         }
-        com.yuyuframe.launcheragent.runtime.ui.ingameui.TitleAccountBar.render((UiRenderer) uiRenderer,
+        // Raccourcis de l'écran-titre et du menu Échap (compte, menu, missions, rang, modules, amis).
+        com.yuyuframe.launcheragent.runtime.ui.shortcuts.ShortcutOverlay.render((UiRenderer) uiRenderer,
             (com.yuyuframe.launcheragent.apigraphic.platform.UiInputPoller) inputPoller, currentScreen);
     }
 }

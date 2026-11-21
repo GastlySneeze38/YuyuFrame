@@ -111,6 +111,19 @@ public class UiMainMenuScreen extends UiScreenBase {
     private int lastOpenMissions = -1;
     private boolean rebuildRequested;
 
+    /**
+     * Le menu ouvert sur un onglet : {@code "missions"}, {@code "competitive"},
+     * {@code "friends"}, {@code "modules"} ou {@code "home"} — pour les
+     * raccourcis de l'écran-titre et du menu Échap. Un nom inconnu garde
+     * l'onglet de la dernière ouverture.
+     */
+    public static UiMainMenuScreen openOn(Object lastScreen, String tabName) {
+        for (Tab t : Tab.values()) {
+            if (t.name().equalsIgnoreCase(tabName)) tab = t;
+        }
+        return new UiMainMenuScreen(lastScreen);
+    }
+
     public UiMainMenuScreen(Object lastScreen) {
         super("YuyuFrame");
         this.lastScreen = lastScreen;

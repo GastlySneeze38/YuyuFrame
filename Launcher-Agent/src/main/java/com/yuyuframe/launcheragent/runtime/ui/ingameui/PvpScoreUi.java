@@ -334,7 +334,7 @@ public final class PvpScoreUi {
      */
     static final String[] MODES = { "Masse", "Épée" };
     /** Le code de chaque mode dans le résumé du noyau ({@code NativeCombat.REPORT_MODE}), dans l'ordre de {@link #MODES}. */
-    static final int[] MODE_CODES = { 1, 2 };
+    public static final int[] MODE_CODES = { 1, 2 };
 
     /** Pourquoi un duel n'a pas de note, en deux lignes ({@code NativeCombat.REPORT_REASON}). */
     public static String[] reasonLines(double[] report) {
