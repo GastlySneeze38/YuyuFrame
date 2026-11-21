@@ -47,13 +47,15 @@ public final class McTexture {
 
     /** Un objet du jeu par son nom moderne ({@code "mace"}), puis ses noms anciens. */
     public static BufferedImage item(String name, String... legacyNames) {
-        String[] paths = new String[2 + 2 * legacyNames.length];
+        String[] paths = new String[2 + 3 * legacyNames.length];
         int i = 0;
         paths[i++] = "textures/item/" + name + ".png";
         paths[i++] = "textures/block/" + name + ".png";
         for (String legacy : legacyNames) {
             paths[i++] = "textures/item/" + legacy + ".png";
             paths[i++] = "textures/items/" + legacy + ".png";
+            // 1.8.9 : ce qui se pose (torche de redstone…) a sa texture avec les blocs.
+            paths[i++] = "textures/blocks/" + legacy + ".png";
         }
         return image("item:" + name, null, paths);
     }

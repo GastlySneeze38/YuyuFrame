@@ -219,7 +219,6 @@ public final class ShortcutOverlay {
         updateRank();
 
         List<ScreenButtons.Button> buttons = ScreenButtons.read(screen);
-        ScreenButtons.Row row = ScreenButtons.findRow(buttons, sw, sh);
         keepDataFresh(kind);
 
         // ── Mise en place ──
@@ -233,6 +232,8 @@ public final class ShortcutOverlay {
             Item item = new Item(s, inRow, inRow ? null : label(s));
             (inRow ? rowItems : freeItems).add(item);
         }
+        ScreenButtons.Row row = ScreenButtons.findRow(buttons, sw, sh, rowItems.size());
+        lastRow = row;
         float[] rowSpan = layoutRow(row, rowItems);
         List<float[]> obstacles = new ArrayList<>();
         for (ScreenButtons.Button b : buttons) obstacles.add(new float[]{ b.x, b.y, b.x + b.w, b.y + b.h });
@@ -338,6 +339,9 @@ public final class ShortcutOverlay {
         for (int i = 0; i < n; i++) place(items.get(i), row.right + row.gap - shift + i * step, row.y, row.size);
         return new float[]{ left, row.y, row.right - shift + n * step, row.y + row.size };
     }
+
+    /** La rangée de l'image en cours, pour savoir où un raccourci glissé est lâché. */
+    private static ScreenButtons.Row lastRow;
 
     private static void place(Item it, float x, float y, float size) {
         it.x = x;
@@ -874,7 +878,7 @@ public final class ShortcutOverlay {
         }
         // Fin d'un glisser : le raccourci se range.
         if (dragging != null && !in.leftDown) {
-            drop(kind, items, rowSpan, ScreenButtons.findRow(buttons, sw, sh));
+            drop(kind, items, rowSpan, lastRow);
             return;
         }
         if (dragging != null) {

@@ -114,36 +114,45 @@ public final class ScreenButtons {
     }
 
     /**
-     * La rangée d'icônes : au moins deux boutons carrés (16 à 24 pixels) sur
-     * la même ligne. Leur {@code x} est lu avant nos décalages — un bouton
-     * que le jeu a replacé (fenêtre redimensionnée) reprend sa nouvelle place
-     * comme origine. Sans rangée, la nôtre se pose sous les boutons du milieu.
+     * La rangée d'icônes : au moins deux boutons carrés (16 à 24 pixels) de
+     * même taille, sur la même ligne ET côte à côte (écart d'au plus la
+     * moitié d'une icône). En 26.1.2, les icônes de langue et d'accessibilité
+     * de l'écran-titre sont sur une même ligne mais aux deux bouts de l'écran
+     * (retour du 2026-11-21) : ce n'est pas une rangée.
+     *
+     * <p>Leur {@code x} est lu avant nos décalages — un bouton que le jeu a
+     * replacé (fenêtre redimensionnée) reprend sa nouvelle place comme
+     * origine. Sans rangée, la nôtre ({@code ownCount} icônes) se pose sous
+     * les boutons qu'elle croiserait au milieu de l'écran, sinon au-dessus.
      */
-    static Row findRow(List<Button> buttons, float screenW, float screenH) {
+    static Row findRow(List<Button> buttons, float screenW, float screenH, int ownCount) {
         Map<Integer, List<Button>> byY = new java.util.TreeMap<>();
         for (Button b : buttons) {
             if (b.w == b.h && b.w >= 16 && b.w <= 24) byY.computeIfAbsent(b.y, k -> new ArrayList<>()).add(b);
         }
         List<Button> best = null;
         for (List<Button> line : byY.values()) {
-            if (line.size() >= 2 && (best == null || line.size() > best.size())) best = line;
+            line.sort((a, b) -> Integer.compare(a.x, b.x));
+            List<Button> cluster = new ArrayList<>();
+            for (Button b : line) {
+                Button prev = cluster.isEmpty() ? null : cluster.get(cluster.size() - 1);
+                if (prev != null && (b.w != prev.w || b.x - (prev.x + prev.w) > Math.max(8, prev.w / 2))) {
+                    if (cluster.size() >= 2 && (best == null || cluster.size() > best.size())) best = cluster;
+                    cluster = new ArrayList<>();
+                }
+                cluster.add(b);
+            }
+            if (cluster.size() >= 2 && (best == null || cluster.size() > best.size())) best = cluster;
         }
         Row row = new Row();
         if (best == null) {
             row.own = true;
             row.size = 20;
             row.gap = 4;
-            // Sous le plus bas des boutons qui touchent le milieu de l'écran, sinon au tiers bas.
-            int bottom = -1;
-            for (Button b : buttons) {
-                if (b.x < screenW / 2f && b.x + b.w > screenW / 2f) bottom = Math.max(bottom, b.y + b.h);
-            }
-            row.y = bottom < 0 ? Math.round(screenH * 0.7f) : bottom + 4;
-            if (row.y + row.size > screenH - 4) row.y = Math.max(4, Math.round(screenH - row.size - 4));
+            row.y = ownRowY(buttons, screenW, screenH, ownCount, row.size, row.gap);
             row.left = row.right = Math.round(screenW / 2f);
             return row;
         }
-        best.sort((a, b) -> Integer.compare(a.x, b.x));
         row.y = best.get(0).y;
         row.size = best.get(0).w;
         int gapSum = 0;
@@ -159,6 +168,28 @@ public final class ScreenButtons {
         row.left = row.originX.get(0);
         row.right = row.originX.get(row.originX.size() - 1) + row.size;
         return row;
+    }
+
+    /**
+     * Le haut de notre rangée quand l'écran n'en a pas : juste sous le plus
+     * bas des boutons qu'elle croiserait (même bande horizontale, centrée),
+     * pour ne mordre sur aucun — en 1.8.9, l'espace entre Realms et
+     * « Options » est trop court pour elle. Sans place en dessous, juste
+     * au-dessus du plus haut de ces boutons.
+     */
+    private static int ownRowY(List<Button> buttons, float screenW, float screenH, int count, int size, int gap) {
+        float total = Math.max(1, count) * size + Math.max(0, count - 1) * gap;
+        float left = (screenW - total) / 2f - 2, right = (screenW + total) / 2f + 2;
+        int bottom = -1, top = Integer.MAX_VALUE;
+        for (Button b : buttons) {
+            if (b.x + b.w <= left || b.x >= right) continue;
+            bottom = Math.max(bottom, b.y + b.h);
+            top = Math.min(top, b.y);
+        }
+        if (bottom < 0) return Math.round(screenH * 0.7f);
+        if (bottom + 4 + size <= screenH - 2) return bottom + 4;
+        if (top - 4 - size >= 2) return top - 4 - size;
+        return Math.max(2, Math.round(screenH - size - 2));
     }
 
     /** Décale les icônes de la rangée de {@code shift} pixels vers la gauche (0 = place d'origine). */
