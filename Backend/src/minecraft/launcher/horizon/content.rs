@@ -136,7 +136,12 @@ impl Index {
 /// Les sortes qu'on propose. Un pack de données va dans un monde de
 /// l'instance ; un modpack `.hpack` installe ses mods et ses réglages dans
 /// l'instance ouverte.
+#[cfg(not(target_os = "android"))]
 const OFFERED: [&str; 7] = ["mod", "native-mod", "shader", "shaderpack", "resourcepack", "datapack", "modpack"];
+/// Sur téléphone, pas de mods natifs : c'est du code compilé téléchargé, que
+/// le Play Store interdit (le moteur de l'APK ne les charge pas non plus).
+#[cfg(target_os = "android")]
+const OFFERED: [&str; 6] = ["mod", "shader", "shaderpack", "resourcepack", "datapack", "modpack"];
 
 static CACHE: Mutex<Option<(std::time::Instant, Index)>> = Mutex::new(None);
 const CACHE_SECS: u64 = 10 * 60;
@@ -867,6 +872,9 @@ async fn install_modpack(app: &tauri::AppHandle, index: &Index, dir: &Path, proj
             .find(|p| p.id == m.id && (p.kind == "mod" || p.kind == "native-mod"))
             .and_then(|p| Some((p, p.versions.iter().find(|v| v.version == m.version && v.file.sha256.eq_ignore_ascii_case(&m.sha256))?)));
         let (p, v) = found.ok_or_else(|| anyhow!("{} demande {} {}, absent du registre", pack.name, m.id, m.version))?;
+        if cfg!(target_os = "android") && p.kind == "native-mod" {
+            return Err(anyhow!("{} demande le mod natif {}, que le téléphone ne fait pas tourner", pack.name, p.name));
+        }
         wanted.push((m, p, v));
     }
     let mut fetched = Vec::new();

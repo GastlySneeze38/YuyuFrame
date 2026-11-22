@@ -23,6 +23,7 @@
 
 use anyhow::{anyhow, Result};
 use horizon_engine_api::launch::{Launch, Player, Session};
+use horizon_engine_api::skin::Model;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -140,7 +141,11 @@ pub async fn launch(app: tauri::AppHandle, run: HorizonLaunch<'_>, cancel: watch
     } else {
         None
     };
-    let launch = launch_line(run.game_dir, &home, run.session, session_file.as_deref(), run.connect_server);
+    wear_skin(&app, run.game_dir, run.session).await;
+    let mut launch = launch_line(run.game_dir, &home, run.session, session_file.as_deref(), run.connect_server);
+    // La ligne « Launcher » du menu pause : la partie se sauvegarde, l'écran du
+    // jeu se ferme, et le launcher, resté dessous, revient.
+    launch.launcher_button();
     let written = {
         let files = files.clone();
         tokio::task::spawn_blocking(move || launch.write_args_file(&files)).await?
@@ -237,6 +242,32 @@ fn launch_line(
         },
         server: server.map(str::to_owned),
         env: vec![("YUYUFRAME".into(), "1".into())],
+    }
+}
+
+/// Le skin que l'écran Skins fait porter au compte devient celui du joueur en
+/// solo (`horizon-engine-api`, `skin::wear`, profil `""` : le jeu n'a pas de
+/// profil Starling quand YuyuFrame le lance). Sans skin choisi ici, le profil
+/// garde le sien. Un échec n'empêche pas de jouer.
+async fn wear_skin(app: &tauri::AppHandle, game_dir: &Path, session: &MinecraftSession) {
+    let state = app.state::<crate::state::SharedState>();
+    let worn = crate::account::skins::host::worn_skin(&state, &session.uuid).await;
+    let game = game_dir.to_path_buf();
+    let result = tokio::task::spawn_blocking(move || -> Result<(), String> {
+        match worn {
+            Some((path, slim)) => {
+                let png = std::fs::read(&path).map_err(|e| e.to_string())?;
+                let model = if slim { Model::Slim } else { Model::Classic };
+                horizon_engine_api::skin::wear(&game, "", Some(&png), model)
+            }
+            None => horizon_engine_api::skin::wear(&game, "", None, Model::Classic),
+        }
+    })
+    .await;
+    match result {
+        Ok(Ok(())) => {}
+        Ok(Err(e)) => tracing::warn!("[Horizon] skin non posé : {e}"),
+        Err(e) => tracing::warn!("[Horizon] skin non posé : {e}"),
     }
 }
 

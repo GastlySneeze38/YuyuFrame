@@ -16,6 +16,10 @@ export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in
  * maquille pas : « Android » dans la WebView du téléphone, « Windows NT »
  * dans WebView2. L'ordre compte — Android annonce aussi « Linux ».
  */
+/** L'appli Android elle-même (pas l'aperçu téléphone dans un navigateur) : seul
+ *  endroit où le moteur Horizon de l'APK et son API existent. */
+export const isAndroidApp = inTauri && typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent)
+
 export function osName(): string {
   const ua = typeof navigator === 'undefined' ? '' : navigator.userAgent
   if (/Android/i.test(ua)) return 'Android'

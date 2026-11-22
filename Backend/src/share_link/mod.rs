@@ -319,7 +319,7 @@ fn short_id(data: &[u8]) -> String {
     format!("{:x}", Sha256::digest(data))[..8].to_string()
 }
 
-fn percent_decode(text: &str) -> Option<String> {
+pub(crate) fn percent_decode(text: &str) -> Option<String> {
     if !text.contains('%') {
         return Some(text.to_string());
     }

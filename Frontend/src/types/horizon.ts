@@ -115,3 +115,45 @@ export interface HorizonInstalledPack {
   /** `id version` de chaque mod du pack. */
   mods: string[]
 }
+
+/** Les réglages du jeu d'une instance Horizon sur téléphone (`horizon-engine-api`,
+ *  `settings`). `null` = non réglé : le jeu prend son défaut. À l'écriture, seuls
+ *  les champs donnés changent. */
+export interface HorizonEngineSettings {
+  /** 25 à 200 (%). */
+  resolution_scale: number | null
+  /** 10 à 260 par dizaines ; 260 = illimité. */
+  max_fps: number | null
+  battery_mode: boolean | null
+  cutout: 'full' | 'avoid' | null
+  orientation: 'landscape' | 'portrait' | 'both' | null
+  rotation: 'automatic' | 'inverted_automatic' | 'fixed' | 'fixed_reversed' | null
+  /** Index de `HORIZON_ASPECTS`. */
+  aspect: number | null
+  gyroscope: boolean | null
+  /** 0,1 à 3,0. */
+  gyro_sensitivity: number | null
+}
+
+/** Les formats d'écran du moteur, dans l'ordre de `settings::ASPECTS`. */
+export const HORIZON_ASPECTS = ['Native', '1:1', '5:4', '4:3', '3:2', '16:10', '16:9', '18:9', '19.5:9', '20:9', '21:9'] as const
+
+/** Les dossiers d'une instance Horizon qu'un joueur peut ouvrir (`files::Folder`). */
+export type HorizonFolder =
+  | 'mods'
+  | 'native_mods'
+  | 'resource_packs'
+  | 'shader_packs'
+  | 'worlds'
+  | 'screenshots'
+  | 'skins'
+  | 'configuration'
+
+/** Un fichier ou dossier d'une liste (`files::Item`). */
+export interface HorizonFileItem {
+  name: string
+  dir: boolean
+  size: number
+  /** Millisecondes depuis 1970, 0 si inconnu. */
+  modified: number
+}

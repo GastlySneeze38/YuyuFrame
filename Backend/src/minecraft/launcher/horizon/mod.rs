@@ -19,6 +19,55 @@
 #[cfg(target_os = "android")]
 pub mod android;
 pub mod content;
+#[cfg(target_os = "android")]
+pub mod engine;
+
+/// Sur ordinateur, le jeu est le build officiel d'Horizon : les réglages et les
+/// fichiers passent par ses propres écrans. Les commandes existent pour que
+/// l'interface reste la même ; elles refusent.
+#[cfg(not(target_os = "android"))]
+pub mod engine {
+    const PHONE_ONLY: &str = "Disponible sur téléphone seulement";
+    #[tauri::command]
+    pub async fn horizon_engine_settings(instance_id: String) -> Result<serde_json::Value, String> {
+        let _ = instance_id;
+        Err(PHONE_ONLY.into())
+    }
+    #[tauri::command]
+    pub async fn horizon_engine_settings_set(instance_id: String, settings: serde_json::Value) -> Result<serde_json::Value, String> {
+        let _ = (instance_id, settings);
+        Err(PHONE_ONLY.into())
+    }
+    #[tauri::command]
+    pub async fn horizon_files_list(instance_id: String, folder: String, path: Vec<String>) -> Result<Vec<serde_json::Value>, String> {
+        let _ = (instance_id, folder, path);
+        Err(PHONE_ONLY.into())
+    }
+    #[tauri::command]
+    pub async fn horizon_files_remove(instance_id: String, folder: String, path: Vec<String>) -> Result<(), String> {
+        let _ = (instance_id, folder, path);
+        Err(PHONE_ONLY.into())
+    }
+    #[tauri::command]
+    pub async fn horizon_files_rename(instance_id: String, folder: String, path: Vec<String>, name: String) -> Result<(), String> {
+        let _ = (instance_id, folder, path, name);
+        Err(PHONE_ONLY.into())
+    }
+    #[tauri::command]
+    pub async fn horizon_files_mkdir(instance_id: String, folder: String, path: Vec<String>) -> Result<(), String> {
+        let _ = (instance_id, folder, path);
+        Err(PHONE_ONLY.into())
+    }
+    #[tauri::command]
+    pub async fn horizon_files_path(instance_id: String, folder: String, path: Vec<String>) -> Result<String, String> {
+        let _ = (instance_id, folder, path);
+        Err(PHONE_ONLY.into())
+    }
+    #[tauri::command]
+    pub async fn horizon_files_import() -> Result<String, String> {
+        Err(PHONE_ONLY.into())
+    }
+}
 #[cfg(not(target_os = "android"))]
 pub mod native;
 

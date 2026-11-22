@@ -4,7 +4,7 @@ import type { ApiReceivedInvite, DiscordLink, FriendEvent, FriendList, FriendSet
 import type { LocalCrashReport, LocalCrashSummary, RemoteCrashSummary } from '@/types/crash'
 import type { ApiBoard, ApiFriendCompetitive, ApiHistoryPage, ApiOverview, ApiPass, ApiSummary, ModeKey } from '@/lib/competitive'
 import type { BackupDetail, BackupOverview, BackupSettings, BackupSummary, InstanceBackupSettings } from '@/types/backup'
-import type { HorizonDataPack, HorizonInstalled, HorizonInstalledPack, HorizonNativeReport, HorizonNativeStatus, HorizonRegistry, HorizonWorld } from '@/types/horizon'
+import type { HorizonDataPack, HorizonEngineSettings, HorizonFileItem, HorizonFolder, HorizonInstalled, HorizonInstalledPack, HorizonNativeReport, HorizonNativeStatus, HorizonRegistry, HorizonWorld } from '@/types/horizon'
 import type { AuthStatus, CompatResult, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, HealthCheck, JavaReport, JavaStatus, JvmProfile, LoaderVersion, McOption, OptionsSummary, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PackInfo, PackKind, PollResponse, SaveInfo, OptionsLinkInfo, ScanResult, SharedOptionsStatus, ShareExport, ShareLinkStatus, ShareImport, SharePreview, ShareScan, ShareSource, StatsData, StatsQuery, ReferencedMod, SyncDiff, SyncInstance, SyncManifest, SystemMemoryInfo, Version } from '@/types'
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -1140,6 +1140,38 @@ export const api = {
     nativePrefetch: (loaderVersion: string) => invoke<void>('horizon_native_prefetch', { loaderVersion }),
     nativeReport: (instanceId: string) => invoke<HorizonNativeReport | null>('horizon_native_report', { instanceId }),
     nativeClear: () => invoke<void>('horizon_native_clear'),
+  },
+
+  /** Horizon sur téléphone, par l'API du moteur (`horizon/engine.rs`) : les
+   *  réglages que le jeu lit et les fichiers que le joueur peut voir. Refusé
+   *  sur ordinateur et pendant que le jeu tourne dans l'instance. */
+  horizonEngine: {
+    settings: (instanceId: string) =>
+      invoke<HorizonEngineSettings>('horizon_engine_settings', { instanceId }),
+    /** Écrit les champs non nuls et rend les réglages relus. */
+    setSettings: (instanceId: string, settings: Partial<HorizonEngineSettings>) =>
+      invoke<HorizonEngineSettings>('horizon_engine_settings_set', { instanceId, settings }),
+    list: (instanceId: string, folder: HorizonFolder, path: string[]) =>
+      invoke<HorizonFileItem[]>('horizon_files_list', { instanceId, folder, path }),
+    remove: (instanceId: string, folder: HorizonFolder, path: string[]) =>
+      invoke<void>('horizon_files_remove', { instanceId, folder, path }),
+    rename: (instanceId: string, folder: HorizonFolder, path: string[], name: string) =>
+      invoke<void>('horizon_files_rename', { instanceId, folder, path, name }),
+    mkdir: (instanceId: string, folder: HorizonFolder, path: string[]) =>
+      invoke<void>('horizon_files_mkdir', { instanceId, folder, path }),
+    path: (instanceId: string, folder: HorizonFolder, path: string[]) =>
+      invoke<string>('horizon_files_path', { instanceId, folder, path }),
+    /** Un fichier pris par le sélecteur du système, envoyé en octets bruts.
+     *  Rend le nom pris (`nom (2).zip` si le nom était déjà pris). */
+    importFile: async (instanceId: string, folder: HorizonFolder, path: string[], file: File) =>
+      invoke<string>('horizon_files_import', new Uint8Array(await file.arrayBuffer()), {
+        headers: {
+          'x-instance': encodeURIComponent(instanceId),
+          'x-folder': encodeURIComponent(folder),
+          'x-path': encodeURIComponent(path.join('/')),
+          'x-name': encodeURIComponent(file.name),
+        },
+      }),
   },
 
   /** `options.txt` de l'instance. `read` rend une liste vide tant que le jeu
