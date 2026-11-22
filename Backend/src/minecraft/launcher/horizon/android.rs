@@ -21,7 +21,8 @@
 //! pas l'affaire du launcher ici : au premier démarrage, le jeu les télécharge
 //! et les prépare lui-même dans les fichiers de l'appli, avec son propre écran.
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
+use horizon_engine_api::launch::{Launch, Player, Session};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -139,8 +140,15 @@ pub async fn launch(app: tauri::AppHandle, run: HorizonLaunch<'_>, cancel: watch
     } else {
         None
     };
-    let args = arguments(run.game_dir, &home, run.session, session_file.as_deref(), run.connect_server);
-    write_args(&files, &args).await?;
+    let launch = launch_line(run.game_dir, &home, run.session, session_file.as_deref(), run.connect_server);
+    let written = {
+        let files = files.clone();
+        tokio::task::spawn_blocking(move || launch.write_args_file(&files)).await?
+    };
+    if let Err(e) = written {
+        remove(session_file.as_deref()).await;
+        return Err(anyhow!("horizon-args.txt : {e}"));
+    }
 
     let label = if engine.is_empty() { "Horizon".to_string() } else { format!("Horizon (Starling {engine})") };
     set_progress_monotonic(&app, &floor, 100, 100, &format!("Démarrage de {label}..."));
@@ -202,87 +210,50 @@ async fn watch_game(app: &tauri::AppHandle, instance_id: &str, mut cancel: watch
     }
 }
 
-/// La ligne de commande de la partie, une option par élément. Seulement des
-/// options du contrat de lancement d'Horizon, que le jeu promet de garder.
+/// La partie selon le contrat de lancement du moteur (`horizon-engine-api`,
+/// `launch`), que le jeu promet de garder : `--game-dir`, `--home`, le compte
+/// (`--session-file`, sinon `--name` hors ligne), le serveur à rejoindre.
+///
+/// `YUYUFRAME=1` (variable d'environnement) : le jeu sait qu'il est lancé par
+/// YuyuFrame et prépare ses fichiers sans demander de compte Starling (notre
+/// correctif dans `horizon-android`, `game/starling/setup/mod.rs`).
 ///
 /// `--resources` n'y est pas : le jeu met d'office ses ressources préparées
 /// dans les fichiers de l'appli, et c'est là qu'il les prépare au premier
 /// démarrage.
-fn arguments(
+fn launch_line(
     game_dir: &Path,
     home: &Path,
     session: &MinecraftSession,
     session_file: Option<&Path>,
     server: Option<&str>,
-) -> Vec<String> {
-    let mut args = vec![
-        "--game-dir".to_string(),
-        game_dir.display().to_string(),
-        "--home".to_string(),
-        home.display().to_string(),
-    ];
-    match session_file {
-        Some(path) => args.extend(["--session-file".to_string(), path.display().to_string()]),
-        None => args.extend(["--name".to_string(), session.username.clone()]),
+) -> Launch {
+    Launch {
+        game_dir: game_dir.to_path_buf(),
+        home: home.to_path_buf(),
+        player: match session_file {
+            Some(path) => Player::Session(path.to_path_buf()),
+            None => Player::Offline(session.username.clone()),
+        },
+        server: server.map(str::to_owned),
+        env: vec![("YUYUFRAME".into(), "1".into())],
     }
-    if let Some(server) = server.map(str::trim).filter(|s| !s.is_empty()) {
-        args.extend(["--quickPlayMultiplayer".to_string(), server.to_string()]);
-    }
-    args
 }
 
-/// Écrit `horizon-args.txt` d'un coup (fichier voisin puis renommage) : le
-/// jeu ne doit jamais lire une ligne de commande à moitié écrite. Une valeur
-/// qui contient un saut de ligne est refusée, elle deviendrait une option de
-/// plus.
-async fn write_args(files: &Path, args: &[String]) -> Result<()> {
-    if args.iter().any(|a| a.contains(['\n', '\r'])) {
-        return Err(anyhow!("option de lancement invalide (saut de ligne)"));
-    }
-    let mut text = String::from("# Écrit par YuyuFrame à chaque lancement : la ligne de commande du jeu.\n");
-    // Une variable d'environnement (forme `NOM=valeur`) : le jeu sait qu'il est
-    // lancé par YuyuFrame et prépare ses fichiers sans demander de compte
-    // Starling (notre patch dans `horizon-android`, game/setup.rs).
-    text.push_str("YUYUFRAME=1\n");
-    for arg in args {
-        text.push_str(arg);
-        text.push('\n');
-    }
-    let target = files.join("horizon-args.txt");
-    let partial = files.join("horizon-args.txt.partial");
-    tokio::fs::write(&partial, text).await.context("horizon-args.txt")?;
-    tokio::fs::rename(&partial, &target).await.context("horizon-args.txt")?;
-    Ok(())
-}
-
-/// Le compte pour `--session-file` : un nom tiré au hasard, créé neuf et en
-/// mode 0600 (le jeu refuse un fichier lisible par d'autres). Format du
-/// contrat de lancement : `name`, `uuid`, `access_token`, `user_type`, `xuid`.
+/// Le compte pour `--session-file`, écrit par le moteur lui-même
+/// (`horizon-engine-api`) : nom imprévisible, créé neuf, mode 0600.
 async fn write_session_file(files: &Path, session: &MinecraftSession) -> Result<PathBuf> {
-    use std::io::Write;
-    use std::os::unix::fs::OpenOptionsExt;
-
     let dir = files.join("yuyu-sessions");
-    tokio::fs::create_dir_all(&dir).await?;
-    let random: [u8; 12] = rand::random();
-    let name: String = random.iter().map(|b| format!("{b:02x}")).collect();
-    let path = dir.join(format!("session-{name}.json"));
-    let body = serde_json::json!({
-        "name": session.username,
-        "uuid": session.uuid.replace('-', ""),
-        "access_token": session.access_token,
-        "user_type": "msa",
-        "xuid": serde_json::Value::Null,
-    })
-    .to_string();
-    let target = path.clone();
-    tokio::task::spawn_blocking(move || -> std::io::Result<()> {
-        let mut file = std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(&target)?;
-        file.write_all(body.as_bytes())?;
-        file.sync_all()
-    })
-    .await??;
-    Ok(path)
+    let session = Session {
+        name: session.username.clone(),
+        uuid: session.uuid.clone(),
+        access_token: session.access_token.clone(),
+        user_type: "msa".into(),
+        xuid: None,
+    };
+    tokio::task::spawn_blocking(move || horizon_engine_api::launch::write_session_file(&dir, &session))
+        .await?
+        .map_err(|e| anyhow!("fichier de session : {e}"))
 }
 
 async fn remove(path: Option<&Path>) {
@@ -309,9 +280,10 @@ mod tests {
     fn hors_ligne_le_pseudo_sinon_le_fichier_de_session() {
         let dir = Path::new("/data/x/instances/a");
         let home = dir.join("horizon");
-        let offline = arguments(dir, &home, &session("offline"), None, None);
+        let offline = launch_line(dir, &home, &session("offline"), None, None).arguments();
         assert!(offline.windows(2).any(|w| w == ["--name", "Alex"]));
-        let online = arguments(dir, &home, &session("t"), Some(Path::new("/f/s.json")), Some(" play.example.net "));
+        let online =
+            launch_line(dir, &home, &session("t"), Some(Path::new("/f/s.json")), Some(" play.example.net ")).arguments();
         assert!(!online.iter().any(|a| a == "--name"));
         assert!(online.windows(2).any(|w| w == ["--session-file", "/f/s.json"]));
         assert!(online.windows(2).any(|w| w == ["--quickPlayMultiplayer", "play.example.net"]));
