@@ -44,6 +44,30 @@ class GamePlugin(private val activity: Activity) : Plugin(activity) {
         }
     }
 
+    /**
+     * Ramène l'écran du jeu déjà ouvert, sans en ouvrir un second : la partie reprend où elle en
+     * était. Le pendant de la ligne « Launcher » du menu pause du jeu, qui ramène le launcher.
+     */
+    @Command
+    fun resume(invoke: Invoke) {
+        activity.runOnUiThread {
+            if (game() == null) {
+                invoke.reject("Aucune partie en cours")
+                return@runOnUiThread
+            }
+            try {
+                val intent = Intent(activity, YuyuGameActivity::class.java)
+                intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                activity.startActivity(intent)
+                @Suppress("DEPRECATION")
+                activity.overridePendingTransition(0, 0)
+                invoke.resolve(JSObject())
+            } catch (e: Exception) {
+                invoke.reject("L'écran du jeu n'a pas pu revenir : ${e.message}")
+            }
+        }
+    }
+
     @Command
     fun running(invoke: Invoke) {
         val result = JSObject()

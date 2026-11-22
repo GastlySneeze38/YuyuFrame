@@ -198,6 +198,7 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         crate::minecraft::launcher::horizon::engine::horizon_files_mkdir,
         crate::minecraft::launcher::horizon::engine::horizon_files_path,
         crate::minecraft::launcher::horizon::engine::horizon_files_import,
+        crate::minecraft::launcher::horizon::engine::horizon_game_resume,
         crate::minecraft::launcher::horizon::native::horizon_native_status,
         crate::minecraft::launcher::horizon::native::horizon_native_allow,
         crate::minecraft::launcher::horizon::native::horizon_native_prefetch,

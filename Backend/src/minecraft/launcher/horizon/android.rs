@@ -106,6 +106,11 @@ pub async fn engine_version(app: &tauri::AppHandle) -> Option<String> {
         .filter(|v| !v.trim().is_empty())
 }
 
+/// Ramène l'écran du jeu, déjà ouvert, au premier plan (`GamePlugin.resume`).
+pub async fn resume(app: &tauri::AppHandle) -> Result<()> {
+    bridge(app, |b| b.call::<serde_json::Value>("resume")).await.map(|_| ())
+}
+
 /// Le téléphone se décrit (nom, modèle, ANDROID_ID) : `app::device`. Passe
 /// par ce pont, le seul vers Android, bien que rien n'y concerne le jeu.
 pub async fn device(app: &tauri::AppHandle) -> Result<crate::app::device::AndroidDevice> {

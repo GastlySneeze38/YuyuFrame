@@ -21,7 +21,7 @@ import { NAV_ICONS } from './MobileNav'
 import { MenuButton } from './ui/NavDrawer'
 import { InstanceSheet, loaderName } from './home/InstanceSheet'
 import { MobileServerCard } from './home/HomeCards'
-import { useLaunchProgress, useMobileLaunch } from './home/useMobileLaunch'
+import { resumeGame, useLaunchProgress, useMobileLaunch } from './home/useMobileLaunch'
 
 /** Mêmes étoiles que la bannière du PC (pages/Home.tsx). */
 const STARS = Array.from({ length: 40 }, (_, i) => ({
@@ -569,6 +569,30 @@ function LaunchButton({ hasAccount, hasInstance, running, step, cancelling, hall
   const shadow = canLaunch
     ? halloween ? 'shadow-[0_6px_24px_rgba(255,110,20,0.35)]' : 'shadow-[0_6px_24px_rgb(var(--accent)/0.4)]'
     : ''
+
+  // En jeu (le lancement est fini) : la partie tourne derrière le launcher.
+  // Le bouton y ramène ; la ligne « Launcher » du menu pause du jeu ramène ici.
+  // « Arrêter » coupe la partie sans la sauvegarder : un geste à part.
+  if (running && !step) {
+    return (
+      <div className="flex gap-2">
+        <button
+          onClick={() => void resumeGame()}
+          className="press flex h-14 min-w-0 flex-1 items-center justify-center gap-2 rounded-2xl bg-success px-4 text-[17px] font-bold text-black shadow-[0_6px_24px_rgb(var(--success)/0.35)]"
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5"><path d="M8 5.14v13.72a1 1 0 001.52.85l10.6-6.86a1 1 0 000-1.7L9.52 4.29A1 1 0 008 5.14z" /></svg>
+          <span className="truncate">{t('home.mobile.backToGame')}</span>
+        </button>
+        <button
+          onClick={onCancel}
+          disabled={cancelling}
+          className="press h-14 shrink-0 rounded-2xl border border-white/[0.1] bg-white/[0.05] px-4 text-[15px] font-semibold text-white/70 disabled:opacity-40"
+        >
+          {t('home.mobile.stopGame')}
+        </button>
+      </div>
+    )
+  }
 
   if (running || step) {
     return (

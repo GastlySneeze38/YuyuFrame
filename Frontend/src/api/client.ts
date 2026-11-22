@@ -1161,6 +1161,8 @@ export const api = {
       invoke<void>('horizon_files_mkdir', { instanceId, folder, path }),
     path: (instanceId: string, folder: HorizonFolder, path: string[]) =>
       invoke<string>('horizon_files_path', { instanceId, folder, path }),
+    /** Ramène au premier plan l'écran du jeu déjà ouvert. */
+    resume: () => invoke<void>('horizon_game_resume'),
     /** Un fichier pris par le sélecteur du système, envoyé en octets bruts.
      *  Rend le nom pris (`nom (2).zip` si le nom était déjà pris). */
     importFile: async (instanceId: string, folder: HorizonFolder, path: string[], file: File) =>

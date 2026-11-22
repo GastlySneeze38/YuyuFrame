@@ -10,7 +10,7 @@ import { useNavDrawer } from '@/mobile/navDrawer'
 import { MOBILE_TABS, NAV_ICONS } from '@/mobile/MobileNav'
 import { bindTouchDrag, isTouchControl, rubber } from './gesture'
 import { Slide, remaining } from './slide'
-import { cancelLaunch, launchInstance, requestInstancePick, useLaunchBadge, useLaunchEvents, useLaunchProgress } from '@/mobile/home/useMobileLaunch'
+import { cancelLaunch, launchInstance, requestInstancePick, resumeGame, useLaunchBadge, useLaunchEvents, useLaunchProgress, useOpenGameOnStart } from '@/mobile/home/useMobileLaunch'
 import { loaderName } from '@/mobile/home/InstanceSheet'
 
 /** Distance de glissé vers la gauche, ou vitesse, au-delà de laquelle le menu
@@ -78,6 +78,7 @@ export function NavDrawer() {
   // Les événements du lancement, écoutés ici une fois pour toute
   // l'appli : ce composant est toujours monté sur téléphone.
   useLaunchEvents()
+  useOpenGameOnStart()
   const supportUnread = useSupportWatch((s) => s.unread)
   const crashUpdates = useCrashWatch((s) => s.updates)
 
@@ -408,7 +409,15 @@ function PlayRow({ go }: { go: (path: string) => void }) {
           {cancelling ? t('home.cancelling') : t('home.cancel')}
         </button>
       ) : running ? (
-        <span aria-hidden className="mr-2 h-2.5 w-2.5 shrink-0 rounded-full bg-success" />
+        // La partie tourne derrière le launcher : on y retourne d'ici, et la
+        // ligne « Launcher » de son menu pause ramène ici.
+        <button
+          onClick={() => void resumeGame()}
+          className="press flex h-11 shrink-0 items-center gap-2 rounded-xl bg-success/90 px-3 text-[14px] font-semibold text-black"
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4"><path d="M8 5.14v13.72a1 1 0 001.52.85l10.6-6.86a1 1 0 000-1.7L9.52 4.29A1 1 0 008 5.14z" /></svg>
+          {t('home.mobile.backToGame')}
+        </button>
       ) : (
         <button
           onClick={() => { void launchInstance(instance.id); go('/home') }}

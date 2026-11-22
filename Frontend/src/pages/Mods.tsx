@@ -23,6 +23,7 @@ import { MobileImportFab, MobileModsToolbar, swipeOrder } from '@/components/mod
 import { SwipeTabs } from '@/mobile/ui/SwipeTabs'
 import { TOOLBAR_ICON } from '@/components/mods/toolbarIcons'
 import { useIsMobile } from '@/mobile/useIsMobile'
+import { isAndroidApp } from '@/lib/platform'
 import { PacksTab } from '@/components/mods/PacksTab'
 import { OptionsTab } from '@/components/mods/OptionsTab'
 import { HorizonContentTab, HorizonPacksTab } from '@/components/mods/HorizonContentTab'
@@ -103,9 +104,12 @@ export function ModsContent({ instance, initialTab }: {
   // Vanilla et Horizon : aucun chargeur de mods Java. Les packs de ressources
   // et les shaders restent : Horizon lit aussi les shaders (vérifié en jeu).
   const isPlugin = !isModLoader(loader)
-  // Horizon a ses propres mods (registre `horizon-mods`), sur ordinateur : la
-  // famille Mods y mène à `HorizonContentTab` au lieu de Modrinth/CurseForge.
-  const isHorizon = loader === 'horizon' && !mobile
+  // Horizon a ses propres mods (registre `horizon-mods`) : la famille Mods y
+  // mène à `HorizonContentTab` au lieu de Modrinth/CurseForge. Sur ordinateur,
+  // et dans l'appli Android, dont le moteur charge les mods de contenu et
+  // WebAssembly (pas les mods natifs). Pas dans l'aperçu téléphone d'un
+  // navigateur, qui n'a aucun moteur derrière.
+  const isHorizon = loader === 'horizon' && (!mobile || isAndroidApp)
   const [horizonCount, setHorizonCount] = useState(0)
   const { avoidBetaDependencies, pinnedMods } = useStorePick('avoidBetaDependencies', 'pinnedMods')
 
@@ -1223,7 +1227,9 @@ export function ModsContent({ instance, initialTab }: {
     <div className="relative flex h-full flex-col overflow-hidden">
       {/* Pas sur l'écran Options : il a sa propre barre d'enregistrement en
           bas, et deux boutons au même endroit se gêneraient. */}
-      {mobile && tab !== 'options' && (
+      {/* Horizon : un fichier du téléphone entre par l'onglet Fichiers des
+          paramètres de l'instance (sélecteur d'Android, `horizonEngine`). */}
+      {mobile && tab !== 'options' && !isHorizon && (
         <MobileImportFab uploading={uploading} collapsed={fabCollapsed} onImport={() => setShowImportChoice(true)} />
       )}
       {mobile ? (
@@ -1231,8 +1237,9 @@ export function ModsContent({ instance, initialTab }: {
           tab={tab}
           onTab={setTab}
           isPlugin={isPlugin}
+          horizon={isHorizon}
           hasModpack={!!modpackMeta}
-          modCount={mods.length}
+          modCount={isHorizon ? horizonCount : mods.length}
           packCount={packCount}
           updatesCount={tab === 'installed' ? extraUpdatesCount : 0}
           updatingAll={updatingAll}
@@ -1465,7 +1472,7 @@ export function ModsContent({ instance, initialTab }: {
           remonte au-dessus du bouton flottant au lieu de rester dessous. */}
       {/* Sur téléphone, balayer le contenu change d'écran dans la famille
           ouverte (Installés ↔ Shaders ↔ Ressources…) : `SwipeTabs`. */}
-      <MaybeSwipe on={mobile} tabs={swipeOrder(tab, isPlugin)} value={tab} onChange={setTab}>
+      <MaybeSwipe on={mobile} tabs={swipeOrder(tab, isPlugin, isHorizon)} value={tab} onChange={setTab}>
       <div onScroll={onContentScroll} className={`flex-1 overflow-y-auto ${mobile ? 'overscroll-contain px-4 pb-24 pt-3' : 'px-6 py-3'}`}>
         {modpackMeta && (
           <ModpackBanner

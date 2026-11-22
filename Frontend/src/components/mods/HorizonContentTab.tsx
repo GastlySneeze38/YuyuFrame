@@ -5,6 +5,7 @@ import { SNAP, press, pressIf } from '@/lib/motion'
 import { formatBytes, formatDate, formatDownloadCount } from '@/lib/format'
 import { horizonVersionName } from '@/lib/horizonVersion'
 import { openExternal } from '@/lib/openExternal'
+import { isAndroidApp } from '@/lib/platform'
 import { useT } from '@/i18n'
 import { useStore, useStorePick } from '@/stores/useStore'
 import { showError } from '@/stores/useErrorToast'
@@ -155,7 +156,7 @@ export function HorizonContentTab({ instance, mode, onBrowse, onCount }: {
       {mode === 'installed' ? (
         <Installed
           instance={instance}
-          sections={['mods', 'native', 'modpacks']}
+          sections={isAndroidApp ? ['mods', 'modpacks'] : ['mods', 'native', 'modpacks']}
           items={c.installed}
           packs={c.packs}
           datapacks={c.datapacks}
@@ -169,8 +170,10 @@ export function HorizonContentTab({ instance, mode, onBrowse, onCount }: {
         <Browse
           key={mode}
           instance={instance}
-          kinds={mode === 'modpack' ? ['modpack'] : ['mod', 'native-mod']}
-          chips={mode === 'modpack' ? [] : ['all', 'mod', 'native']}
+          // Dans l'appli Android, pas de mods natifs : du code compilé
+          // téléchargé, que le Play Store interdit (le moteur ne les charge pas).
+          kinds={mode === 'modpack' ? ['modpack'] : isAndroidApp ? ['mod'] : ['mod', 'native-mod']}
+          chips={mode === 'modpack' || isAndroidApp ? [] : ['all', 'mod', 'native']}
           installed={c.installed}
           packs={c.packs}
           onChanged={c.reload}

@@ -1,9 +1,11 @@
+import { useEffect } from 'react'
 import { create } from 'zustand'
 import { api } from '@/api/client'
 import { useTauriEvent } from '@/hooks/useTauriEvent'
 import { useStore } from '@/stores/useStore'
 import { showError, showNotice } from '@/stores/useErrorToast'
 import { t, useT } from '@/i18n'
+import { isAndroidApp } from '@/lib/platform'
 
 /** Où en est le lancement d'une instance : un pourcentage et ce qui se passe. */
 export interface LaunchStep {
@@ -77,6 +79,16 @@ export async function launchInstance(instanceId: string, connectServer?: string)
   }
 }
 
+/** Ramène la partie en cours au premier plan (l'écran du jeu reste ouvert
+ *  derrière le launcher, qu'on rejoint par la ligne « Launcher » du menu pause). */
+export async function resumeGame() {
+  try {
+    await api.horizonEngine.resume()
+  } catch (e) {
+    showError(e)
+  }
+}
+
 export async function cancelLaunch(instanceId: string) {
   if (useLaunchProgress.getState().cancelling[instanceId]) return
   useLaunchProgress.setState((s) => ({ cancelling: { ...s.cancelling, [instanceId]: true } }))
@@ -110,6 +122,29 @@ export function useLaunchEvents() {
     showNotice(tr('home.launchCancelled'))
     clear(instanceId)
   })
+}
+
+/** Une fois par ouverture de l'appli : le réglage « Ouvrir le jeu au démarrage ». */
+let openedOnStart = false
+
+/**
+ * Appli Android, réglage `openGameOnStart` : dès que le compte et l'instance
+ * choisie sont connus, l'instance Horizon se lance, une seule fois par
+ * ouverture de l'appli (revenir au launcher par la ligne « Launcher » du menu
+ * pause ne relance rien). Une autre sorte d'instance ne se lance pas : seul
+ * Horizon tourne sur le téléphone. À poser **une seule fois** (`NavDrawer`).
+ */
+export function useOpenGameOnStart() {
+  const ready = useStore((s) => {
+    if (!isAndroidApp || !s.openGameOnStart || !s.username) return null
+    const instance = s.instances.find((i) => i.id === s.selectedInstanceId)
+    return instance?.loader === 'horizon' ? instance.id : null
+  })
+  useEffect(() => {
+    if (!ready || openedOnStart) return
+    openedOnStart = true
+    void launchInstance(ready)
+  }, [ready])
 }
 
 /** Ce que l'accueil lit et fait : même forme qu'avant le partage. */

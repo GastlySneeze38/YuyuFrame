@@ -26,6 +26,10 @@ import { ClientOptionsTransfer, OptionsLinkApply, OptionsLinkCreate } from './Op
 import { useT } from '@/i18n'
 import { useStorePick } from '@/stores/useStore'
 import { HorizonVersionPicker, horizonChoiceLabel } from './HorizonVersionPicker'
+import { Field, Row, Separator } from './settingsParts'
+import { HorizonGameTab } from './HorizonGameTab'
+import { HorizonFilesTab } from './HorizonFilesTab'
+import { isAndroidApp } from '@/lib/platform'
 
 /**
  * Les réglages d'une instance, en un seul endroit.
@@ -53,8 +57,10 @@ import { HorizonVersionPicker, horizonChoiceLabel } from './HorizonVersionPicker
  * de fichier, pas des champs). Elles ne passent pas par le brouillon et
  * n'allument donc pas le pied.
  */
-const TABS = ['general', 'installation', 'window', 'java', 'game', 'compat', 'repair', 'share'] as const
+const TABS = ['general', 'installation', 'window', 'java', 'game', 'engine', 'files', 'compat', 'repair', 'share'] as const
 type Tab = (typeof TABS)[number]
+/** Les onglets de l'appli Android pour une instance Horizon, par l'API du moteur. */
+const ENGINE_TABS: Tab[] = ['engine', 'files']
 /** Onglets sans objet pour une instance Horizon — voir `tabs` plus bas. */
 const HORIZON_HIDDEN_TABS: Tab[] = ['java', 'compat', 'repair', 'share']
 
@@ -150,6 +156,7 @@ export function InstanceSettingsModal({
   // instance vanilla à l'arrivée. Ces onglets ne sont donc pas proposés,
   // plutôt que de proposer des réglages sans effet.
   const isHorizon = instance.loader === 'horizon'
+  const phoneEngine = isHorizon && isAndroidApp
   const tabs = useMemo(
     () => [
       { id: 'general' as const, label: t('instancesPage.tabGeneral'), icon: <IconInfo /> },
@@ -157,11 +164,18 @@ export function InstanceSettingsModal({
       { id: 'window' as const, label: t('instancesPage.tabWindow'), icon: <IconWindow /> },
       { id: 'java' as const, label: t('instancesPage.tabJava'), icon: <IconChip /> },
       { id: 'game' as const, label: t('instancesPage.tabGame'), icon: <IconSliders /> },
+      { id: 'engine' as const, label: t('horizonEngine.tab'), icon: <IconPhone /> },
+      { id: 'files' as const, label: t('horizonEngine.filesTab'), icon: <IconFolder /> },
       { id: 'compat' as const, label: t('instancesPage.tabCompat'), icon: <IconPlayCheck /> },
       { id: 'repair' as const, label: t('instancesPage.tabRepair'), icon: <IconWrench /> },
       { id: 'share' as const, label: t('instancesPage.tabShare'), icon: <IconShare /> },
-    ].filter((item) => !isHorizon || !HORIZON_HIDDEN_TABS.includes(item.id)),
-    [t, isHorizon],
+    ]
+      .filter((item) => !isHorizon || !HORIZON_HIDDEN_TABS.includes(item.id))
+      // Le moteur de l'APK : ses réglages et ses fichiers, pour Horizon dans
+      // l'appli Android seulement. Là, la fenêtre n'a pas de sens (le jeu
+      // prend l'écran).
+      .filter((item) => (phoneEngine ? item.id !== 'window' : !ENGINE_TABS.includes(item.id))),
+    [t, isHorizon, phoneEngine],
   )
 
   // Un onglet retiré (instance passée sur Horizon pendant que la fenêtre est
@@ -447,6 +461,10 @@ export function InstanceSettingsModal({
             {tab === 'window' && <WindowTab instance={instance} onUpdate={onUpdate} />}
 
             {tab === 'game' && <GameSettings instance={instance} />}
+
+            {tab === 'engine' && <HorizonGameTab instance={instance} />}
+
+            {tab === 'files' && <HorizonFilesTab instance={instance} />}
 
             {tab === 'repair' && <RepairTab instance={instance} />}
 
@@ -1968,42 +1986,6 @@ function DeleteButton({ onConfirm }: { onConfirm: () => void }) {
   )
 }
 
-function Separator() {
-  return <div className="h-px bg-line" />
-}
-
-/** Un champ et son intitulé — la forme de tout ce qui se saisit ici. */
-function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label className="flex items-baseline gap-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-txt-muted">
-        {label}
-        {/* Pas de suffixe d'opacité sur `txt-muted` : le jeton porte déjà son
-            alpha, et `/70` donnerait une couleur invalide (voir
-            `tailwind.config.js`). */}
-        {hint && <span className="text-[10px] normal-case tracking-normal text-txt-muted">{hint}</span>}
-      </label>
-      {children}
-    </div>
-  )
-}
-
-/** Un réglage et son bouton, alignés — la forme de tout ce qui s'actionne. */
-function Row({ title, desc, action }: { title: string; desc: string; action: ReactNode }) {
-  // Sur téléphone, le texte au-dessus et les boutons dessous : côte à côte,
-  // l'explication se réduisait à un mot par ligne.
-  const mobile = useIsMobile()
-  return (
-    <div className={mobile ? 'flex flex-col items-start gap-3' : 'flex items-center justify-between gap-4'}>
-      <div className="min-w-0">
-        <p className={`font-semibold text-txt-primary ${mobile ? 'text-[15px]' : 'text-[13px]'}`}>{title}</p>
-        <p className={`mt-0.5 leading-relaxed text-txt-secondary ${mobile ? 'text-[13px]' : 'text-[11.5px]'}`}>{desc}</p>
-      </div>
-      {action}
-    </div>
-  )
-}
-
 /** Une ligne d'information, intitulé à gauche et valeur à droite. */
 function Line({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -2071,5 +2053,15 @@ const IconWrench = () => (
 const IconSliders = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" width={14} height={14}>
     <path d="M4 6h16M4 12h16M4 18h16" /><circle cx="9" cy="6" r="2" /><circle cx="15" cy="12" r="2" /><circle cx="8" cy="18" r="2" />
+  </svg>
+)
+const IconPhone = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" width={14} height={14}>
+    <rect x="7" y="2.5" width="10" height="19" rx="2" /><path d="M11 18.5h2" />
+  </svg>
+)
+const IconFolder = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" width={14} height={14}>
+    <path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
   </svg>
 )

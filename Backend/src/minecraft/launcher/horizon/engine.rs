@@ -12,6 +12,14 @@ use tauri::State;
 
 use crate::state::SharedState;
 
+/// Ramène l'écran du jeu, déjà ouvert, au premier plan : le bouton Jouer du
+/// launcher pendant une partie (« Revenir au jeu »). Le pendant de la ligne
+/// « Launcher » du menu pause du jeu.
+#[tauri::command]
+pub async fn horizon_game_resume(app: tauri::AppHandle) -> Result<(), String> {
+    super::android::resume(&app).await.map_err(|e| e.to_string())
+}
+
 fn game_dir(instance_id: &str) -> Result<PathBuf, String> {
     if instance_id.is_empty() || instance_id.contains(['/', '\\']) || instance_id.contains("..") {
         return Err("Instance inconnue".into());

@@ -67,6 +67,10 @@ pub mod engine {
     pub async fn horizon_files_import() -> Result<String, String> {
         Err(PHONE_ONLY.into())
     }
+    #[tauri::command]
+    pub async fn horizon_game_resume() -> Result<(), String> {
+        Err(PHONE_ONLY.into())
+    }
 }
 #[cfg(not(target_os = "android"))]
 pub mod native;

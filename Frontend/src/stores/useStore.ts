@@ -182,6 +182,12 @@ interface Store {
   confirmServerLaunch: boolean
   setConfirmServerLaunch: (v: boolean) => void
 
+  /** Appli Android : à l'ouverture, lancer tout de suite l'instance Horizon
+   *  choisie (le launcher reste derrière ; la ligne « Launcher » du menu pause
+   *  du jeu y ramène). Voir `mobile/home/useMobileLaunch.ts`. */
+  openGameOnStart: boolean
+  setOpenGameOnStart: (v: boolean) => void
+
   /** Prévenir quand un ami se connecte (voir `stores/useFriends.ts`). */
   friendOnlineNotify: boolean
   setFriendOnlineNotify: (v: boolean) => void
@@ -480,6 +486,9 @@ export const useStore = create<Store>()(
       confirmServerLaunch: true,
       setConfirmServerLaunch: (confirmServerLaunch) => set({ confirmServerLaunch }),
 
+      openGameOnStart: false,
+      setOpenGameOnStart: (openGameOnStart) => set({ openGameOnStart }),
+
       friendOnlineNotify: true,
       setFriendOnlineNotify: (friendOnlineNotify) => set({ friendOnlineNotify }),
       osNotifications: true,
@@ -639,6 +648,7 @@ export const useStore = create<Store>()(
         showHomeServers: s.showHomeServers,
         confirmServerLaunch: s.confirmServerLaunch,
         friendOnlineNotify: s.friendOnlineNotify,
+        openGameOnStart: s.openGameOnStart,
         osNotifications: s.osNotifications,
         language: s.language,
         languagePicked: s.languagePicked,

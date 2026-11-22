@@ -14,11 +14,13 @@ function familyOf(tab: Tab): Family {
  * écrans de la famille ouverte — le niveau le plus profond prend le geste.
  * La famille Options n'a pas d'écrans : là, ce sont les familles.
  */
-export function swipeOrder(tab: Tab, isPlugin: boolean): Tab[] {
+export function swipeOrder(tab: Tab, isPlugin: boolean, horizon = false): Tab[] {
   const family = familyOf(tab)
   if (family === 'mods') return ['installed', 'browse', 'modpack']
-  if (family === 'packs') return ['packs-installed', 'packs-shader', 'packs-resourcepack']
-  return [...(!isPlugin ? ['installed' as const] : []), 'packs-installed', 'options']
+  if (family === 'packs') {
+    return ['packs-installed', 'packs-shader', 'packs-resourcepack', ...(horizon ? ['packs-datapack' as const] : [])]
+  }
+  return [...(!isPlugin || horizon ? ['installed' as const] : []), 'packs-installed', 'options']
 }
 
 /**
@@ -35,11 +37,14 @@ export function swipeOrder(tab: Tab, isPlugin: boolean): Tab[] {
  * « Jouer à … » n'y est pas : sur téléphone, l'onglet Accueil de la barre du
  * bas fait la même chose, à un pouce de là.
  */
-export function MobileModsToolbar({ tab, onTab, isPlugin, hasModpack, modCount, packCount, updatesCount, updatingAll, onUpdateAll, notice }: {
+export function MobileModsToolbar({ tab, onTab, isPlugin, horizon = false, hasModpack, modCount, packCount, updatesCount, updatingAll, onUpdateAll, notice }: {
   tab: Tab
   onTab: (tab: Tab) => void
   /** Vanilla ou Horizon : pas de famille Mods (aucun chargeur de mods). */
   isPlugin: boolean
+  /** Horizon dans l'appli Android : la famille Mods mène au registre
+   *  d'Horizon (comme sur PC), et les packs gagnent les packs de données. */
+  horizon?: boolean
   hasModpack: boolean
   modCount: number
   packCount: number
@@ -52,7 +57,7 @@ export function MobileModsToolbar({ tab, onTab, isPlugin, hasModpack, modCount, 
   const family = familyOf(tab)
 
   const families: { id: Family; label: string; icon: string; first: Tab }[] = [
-    ...(!isPlugin ? [{ id: 'mods' as const, label: t('mods.menuMods'), icon: TOOLBAR_ICON.mods, first: 'installed' as const }] : []),
+    ...(!isPlugin || horizon ? [{ id: 'mods' as const, label: t('mods.menuMods'), icon: TOOLBAR_ICON.mods, first: 'installed' as const }] : []),
     { id: 'packs', label: t('mods.menuPacks'), icon: TOOLBAR_ICON.grid, first: 'packs-installed' },
     { id: 'options', label: t('mods.menuOptions'), icon: TOOLBAR_ICON.sliders, first: 'options' },
   ]
@@ -69,6 +74,7 @@ export function MobileModsToolbar({ tab, onTab, isPlugin, hasModpack, modCount, 
             { id: 'packs-installed', label: t('mods.mobile.installed'), badge: packCount },
             { id: 'packs-shader', label: t('mods.mobile.shaders') },
             { id: 'packs-resourcepack', label: t('mods.mobile.resourcepacksShort') },
+            ...(horizon ? [{ id: 'packs-datapack' as const, label: t('mods.mobile.datapacksShort') }] : []),
           ]
         : []
 
