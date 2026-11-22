@@ -1,6 +1,8 @@
 import { useEffect, type CSSProperties } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useFleet } from '@/stores/useFleet'
+import { useStore } from '@/stores/useStore'
+import { useT } from '@/i18n'
 import type { FleetAnnouncement } from '@/api/client'
 
 /**
@@ -98,6 +100,40 @@ export function HomeBanner({ banner, visible }: { banner: FleetAnnouncement | nu
             </span>
           </div>
         </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}
+
+/**
+ * Annonce du compte, au même endroit que la bannière de la flotte et dans son
+ * style, mais cliquable : le mot de passe est provisoire (donné par le
+ * support). Un clic rouvre la fenêtre qui le fait changer, même remise à plus
+ * tard. Rien tant que le compte n'a pas ce drapeau.
+ */
+export function AccountNotice() {
+  const t = useT()
+  const provisional = useStore((s) => s.yuyuSignedIn && s.yuyuPasswordResetRequired)
+  const reopen = useStore((s) => s.setYuyuPasswordLater)
+  return (
+    <AnimatePresence>
+      {provisional && (
+        <motion.button
+          type="button"
+          initial={{ opacity: 0, x: -8 }}
+          animate={{ opacity: 1, x: 0, transition: { duration: 0.2, ease: EASE_OUT } }}
+          exit={{ opacity: 0, x: -8, transition: { duration: 0.15, ease: EASE_OUT } }}
+          onClick={() => reopen(false)}
+          className="press flex w-fit max-w-[min(34vw,420px)] items-center gap-3 rounded-xl border border-[rgba(250,204,21,0.45)] bg-[rgba(24,18,4,0.8)] px-4 py-2.5 text-left shadow-[0_12px_34px_rgba(0,0,0,0.45)] backdrop-blur-[8px] transition-colors duration-150 hover:border-[rgba(250,204,21,0.7)] max-sm:max-w-full"
+        >
+          <span className="flex-none rounded-md bg-[rgba(250,204,21,0.18)] px-2 py-1 text-[10.5px] font-bold uppercase tracking-[0.12em] text-[rgb(253,224,71)]">
+            {t('password.noticeKicker')}
+          </span>
+          <span className="flex min-w-0 flex-col gap-0.5">
+            <span className="truncate text-[15px] font-bold text-white">{t('password.noticeTitle')}</span>
+            <span className="truncate text-[12px] text-[rgba(254,240,138,0.7)]">{t('password.noticeAction')}</span>
+          </span>
+        </motion.button>
       )}
     </AnimatePresence>
   )

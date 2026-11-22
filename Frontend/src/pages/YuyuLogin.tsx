@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api, type YuyuSessionResp } from '@/api/client'
 import { useStore, useStorePick } from '@/stores/useStore'
@@ -6,6 +6,7 @@ import { showError, showApiError, showNotice } from '@/stores/useErrorToast'
 import { parseApiError } from '@/lib/apiError'
 import { useT } from '@/i18n'
 import { PrivacyModal } from '@/components/legal/PrivacyModal'
+import { rememberProvisionalPassword } from '@/components/account/PasswordChangeModal'
 import type { Account } from '@/types'
 
 // forgot : demander un code de réinitialisation ; reset : le saisir avec le
@@ -28,6 +29,7 @@ export default function YuyuLogin() {
   // serveur, et le moyen attendu.
   const [mfa, setMfa] = useState<{ token: string; byEmail: boolean; emailHint: string | null } | null>(null)
   const [loading, setLoading] = useState(false)
+  const loginPasswordRef = useRef('')
   // Inscription : pas de compte sans avoir accepté la politique de
   // confidentialité (le serveur le refuse aussi). Décochée par défaut — un
   // accord ne se présente pas déjà donné.
@@ -116,6 +118,10 @@ export default function YuyuLogin() {
     }
 
     setLoading(true)
+    // Gardé le temps de la connexion (le champ est vidé avant le second
+    // facteur) : si c'est un mot de passe provisoire, la fenêtre qui le fait
+    // changer l'a déjà, on ne le redemande pas.
+    if (mode === 'login') loginPasswordRef.current = password
     try {
       finish(
         mode === 'register'
@@ -146,6 +152,9 @@ export default function YuyuLogin() {
 
   /** Session ouverte (inscription, ou connexion une fois le second facteur passé). */
   const finish = (resp: YuyuSessionResp) => {
+    // En mémoire seulement, jamais sur le disque (`PasswordChangeModal`).
+    rememberProvisionalPassword(resp.password_reset_required ? loginPasswordRef.current : null)
+    loginPasswordRef.current = ''
     // Les jetons restent côté Rust : ici, seulement de quoi afficher.
     setYuyuSession({
       username: resp.username,

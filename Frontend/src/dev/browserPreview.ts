@@ -180,7 +180,7 @@ const ANSWERS: Record<string, unknown> = {
     motd_spans: [],
   } satisfies ServerPingInfo,
   yuyu_ping: true,
-  yuyu_status: { has_account: true } satisfies YuyuStatusResp,
+  yuyu_status: { has_account: true, password_reset_required: false } satisfies YuyuStatusResp,
   presence_get_visible: true,
   analytics_get_disabled: false,
   patch_notes_latest: null,

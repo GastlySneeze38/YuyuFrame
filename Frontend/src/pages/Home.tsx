@@ -15,7 +15,7 @@ import { showError, showNotice } from '@/stores/useErrorToast'
 import { InstanceSwitchModal } from '@/components/instances/InstanceSwitchModal'
 import { WelcomeSequence } from '@/components/home/WelcomeSequence'
 import { homeGreeting } from '@/lib/greeting'
-import { HomeBanner, Confetti, useHomeBanner } from '@/components/home/HomeBanner'
+import { AccountNotice, HomeBanner, Confetti, useHomeBanner } from '@/components/home/HomeBanner'
 import { HomeRail } from '@/components/home/HomeRail'
 import { InstanceShelf } from '@/components/home/shelf/InstanceShelf'
 import { LaunchTips } from '@/components/home/LaunchTips'
@@ -853,7 +853,12 @@ export default function Home() {
             className="absolute left-[clamp(12px,2vw,22px)] z-10 -translate-y-1/2"
             style={{ top: 'max(50%, calc(clamp(12px, 2vw, 22px) + clamp(26px, 6vh, 58px) + 14px + 30px))' }}
           >
-            <HomeBanner banner={banner} visible={bannerReady} />
+            {/* L'annonce du compte (mot de passe provisoire) passe au-dessus
+                de celle de la flotte : c'est un geste à faire. */}
+            <div className="flex flex-col gap-2">
+              <AccountNotice />
+              <HomeBanner banner={banner} visible={bannerReady} />
+            </div>
           </div>
 
           {/* Les raccourcis en carré : missions, amis, passe, saison. Même

@@ -55,6 +55,11 @@ interface Store {
    * toute autre action (le serveur refuse le reste). */
   yuyuPasswordResetRequired: boolean
   setYuyuPasswordResetRequired: (required: boolean) => void
+  /** La fenêtre du mot de passe provisoire a été remise à plus tard : on ne
+   *  la rouvre plus d'office pour cette session (bannière et Compte restent).
+   *  Jamais gardé d'un lancement à l'autre. */
+  yuyuPasswordLater: boolean
+  setYuyuPasswordLater: (later: boolean) => void
   /** E-mail absent ou non confirmé : saisie du code imposée avant toute
    * autre action (le serveur refuse le reste). */
   yuyuEmailVerificationRequired: boolean
@@ -301,6 +306,8 @@ export const useStore = create<Store>()(
       yuyuLicenseState: 'valid',
       yuyuPasswordResetRequired: false,
       setYuyuPasswordResetRequired: (required) => set({ yuyuPasswordResetRequired: required }),
+      yuyuPasswordLater: false,
+      setYuyuPasswordLater: (later) => set({ yuyuPasswordLater: later }),
       yuyuEmailVerificationRequired: false,
       yuyuPendingEmail: null,
       // `pendingEmail` absent = on ne sait pas : l'adresse déjà connue reste.
@@ -318,6 +325,8 @@ export const useStore = create<Store>()(
           yuyuPlanExpiresAt: session.planExpiresAt,
           yuyuLicenseState: session.licenseState ?? 'valid',
           yuyuPasswordResetRequired: session.passwordResetRequired ?? false,
+          // Une connexion avec un mot de passe provisoire le fait changer tout de suite.
+          yuyuPasswordLater: false,
           yuyuEmailVerificationRequired: session.emailVerificationRequired ?? false,
           yuyuPendingEmail: session.pendingEmail ?? null,
         }),
@@ -337,6 +346,7 @@ export const useStore = create<Store>()(
           yuyuPlanExpiresAt: null,
           yuyuLicenseState: 'valid',
           yuyuPasswordResetRequired: false,
+          yuyuPasswordLater: false,
           yuyuEmailVerificationRequired: false,
           yuyuPendingEmail: null,
         })

@@ -13,6 +13,9 @@ use crate::state::SharedState;
 #[derive(Serialize)]
 pub struct StatusResp {
     pub has_account: bool,
+    /// Le compte ouvert a un mot de passe provisoire (donné par le support) :
+    /// relu au démarrage, l'interface ne le garde pas d'un lancement à l'autre.
+    pub password_reset_required: bool,
 }
 
 #[derive(Serialize)]
@@ -37,7 +40,10 @@ pub struct SessionResp {
 #[tauri::command]
 pub async fn yuyu_status(state: tauri::State<'_, SharedState>) -> Result<StatusResp, String> {
     let s = state.read().await;
-    Ok(StatusResp { has_account: s.yuyu_session.is_some() })
+    Ok(StatusResp {
+        has_account: s.yuyu_session.is_some(),
+        password_reset_required: s.yuyu_session.as_ref().is_some_and(|y| y.password_reset_required),
+    })
 }
 
 /// Ping léger (`GET /health`) pour l'indicateur de connectivité — ne renvoie

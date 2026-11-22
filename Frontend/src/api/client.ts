@@ -11,6 +11,8 @@ import type { AuthStatus, CompatResult, DetectedLauncher, DeviceAuthResponse, Im
 
 export interface YuyuStatusResp {
   has_account: boolean
+  /** Le compte ouvert a un mot de passe provisoire à changer. */
+  password_reset_required: boolean
 }
 
 /** Session ouverte : les jetons restent côté Rust, jamais exposés ici. */

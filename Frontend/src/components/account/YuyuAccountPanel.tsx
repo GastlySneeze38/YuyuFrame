@@ -41,6 +41,7 @@ export function YuyuAccountPanel() {
   const [showPassword, setShowPassword] = useState(false)
   const [showVerify, setShowVerify] = useState(false)
   const verificationRequired = useStore((s) => s.yuyuEmailVerificationRequired)
+  const passwordProvisional = useStore((s) => s.yuyuPasswordResetRequired)
   const [mfa, setMfa] = useState<YuyuMfaResp | null>(null)
   const [totpMode, setTotpMode] = useState<'setup' | 'regen' | null>(null)
 
@@ -132,6 +133,26 @@ export function YuyuAccountPanel() {
           )}
         </AnimatePresence>
 
+        {/* Mot de passe provisoire (donné par le support) : le dire, et de
+            quoi le changer tout de suite — la fenêtre d'office a pu être
+            remise à plus tard. */}
+        <AnimatePresence>
+          {passwordProvisional && (
+            <motion.div
+              variants={fadeVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              className="flex items-center gap-3 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 max-sm:flex-col max-sm:items-stretch max-sm:rounded-xl max-sm:p-4"
+            >
+              <p className="min-w-0 flex-1 text-[11px] leading-relaxed text-warning max-sm:text-[15px]">{t('password.accountWarning')}</p>
+              <Button size="sm" variant="primary" onClick={() => setShowPassword(true)}>
+                {t('password.changeProvisional')}
+              </Button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* E-mail jamais confirmé : le serveur supprime le compte un jour
             après sa création. Le dire ici, avec de quoi y remédier — la
             fenêtre de confirmation peut avoir été remise à plus tard. */}
@@ -172,7 +193,7 @@ export function YuyuAccountPanel() {
         <motion.div variants={listItemVariants}>
           <Row
             label={t('account.password')}
-            value="••••••••"
+            value={passwordProvisional ? t('password.provisionalValue') : '••••••••'}
             action={
               <Button size="sm" onClick={() => setShowPassword(true)}>
                 {t('account.change')}

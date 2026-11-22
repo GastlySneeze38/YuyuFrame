@@ -196,7 +196,11 @@ export default function App() {
   // qu'il n'est pas changé (le serveur refuse tout le reste).
   const applyDetectedLanguage = useStore((s) => s.applyDetectedLanguage)
   const language = useStore((s) => s.language)
-  const passwordResetRequired = useStore((s) => s.yuyuPasswordResetRequired)
+  const passwordResetRequired = useStore((s) => s.yuyuSignedIn && s.yuyuPasswordResetRequired)
+  // « Plus tard » : la fenêtre ne s'ouvre plus d'office pour cette session ;
+  // la bannière de l'accueil et l'écran Compte permettent d'y revenir.
+  const passwordLater = useStore((s) => s.yuyuPasswordLater)
+  const setPasswordLater = useStore((s) => s.setYuyuPasswordLater)
   const emailVerificationRequired = useStore((s) => s.yuyuSignedIn && s.yuyuEmailVerificationRequired)
   // « Plus tard » sur la fenêtre de confirmation : elle ne revient pas avant
   // le prochain démarrage ou la prochaine connexion. La page Compte garde
@@ -662,6 +666,16 @@ export default function App() {
     }
   }, [yuyuSignedIn])
 
+  // Mot de passe provisoire : le drapeau n'est pas gardé par l'interface d'un
+  // lancement à l'autre, le Rust si (session enregistrée). Relu au démarrage,
+  // sans quoi la fenêtre ne revenait qu'au premier refus du serveur.
+  useEffect(() => {
+    if (isConsoleWindow || !yuyuSignedIn) return
+    api.yuyu.status()
+      .then((s) => { if (s.password_reset_required) useStore.getState().setYuyuPasswordResetRequired(true) })
+      .catch(() => {})
+  }, [yuyuSignedIn])
+
   // Notifications Windows (envoyées par le Rust, qui ne voit pas le magasin) :
   // on lui donne les deux réglages au démarrage et à chaque changement.
   const osNotifications = useStore((s) => s.osNotifications)
@@ -808,7 +822,9 @@ export default function App() {
       )}
       <FleetNotices />
       <InviteStack />
-      {passwordResetRequired && <PasswordChangeModal forced onClose={() => {}} />}
+      {passwordResetRequired && !passwordLater && (
+        <PasswordChangeModal forced onClose={() => {}} onLater={() => setPasswordLater(true)} />
+      )}
       {/* Après le mot de passe provisoire, jamais en même temps : le serveur
           les réclame dans cet ordre. */}
       {emailVerificationRequired && !passwordResetRequired && !verifyLater && (

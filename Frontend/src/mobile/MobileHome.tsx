@@ -9,7 +9,7 @@ import { skinPreview } from '@/lib/skinCache'
 import { homeGreeting } from '@/lib/greeting'
 import { acceptsVersion, homeSuggestions } from '@/lib/homeSuggestions'
 import { WelcomeSequence } from '@/components/home/WelcomeSequence'
-import { HomeBanner, Confetti, useHomeBanner } from '@/components/home/HomeBanner'
+import { AccountNotice, HomeBanner, Confetti, useHomeBanner } from '@/components/home/HomeBanner'
 import { HomeShortcuts } from '@/components/home/ChallengeShortcuts'
 import { HalloweenGround, HalloweenSky } from '@/components/home/Halloween'
 import { Skyline } from '@/components/home/Skyline'
@@ -300,7 +300,9 @@ export default function MobileHome() {
           </motion.div>
 
           {/* L'annonce de la flotte (Halloween…), sous le titre. */}
-          <div className="absolute left-4 top-[54px] z-10 max-w-[calc(100%-32px)]">
+          <div className="absolute left-4 top-[54px] z-10 flex max-w-[calc(100%-32px)] flex-col gap-2">
+            {/* Mot de passe provisoire : un geste à faire, au-dessus de l'annonce. */}
+            <AccountNotice />
             <HomeBanner banner={banner} visible />
           </div>
 
