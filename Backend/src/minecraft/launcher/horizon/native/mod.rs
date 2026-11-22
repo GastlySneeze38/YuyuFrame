@@ -19,6 +19,7 @@
 //! celui de l'instance — on le propose, sans jamais l'imposer.
 
 pub mod build;
+pub mod engine;
 pub mod sdk;
 pub mod toolchain;
 
@@ -147,9 +148,11 @@ pub async fn prepare(
         }, &cancelled)
         .await?
     };
+    // Le reste du jeu précompilé n'est utile qu'aux mods qui le modifient.
+    let wants_engine = mods.iter().any(|(_, b)| b.engine.is_some() && b.made_for == commit);
     let sdk = {
         let (app, floor) = (app.clone(), floor.clone());
-        sdk::ensure(client, &commit, &move |f| {
+        sdk::ensure(client, &commit, wants_engine, &move |f| {
             let pct = (f * 100.0) as u64;
             set_progress_monotonic(&app, &floor, 54 + (f * 6.0) as u64, 100, &format!("Téléchargement du SDK d'Horizon — {pct} %"));
         }, &cancelled)
@@ -162,7 +165,7 @@ pub async fn prepare(
     let needs_surface = mods.iter().any(|(_, b)| b.made_for != commit && b.engine.is_none());
     let surface = if needs_surface { sdk::surface(client, &sdk.index).await.ok() } else { None };
     let api_deps = sdk.api().join("deps");
-    let mut accepted = Vec::new();
+    let mut accepted: Vec<build::Bundle> = Vec::new();
     for (path, bundle) in mods {
         match build::judge(&bundle, &commit, surface.as_ref(), &prebuilt, &api_deps) {
             Ok(()) => accepted.push(bundle),
@@ -174,7 +177,66 @@ pub async fn prepare(
         }
     }
 
-    set_progress_monotonic(app, floor, 60, 100, "Compilation des mods natifs...");
+    // Le jeu précompilé entier, si un mod le modifie ou utilise un paquet du
+    // jeu absent de la tranche `api` (serde, log…).
+    let mut whole = None;
+    if accepted.iter().any(|b| build::needs_whole(b, &prebuilt, &api_deps)) {
+        let ready = async {
+            let sdk = {
+                let (app, floor) = (app.clone(), floor.clone());
+                sdk::ensure(client, &commit, true, &move |f| {
+                    let pct = (f * 100.0) as u64;
+                    set_progress_monotonic(&app, &floor, 58, 100, &format!("Téléchargement du jeu précompilé — {pct} %"));
+                }, &cancelled)
+                .await?
+            };
+            tokio::task::spawn_blocking(move || engine::whole(&sdk)).await.map_err(|e| anyhow!("{e}"))?
+        };
+        match ready.await {
+            Ok(dir) => whole = Some(dir),
+            Err(e) => {
+                if *cancel.borrow() {
+                    return Err(e);
+                }
+                let error = e.to_string();
+                accepted.retain(|b| {
+                    if build::needs_whole(b, &prebuilt, &api_deps) {
+                        report.left_out.push(LeftOut { id: b.id.clone(), file: format!("{}.hmod", b.id), reason: Reason::Engine { error: error.clone() } });
+                        false
+                    } else {
+                        true
+                    }
+                });
+            }
+        }
+    }
+
+    // Les outils des mods qui modifient le jeu : une fois par build d'Horizon.
+    // S'ils ne peuvent pas être préparés, ces mods restent de côté avec la
+    // raison, et les autres sont chargés.
+    let mut tools = None;
+    if accepted.iter().any(|b| b.engine.is_some()) {
+        match engine_tools(app, floor, client, &rust, &sdk, &commit, accepted.iter().any(|b| b.mixins), &cancelled).await {
+            Ok(ready) => tools = Some(ready),
+            Err(e) => {
+                if *cancel.borrow() {
+                    return Err(e);
+                }
+                let error = e.to_string();
+                log_to_console(app, console, &format!("[Horizon] Outils des mods qui modifient le jeu indisponibles : {error}"), "err");
+                accepted.retain(|b| {
+                    if b.engine.is_some() {
+                        report.left_out.push(LeftOut { id: b.id.clone(), file: format!("{}.hmod", b.id), reason: Reason::Engine { error: error.clone() } });
+                        false
+                    } else {
+                        true
+                    }
+                });
+            }
+        }
+    }
+
+    set_progress_monotonic(app, floor, 66, 100, "Compilation des mods natifs...");
     let built = {
         let (app, floor) = (app.clone(), floor.clone());
         let base_dir = base_dir.to_path_buf();
@@ -187,8 +249,10 @@ pub async fn prepare(
                 &base_dir,
                 accepted,
                 left_out,
+                whole.as_deref(),
+                tools.as_ref(),
                 &|id, n, total| {
-                    let at = 60 + ((n - 1) * 9 / total.max(1)) as u64;
+                    let at = 66 + ((n - 1) * 3 / total.max(1)) as u64;
                     set_progress_monotonic(&app, &floor, at, 100, &format!("Compilation des mods natifs — {id} ({n}/{total})"));
                 },
                 &|| *cancel.borrow(),
@@ -220,6 +284,46 @@ pub async fn prepare(
     Ok((!built.mods.is_empty()).then_some(built.dir))
 }
 
+/// Source du build, jeu précompilé entier, `yuyu-horizon-gen` et, si un mod
+/// a des `[[native.mixin]]`, `horizon-mixins`. Chacun n'est construit qu'une
+/// fois par build (ou par révision), puis repris.
+#[allow(clippy::too_many_arguments)]
+async fn engine_tools(
+    app: &tauri::AppHandle,
+    floor: &Arc<ProgressFloor>,
+    client: &reqwest::Client,
+    rust: &toolchain::Toolchain,
+    sdk: &sdk::Sdk,
+    commit: &str,
+    mixins: bool,
+    cancelled: &(dyn Fn() -> bool + Send + Sync),
+) -> Result<build::EngineTools> {
+    let source = {
+        let (app, floor) = (app.clone(), floor.clone());
+        engine::ensure_source(client, commit, &move |done| {
+            set_progress_monotonic(&app, &floor, 60, 100, &format!("Téléchargement du source d'Horizon — {} Mo", done / 1_000_000));
+        }, cancelled)
+        .await?
+    };
+    let whole = {
+        let sdk = sdk.clone();
+        tokio::task::spawn_blocking(move || engine::whole(&sdk)).await.map_err(|e| anyhow!("{e}"))??
+    };
+    set_progress_monotonic(app, floor, 61, 100, "Construction de l'outil des mods natifs (une fois par version d'Horizon)...");
+    let generator = {
+        let (rust, source, commit) = (rust.clone(), source.clone(), commit.to_string());
+        tokio::task::spawn_blocking(move || engine::ensure_gen(&rust, &source, &commit)).await.map_err(|e| anyhow!("{e}"))??
+    };
+    let mixins = if mixins {
+        set_progress_monotonic(app, floor, 64, 100, "Construction de horizon-mixins (une fois)...");
+        let rev = sdk.index.mixins.as_ref().map(|m| m.rev.clone()).ok_or_else(|| anyhow!("ce SDK ne dit pas quelle version de horizon-mixins utiliser"))?;
+        Some(engine::ensure_mixins(client, rust, &generator, &rev, cancelled).await?)
+    } else {
+        None
+    };
+    Ok(build::EngineTools { whole, generator, source, mixins })
+}
+
 /// Télécharge en arrière-plan le compilateur et le SDK du build que jouera
 /// l'instance, dès qu'un premier mod natif y est allumé : au clic sur Jouer,
 /// il ne reste en général que la compilation. Silencieux ; un échec sera
@@ -246,7 +350,7 @@ pub fn prefetch(app: tauri::AppHandle, pinned: String) {
         let version = base.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         match super::release::build_commit(client, &base, &version).await {
             Ok(commit) => {
-                if let Err(e) = sdk::ensure(client, &commit, &|f| emit("sdk", f), &never).await {
+                if let Err(e) = sdk::ensure(client, &commit, false, &|f| emit("sdk", f), &never).await {
                     tracing::warn!("[Horizon] SDK non préparé en arrière-plan : {e}");
                 }
             }

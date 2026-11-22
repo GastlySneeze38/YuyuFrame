@@ -28,11 +28,13 @@ const DIST: &str = "https://static.rust-lang.org/dist/2026-10-15";
 pub const TARGET: &str = "x86_64-pc-windows-gnu";
 
 /// (composant, SHA-256, taille) de `<composant>-<VERSION>-<TARGET>.tar.gz`.
-/// Pas `cargo` : les mods sont compilés par `rustc` seul.
-const COMPONENTS: [(&str, &str, u64); 3] = [
+/// Les mods sont compilés par `rustc` seul ; `cargo` construit les outils des
+/// mods qui modifient le jeu (`engine.rs`), depuis le source d'Horizon.
+const COMPONENTS: [(&str, &str, u64); 4] = [
     ("rustc", "43b17e9a9134ea72562bfbb23728a830f671ea9be1db6a72597a8d240e986b35", 161_274_138),
     ("rust-std", "6546651238a3ac092b763511be524ca6eda6103e5d47342416923be1b3ce837c", 44_957_351),
     ("rust-mingw", "30263d7bb4fd0bf63a153afe36d7fc102f929a7d42781651c6b3a03a414ba428", 9_594_887),
+    ("cargo", "57e54617be4420dbb967ca8293f5ace7168104ac12efa9dc7c5c3bda112f8b36", 18_659_998),
 ];
 
 /// GCC et binutils de WinLibs (MSVCRT, threads POSIX, SEH) : l'éditeur de
@@ -59,6 +61,18 @@ impl Toolchain {
         self.dir.join("mingw64").join("bin")
     }
 
+    pub fn cargo(&self) -> PathBuf {
+        self.dir.join("bin").join("cargo.exe")
+    }
+
+    /// Un programme (`cargo`, un outil construit) réglé comme `rustc` : ce
+    /// compilateur seul (`RUSTC`), son `CARGO_HOME` à lui, pas de console.
+    pub fn program(&self, program: &Path) -> std::process::Command {
+        let mut cmd = self.base(program);
+        cmd.env("RUSTC", self.rustc()).env("CARGO_HOME", super::root().join("cargo-home"));
+        cmd
+    }
+
     /// Les bibliothèques de Rust pour la cible : la bibliothèque standard en
     /// DLL, que le jeu charge à côté de son exécutable.
     pub fn target_libdir(&self) -> PathBuf {
@@ -69,7 +83,11 @@ impl Toolchain {
     /// liens d'abord dans le `PATH`, aucune variable Rust du joueur, pas de
     /// fenêtre de console.
     pub fn command(&self) -> std::process::Command {
-        let mut cmd = std::process::Command::new(self.rustc());
+        self.base(&self.rustc())
+    }
+
+    fn base(&self, program: &Path) -> std::process::Command {
+        let mut cmd = std::process::Command::new(program);
         #[cfg(target_os = "windows")]
         {
             use std::os::windows::process::CommandExt;
@@ -101,7 +119,10 @@ fn root() -> PathBuf {
 /// Le compilateur, s'il est déjà installé.
 pub fn installed() -> Option<Toolchain> {
     let dir = root();
-    (dir.join(COMPLETE).is_file() && dir.join("bin").join("rustc.exe").is_file()).then_some(Toolchain { dir })
+    let complete = dir.join(COMPLETE).is_file()
+        && dir.join("bin").join("rustc.exe").is_file()
+        && dir.join("bin").join("cargo.exe").is_file();
+    complete.then_some(Toolchain { dir })
 }
 
 /// Taille totale à télécharger, pour l'annoncer avant.

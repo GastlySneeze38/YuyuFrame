@@ -37,6 +37,9 @@ pub struct Index {
     pub build: Build,
     pub package_format: u32,
     pub toolchain: Toolchain,
+    /// La version de horizon-mixins avec laquelle ce build se modifie.
+    #[serde(default)]
+    pub mixins: Option<Mixins>,
     #[serde(default)]
     pub assets: HashMap<String, Asset>,
 }
@@ -49,6 +52,11 @@ pub struct Build {
 #[derive(Deserialize, Clone, Debug)]
 pub struct Toolchain {
     pub rust: String,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct Mixins {
+    pub rev: String,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -214,12 +222,15 @@ struct Stamp {
 pub async fn ensure(
     client: &reqwest::Client,
     commit: &str,
+    engine: bool,
     progress: &(dyn Fn(f32) + Send + Sync),
     cancel: &(dyn Fn() -> bool + Send + Sync),
 ) -> Result<Sdk> {
     let index = index(client, commit).await?;
     let dir = dir_for(commit);
-    let slices = ["runtime", "api"];
+    // `engine` : le reste du jeu précompilé (~190 Mo), pour les mods qui le
+    // modifient ; aussi l'index des fonctions qu'on peut copier.
+    let slices: &[&str] = if engine { &["runtime", "api", "engine"] } else { &["runtime", "api"] };
     let names: Vec<String> = slices.iter().map(|s| format!("{s}-{}.tar.xz", super::toolchain::TARGET)).collect();
     let total: u64 = names.iter().filter_map(|n| index.assets.get(n)).map(|a| a.size).sum::<u64>().max(1);
     let mut before = 0u64;
@@ -341,6 +352,10 @@ pub struct Prebuilt {
     pub side: String,
     #[serde(default)]
     pub facade_crates: Vec<String>,
+    /// Les fonctionnalités avec lesquelles le jeu a été compilé : les copies
+    /// de ses fonctions se compilent avec les mêmes.
+    #[serde(default)]
+    pub game_features: Vec<String>,
 }
 
 pub fn prebuilt(runtime: &Path) -> Result<Prebuilt> {

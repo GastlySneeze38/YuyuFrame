@@ -71,6 +71,7 @@ export type HorizonLeftOutReason =
   | { kind: 'other_build'; made_for: string; why: string }
   | { kind: 'does_not_fit'; made_for: string; items: string[] }
   | { kind: 'changes_game' }
+  | { kind: 'engine'; error: string }
   | { kind: 'injections' }
   | { kind: 'crates'; names: string[] }
   | { kind: 'missing_dependency'; id: string }

@@ -17,10 +17,15 @@
 //! laissé de côté avec la raison, jamais supprimé, et les autres sont compilés
 //! quand même : la partie se lance toujours.
 //!
-//! Pas encore pris en charge (laissés de côté, raison donnée au joueur) : les
-//! mods qui modifient le code du jeu (`[[native.mixin]]`, modules, internes —
-//! route « engine », environ 15 % du registre), et ceux qui déclarent des
-//! `[[inject]]` (aucun dans le registre au 2026-11-21).
+//! 3. Route « engine » (`engine.rs`, 2026-11-22) : les mods qui modifient le
+//!    code du jeu sont compilés contre le jeu précompilé entier ; leurs
+//!    internes passent par une façade, leurs `[[native.mixin]]` par une crate
+//!    de copies (`horizon_patched`) et la bibliothèque `horizon_patch`, qui les
+//!    installe au démarrage. Recette vérifiée à la main sur Server Flags.
+//!
+//! Pas encore pris en charge : les `[[inject]]` (aucun dans le registre au
+//! 2026-11-21), et les mods qui dépendent de paquets Rust que le jeu ne
+//! fournit pas.
 
 use anyhow::{anyhow, Result};
 use serde::Serialize;
@@ -47,6 +52,8 @@ pub struct Bundle {
     pub made_for: String,
     /// Pourquoi il ne peut tourner que sur ce build-là, s'il modifie le jeu.
     pub engine: Option<&'static str>,
+    /// Des `[[native.mixin]]` : il faut horizon-mixins.
+    pub mixins: bool,
     pub inject: bool,
     pub files: Vec<(String, Vec<u8>)>,
     pub sha256: String,
@@ -91,7 +98,10 @@ impl Bundle {
             return Vec::new();
         };
         deps.iter()
-            .filter(|(name, _)| !SDK_PACKAGES.iter().any(|(p, _)| p == name))
+            .filter(|(name, value)| {
+                let package = value.get("package").and_then(|p| p.as_str()).unwrap_or(name);
+                !SDK_PACKAGES.iter().any(|(p, _)| *p == package) && package != INTERNALS_PACKAGE
+            })
             .filter(|(name, _)| !self.depends.iter().any(|(id, _)| id.replace('_', "-") == name.replace('_', "-")))
             .map(|(name, value)| {
                 let package = value.get("package").and_then(|p| p.as_str()).unwrap_or(name);
@@ -111,10 +121,28 @@ impl Bundle {
             })
             .collect()
     }
+
+    /// Le nom sous lequel il nomme la façade de ses internes, s'il en a une.
+    fn internals_alias(&self) -> Option<String> {
+        let deps = self.cargo.get("dependencies")?.as_table()?;
+        deps.iter()
+            .find(|(key, value)| value.get("package").and_then(|p| p.as_str()).unwrap_or(key) == INTERNALS_PACKAGE)
+            .map(|(key, _)| key.replace('-', "_"))
+    }
 }
 
 /// Les paquets du SDK qu'un mod peut nommer, et leur bibliothèque.
 const SDK_PACKAGES: [(&str, &str); 2] = [("horizon-mod-api", "mod_api"), ("horizon-mod-points", "mod_points")];
+/// La façade des internes qu'un mod déclare : une crate générée pour lui.
+const INTERNALS_PACKAGE: &str = "horizon-internals";
+
+/// Les outils de la route « engine », prêts (`engine.rs`).
+pub struct EngineTools {
+    pub whole: PathBuf,
+    pub generator: PathBuf,
+    pub source: PathBuf,
+    pub mixins: Option<PathBuf>,
+}
 
 /// Lit un `.hmod` : une archive zip, chemins relatifs simples, fichiers
 /// ordinaires. Rien n'est exécuté.
@@ -199,6 +227,7 @@ pub fn read_bundle(path: &Path) -> Result<Bundle> {
         side: get("side"),
         made_for,
         engine,
+        mixins: native.contains_key("mixin"),
         inject: manifest.contains_key("inject"),
         files,
         sha256,
@@ -216,8 +245,11 @@ pub enum Reason {
     OtherBuild { made_for: String, why: String },
     /// Fait pour un autre build, et des éléments qu'il utilise ont changé ici.
     DoesNotFit { made_for: String, items: Vec<String> },
-    /// Il modifie le code du jeu : pas encore pris en charge par YuyuFrame.
+    /// Il modifie le code du jeu, et les outils pour ça n'ont pas pu être
+    /// préparés (la raison est dans `Engine`).
     ChangesGame,
+    /// La préparation de ses modifications du jeu a échoué ou a été refusée.
+    Engine { error: String },
     /// Il déclare des points d'injection : pas encore pris en charge.
     Injections,
     /// Il dépend de paquets Rust que le SDK ne fournit pas.
@@ -277,19 +309,22 @@ pub fn enabled_mods(game_dir: &Path) -> (Vec<(PathBuf, Bundle)>, Vec<LeftOut>) {
 
 /// Ce que chaque mod donne contre le build `commit` : compilable, ou pourquoi pas.
 pub fn judge(bundle: &Bundle, commit: &str, surface: Option<&HashMap<String, String>>, prebuilt: &super::sdk::Prebuilt, api_deps: &Path) -> Result<(), Reason> {
-    if bundle.engine.is_some() {
-        if bundle.made_for != commit {
-            return Err(Reason::OtherBuild { made_for: bundle.made_for.clone(), why: bundle.engine.unwrap_or_default().to_string() });
-        }
-        return Err(Reason::ChangesGame);
+    // Un mod qui modifie le jeu ne tourne que sur le build pour lequel il est
+    // fait : ses copies de fonctions et ses internes sont ceux de ce build.
+    if bundle.engine.is_some() && bundle.made_for != commit {
+        return Err(Reason::OtherBuild { made_for: bundle.made_for.clone(), why: bundle.engine.unwrap_or_default().to_string() });
     }
     if bundle.inject {
         return Err(Reason::Injections);
     }
+    // Les paquets tiers que le jeu fournit déjà (`facade_crates`) se lient au
+    // jeu ; ceux de la tranche `api` directement, les autres contre le jeu
+    // précompilé entier (`needs_whole`).
+    let _ = api_deps;
     let missing: Vec<String> = bundle
         .crates()
         .into_iter()
-        .filter(|(_, krate)| facade(prebuilt, api_deps, krate).is_none())
+        .filter(|(_, krate)| !prebuilt.facade_crates.iter().any(|c| c == krate))
         .map(|(name, _)| name)
         .collect();
     if !missing.is_empty() {
@@ -324,6 +359,12 @@ pub fn judge(bundle: &Bundle, commit: &str, surface: Option<&HashMap<String, Str
     } else {
         Err(Reason::DoesNotFit { made_for: bundle.made_for.clone(), items })
     }
+}
+
+/// Le mod a-t-il besoin du jeu précompilé entier : il le modifie, ou il
+/// utilise un paquet tiers du jeu absent de la tranche `api`.
+pub fn needs_whole(bundle: &Bundle, prebuilt: &super::sdk::Prebuilt, api_deps: &Path) -> bool {
+    bundle.engine.is_some() || bundle.crates().iter().any(|(_, krate)| facade(prebuilt, api_deps, krate).is_none())
 }
 
 /// La bibliothèque d'un paquet tiers que le jeu fournit déjà (serde_json,
@@ -416,18 +457,36 @@ pub fn builds_dir() -> PathBuf {
 
 /// Compile les mods acceptés et assemble le jeu ; reprend un jeu déjà
 /// assemblé pour le même ensemble. `on_mod(id, n, total)` avant chaque compilation.
+#[allow(clippy::too_many_arguments)]
 pub fn build(
     rust: &Toolchain,
     sdk: &Sdk,
     base_dir: &Path,
     accepted: Vec<Bundle>,
     mut left_out: Vec<LeftOut>,
+    whole: Option<&Path>,
+    engine: Option<&EngineTools>,
     on_mod: &dyn Fn(&str, usize, usize),
     cancel: &dyn Fn() -> bool,
 ) -> Result<Built> {
-    let (ordered, missing) = order(accepted);
+    let leave = |left_out: &mut Vec<LeftOut>, b: &Bundle, reason: Reason| {
+        left_out.push(LeftOut { file: format!("{}.hmod", b.id), id: b.id.clone(), reason });
+    };
+    // Sans les outils de la route engine, ses mods restent de côté.
+    let accepted: Vec<Bundle> = accepted
+        .into_iter()
+        .filter_map(|b| {
+            if b.engine.is_some() && engine.is_none() {
+                leave(&mut left_out, &b, Reason::ChangesGame);
+                None
+            } else {
+                Some(b)
+            }
+        })
+        .collect();
+    let (mut ordered, missing) = order(accepted);
     for (b, reason) in missing {
-        left_out.push(LeftOut { file: format!("{}.hmod", b.id), id: b.id, reason });
+        leave(&mut left_out, &b, reason);
     }
     let commit = sdk.index.build.commit.clone();
     let runtime = sdk.runtime();
@@ -438,16 +497,96 @@ pub fn build(
     }
     let template = std::fs::read_to_string(api.join(ENTRY_TEMPLATE))
         .map_err(|_| anyhow!("Ce SDK n'a pas de modèle de point d'entrée : mets à jour YuyuFrame"))?;
-    for marker in ["/* MOD_ENTRIES */", "/* MOD_SLOTS */", "/* BUILT_MODS */"] {
+    for marker in ["/* MOD_ENTRIES */", "/* MOD_SLOTS */", "/* BUILT_MODS */", "/* MOD_REDIRECTS */"] {
         if template.matches(marker).count() != 1 {
             return Err(anyhow!("Le modèle de point d'entrée de ce SDK a changé : mets à jour YuyuFrame"));
         }
     }
 
-    // Compiler dans l'ordre ; un échec retire le mod et ceux qui en dépendent.
     let work = super::root().join("work").join(&commit[..12]);
     let out = work.join("out");
     std::fs::create_dir_all(&out)?;
+
+    // Dès qu'un mod modifie le jeu ou utilise un paquet du jeu hors de la
+    // tranche `api`, tout se compile contre le jeu précompilé entier, comme
+    // chez Horizon.
+    let engine = engine.filter(|_| ordered.iter().any(|b| b.engine.is_some()));
+    let whole = whole.or(engine.map(|t| t.whole.as_path()));
+    let ctx = match whole {
+        Some(whole) => Ctx {
+            search: vec![whole.join("deps"), whole.join("host"), out.clone()],
+            native: Some(whole.join("native")),
+            libs: whole.join("deps"),
+            facades: whole.join("deps"),
+        },
+        None => Ctx {
+            search: vec![api.join("deps"), api.join("host"), runtime.join("deps"), out.clone()],
+            native: None,
+            libs: runtime.join("deps"),
+            facades: api.join("deps"),
+        },
+    };
+
+    // Façades des internes et copies des fonctions, par notre outil construit
+    // contre leurs crates. Un mod refusé reste de côté avec la raison.
+    let mut internals: HashMap<String, PathBuf> = HashMap::new();
+    let mut prepared_patch = None;
+    if let Some(tools) = engine {
+        let staged_root = work.join("engine-mods");
+        let _ = std::fs::remove_dir_all(&staged_root);
+        let mut staged = Vec::new();
+        for b in ordered.iter().filter(|b| b.engine.is_some()) {
+            let dir = staged_root.join(&b.id);
+            for (name, bytes) in &b.files {
+                let to = dir.join(name);
+                std::fs::create_dir_all(to.parent().unwrap_or(&dir))?;
+                std::fs::write(to, bytes)?;
+            }
+            staged.push((b.id.clone(), dir));
+        }
+        match super::engine::prepare(&tools.generator, &tools.source, &tools.whole, &commit, &work.join("engine"), &staged) {
+            Ok(prepared) => {
+                for (id, facade) in &prepared.facades {
+                    if prepared.refused.contains_key(id) {
+                        continue;
+                    }
+                    match compile_facade(rust, &ctx, &out, id, facade, &prebuilt) {
+                        Ok(rlib) => {
+                            internals.insert(id.clone(), rlib);
+                        }
+                        Err(reason) => {
+                            if let Some(b) = ordered.iter().find(|b| &b.id == id) {
+                                leave(&mut left_out, b, reason);
+                            }
+                        }
+                    }
+                }
+                let refused = prepared.refused.clone();
+                let gone: HashSet<String> = left_out.iter().map(|l| l.id.clone()).collect();
+                ordered.retain(|b| {
+                    if let Some(error) = refused.get(&b.id) {
+                        left_out.push(LeftOut { file: format!("{}.hmod", b.id), id: b.id.clone(), reason: Reason::Engine { error: error.clone() } });
+                        return false;
+                    }
+                    !gone.contains(&b.id)
+                });
+                prepared_patch = prepared.patch;
+            }
+            Err(e) => {
+                let error = e.to_string();
+                ordered.retain(|b| {
+                    if b.engine.is_some() {
+                        left_out.push(LeftOut { file: format!("{}.hmod", b.id), id: b.id.clone(), reason: Reason::Engine { error: error.clone() } });
+                        false
+                    } else {
+                        true
+                    }
+                });
+            }
+        }
+    }
+
+    // Compiler dans l'ordre ; un échec retire le mod et ceux qui en dépendent.
     let mut compiled: Vec<(Bundle, PathBuf)> = Vec::new();
     let mut failed: HashSet<String> = HashSet::new();
     let total = ordered.len();
@@ -457,7 +596,8 @@ pub fn build(
         }
         if let Some((dep, _)) = bundle.depends.iter().find(|(id, optional)| !optional && failed.contains(id)) {
             failed.insert(bundle.id.clone());
-            left_out.push(LeftOut { file: format!("{}.hmod", bundle.id), id: bundle.id.clone(), reason: Reason::MissingDependency { id: dep.clone() } });
+            let reason = Reason::MissingDependency { id: dep.clone() };
+            leave(&mut left_out, &bundle, reason);
             continue;
         }
         on_mod(&bundle.id, n + 1, total);
@@ -466,19 +606,42 @@ pub fn build(
             .iter()
             .filter_map(|(id, optional)| compiled.iter().find(|(b, _)| &b.id == id).map(|(_, lib)| (id.clone(), *optional, lib.clone())))
             .collect();
-        match compile(rust, &runtime, &api, &out, &bundle, &deps, &template, &commit, &prebuilt) {
+        let facade = internals.get(&bundle.id).map(PathBuf::as_path);
+        match compile(rust, &ctx, &out, &bundle, &deps, facade, &template, &commit, &prebuilt) {
             Ok(lib) => compiled.push((bundle, lib)),
             Err(reason) => {
                 failed.insert(bundle.id.clone());
-                left_out.push(LeftOut { file: format!("{}.hmod", bundle.id), id: bundle.id.clone(), reason });
+                leave(&mut left_out, &bundle, reason);
             }
         }
     }
 
-    let identity: Vec<(&str, &str)> = compiled.iter().map(|(b, _)| (b.id.as_str(), b.sha256.as_str())).collect();
+    // Les copies modifiées des fonctions, puis la bibliothèque qui les installe.
+    // Un échec ici retire les mods qui modifient le jeu, jamais les autres.
+    let mut patch_lib = None;
+    if let (Some(tools), Some(patch)) = (engine, prepared_patch) {
+        match build_patch(rust, &ctx, &out, tools, &patch, &compiled, &template, &commit, &prebuilt) {
+            Ok(lib) => patch_lib = Some(lib),
+            Err(error) => {
+                compiled.retain(|(b, _)| {
+                    if b.engine == Some(CHANGES_GAME) {
+                        left_out.push(LeftOut { file: format!("{}.hmod", b.id), id: b.id.clone(), reason: Reason::Engine { error: error.clone() } });
+                        false
+                    } else {
+                        true
+                    }
+                });
+            }
+        }
+    }
+
+    let mut identity: Vec<(&str, &str)> = compiled.iter().map(|(b, _)| (b.id.as_str(), b.sha256.as_str())).collect();
+    if patch_lib.is_some() {
+        identity.push(("horizon_patch", "engine"));
+    }
     let dir = builds_dir().join(&key(&commit, &identity)[..16]);
     if !dir.join(".installed").is_file() {
-        assemble(rust, sdk, base_dir, &compiled, &dir, &left_out)?;
+        assemble(rust, sdk, base_dir, &compiled, patch_lib.as_deref(), &dir, &left_out)?;
     } else {
         let _ = std::fs::write(dir.join(".installed"), &commit);
     }
@@ -486,14 +649,191 @@ pub fn build(
     Ok(Built { dir, mods: compiled.iter().map(|(b, _)| b.id.clone()).collect(), left_out })
 }
 
+/// Où chercher ce contre quoi un mod se compile, selon la route.
+struct Ctx {
+    /// Dossiers `-L dependency=`.
+    search: Vec<PathBuf>,
+    /// Bibliothèques natives du jeu (`-L native=`), route engine.
+    native: Option<PathBuf>,
+    /// Où sont `mod_api`, `mod_vocab`, `mod_points`, `horizon_client`…
+    libs: PathBuf,
+    /// Où sont les paquets tiers que le jeu expose (`facade_crates`).
+    facades: PathBuf,
+}
+
+impl Ctx {
+    fn rustc(&self, rust: &Toolchain, edition: &str) -> std::process::Command {
+        let mut cmd = rust.command();
+        cmd.args(["--edition", edition, "-C", "prefer-dynamic", "-C", "opt-level=3"]);
+        for folder in &self.search {
+            cmd.arg("-L").arg(format!("dependency={}", folder.display()));
+        }
+        if let Some(native) = &self.native {
+            cmd.arg("-L").arg(format!("native={}", native.display()));
+        }
+        cmd
+    }
+}
+
+/// La bibliothèque d'une crate du jeu dans `dir` : sa DLL, sinon ses métadonnées.
+fn library_in(dir: &Path, krate: &str) -> Option<PathBuf> {
+    for name in [format!("{krate}.dll"), format!("lib{krate}.dll")] {
+        let path = dir.join(&name);
+        if path.is_file() {
+            return Some(path);
+        }
+    }
+    let prefix = format!("lib{krate}-");
+    let found: Vec<PathBuf> = std::fs::read_dir(dir)
+        .ok()?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| {
+            let name = p.file_name().unwrap_or_default().to_string_lossy();
+            (name.starts_with(&prefix) && name.ends_with(".rmeta")) || name == format!("lib{krate}.rmeta")
+        })
+        .collect();
+    match found.as_slice() {
+        [one] => Some(one.clone()),
+        _ => None,
+    }
+}
+
+/// Lance `rustc` ; en cas d'échec, ses dernières lignes.
+fn run_rustc(mut cmd: std::process::Command, what: &str) -> std::result::Result<(), String> {
+    let output = cmd.output().map_err(|e| format!("rustc ne démarre pas : {e}"))?;
+    if output.status.success() {
+        return Ok(());
+    }
+    let text = String::from_utf8_lossy(&output.stderr);
+    tracing::warn!("[Horizon] {what} a échoué :\n{text}");
+    let lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
+    Err(lines[lines.len().saturating_sub(12)..].join("\n"))
+}
+
+/// La façade des internes d'un mod, en rlib nommée `internals`.
+fn compile_facade(rust: &Toolchain, ctx: &Ctx, out: &Path, id: &str, facade: &super::engine::Facade, prebuilt: &super::sdk::Prebuilt) -> std::result::Result<PathBuf, Reason> {
+    let source = out.join(format!("internals_{id}.rs"));
+    std::fs::write(&source, &facade.source).map_err(|e| Reason::Engine { error: e.to_string() })?;
+    let rlib = out.join(format!("libinternals_{id}.rlib"));
+    let game = library_in(&ctx.libs, "horizon_client").ok_or_else(|| Reason::Engine { error: "le jeu précompilé n'a pas horizon_client".into() })?;
+    let mut cmd = ctx.rustc(rust, "2024");
+    cmd.args(["--crate-type", "rlib", "--crate-name", "internals"])
+        .arg("-C")
+        .arg(format!("metadata={id}"))
+        .arg("--extern")
+        .arg(format!("horizon_client={}", game.display()))
+        .arg("-o")
+        .arg(&rlib)
+        .arg(&source);
+    for krate in &facade.crates {
+        if krate != "horizon_client" {
+            let path = facade_lib(prebuilt, &ctx.facades, krate).ok_or_else(|| Reason::Engine { error: format!("le jeu n'expose pas {krate}") })?;
+            cmd.arg("--extern").arg(format!("{krate}={}", path.display()));
+        }
+    }
+    run_rustc(cmd, &format!("façade des internes de {id}")).map_err(|log| Reason::Compile { log })?;
+    Ok(rlib)
+}
+
+fn facade_lib(prebuilt: &super::sdk::Prebuilt, dir: &Path, krate: &str) -> Option<PathBuf> {
+    prebuilt.facade_crates.iter().any(|c| c == krate).then(|| library_in(dir, krate)).flatten()
+}
+
+/// Ce que `Bundle::engine` dit d'un mod qui a des copies de fonctions.
+const CHANGES_GAME: &str = "modifie le code du jeu";
+
+/// Applique les mixins aux copies, compile les crates de patch puis
+/// `horizon_patch`, qui installe chaque copie à la place de l'originale.
+#[allow(clippy::too_many_arguments)]
+fn build_patch(
+    rust: &Toolchain,
+    ctx: &Ctx,
+    out: &Path,
+    tools: &EngineTools,
+    patch: &super::engine::Patch,
+    compiled: &[(Bundle, PathBuf)],
+    template: &str,
+    commit: &str,
+    prebuilt: &super::sdk::Prebuilt,
+) -> std::result::Result<PathBuf, String> {
+    let applied = if patch.rows {
+        let tool = tools.mixins.as_ref().ok_or("horizon-mixins n'a pas pu être préparé")?;
+        super::engine::apply(rust, tool, patch, out).map_err(|e| e.to_string())?
+    } else {
+        patch.workspace.clone()
+    };
+    let game = library_in(&ctx.libs, "horizon_client").ok_or("le jeu précompilé n'a pas horizon_client")?;
+    let mut externs = vec![format!("--extern\nhorizon_client={}", game.display())];
+    for krate in prebuilt.facade_crates.iter().filter(|k| *k != "horizon_client") {
+        if let Some(path) = library_in(&ctx.facades, krate) {
+            externs.push(format!("--extern\n{krate}={}", path.display()));
+        }
+    }
+    for (bundle, lib) in compiled.iter().filter(|(b, _)| b.engine.is_some()) {
+        externs.push(format!("--extern\n{}={}", bundle.crate_name(), lib.display()));
+    }
+    let mut rlibs = Vec::new();
+    for name in &patch.names {
+        let rlib = out.join(format!("lib{name}.rlib"));
+        let mut cmd = ctx.rustc(rust, "2024");
+        cmd.args(["--crate-type", "rlib", "--crate-name", name, "--cap-lints", "allow"])
+            .arg("-o")
+            .arg(&rlib)
+            .arg(applied.join(name).join("src").join("lib.rs"));
+        for feature in &prebuilt.game_features {
+            cmd.arg("--cfg").arg(format!("feature=\"{feature}\""));
+        }
+        // Un fichier d'arguments : une `--extern` par crate du SDK dépasse la
+        // limite de 32 767 caractères d'une ligne de commande Windows.
+        let argfile = out.join(format!("{name}.externs"));
+        std::fs::write(&argfile, externs.join("\n")).map_err(|e| e.to_string())?;
+        let mut arg = std::ffi::OsString::from("@");
+        arg.push(&argfile);
+        cmd.arg(arg);
+        run_rustc(cmd, "compilation des fonctions modifiées")?;
+        rlibs.push((name.clone(), rlib));
+    }
+
+    let fill = |text: &str, marker: &str, value: &str| -> String {
+        match text.find(marker) {
+            Some(i) => format!("{}{}{}", text[..i].trim_end_matches([' ', '\t']), value, &text[i + marker.len()..]),
+            None => text.to_string(),
+        }
+    };
+    let mut entry = template.to_string();
+    entry = fill(&entry, "/* MOD_ENTRIES */", "");
+    entry = fill(&entry, "/* MOD_SLOTS */", "");
+    entry = fill(&entry, "/* BUILT_MODS */", "");
+    entry = fill(&entry, "/* MOD_REDIRECTS */", &patch.installs.iter().map(|i| format!("{i},\n")).collect::<String>());
+    entry = entry.replace("/* NATIVE_BUILD */", &format!("{commit} horizon_patch 0 {}", super::toolchain::VERSION));
+    // L'édition 2024 ne charge une `--extern` que si le source la nomme.
+    entry.push_str("\nextern crate horizon_mod_host as _;\n");
+    let source = out.join("horizon_patch.rs");
+    std::fs::write(&source, &entry).map_err(|e| e.to_string())?;
+    let library = out.join("horizon_patch.dll");
+    let mut cmd = ctx.rustc(rust, "2024");
+    cmd.args(["--crate-type", "dylib", "--crate-name", "horizon_patch"]);
+    for krate in ["horizon_client", "mod_api", "mod_vocab", "mod_points", "horizon_mod_package", "horizon_mod_host"] {
+        let path = library_in(&ctx.libs, krate).ok_or_else(|| format!("le jeu précompilé n'a pas {krate}"))?;
+        cmd.arg("--extern").arg(format!("{krate}={}", path.display()));
+    }
+    for (name, rlib) in &rlibs {
+        cmd.arg("--extern").arg(format!("{name}={}", rlib.display()));
+    }
+    cmd.arg("-o").arg(&library).arg(&source);
+    run_rustc(cmd, "bibliothèque des fonctions modifiées")?;
+    Ok(library)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn compile(
     rust: &Toolchain,
-    runtime: &Path,
-    api: &Path,
+    ctx: &Ctx,
     out: &Path,
     bundle: &Bundle,
     deps: &[(String, bool, PathBuf)],
+    internals: Option<&Path>,
     template: &str,
     commit: &str,
     prebuilt: &super::sdk::Prebuilt,
@@ -509,6 +849,12 @@ fn compile(
     hash.update(BUILD_RECIPE.to_le_bytes());
     for (_, _, dep) in deps {
         hash.update(std::fs::read(dep).unwrap_or_default());
+    }
+    if let Some(facade) = internals {
+        hash.update(std::fs::read(facade).unwrap_or_default());
+    }
+    for folder in &ctx.search {
+        hash.update(folder.to_string_lossy().as_bytes());
     }
     let fingerprint = format!("{:x}", hash.finalize());
     let saved = lib.with_extension("fingerprint");
@@ -533,25 +879,26 @@ fn compile(
     root.push_str("\n#[allow(unsafe_code)]\n#[path = \"__horizon_entry.rs\"] mod __horizon_entry;\n");
     std::fs::write(&source, root).map_err(write_err)?;
 
-    let runtime_deps = runtime.join("deps");
-    let mut cmd = rust.command();
-    cmd.args(["--edition", &bundle.edition(), "-C", "prefer-dynamic", "-C", "opt-level=3"]);
-    for folder in [api.join("deps"), api.join("host"), runtime_deps.clone(), out.to_path_buf()] {
-        cmd.arg("-L").arg(format!("dependency={}", folder.display()));
-    }
+    let mut cmd = ctx.rustc(rust, &bundle.edition());
     cmd.args(["--crate-type", "dylib", "--crate-name", &krate])
         .arg("-C")
         .arg(format!("metadata={}", bundle.id));
+    let missing = |name: &str| Reason::Compile { log: format!("le jeu précompilé n'a pas {name}") };
     for name in ["mod_api", "mod_vocab", "mod_points"] {
-        cmd.arg("--extern").arg(format!("{name}={}", runtime_deps.join(format!("{name}.dll")).display()));
+        let path = library_in(&ctx.libs, name).ok_or_else(|| missing(name))?;
+        cmd.arg("--extern").arg(format!("{name}={}", path.display()));
     }
     for (alias, name) in bundle.sdk_aliases() {
         if alias != name {
-            cmd.arg("--extern").arg(format!("{alias}={}", runtime_deps.join(format!("{name}.dll")).display()));
+            let path = library_in(&ctx.libs, name).ok_or_else(|| missing(name))?;
+            cmd.arg("--extern").arg(format!("{alias}={}", path.display()));
         }
     }
+    if let (Some(alias), Some(facade)) = (bundle.internals_alias(), internals) {
+        cmd.arg("--extern").arg(format!("{alias}={}", facade.display()));
+    }
     for (alias, krate) in bundle.crates() {
-        if let Some(path) = facade(prebuilt, &api.join("deps"), &krate) {
+        if let Some(path) = facade(prebuilt, &ctx.facades, &krate) {
             cmd.arg("--extern").arg(format!("{alias}={}", path.display()));
         }
     }
@@ -617,7 +964,7 @@ fn forbids_unsafe(root: &str) -> bool {
 }
 
 /// Pose le jeu assemblé dans `dir`, en entier ou pas du tout.
-fn assemble(rust: &Toolchain, sdk: &Sdk, base_dir: &Path, compiled: &[(Bundle, PathBuf)], dir: &Path, left_out: &[LeftOut]) -> Result<()> {
+fn assemble(rust: &Toolchain, sdk: &Sdk, base_dir: &Path, compiled: &[(Bundle, PathBuf)], patch: Option<&Path>, dir: &Path, left_out: &[LeftOut]) -> Result<()> {
     let runtime = sdk.runtime();
     let partial = dir.with_extension("partial");
     let _ = std::fs::remove_dir_all(&partial);
@@ -677,12 +1024,23 @@ fn assemble(rust: &Toolchain, sdk: &Sdk, base_dir: &Path, compiled: &[(Bundle, P
             std::fs::write(to, bytes)?;
         }
     }
+    // La bibliothèque des copies de fonctions se charge après les mods.
+    if let Some(lib) = patch {
+        std::fs::copy(lib, partial.join("horizon_patch.dll"))?;
+        records.push(serde_json::json!({
+            "file": "horizon_patch.dll",
+            "sha256": format!("{:x}", Sha256::digest(std::fs::read(lib)?)),
+            "kind": "patch",
+            "mod": "horizon_patch",
+            "identity": format!("{} horizon_patch 0 {}", sdk.index.build.commit, super::toolchain::VERSION),
+        }));
+    }
     let about = serde_json::json!({
         "base": base_dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
         "horizon": sdk.index.build.commit,
         "rust": super::toolchain::VERSION,
         "profile": "optimized",
-        "route": "api",
+        "route": if patch.is_some() { "prebuilt" } else { "prebuilt-api" },
         "left_out": left_out.iter().map(|l| serde_json::json!({ "id": l.id })).collect::<Vec<_>>(),
         "target": "client",
         "rust_target": super::toolchain::TARGET,
@@ -727,6 +1085,7 @@ mod tests {
             side: "client".into(),
             made_for: String::new(),
             engine: None,
+            mixins: false,
             inject: false,
             files: Vec::new(),
             sha256: String::new(),
@@ -771,11 +1130,43 @@ mod tests {
         };
         judge(&bundle, &commit, surface.as_ref(), &prebuilt, &sdk.api().join("deps")).expect("compatible");
         let started = std::time::Instant::now();
-        let built = build(&rust, &sdk, &base, vec![bundle], Vec::new(), &|id, n, t| println!("{id} {n}/{t}"), &|| false).unwrap();
+        let built = build(&rust, &sdk, &base, vec![bundle], Vec::new(), None, None, &|id, n, t| println!("{id} {n}/{t}"), &|| false).unwrap();
         println!("{:?} en {:?}, laissés : {:?}", built.dir, started.elapsed(), built.left_out);
         assert_eq!(built.mods.len(), 1);
         assert!(built.dir.join("native-mods.json").is_file());
         assert!(built.dir.join(CLIENT).is_file());
+    }
+
+    /// La route engine entière sur un vrai mod qui modifie le jeu :
+    /// `YF_NATIVE_HMOD=<.hmod> YF_NATIVE_BASE=<version> cargo test --lib
+    /// compile_un_mod_engine -- --ignored --nocapture`. Télécharge le source et
+    /// construit les outils la première fois (plusieurs minutes).
+    #[test]
+    #[ignore]
+    fn compile_un_mod_engine() {
+        let hmod = PathBuf::from(std::env::var("YF_NATIVE_HMOD").expect("YF_NATIVE_HMOD"));
+        let base = PathBuf::from(std::env::var("YF_NATIVE_BASE").expect("YF_NATIVE_BASE"));
+        let commit = std::fs::read_to_string(base.join(".build-commit")).expect("commit").trim().to_string();
+        let rust = super::super::toolchain::installed().expect("compilateur installé");
+        let dir = super::super::sdk::dir_for(&commit);
+        let index: super::super::sdk::Index = serde_json::from_slice(&std::fs::read(dir.join("sdk.json")).unwrap()).unwrap();
+        let sdk = Sdk { index, dir };
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let client = crate::net::files();
+        let started = std::time::Instant::now();
+        let source = runtime.block_on(super::super::engine::ensure_source(client, &commit, &|_| {}, &|| false)).unwrap();
+        let whole = super::super::engine::whole(&sdk).unwrap();
+        let generator = super::super::engine::ensure_gen(&rust, &source, &commit).unwrap();
+        let rev = sdk.index.mixins.as_ref().unwrap().rev.clone();
+        let mixins = runtime.block_on(super::super::engine::ensure_mixins(client, &rust, &generator, &rev, &|| false)).unwrap();
+        println!("outils prêts en {:?}", started.elapsed());
+        let tools = EngineTools { whole, generator, source, mixins: Some(mixins) };
+        let bundle = read_bundle(&hmod).unwrap();
+        let started = std::time::Instant::now();
+        let built = build(&rust, &sdk, &base, vec![bundle], Vec::new(), None, Some(&tools), &|id, n, t| println!("{id} {n}/{t}"), &|| false).unwrap();
+        println!("{:?} en {:?}, laissés : {:?}", built.dir, started.elapsed(), built.left_out);
+        assert_eq!(built.mods.len(), 1);
+        assert!(built.dir.join("horizon_patch.dll").is_file());
     }
 
     #[test]

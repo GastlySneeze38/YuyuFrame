@@ -602,7 +602,9 @@ function Row({ item, busy, onToggle, onUpdate, onRemove }: {
         {item.revoked ? (
           <p className="truncate text-[11px] text-[rgba(248,113,113,0.9)]">{t('mods.horizon.revoked', { reason: item.revoked })}</p>
         ) : item.changes_game ? (
-          <p className="truncate text-[11px] text-[rgba(250,204,21,0.8)]" title={t('mods.horizon.changesGameHint')}>{t('mods.horizon.changesGame')}</p>
+          <p className="truncate text-[11px] text-[rgba(255,255,255,0.4)]" title={t('mods.horizon.changesGameHint')}>
+            {formatBytes(item.size)} · {t('mods.horizon.changesGame')}
+          </p>
         ) : (
           <p className="truncate text-[11px] text-[rgba(255,255,255,0.4)]">{formatBytes(item.size)}</p>
         )}
@@ -652,6 +654,7 @@ function ReportCard({ instance, report }: { instance: Instance; report: HorizonN
       case 'crates': return t('mods.horizon.reasons.crates', { names: l.names.join(', ') })
       case 'missing_dependency': return t('mods.horizon.reasons.missing_dependency', { id: l.id })
       case 'compile': return t('mods.horizon.reasons.compile')
+      case 'engine': return t('mods.horizon.reasons.engine')
       case 'unreadable': return t('mods.horizon.reasons.unreadable')
       default: return t(`mods.horizon.reasons.${l.kind}`)
     }
@@ -692,7 +695,7 @@ function ReportCard({ instance, report }: { instance: Instance; report: HorizonN
           <div key={l.id} className="flex items-center gap-3 rounded-lg bg-[rgba(0,0,0,0.15)] px-3 py-2">
             <div className="min-w-0 flex-1">
               <p className="text-[12px] font-semibold text-white">{l.id}</p>
-              <p className="text-[11px] text-[rgba(255,255,255,0.55)]" title={l.kind === 'compile' ? l.log : undefined}>{reason(l)}</p>
+              <p className="text-[11px] text-[rgba(255,255,255,0.55)]" title={l.kind === 'compile' ? l.log : l.kind === 'engine' ? l.error : undefined}>{reason(l)}</p>
               {madeFor && (
                 <p className="text-[11px] text-[rgba(255,255,255,0.4)]">
                   {version
