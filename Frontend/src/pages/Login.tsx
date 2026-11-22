@@ -19,7 +19,7 @@ import { ModalShell } from '@/components/ui/ModalShell'
 import { fadeVariants, fastTransition, listItemVariants, listVariants, pressable } from '@/lib/motion'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useT } from '@/i18n'
-import { useIsMobile } from '@/mobile/useIsMobile'
+import { holdLayout, useIsMobile } from '@/mobile/useIsMobile'
 import { MobileAccount } from '@/mobile/account/MobileAccount'
 
 type Step = 'idle' | 'loading' | 'polling' | 'confirmed' | 'error'
@@ -90,6 +90,7 @@ export default function Login() {
       // La fenêtre a une taille minimale (900 × 560, `tauri.conf.json`) : sans
       // la lever, le panneau de 380 px restait large de 900, collé au bord
       // droit de l'écran, et le code s'affichait hors de l'écran.
+      holdLayout(true)
       await win.setMinSize(null)
       await win.setSize(size)
       await win.setPosition(position)
@@ -97,6 +98,7 @@ export default function Login() {
       setOverlayActive(true)
     } catch {
       // Best-effort : si le redimensionnement échoue, on reste en page pleine
+      holdLayout(false)
     }
   }
 
@@ -126,6 +128,7 @@ export default function Login() {
       }
       await win.setFocus()
     } catch { /* best-effort */ }
+    holdLayout(false)
   }
 
   useEffect(() => {
