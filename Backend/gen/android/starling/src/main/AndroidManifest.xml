@@ -5,6 +5,10 @@
      - L'écran de jeu est le nôtre (YuyuGameActivity) et vit dans le processus « :game » :
        le jeu termine tout son processus à la fin d'une partie, ce qui fermerait le launcher
        s'ils partageaient le même. Il n'est pas exporté : seul le launcher l'ouvre.
+     - Et dans sa propre tâche (taskAffinity « .game », singleTask) : le launcher est singleTask,
+       et le ramener au premier plan détruirait tout ce qui est au-dessus de lui dans sa tâche,
+       donc le jeu. Ainsi la ligne « Launcher » du menu pause ramène le launcher et laisse le jeu
+       ouvert derrière, et « Revenir au jeu » le reprend où il en était.
      - Pas de LauncherActivity (l'entrée de Starling, son ouverture de fichiers) : l'entrée de
        l'appli est le launcher. Le redémarrage du jeu dans un build avec mods natifs passe par
        elle, il n'est donc pas disponible.
@@ -31,6 +35,8 @@
             android:name="fr.yuyuframe.game.YuyuGameActivity"
             android:exported="false"
             android:process=":game"
+            android:taskAffinity="${applicationId}.game"
+            android:launchMode="singleTask"
             android:screenOrientation="sensorLandscape"
             android:resizeableActivity="false"
             android:theme="@style/Starling.Game"

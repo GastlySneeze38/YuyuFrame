@@ -33,7 +33,11 @@ class GamePlugin(private val activity: Activity) : Plugin(activity) {
     fun start(invoke: Invoke) {
         activity.runOnUiThread {
             try {
-                activity.startActivity(Intent(activity, YuyuGameActivity::class.java))
+                // Sa propre tâche (manifeste du module `starling`) : le launcher, singleTask,
+                // peut revenir devant sans détruire le jeu.
+                activity.startActivity(
+                    Intent(activity, YuyuGameActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
                 // Droit dans la première image noire du jeu, sans animation entre les deux.
                 @Suppress("DEPRECATION")
                 activity.overridePendingTransition(0, 0)
@@ -56,8 +60,9 @@ class GamePlugin(private val activity: Activity) : Plugin(activity) {
                 return@runOnUiThread
             }
             try {
+                // singleTask dans sa tâche : l'écran existant revient devant, rien n'est recréé.
                 val intent = Intent(activity, YuyuGameActivity::class.java)
-                intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
                 activity.startActivity(intent)
                 @Suppress("DEPRECATION")
                 activity.overridePendingTransition(0, 0)

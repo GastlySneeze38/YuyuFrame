@@ -26,7 +26,10 @@
  * - un geste déjà pris par un panneau (feuille, menu : `mobile/ui/gesture`)
  *   arrive annulé, et il est ignoré ;
  * - un geste plutôt horizontal est ignoré ;
- * - un champ ou `data-no-stretch` l'arrête.
+ * - un champ ou `data-no-stretch` l'arrête ;
+ * - un doigt posé au bord haut ou bas de l'écran (`SYSTEM_EDGE_PX`) appartient
+ *   à Android (barre d'état, barre de navigation) et n'étire rien ; un geste
+ *   qu'Android reprend en route (`touchcancel`) ne rebondit pas.
  */
 
 /** Décalage maximal du contenu (px), atteint en tirant franchement. */
@@ -38,6 +41,12 @@ const RELEASE_MS = 420
 const RELEASE_EASE = 'cubic-bezier(0.2, 0.9, 0.25, 1)'
 /** Un coup plus vif que ça (px/s) sur une zone en butée donne un rebond. */
 const FLICK_VELOCITY = 500
+/**
+ * Bande du bord haut et du bord bas (px) où un geste appartient à Android :
+ * tirer la barre d'état, faire apparaître la barre de navigation ou revenir à
+ * l'accueil par un balayage depuis le bas. Un doigt posé là n'étire rien.
+ */
+const SYSTEM_EDGE_PX = 32
 
 interface Item {
   el: HTMLElement
@@ -136,6 +145,8 @@ export function installOverscroll(): void {
     if (e.touches.length !== 1) { release(); scroller = null; return }
     const t = e.touches[0]
     if ((e.target as Element | null)?.closest?.('input, textarea, select, [data-no-stretch]')) { scroller = null; return }
+    // Un geste du système (barre d'état, barre de navigation) : pas le nôtre.
+    if (t.clientY < SYSTEM_EDGE_PX || t.clientY > window.innerHeight - SYSTEM_EDGE_PX) { release(); scroller = null; return }
     release()
     scroller = scrollerOf(e.target as Element)
     id = t.identifier
@@ -189,6 +200,9 @@ export function installOverscroll(): void {
     const velocity = dt > 0 ? (lastY - first.y) / dt : 0
     release()
     scroller = null
+    // Un geste annulé (le système l'a pris : barre de navigation, retour…)
+    // ne rebondit pas : le doigt n'a pas lâché la liste, il est parti ailleurs.
+    if (e.type === 'touchcancel') return
     // Un coup vif qui n'a pas eu le temps d'étirer : le rebond tout de suite.
     if (!stretched && Math.abs(velocity) > FLICK_VELOCITY) {
       const atTop = s.scrollTop <= 0
