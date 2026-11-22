@@ -966,6 +966,7 @@ export const it: TranslationSchema = {
     launching: 'IN GIOCO...',
     preparingLaunch: 'Preparazione dell’avvio',
     launchAnother: 'Avvia un altro Minecraft con questa istanza',
+    launchAnotherWait: 'Aspetta che il Minecraft in avvio sia partito',
     inGame: 'In gioco',
     stopGame: 'Ferma la partita',
     cancelling: 'Annullamento...',

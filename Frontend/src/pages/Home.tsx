@@ -1014,22 +1014,29 @@ export default function Home() {
                   onCancel={handleCancelLaunch}
                   toneClass={`${launchBtnBg} ${launchBtnShadow}`}
                 />
-                {/* Un Minecraft de plus sur la même instance, une fois le
-                    premier en jeu (pas pendant un lancement en cours). */}
-                {!progress && (
-                  <motion.button
-                    {...pressIf(!launchingExtra)}
-                    onClick={() => void launchExtra()}
-                    disabled={launchingExtra}
-                    title={t('home.launchAnother')}
-                    aria-label={t('home.launchAnother')}
-                    className="flex h-[clamp(38px,6.6vh,52px)] w-[clamp(38px,6.6vh,52px)] flex-shrink-0 items-center justify-center rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] text-[rgba(255,255,255,0.6)] transition-colors duration-150 hover:border-[rgb(var(--accent)/0.5)] hover:text-white disabled:cursor-wait disabled:opacity-50"
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" className="h-[42%] w-[42%]">
-                      <path d="M12 5v14M5 12h14" />
-                    </svg>
-                  </motion.button>
-                )}
+                {/* Un Minecraft de plus sur la même instance. Toujours là
+                    pendant une partie, grisé tant qu'un lancement est en
+                    cours : on attend que le précédent ait démarré. */}
+                {(() => {
+                  const waiting = !!progress || launchingExtra
+                  // La bulle sur un conteneur : un bouton désactivé ne reçoit
+                  // pas le survol, et c'est justement là qu'il faut l'expliquer.
+                  return (
+                    <span className="flex flex-shrink-0" title={waiting ? t('home.launchAnotherWait') : t('home.launchAnother')}>
+                    <motion.button
+                      {...pressIf(!waiting)}
+                      onClick={() => void launchExtra()}
+                      disabled={waiting}
+                      aria-label={waiting ? t('home.launchAnotherWait') : t('home.launchAnother')}
+                      className="flex h-[clamp(38px,6.6vh,52px)] w-[clamp(38px,6.6vh,52px)] flex-shrink-0 items-center justify-center rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] text-[rgba(255,255,255,0.6)] transition-[color,border-color,opacity] duration-150 enabled:hover:border-[rgb(var(--accent)/0.5)] enabled:hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" className="h-[42%] w-[42%]">
+                        <path d="M12 5v14M5 12h14" />
+                      </svg>
+                    </motion.button>
+                    </span>
+                  )
+                })()}
               </>
             ) : (
               <span className="relative flex flex-1">

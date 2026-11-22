@@ -966,6 +966,7 @@ export const ru: TranslationSchema = {
     launching: 'В ИГРЕ...',
     preparingLaunch: 'Подготовка к запуску',
     launchAnother: 'Запустить ещё один Minecraft на этой сборке',
+    launchAnotherWait: 'Подожди, пока запускаемый Minecraft стартует',
     inGame: 'В игре',
     stopGame: 'Остановить игру',
     cancelling: 'Отмена...',

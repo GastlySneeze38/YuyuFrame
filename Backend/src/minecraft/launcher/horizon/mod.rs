@@ -310,28 +310,46 @@ async fn desktop_launch(app: tauri::AppHandle, run: HorizonLaunch<'_>, cancel: w
         beat(id, child.id(), app.clone(), stop.clone());
     }
 
-    // Prêt à la première ligne écrite par le jeu : Horizon n'a pas de
-    // marqueur à lui, et sa fenêtre s'ouvre en une poignée de secondes.
+    // Prêt quand la fenêtre du jeu se montre. Horizon n'a pas de marqueur à
+    // nous : la v0.2.97 écrivait sur sa sortie standard dès l'ouverture, les
+    // Nightly récentes écrivent tout sur la sortie d'erreur, et la sortie
+    // standard reste muette — le lancement ne se terminait alors jamais dans
+    // l'interface. On guette donc les deux : la première ligne de la sortie
+    // standard (anciennes versions), ou la ligne qui annonce le premier écran
+    // (« loading screen shown », « first frame ») sur l'une ou l'autre.
     let ready = Arc::new(AtomicBool::new(false));
     let last_error = Arc::new(std::sync::Mutex::new(String::new()));
+    let signal_ready = {
+        let (app, instance, ready) = (app.clone(), run.instance_id.to_string(), ready.clone());
+        Arc::new(move || {
+            if !ready.swap(true, Ordering::Relaxed) {
+                let _ = app.emit("game_ready", serde_json::json!({ "instance_id": &instance }));
+            }
+        })
+    };
+    let shows_window = |line: &str| {
+        let line = line.to_ascii_lowercase();
+        line.contains("loading screen shown") || line.contains("first frame")
+    };
     if let Some(out) = child.stdout.take() {
-        let (app_ready, app_log, label, instance, ready) =
-            (app.clone(), app.clone(), run.console_label.to_string(), run.instance_id.to_string(), ready.clone());
+        let (app_log, label, signal) = (app.clone(), run.console_label.to_string(), signal_ready.clone());
         spawn_game_output_pump(
             BufReader::new(out),
-            move |_| {
-                if !ready.swap(true, Ordering::Relaxed) {
-                    let _ = app_ready.emit("game_ready", serde_json::json!({ "instance_id": &instance }));
-                }
-            },
+            move |_| signal(),
             move |line| log_to_console(&app_log, &label, &line, "out"),
         );
     }
     if let Some(err) = child.stderr.take() {
-        let (app_log, label, last) = (app.clone(), run.console_label.to_string(), last_error.clone());
+        let (app_log, label, last, signal) = (app.clone(), run.console_label.to_string(), last_error.clone(), signal_ready.clone());
         spawn_game_output_pump(
             BufReader::new(err),
-            |_| {},
+            // Lu ici et pas dans l'affichage, qui peut sauter des lignes
+            // quand la console ne suit pas.
+            move |line| {
+                if shows_window(line) {
+                    signal();
+                }
+            },
             move |line| {
                 if !line.trim().is_empty() {
                     *last.lock().unwrap() = line.clone();

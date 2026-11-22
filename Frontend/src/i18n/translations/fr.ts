@@ -966,6 +966,7 @@ export const fr = {
     launching: 'EN JEU...',
     preparingLaunch: 'Préparation du lancement',
     launchAnother: 'Lancer un autre Minecraft sur cette instance',
+    launchAnotherWait: 'Attends que le Minecraft en cours de lancement ait démarré',
     inGame: 'En jeu',
     stopGame: 'Arrêter la partie',
     cancelling: 'Annulation...',
