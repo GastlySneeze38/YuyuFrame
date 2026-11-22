@@ -23,9 +23,12 @@
 //!    de copies (`horizon_patched`) et la bibliothèque `horizon_patch`, qui les
 //!    installe au démarrage. Recette vérifiée à la main sur Server Flags.
 //!
-//! Pas encore pris en charge : les `[[inject]]` (aucun dans le registre au
-//! 2026-11-21), et les mods qui dépendent de paquets Rust que le jeu ne
-//! fournit pas.
+//! 4. `[[inject]]` (`inject.rs`) : une expression par ligne dans le point
+//!    d'entrée du mod, à la place de `MOD_SLOTS`, d'après `points.json`.
+//! 5. Route « registry » (`registry.rs`, 2026-11-22) : un mod qui a ses
+//!    propres paquets (crates.io, crates locales) est construit par cargo,
+//!    les bibliothèques du jeu branchées par notre intermédiaire de rustc ;
+//!    elle se combine avec la route engine.
 
 use anyhow::{anyhow, Result};
 use serde::Serialize;
@@ -54,12 +57,16 @@ pub struct Bundle {
     pub engine: Option<&'static str>,
     /// Des `[[native.mixin]]` : il faut horizon-mixins.
     pub mixins: bool,
-    pub inject: bool,
+    /// Ses lignes `[[inject]]`, ou pourquoi elles sont illisibles.
+    pub inject: std::result::Result<Vec<super::inject::Inject>, String>,
     pub files: Vec<(String, Vec<u8>)>,
     pub sha256: String,
-    cargo: toml::Table,
+    pub(super) cargo: toml::Table,
     /// Les mods dont il dépend : (identifiant, facultatif).
     pub depends: Vec<(String, bool)>,
+    /// Il a des paquets que le jeu ne fournit pas : cargo le construit
+    /// (décidé par `judge`).
+    pub registry: bool,
 }
 
 impl Bundle {
@@ -67,7 +74,11 @@ impl Bundle {
         self.files.iter().find(|(n, _)| n == name).map(|(_, b)| b.as_slice())
     }
 
-    fn edition(&self) -> String {
+    pub fn registry(&self) -> bool {
+        self.registry
+    }
+
+    pub(super) fn edition(&self) -> String {
         self.cargo
             .get("package")
             .and_then(|p| p.get("edition"))
@@ -76,13 +87,13 @@ impl Bundle {
             .to_string()
     }
 
-    fn crate_name(&self) -> String {
+    pub(super) fn crate_name(&self) -> String {
         let lib = self.cargo.get("lib").and_then(|l| l.get("name")).and_then(|n| n.as_str());
         let package = self.cargo.get("package").and_then(|p| p.get("name")).and_then(|n| n.as_str());
         lib.or(package).unwrap_or(&self.id).replace('-', "_")
     }
 
-    fn lib_path(&self) -> String {
+    pub(super) fn lib_path(&self) -> String {
         self.cargo
             .get("lib")
             .and_then(|l| l.get("path"))
@@ -111,7 +122,7 @@ impl Bundle {
     }
 
     /// Les paquets du SDK qu'il nomme, sous le nom qu'il leur donne.
-    fn sdk_aliases(&self) -> Vec<(String, &'static str)> {
+    pub(super) fn sdk_aliases(&self) -> Vec<(String, &'static str)> {
         let Some(deps) = self.cargo.get("dependencies").and_then(|d| d.as_table()) else {
             return Vec::new();
         };
@@ -132,9 +143,9 @@ impl Bundle {
 }
 
 /// Les paquets du SDK qu'un mod peut nommer, et leur bibliothèque.
-const SDK_PACKAGES: [(&str, &str); 2] = [("horizon-mod-api", "mod_api"), ("horizon-mod-points", "mod_points")];
+pub(super) const SDK_PACKAGES: [(&str, &str); 2] = [("horizon-mod-api", "mod_api"), ("horizon-mod-points", "mod_points")];
 /// La façade des internes qu'un mod déclare : une crate générée pour lui.
-const INTERNALS_PACKAGE: &str = "horizon-internals";
+pub(super) const INTERNALS_PACKAGE: &str = "horizon-internals";
 
 /// Les outils de la route « engine », prêts (`engine.rs`).
 pub struct EngineTools {
@@ -221,6 +232,7 @@ pub fn read_bundle(path: &Path) -> Result<Bundle> {
     if id.is_empty() || !id.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_') || id.len() > 64 {
         return Err(anyhow!("{} : identifiant de mod invalide", path.display()));
     }
+    let inject = super::inject::rows(&manifest, &id);
     Ok(Bundle {
         id,
         version: get("version"),
@@ -228,11 +240,12 @@ pub fn read_bundle(path: &Path) -> Result<Bundle> {
         made_for,
         engine,
         mixins: native.contains_key("mixin"),
-        inject: manifest.contains_key("inject"),
+        inject,
         files,
         sha256,
         cargo,
         depends,
+        registry: false,
     })
 }
 
@@ -250,8 +263,8 @@ pub enum Reason {
     ChangesGame,
     /// La préparation de ses modifications du jeu a échoué ou a été refusée.
     Engine { error: String },
-    /// Il déclare des points d'injection : pas encore pris en charge.
-    Injections,
+    /// Un de ses `[[inject]]` ne trouve pas sa place dans ce build.
+    Injections { error: String },
     /// Il dépend de paquets Rust que le SDK ne fournit pas.
     Crates { names: Vec<String> },
     /// Un mod dont il a besoin manque ou est lui-même laissé de côté.
@@ -308,18 +321,20 @@ pub fn enabled_mods(game_dir: &Path) -> (Vec<(PathBuf, Bundle)>, Vec<LeftOut>) {
 }
 
 /// Ce que chaque mod donne contre le build `commit` : compilable, ou pourquoi pas.
-pub fn judge(bundle: &Bundle, commit: &str, surface: Option<&HashMap<String, String>>, prebuilt: &super::sdk::Prebuilt, api_deps: &Path) -> Result<(), Reason> {
+pub fn judge(bundle: &mut Bundle, commit: &str, surface: Option<&HashMap<String, String>>, prebuilt: &super::sdk::Prebuilt, api_deps: &Path) -> Result<(), Reason> {
     // Un mod qui modifie le jeu ne tourne que sur le build pour lequel il est
     // fait : ses copies de fonctions et ses internes sont ceux de ce build.
     if bundle.engine.is_some() && bundle.made_for != commit {
         return Err(Reason::OtherBuild { made_for: bundle.made_for.clone(), why: bundle.engine.unwrap_or_default().to_string() });
     }
-    if bundle.inject {
-        return Err(Reason::Injections);
+    if let Err(error) = &bundle.inject {
+        return Err(Reason::Injections { error: error.clone() });
     }
     // Les paquets tiers que le jeu fournit déjà (`facade_crates`) se lient au
     // jeu ; ceux de la tranche `api` directement, les autres contre le jeu
-    // précompilé entier (`needs_whole`).
+    // précompilé entier (`needs_whole`). Un mod qui a d'autres paquets
+    // (crates.io, ou ses propres crates locales) passe par cargo
+    // (`registry.rs`).
     let _ = api_deps;
     let missing: Vec<String> = bundle
         .crates()
@@ -327,9 +342,7 @@ pub fn judge(bundle: &Bundle, commit: &str, surface: Option<&HashMap<String, Str
         .filter(|(_, krate)| !prebuilt.facade_crates.iter().any(|c| c == krate))
         .map(|(name, _)| name)
         .collect();
-    if !missing.is_empty() {
-        return Err(Reason::Crates { names: missing });
-    }
+    bundle.registry = !missing.is_empty();
     if bundle.made_for == commit {
         return Ok(());
     }
@@ -364,7 +377,8 @@ pub fn judge(bundle: &Bundle, commit: &str, surface: Option<&HashMap<String, Str
 /// Le mod a-t-il besoin du jeu précompilé entier : il le modifie, ou il
 /// utilise un paquet tiers du jeu absent de la tranche `api`.
 pub fn needs_whole(bundle: &Bundle, prebuilt: &super::sdk::Prebuilt, api_deps: &Path) -> bool {
-    bundle.engine.is_some() || bundle.crates().iter().any(|(_, krate)| facade(prebuilt, api_deps, krate).is_none())
+    // Ceux qui passent par cargo y construisent leurs paquets eux-mêmes.
+    bundle.engine.is_some() || (!bundle.registry && bundle.crates().iter().any(|(_, krate)| facade(prebuilt, api_deps, krate).is_none()))
 }
 
 /// La bibliothèque d'un paquet tiers que le jeu fournit déjà (serde_json,
@@ -586,6 +600,15 @@ pub fn build(
         }
     }
 
+    // Les mods qui ont leurs propres paquets passent par cargo, avec notre
+    // intermédiaire de rustc construit une fois par compilateur.
+    let mut catalog: Option<std::result::Result<super::inject::Catalog, String>> = None;
+    let registry_tools = if ordered.iter().any(Bundle::registry) {
+        Some(super::registry::Tools::ensure(rust, &work).map_err(|e| e.to_string()))
+    } else {
+        None
+    };
+
     // Compiler dans l'ordre ; un échec retire le mod et ceux qui en dépendent.
     let mut compiled: Vec<(Bundle, PathBuf)> = Vec::new();
     let mut failed: HashSet<String> = HashSet::new();
@@ -606,8 +629,35 @@ pub fn build(
             .iter()
             .filter_map(|(id, optional)| compiled.iter().find(|(b, _)| &b.id == id).map(|(_, lib)| (id.clone(), *optional, lib.clone())))
             .collect();
+        // Ses `[[inject]]` : une expression par ligne dans son point d'entrée.
+        let rows = bundle.inject.as_deref().unwrap_or_default();
+        let slots = if rows.is_empty() {
+            Ok(Vec::new())
+        } else {
+            if catalog.is_none() {
+                catalog = Some(super::inject::Catalog::read(&api, &commit).map_err(|e| e.to_string()));
+            }
+            match catalog.as_ref() {
+                Some(Ok(catalog)) => super::inject::slots(catalog, &bundle.id, rows, "crate::"),
+                Some(Err(e)) => Err(e.clone()),
+                None => unreachable!(),
+            }
+        };
+        let slots = match slots {
+            Ok(slots) => slots,
+            Err(error) => {
+                failed.insert(bundle.id.clone());
+                leave(&mut left_out, &bundle, Reason::Injections { error });
+                continue;
+            }
+        };
         let facade = internals.get(&bundle.id).map(PathBuf::as_path);
-        match compile(rust, &ctx, &out, &bundle, &deps, facade, &template, &commit, &prebuilt) {
+        let result = if bundle.registry() {
+            super::registry::compile(rust, &ctx, &out, &bundle, &deps, facade, &slots, &template, &commit, registry_tools.as_ref())
+        } else {
+            compile(rust, &ctx, &out, &bundle, &deps, facade, &slots, &template, &commit, &prebuilt)
+        };
+        match result {
             Ok(lib) => compiled.push((bundle, lib)),
             Err(reason) => {
                 failed.insert(bundle.id.clone());
@@ -620,7 +670,11 @@ pub fn build(
     // Un échec ici retire les mods qui modifient le jeu, jamais les autres.
     let mut patch_lib = None;
     if let (Some(tools), Some(patch)) = (engine, prepared_patch) {
-        match build_patch(rust, &ctx, &out, tools, &patch, &compiled, &template, &commit, &prebuilt) {
+        let extra: Vec<PathBuf> = match &registry_tools {
+            Some(Ok(t)) => vec![t.deps_dir()],
+            _ => Vec::new(),
+        };
+        match build_patch(rust, &ctx, &out, tools, &patch, &compiled, &template, &commit, &prebuilt, &extra) {
             Ok(lib) => patch_lib = Some(lib),
             Err(error) => {
                 compiled.retain(|(b, _)| {
@@ -650,15 +704,15 @@ pub fn build(
 }
 
 /// Où chercher ce contre quoi un mod se compile, selon la route.
-struct Ctx {
+pub(super) struct Ctx {
     /// Dossiers `-L dependency=`.
-    search: Vec<PathBuf>,
+    pub(super) search: Vec<PathBuf>,
     /// Bibliothèques natives du jeu (`-L native=`), route engine.
-    native: Option<PathBuf>,
+    pub(super) native: Option<PathBuf>,
     /// Où sont `mod_api`, `mod_vocab`, `mod_points`, `horizon_client`…
-    libs: PathBuf,
+    pub(super) libs: PathBuf,
     /// Où sont les paquets tiers que le jeu expose (`facade_crates`).
-    facades: PathBuf,
+    pub(super) facades: PathBuf,
 }
 
 impl Ctx {
@@ -676,7 +730,7 @@ impl Ctx {
 }
 
 /// La bibliothèque d'une crate du jeu dans `dir` : sa DLL, sinon ses métadonnées.
-fn library_in(dir: &Path, krate: &str) -> Option<PathBuf> {
+pub(super) fn library_in(dir: &Path, krate: &str) -> Option<PathBuf> {
     for name in [format!("{krate}.dll"), format!("lib{krate}.dll")] {
         let path = dir.join(&name);
         if path.is_file() {
@@ -756,7 +810,17 @@ fn build_patch(
     template: &str,
     commit: &str,
     prebuilt: &super::sdk::Prebuilt,
+    extra_search: &[PathBuf],
 ) -> std::result::Result<PathBuf, String> {
+    // Les paquets des mods construits par cargo : les copies de fonctions
+    // appellent ces mods, rustc doit retrouver ce dont ils dépendent.
+    let rustc = |edition: &str| {
+        let mut cmd = ctx.rustc(rust, edition);
+        for folder in extra_search {
+            cmd.arg("-L").arg(format!("dependency={}", folder.display()));
+        }
+        cmd
+    };
     let applied = if patch.rows {
         let tool = tools.mixins.as_ref().ok_or("horizon-mixins n'a pas pu être préparé")?;
         super::engine::apply(rust, tool, patch, out).map_err(|e| e.to_string())?
@@ -776,7 +840,7 @@ fn build_patch(
     let mut rlibs = Vec::new();
     for name in &patch.names {
         let rlib = out.join(format!("lib{name}.rlib"));
-        let mut cmd = ctx.rustc(rust, "2024");
+        let mut cmd = rustc("2024");
         cmd.args(["--crate-type", "rlib", "--crate-name", name, "--cap-lints", "allow"])
             .arg("-o")
             .arg(&rlib)
@@ -812,7 +876,7 @@ fn build_patch(
     let source = out.join("horizon_patch.rs");
     std::fs::write(&source, &entry).map_err(|e| e.to_string())?;
     let library = out.join("horizon_patch.dll");
-    let mut cmd = ctx.rustc(rust, "2024");
+    let mut cmd = rustc("2024");
     cmd.args(["--crate-type", "dylib", "--crate-name", "horizon_patch"]);
     for krate in ["horizon_client", "mod_api", "mod_vocab", "mod_points", "horizon_mod_package", "horizon_mod_host"] {
         let path = library_in(&ctx.libs, krate).ok_or_else(|| format!("le jeu précompilé n'a pas {krate}"))?;
@@ -834,13 +898,14 @@ fn compile(
     bundle: &Bundle,
     deps: &[(String, bool, PathBuf)],
     internals: Option<&Path>,
+    slots: &[String],
     template: &str,
     commit: &str,
     prebuilt: &super::sdk::Prebuilt,
 ) -> std::result::Result<PathBuf, Reason> {
     let krate = bundle.crate_name();
     let lib = out.join(format!("{krate}.dll"));
-    let entry = entry_source(template, bundle, commit);
+    let entry = entry_source(template, bundle, commit, slots);
 
     // Une compilation déjà faite pour exactement ces entrées est reprise.
     let mut hash = Sha256::new();
@@ -924,7 +989,7 @@ fn compile(
 
 /// Le point d'entrée d'un mod, rempli depuis le modèle du SDK comme le fait
 /// leur launcher (`prebuilt::library_entry`).
-fn entry_source(template: &str, bundle: &Bundle, commit: &str) -> String {
+pub(super) fn entry_source(template: &str, bundle: &Bundle, commit: &str, slots: &[String]) -> String {
     let side = match bundle.side.as_str() {
         "server" => "Server",
         "both" => "Both",
@@ -938,7 +1003,7 @@ fn entry_source(template: &str, bundle: &Bundle, commit: &str) -> String {
     };
     let mut text = template.to_string();
     text = fill(&text, "/* MOD_ENTRIES */", &format!("        {:?} => crate::hooks,\n", bundle.id));
-    text = fill(&text, "/* MOD_SLOTS */", "");
+    text = fill(&text, "/* MOD_SLOTS */", &slots.iter().map(|s| format!("        {s},\n")).collect::<String>());
     text = fill(&text, "/* MOD_REDIRECTS */", "");
     text = fill(
         &text,
@@ -956,7 +1021,7 @@ fn entry_source(template: &str, bundle: &Bundle, commit: &str) -> String {
 
 /// Le point d'entrée a besoin de code non sûr : un mod qui l'interdit dans
 /// tout son crate (`#![forbid(unsafe_code)]`) ne peut pas le recevoir.
-fn forbids_unsafe(root: &str) -> bool {
+pub(super) fn forbids_unsafe(root: &str) -> bool {
     root.lines()
         .map(str::trim_start)
         .filter(|l| !l.starts_with("//"))
@@ -1086,13 +1151,15 @@ mod tests {
             made_for: String::new(),
             engine: None,
             mixins: false,
-            inject: false,
+            inject: Ok(Vec::new()),
             files: Vec::new(),
             sha256: String::new(),
             cargo: toml::Table::new(),
             depends: Vec::new(),
+            registry: false,
         };
-        let text = entry_source(template, &bundle, "abc");
+        let text = entry_source(template, &bundle, "abc", &["mod_points::listeners::tick(\"appleskin_hzn\", 0, \"a\", crate::f)".to_string()]);
+        assert!(text.contains("        mod_points::listeners::tick(\"appleskin_hzn\", 0, \"a\", crate::f),\n"));
         assert!(text.contains("\"appleskin_hzn\" => crate::hooks,"));
         assert!(text.contains("side: mod_api::Side::Client"));
         assert!(text.contains("abc appleskin_hzn 0.2.0 1.99.1"));
@@ -1119,7 +1186,7 @@ mod tests {
             serde_json::from_slice(&std::fs::read(dir.join("sdk.json")).expect("sdk.json")).unwrap();
         let sdk = Sdk { index, dir };
         let prebuilt = super::super::sdk::prebuilt(&sdk.runtime()).unwrap();
-        let bundle = read_bundle(&hmod).unwrap();
+        let mut bundle = read_bundle(&hmod).unwrap();
         let surface = {
             let bytes = std::fs::read(sdk.dir.join("surface.json")).ok();
             bytes.map(|b| {
@@ -1128,7 +1195,7 @@ mod tests {
                 out
             })
         };
-        judge(&bundle, &commit, surface.as_ref(), &prebuilt, &sdk.api().join("deps")).expect("compatible");
+        judge(&mut bundle, &commit, surface.as_ref(), &prebuilt, &sdk.api().join("deps")).expect("compatible");
         let started = std::time::Instant::now();
         let built = build(&rust, &sdk, &base, vec![bundle], Vec::new(), None, None, &|id, n, t| println!("{id} {n}/{t}"), &|| false).unwrap();
         println!("{:?} en {:?}, laissés : {:?}", built.dir, started.elapsed(), built.left_out);
@@ -1144,16 +1211,26 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_un_mod_engine() {
+        // `YF_NATIVE_COMMIT` à la place de `YF_NATIVE_BASE` : un build dont la
+        // version n'est pas installée (le jeu assemblé n'aura alors que le SDK).
         let hmod = PathBuf::from(std::env::var("YF_NATIVE_HMOD").expect("YF_NATIVE_HMOD"));
-        let base = PathBuf::from(std::env::var("YF_NATIVE_BASE").expect("YF_NATIVE_BASE"));
-        let commit = std::fs::read_to_string(base.join(".build-commit")).expect("commit").trim().to_string();
+        let (base, commit) = match std::env::var("YF_NATIVE_COMMIT") {
+            Ok(commit) => {
+                let base = std::env::temp_dir().join(format!("yf-native-base-{}", &commit[..12]));
+                std::fs::create_dir_all(&base).unwrap();
+                (base, commit)
+            }
+            Err(_) => {
+                let base = PathBuf::from(std::env::var("YF_NATIVE_BASE").expect("YF_NATIVE_BASE"));
+                let commit = std::fs::read_to_string(base.join(".build-commit")).expect("commit").trim().to_string();
+                (base, commit)
+            }
+        };
         let rust = super::super::toolchain::installed().expect("compilateur installé");
-        let dir = super::super::sdk::dir_for(&commit);
-        let index: super::super::sdk::Index = serde_json::from_slice(&std::fs::read(dir.join("sdk.json")).unwrap()).unwrap();
-        let sdk = Sdk { index, dir };
         let runtime = tokio::runtime::Runtime::new().unwrap();
         let client = crate::net::files();
         let started = std::time::Instant::now();
+        let sdk = runtime.block_on(super::super::sdk::ensure(client, &commit, true, &|_| {}, &|| false)).unwrap();
         let source = runtime.block_on(super::super::engine::ensure_source(client, &commit, &|_| {}, &|| false)).unwrap();
         let whole = super::super::engine::whole(&sdk).unwrap();
         let generator = super::super::engine::ensure_gen(&rust, &source, &commit).unwrap();
@@ -1161,7 +1238,10 @@ mod tests {
         let mixins = runtime.block_on(super::super::engine::ensure_mixins(client, &rust, &generator, &rev, &|| false)).unwrap();
         println!("outils prêts en {:?}", started.elapsed());
         let tools = EngineTools { whole, generator, source, mixins: Some(mixins) };
-        let bundle = read_bundle(&hmod).unwrap();
+        let mut bundle = read_bundle(&hmod).unwrap();
+        let prebuilt = super::super::sdk::prebuilt(&sdk.runtime()).unwrap();
+        judge(&mut bundle, &commit, None, &prebuilt, &sdk.api().join("deps")).expect("compatible");
+        println!("{} : route {}", bundle.id, if bundle.registry { "cargo + engine" } else { "engine" });
         let started = std::time::Instant::now();
         let built = build(&rust, &sdk, &base, vec![bundle], Vec::new(), None, Some(&tools), &|id, n, t| println!("{id} {n}/{t}"), &|| false).unwrap();
         println!("{:?} en {:?}, laissés : {:?}", built.dir, started.elapsed(), built.left_out);

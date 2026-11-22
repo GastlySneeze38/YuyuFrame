@@ -20,6 +20,8 @@
 
 pub mod build;
 pub mod engine;
+pub mod inject;
+pub mod registry;
 pub mod sdk;
 pub mod toolchain;
 
@@ -166,8 +168,8 @@ pub async fn prepare(
     let surface = if needs_surface { sdk::surface(client, &sdk.index).await.ok() } else { None };
     let api_deps = sdk.api().join("deps");
     let mut accepted: Vec<build::Bundle> = Vec::new();
-    for (path, bundle) in mods {
-        match build::judge(&bundle, &commit, surface.as_ref(), &prebuilt, &api_deps) {
+    for (path, mut bundle) in mods {
+        match build::judge(&mut bundle, &commit, surface.as_ref(), &prebuilt, &api_deps) {
             Ok(()) => accepted.push(bundle),
             Err(reason) => report.left_out.push(LeftOut {
                 id: bundle.id.clone(),

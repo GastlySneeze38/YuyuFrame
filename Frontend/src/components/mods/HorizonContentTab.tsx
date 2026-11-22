@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { api } from '@/api/client'
 import { press, pressIf } from '@/lib/motion'
-import { formatBytes, formatDownloadCount } from '@/lib/format'
+import { formatBytes, formatDate, formatDownloadCount } from '@/lib/format'
 import { horizonVersionName } from '@/lib/horizonVersion'
 import { openExternal } from '@/lib/openExternal'
 import { useT } from '@/i18n'
@@ -16,7 +16,8 @@ import { Toggle } from '@/components/ui/Toggle'
 import { Pagination } from '@/components/ui/Pagination'
 import type { Instance } from '@/types'
 import type {
-  HorizonInstalled, HorizonKind, HorizonLeftOut, HorizonNativeReport, HorizonNativeStatus, HorizonProject,
+  HorizonDataPack, HorizonInstalled, HorizonInstalledPack, HorizonKind, HorizonLeftOut, HorizonNativeReport,
+  HorizonNativeStatus, HorizonProject, HorizonWorld,
 } from '@/types/horizon'
 
 /**
@@ -31,7 +32,7 @@ import type {
  */
 
 const PAGE_SIZE = 24
-type KindFilter = 'all' | 'mod' | 'native' | 'shader' | 'resourcepack'
+type KindFilter = 'all' | 'mod' | 'native' | 'shader' | 'resourcepack' | 'datapack' | 'modpack'
 type Sort = 'popular' | 'recent' | 'name'
 
 const KIND_OF: Record<HorizonKind, KindFilter> = {
@@ -40,7 +41,12 @@ const KIND_OF: Record<HorizonKind, KindFilter> = {
   'shader': 'shader',
   'shaderpack': 'shader',
   'resourcepack': 'resourcepack',
+  'datapack': 'datapack',
+  'modpack': 'modpack',
 }
+
+/** Ce que l'instance a déjà d'un projet : sa version, et son fichier s'il en a un. */
+type Mine = { version: string; file?: string }
 
 // Le registre change rarement : gardé pour la session, par version jouée.
 const registryCache = new Map<string, Promise<HorizonProject[]>>()
@@ -66,18 +72,24 @@ export function HorizonContentTab({ instance, mode, onBrowse, onCount }: {
   const [status, setStatus] = useState<HorizonNativeStatus | null>(null)
   const [report, setReport] = useState<HorizonNativeReport | null>(null)
   const [consent, setConsent] = useState<null | (() => Promise<void>)>(null)
+  const [packs, setPacks] = useState<HorizonInstalledPack[]>([])
+  const [datapacks, setDatapacks] = useState<HorizonDataPack[]>([])
 
   const reload = useCallback(async () => {
     try {
-      const [list, st, rep] = await Promise.all([
+      const [list, st, rep, mp, dp] = await Promise.all([
         api.horizon.installed(instance.id, loaderVersion),
         api.horizon.nativeStatus(),
         api.horizon.nativeReport(instance.id),
+        api.horizon.modpacks(instance.id),
+        api.horizon.datapacks(instance.id),
       ])
       setInstalled(list)
       setStatus(st)
       setReport(rep)
-      onCount?.(list.length)
+      setPacks(mp)
+      setDatapacks(dp)
+      onCount?.(list.length + mp.length + dp.length)
     } catch (e) {
       showError(e)
     }
@@ -97,11 +109,13 @@ export function HorizonContentTab({ instance, mode, onBrowse, onCount }: {
   return (
     <>
       {mode === 'browse' ? (
-        <Browse instance={instance} installed={installed} onChanged={reload} withConsent={withConsent} />
+        <Browse instance={instance} installed={installed} packs={packs} onChanged={reload} withConsent={withConsent} />
       ) : (
         <Installed
           instance={instance}
           items={installed}
+          packs={packs}
+          datapacks={datapacks}
           status={status}
           report={report}
           onChanged={reload}
@@ -134,9 +148,10 @@ export function HorizonContentTab({ instance, mode, onBrowse, onCount }: {
 
 // ── Parcourir ────────────────────────────────────────────────────────────────
 
-function Browse({ instance, installed, onChanged, withConsent }: {
+function Browse({ instance, installed, packs, onChanged, withConsent }: {
   instance: Instance
   installed: HorizonInstalled[]
+  packs: HorizonInstalledPack[]
   onChanged: () => Promise<void>
   withConsent: (action: () => Promise<void>) => Promise<void>
 }) {
@@ -150,6 +165,8 @@ function Browse({ instance, installed, onChanged, withConsent }: {
   const [page, setPage] = useState(1)
   const [busy, setBusy] = useState<string | null>(null)
   const [detail, setDetail] = useState<HorizonProject | null>(null)
+  /** Un pack de données attend qu'on choisisse son monde. */
+  const [toWorld, setToWorld] = useState<{ project: HorizonProject; version?: string } | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -160,11 +177,13 @@ function Browse({ instance, installed, onChanged, withConsent }: {
     return () => { cancelled = true }
   }, [loaderVersion])
 
+  // Un pack de données peut aller dans plusieurs mondes : il reste toujours installable.
   const byProject = useMemo(() => {
-    const map = new Map<string, HorizonInstalled>()
+    const map = new Map<string, Mine>()
     for (const i of installed) if (i.project) map.set(i.project, i)
+    for (const p of packs) map.set(p.id, { version: p.version })
     return map
-  }, [installed])
+  }, [installed, packs])
 
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -182,11 +201,15 @@ function Browse({ instance, installed, onChanged, withConsent }: {
   const pageCount = Math.max(1, Math.ceil(shown.length / PAGE_SIZE))
   const pageItems = shown.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
-  const install = async (project: HorizonProject, version?: string) => {
+  const install = async (project: HorizonProject, version?: string, world?: string) => {
+    if (project.kind === 'datapack' && !world) {
+      setToWorld({ project, version })
+      return
+    }
     const run = async () => {
       setBusy(project.id)
       try {
-        await api.horizon.install(instance.id, project.id, loaderVersion, version, byProject.get(project.id)?.file)
+        await api.horizon.install(instance.id, project.id, loaderVersion, version, byProject.get(project.id)?.file, world)
         await onChanged()
       } catch (e) {
         showError(e)
@@ -198,7 +221,7 @@ function Browse({ instance, installed, onChanged, withConsent }: {
     else await run()
   }
 
-  const kinds: KindFilter[] = ['all', 'mod', 'native', 'shader', 'resourcepack']
+  const kinds: KindFilter[] = ['all', 'mod', 'native', 'shader', 'resourcepack', 'datapack', 'modpack']
 
   return (
     <div className="flex flex-col gap-3">
@@ -270,6 +293,20 @@ function Browse({ instance, installed, onChanged, withConsent }: {
           />
         )}
       </AnimatePresence>
+      <AnimatePresence>
+        {toWorld && (
+          <WorldPicker
+            instanceId={instance.id}
+            name={toWorld.project.name}
+            onCancel={() => setToWorld(null)}
+            onPick={(world) => {
+              const { project, version } = toWorld
+              setToWorld(null)
+              void install(project, version, world)
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -291,7 +328,7 @@ function KindBadge({ kind }: { kind: HorizonKind }) {
 
 function InstallButton({ project, mine, busy, onInstall }: {
   project: HorizonProject
-  mine?: HorizonInstalled
+  mine?: Mine
   busy: boolean
   onInstall: () => void
 }) {
@@ -320,7 +357,7 @@ function InstallButton({ project, mine, busy, onInstall }: {
 
 function ProjectCard({ project, mine, busy, onOpen, onInstall }: {
   project: HorizonProject
-  mine?: HorizonInstalled
+  mine?: Mine
   busy: boolean
   onOpen: () => void
   onInstall: () => void
@@ -359,7 +396,7 @@ function ProjectCard({ project, mine, busy, onOpen, onInstall }: {
 
 function ProjectDetail({ project, mine, busy, onClose, onInstall }: {
   project: HorizonProject
-  mine?: HorizonInstalled
+  mine?: Mine
   busy: boolean
   onClose: () => void
   onInstall: (version?: string) => void
@@ -393,6 +430,11 @@ function ProjectDetail({ project, mine, busy, onClose, onInstall }: {
             </div>
             {project.kind === 'native-mod' && (
               <p className="mt-2 text-[11.5px] text-[rgba(250,204,21,0.8)]">{t('mods.horizon.nativeHint')}</p>
+            )}
+            {(project.kind === 'datapack' || project.kind === 'modpack') && (
+              <p className="mt-2 text-[11.5px] text-[rgba(255,255,255,0.55)]">
+                {t(project.kind === 'datapack' ? 'mods.horizon.datapackHint' : 'mods.horizon.modpackHint')}
+              </p>
             )}
           </div>
         </div>
@@ -461,9 +503,11 @@ function ProjectDetail({ project, mine, busy, onClose, onInstall }: {
 
 // ── Installés ────────────────────────────────────────────────────────────────
 
-function Installed({ instance, items, status, report, onChanged, onBrowse, withConsent }: {
+function Installed({ instance, items, packs, datapacks, status, report, onChanged, onBrowse, withConsent }: {
   instance: Instance
   items: HorizonInstalled[]
+  packs: HorizonInstalledPack[]
+  datapacks: HorizonDataPack[]
   status: HorizonNativeStatus | null
   report: HorizonNativeReport | null
   onChanged: () => Promise<void>
@@ -498,7 +542,7 @@ function Installed({ instance, items, status, report, onChanged, onBrowse, withC
   ]
   const hasNative = groups[1].list.some((i) => i.enabled)
 
-  if (items.length === 0) {
+  if (items.length === 0 && packs.length === 0 && datapacks.length === 0) {
     return (
       <div className="flex flex-col items-center gap-3 py-16 text-center">
         <p className="text-[13px] text-[rgba(255,255,255,0.5)]">{t('mods.horizon.nothingInstalled')}</p>
@@ -560,7 +604,140 @@ function Installed({ instance, items, status, report, onChanged, onBrowse, withC
           ))}
         </section>
       ))}
+
+      {packs.length > 0 && (
+        <section className="flex flex-col gap-1.5">
+          <h3 className="px-1 text-[11px] font-bold uppercase tracking-wider text-[rgba(255,255,255,0.4)]">
+            {t('mods.horizon.sections.modpacks')} · {packs.length}
+          </h3>
+          {packs.map((p) => (
+            <SimpleRow
+              key={p.id}
+              title={p.name}
+              version={p.version}
+              detail={t('mods.horizon.modpackMods', { n: p.mods.length })}
+              busy={busy === `pack:${p.id}`}
+              onRemove={() => run(`pack:${p.id}`, () => api.horizon.modpackRemove(instance.id, p.id))}
+            />
+          ))}
+        </section>
+      )}
+
+      {datapacks.length > 0 && (
+        <section className="flex flex-col gap-1.5">
+          <h3 className="px-1 text-[11px] font-bold uppercase tracking-wider text-[rgba(255,255,255,0.4)]">
+            {t('mods.horizon.sections.datapacks')} · {datapacks.length}
+          </h3>
+          {datapacks.map((d) => {
+            const key = `data:${d.world}/${d.file}`
+            return (
+              <SimpleRow
+                key={key}
+                title={d.file.replace(/\.zip$/i, '')}
+                detail={`${t('mods.horizon.datapackWorld', { world: d.world })}${d.description ? ` · ${d.description}` : ''}`}
+                busy={busy === key}
+                enabled={d.enabled}
+                onToggle={() => run(key, () => api.horizon.datapackToggle(instance.id, d.world, d.file, !d.enabled))}
+                onRemove={() => run(key, () => api.horizon.datapackRemove(instance.id, d.world, d.file))}
+              />
+            )
+          })}
+        </section>
+      )}
     </div>
+  )
+}
+
+/** Une ligne sans fichier de mod : un modpack, ou un pack de données dans un monde. */
+function SimpleRow({ title, version, detail, busy, enabled, onToggle, onRemove }: {
+  title: string
+  version?: string
+  detail: string
+  busy: boolean
+  enabled?: boolean
+  onToggle?: () => void
+  onRemove: () => void
+}) {
+  const t = useT()
+  const [armed, setArmed] = useState(false)
+  const timer = useRef<number | undefined>(undefined)
+  useEffect(() => () => window.clearTimeout(timer.current), [])
+  const arm = () => {
+    if (armed) { onRemove(); setArmed(false); return }
+    setArmed(true)
+    timer.current = window.setTimeout(() => setArmed(false), 2500)
+  }
+  return (
+    <div className={`flex items-center gap-3 rounded-xl border border-line-soft bg-bg-card px-3 py-2 transition-opacity duration-150 ${busy ? 'opacity-60' : ''}`}>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[13px] font-semibold text-white">
+          {title}
+          {version && <span className="ml-2 text-[11px] font-normal text-[rgba(255,255,255,0.4)]">{version}</span>}
+        </p>
+        <p className="truncate text-[11px] text-[rgba(255,255,255,0.4)]" title={detail}>{detail}</p>
+      </div>
+      <motion.button
+        {...pressIf(!busy)}
+        disabled={busy}
+        onClick={arm}
+        className={`h-7 rounded-md px-2.5 text-[11px] font-semibold transition-colors duration-150 ${
+          armed ? 'bg-[rgba(248,113,113,0.2)] text-[rgba(254,202,202,0.95)]' : 'text-[rgba(255,255,255,0.45)] hover:bg-[rgba(255,255,255,0.06)]'
+        }`}
+      >
+        {armed ? t('mods.horizon.confirmRemove') : t('mods.horizon.remove')}
+      </motion.button>
+      {onToggle && enabled !== undefined && (
+        <Toggle size="sm" checked={enabled} onChange={() => { if (!busy) onToggle() }} />
+      )}
+    </div>
+  )
+}
+
+/** Le monde où poser un pack de données. */
+function WorldPicker({ instanceId, name, onCancel, onPick }: {
+  instanceId: string
+  name: string
+  onCancel: () => void
+  onPick: (world: string) => void
+}) {
+  const t = useT()
+  const { language } = useStorePick('language')
+  const [worlds, setWorlds] = useState<HorizonWorld[] | null>(null)
+  useEffect(() => {
+    api.horizon.worlds(instanceId).then(setWorlds).catch((e) => { showError(e); setWorlds([]) })
+  }, [instanceId])
+  return (
+    <ModalShell title={t('mods.horizon.worldPicker.title', { name })} onClose={onCancel}>
+      <div className="flex flex-col gap-3 text-[13px] text-[rgba(255,255,255,0.75)]">
+        <p>{t('mods.horizon.worldPicker.body')}</p>
+        {worlds === null ? (
+          <div className="skeleton h-24 rounded-lg" />
+        ) : worlds.length === 0 ? (
+          <p className="rounded-lg bg-[rgba(255,255,255,0.04)] px-3 py-4 text-center text-[12px] text-[rgba(255,255,255,0.5)]">
+            {t('mods.horizon.worldPicker.empty')}
+          </p>
+        ) : (
+          <div className="flex max-h-[50vh] flex-col gap-1.5 overflow-y-auto">
+            {worlds.map((w) => (
+              <motion.button
+                {...press}
+                key={w.folder}
+                onClick={() => onPick(w.folder)}
+                className="flex items-center gap-3 rounded-lg border border-line-soft bg-bg-card px-3 py-2 text-left transition-colors duration-150 hover:border-[rgb(var(--accent)/0.4)]"
+              >
+                <span className="min-w-0 flex-1 truncate font-semibold text-white">{w.folder}</span>
+                <span className="text-[11px] text-[rgba(255,255,255,0.4)]">{formatDate(w.modified * 1000, language)}</span>
+              </motion.button>
+            ))}
+          </div>
+        )}
+        <div className="flex justify-end">
+          <motion.button {...press} onClick={onCancel} className="h-9 rounded-lg px-4 text-[12.5px] font-semibold text-[rgba(255,255,255,0.65)] hover:bg-[rgba(255,255,255,0.06)]">
+            {t('mods.horizon.consent.cancel')}
+          </motion.button>
+        </div>
+      </div>
+    </ModalShell>
   )
 }
 
@@ -695,7 +872,7 @@ function ReportCard({ instance, report }: { instance: Instance; report: HorizonN
           <div key={l.id} className="flex items-center gap-3 rounded-lg bg-[rgba(0,0,0,0.15)] px-3 py-2">
             <div className="min-w-0 flex-1">
               <p className="text-[12px] font-semibold text-white">{l.id}</p>
-              <p className="text-[11px] text-[rgba(255,255,255,0.55)]" title={l.kind === 'compile' ? l.log : l.kind === 'engine' ? l.error : undefined}>{reason(l)}</p>
+              <p className="text-[11px] text-[rgba(255,255,255,0.55)]" title={l.kind === 'compile' ? l.log : l.kind === 'engine' || l.kind === 'injections' ? l.error : undefined}>{reason(l)}</p>
               {madeFor && (
                 <p className="text-[11px] text-[rgba(255,255,255,0.4)]">
                   {version
@@ -796,6 +973,7 @@ function NativeConsent({ downloadBytes, onCancel, onAllow }: {
       <div className="flex flex-col gap-3 text-[13px] leading-relaxed text-[rgba(255,255,255,0.75)]">
         <p>{t('mods.horizon.consent.body1')}</p>
         <p>{t('mods.horizon.consent.body2')}</p>
+        <p className="text-[12px] text-[rgba(255,255,255,0.5)]">{t('mods.horizon.consent.crates')}</p>
         <p className="text-[12px] text-[rgba(255,255,255,0.5)]">{t('mods.horizon.consent.size', { size: formatBytes(downloadBytes) })}</p>
         <div className="mt-2 flex justify-end gap-2">
           <motion.button {...press} onClick={onCancel} className="h-9 rounded-lg px-4 text-[12.5px] font-semibold text-[rgba(255,255,255,0.65)] hover:bg-[rgba(255,255,255,0.06)]">

@@ -1,6 +1,6 @@
 /** Le registre `horizon-mods` vu par le launcher (`horizon/content.rs`). */
 
-export type HorizonKind = 'mod' | 'native-mod' | 'shader' | 'shaderpack' | 'resourcepack'
+export type HorizonKind = 'mod' | 'native-mod' | 'shader' | 'shaderpack' | 'resourcepack' | 'datapack' | 'modpack'
 
 export interface HorizonVersion {
   version: string
@@ -72,7 +72,7 @@ export type HorizonLeftOutReason =
   | { kind: 'does_not_fit'; made_for: string; items: string[] }
   | { kind: 'changes_game' }
   | { kind: 'engine'; error: string }
-  | { kind: 'injections' }
+  | { kind: 'injections'; error: string }
   | { kind: 'crates'; names: string[] }
   | { kind: 'missing_dependency'; id: string }
   | { kind: 'forbids_unsafe' }
@@ -89,4 +89,29 @@ export interface HorizonNativeReport {
   /** Build (commit) → version publiée qui est ce build. */
   builds: Record<string, string>
   not_allowed: boolean
+}
+
+/** Un monde de l'instance (dossier de `saves/`), le plus récent d'abord. */
+export interface HorizonWorld {
+  folder: string
+  modified: number
+}
+
+/** Un pack de données `.zip` posé dans un monde. */
+export interface HorizonDataPack {
+  world: string
+  file: string
+  description: string
+  enabled: boolean
+  project: string | null
+}
+
+/** Un modpack `.hpack` installé dans l'instance. */
+export interface HorizonInstalledPack {
+  id: string
+  name: string
+  version: string
+  sha256: string
+  /** `id version` de chaque mod du pack. */
+  mods: string[]
 }

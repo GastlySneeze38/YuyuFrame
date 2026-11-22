@@ -10,6 +10,13 @@
 //! | mod natif | `<id>.hmod` | `horizon-native-mods/` | idem ; compilé au lancement (`native/`) |
 //! | shader Horizon | `.hshader` | `shaderpacks/` | `pickedShaderPack:<nom>` dans `horizon-graphics.txt` |
 //! | pack de ressources | `.zip` | `resourcepacks/` | `options.txt`, comme vanilla (écran Packs) |
+//! | pack de données | `.zip` | `saves/<monde>/datapacks/` | tous, sauf ceux de `disabled` dans `<monde>/datapacks.json` |
+//! | modpack | `.hpack` | ses mods dans les dossiers ci-dessus, fiche dans `horizon/packs/<id>.json` | `on` de chaque mod du pack |
+//!
+//! Un modpack s'installe dans l'instance ouverte : chaque mod à la version et
+//! à l'empreinte épinglées, puis ses réglages (`overrides/`), **sans jamais
+//! remplacer un fichier déjà là**. Un chemin hors de la liste de leur
+//! référence refuse le pack entier.
 //!
 //! Le dossier de jeu d'une instance Horizon est le dossier de l'instance.
 //! Avant d'écrire un fichier : adresse d'une forme connue (publication du
@@ -126,9 +133,10 @@ impl Index {
     }
 }
 
-/// Les sortes qu'on propose. Les packs de données (par monde) et les modpacks
-/// `.hpack` ne le sont pas encore.
-const OFFERED: [&str; 5] = ["mod", "native-mod", "shader", "shaderpack", "resourcepack"];
+/// Les sortes qu'on propose. Un pack de données va dans un monde de
+/// l'instance ; un modpack `.hpack` installe ses mods et ses réglages dans
+/// l'instance ouverte.
+const OFFERED: [&str; 7] = ["mod", "native-mod", "shader", "shaderpack", "resourcepack", "datapack", "modpack"];
 
 static CACHE: Mutex<Option<(std::time::Instant, Index)>> = Mutex::new(None);
 const CACHE_SECS: u64 = 10 * 60;
@@ -241,6 +249,8 @@ fn compatible(kind: &str, version: &Version, support: &Support) -> bool {
         "mod" => support.mod_api.iter().any(|a| a == &version.api),
         "shader" => support.shader_api.iter().any(|a| a == &version.api),
         "native-mod" => native_build(&version.api).is_some(),
+        // Le format de manifeste d'un modpack.
+        "modpack" => version.api.is_empty() || version.api == "1",
         _ => true,
     }
 }
@@ -661,6 +671,21 @@ fn check_contents(project: &Project, version: &Version, bytes: &[u8]) -> Result<
             }
             Ok(None)
         }
+        "datapack" => {
+            let zip = zip::ZipArchive::new(std::io::Cursor::new(bytes)).map_err(|_| wrong("l'archive"))?;
+            let names: Vec<&str> = zip.file_names().collect();
+            if !names.contains(&"pack.mcmeta") || !names.iter().any(|n| n.starts_with("data/")) {
+                return Err(anyhow!("{} n'est pas un pack de données (pack.mcmeta et data/ attendus)", project.name));
+            }
+            Ok(None)
+        }
+        "modpack" => {
+            let pack = read_modpack(bytes).map_err(|e| anyhow!("{} : {e}", project.name))?;
+            if pack.id != project.id || pack.version != version.version {
+                return Err(wrong("l'identifiant ou la version"));
+            }
+            Ok(None)
+        }
         _ => Err(anyhow!("Cette version d'Horizon ne sait pas encore installer ce type de contenu")),
     }
 }
@@ -676,6 +701,374 @@ fn write_whole(path: &Path, bytes: &[u8]) -> Result<()> {
     Ok(())
 }
 
+// ── Modpacks (.hpack) ────────────────────────────────────────────────────────
+
+/// `horizon-modpack.toml` (format 1, référence du registre § `.hpack`).
+#[derive(Deserialize, Debug)]
+#[serde(deny_unknown_fields)]
+struct Modpack {
+    format: u32,
+    id: String,
+    name: String,
+    version: String,
+    #[serde(default)]
+    #[allow(dead_code)]
+    description: String,
+    #[serde(default)]
+    #[allow(dead_code)]
+    authors: Vec<String>,
+    game: String,
+    #[serde(default)]
+    mods: Vec<PackMod>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
+struct PackMod {
+    id: String,
+    version: String,
+    sha256: String,
+    #[serde(default = "default_on")]
+    on: bool,
+}
+
+fn default_on() -> bool {
+    true
+}
+
+const MODPACK_MANIFEST: &str = "horizon-modpack.toml";
+/// Le dossier où les mods gardent leurs réglages, sous `horizon-mods/`.
+const MOD_DATA: &str = ".horizon-mod-data";
+const MAX_OVERRIDES: u64 = 256 * 1024 * 1024;
+
+/// Un chemin que `overrides/` a le droit d'écrire : les réglages du jeu, un
+/// pack de ressources, ou les réglages enregistrés d'un mod du pack. Tout le
+/// reste refuse le pack entier, comme chez Horizon.
+fn override_allowed(path: &str, mods: &[PackMod]) -> bool {
+    let parts: Vec<&str> = path.split('/').collect();
+    if parts.iter().any(|p| p.is_empty() || *p == "." || *p == ".." || p.contains(['\\', ':'])) {
+        return false;
+    }
+    match parts.as_slice() {
+        ["options.txt" | "horizon-graphics.txt" | "horizon-extras.txt"] => true,
+        ["resourcepacks", name] => name.to_ascii_lowercase().ends_with(".zip") && !name.starts_with('.'),
+        ["horizon-mods", data, id, rest @ ..] => *data == MOD_DATA && !rest.is_empty() && mods.iter().any(|m| m.id == *id),
+        _ => false,
+    }
+}
+
+/// Lit et vérifie un `.hpack` : son manifeste, et que `overrides/` ne
+/// contient que ce qu'il a le droit d'écrire.
+fn read_modpack(bytes: &[u8]) -> Result<Modpack> {
+    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(bytes))?;
+    let text = {
+        let mut entry = zip.by_name(MODPACK_MANIFEST).map_err(|_| anyhow!("pas de {MODPACK_MANIFEST}"))?;
+        let mut text = String::new();
+        (&mut entry).take(1024 * 1024).read_to_string(&mut text)?;
+        text
+    };
+    let pack: Modpack = toml::from_str(&text).map_err(|e| anyhow!("{MODPACK_MANIFEST} : {e}"))?;
+    if pack.format != 1 {
+        return Err(anyhow!("format de modpack {} inconnu : mets à jour YuyuFrame", pack.format));
+    }
+    if pack.game != super::GAME_VERSION {
+        return Err(anyhow!("fait pour Minecraft {}", pack.game));
+    }
+    let id_ok = |id: &str| !id.is_empty() && id.len() <= 64 && id.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_');
+    if !id_ok(&pack.id) || pack.mods.iter().any(|m| !id_ok(&m.id) || m.sha256.len() != 64) {
+        return Err(anyhow!("identifiant ou empreinte invalide"));
+    }
+    let mut total = 0u64;
+    for i in 0..zip.len() {
+        let entry = zip.by_index(i)?;
+        let name = entry.name().to_string();
+        if name == MODPACK_MANIFEST || entry.is_dir() {
+            continue;
+        }
+        let Some(rest) = name.strip_prefix("overrides/") else {
+            return Err(anyhow!("{name} : un modpack ne contient que {MODPACK_MANIFEST} et overrides/"));
+        };
+        if !override_allowed(rest, &pack.mods) {
+            return Err(anyhow!("overrides/{rest} : chemin refusé"));
+        }
+        if entry.size() > MAX_FILE {
+            return Err(anyhow!("overrides/{rest} dépasse 64 Mio"));
+        }
+        total += entry.size();
+        if total > MAX_OVERRIDES {
+            return Err(anyhow!("les réglages du modpack dépassent 256 Mio"));
+        }
+    }
+    Ok(pack)
+}
+
+/// Écrit les réglages du pack, sans jamais remplacer un fichier déjà là :
+/// l'instance garde ceux du joueur. Rend le nombre de fichiers posés.
+fn extract_overrides(bytes: &[u8], pack: &Modpack, dir: &Path) -> Result<usize> {
+    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(bytes))?;
+    let mut written = 0;
+    for i in 0..zip.len() {
+        let mut entry = zip.by_index(i)?;
+        let Some(rest) = entry.name().strip_prefix("overrides/").map(str::to_string) else { continue };
+        if entry.is_dir() || !override_allowed(&rest, &pack.mods) {
+            continue;
+        }
+        let target = dir.join(&rest);
+        if target.exists() {
+            continue;
+        }
+        let mut data = Vec::with_capacity(entry.size() as usize);
+        (&mut entry).take(MAX_FILE).read_to_end(&mut data)?;
+        write_whole(&target, &data)?;
+        written += 1;
+    }
+    Ok(written)
+}
+
+/// Ce qu'une instance garde d'un modpack installé (`horizon/packs/<id>.json`).
+#[derive(Serialize, Deserialize, Clone)]
+pub struct InstalledPack {
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    pub sha256: String,
+    /// Les mods du pack : `id version`.
+    pub mods: Vec<String>,
+}
+
+fn packs_dir(dir: &Path) -> PathBuf {
+    dir.join("horizon").join("packs")
+}
+
+fn installed_packs(dir: &Path) -> Vec<InstalledPack> {
+    let mut packs: Vec<InstalledPack> = files_in(&packs_dir(dir), "json")
+        .into_iter()
+        .filter_map(|p| serde_json::from_slice(&std::fs::read(p).ok()?).ok())
+        .collect();
+    packs.sort_by_key(|p: &InstalledPack| p.name.to_lowercase());
+    packs
+}
+
+/// Installe chaque mod du pack à la version et à l'empreinte qu'il épingle,
+/// allumé ou éteint comme il le dit. Un mod absent du registre refuse le pack.
+async fn install_modpack(app: &tauri::AppHandle, index: &Index, dir: &Path, project: &Project, version: &Version, bytes: &[u8]) -> Result<(Vec<String>, bool)> {
+    let pack = read_modpack(bytes)?;
+    // Tout est vérifié avant d'écrire quoi que ce soit.
+    let mut wanted = Vec::new();
+    for m in &pack.mods {
+        let found = index
+            .projects
+            .iter()
+            .find(|p| p.id == m.id && (p.kind == "mod" || p.kind == "native-mod"))
+            .and_then(|p| Some((p, p.versions.iter().find(|v| v.version == m.version && v.file.sha256.eq_ignore_ascii_case(&m.sha256))?)));
+        let (p, v) = found.ok_or_else(|| anyhow!("{} demande {} {}, absent du registre", pack.name, m.id, m.version))?;
+        wanted.push((m, p, v));
+    }
+    let mut fetched = Vec::new();
+    for (m, p, v) in wanted {
+        let file = fetch_checked(app, index, p, v).await?;
+        check_contents(p, v, &file)?;
+        fetched.push((m, p, file));
+    }
+    let mut native = false;
+    let mut mods = Vec::new();
+    for (m, p, file) in fetched {
+        let folder = if p.kind == "native-mod" { NATIVE_DIR } else { MODS_DIR };
+        write_whole(&dir.join(folder).join(format!("{}.hmod", p.id)), &file)?;
+        set_enabled(dir, &p.id, m.on)?;
+        native |= p.kind == "native-mod" && m.on;
+        mods.push(format!("{} {}", m.id, m.version));
+    }
+    extract_overrides(bytes, &pack, dir)?;
+    let record = InstalledPack {
+        id: project.id.clone(),
+        name: pack.name.clone(),
+        version: version.version.clone(),
+        sha256: version.file.sha256.to_ascii_lowercase(),
+        mods: mods.clone(),
+    };
+    write_whole(&packs_dir(dir).join(format!("{}.json", project.id)), &serde_json::to_vec_pretty(&record)?)?;
+    Ok((mods.into_iter().map(|m| m.split(' ').next().unwrap_or_default().to_string()).collect(), native))
+}
+
+/// Retire un modpack installé : sa fiche et les mods qu'il a posés.
+#[tauri::command]
+pub async fn horizon_modpack_remove(instance_id: String, pack_id: String) -> Result<(), String> {
+    let dir = game_dir(&instance_id);
+    let pack = installed_packs(&dir).into_iter().find(|p| p.id == pack_id).ok_or("Modpack introuvable")?;
+    for line in &pack.mods {
+        let id = line.split(' ').next().unwrap_or_default();
+        for folder in [MODS_DIR, NATIVE_DIR] {
+            let path = dir.join(folder).join(format!("{id}.hmod"));
+            if path.is_file() && plain_name(id) {
+                let _ = std::fs::remove_file(&path);
+                let _ = write_setting(&dir.join(MODS_LIST), &format!("mod.{id}"), None);
+            }
+        }
+    }
+    std::fs::remove_file(packs_dir(&dir).join(format!("{}.json", pack.id))).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn horizon_modpack_list(instance_id: String) -> Result<Vec<InstalledPack>, String> {
+    Ok(installed_packs(&game_dir(&instance_id)))
+}
+
+// ── Packs de données (par monde) ─────────────────────────────────────────────
+
+const DATAPACK_SETTINGS: &str = "datapacks.json";
+
+#[derive(Serialize)]
+pub struct WorldView {
+    /// Le nom du dossier dans `saves/`.
+    pub folder: String,
+    pub modified: u64,
+}
+
+#[derive(Serialize)]
+pub struct DataPackView {
+    pub world: String,
+    pub file: String,
+    pub description: String,
+    pub enabled: bool,
+    /// Le projet du registre d'où il vient, par son empreinte.
+    pub project: Option<String>,
+}
+
+fn world_dir(dir: &Path, world: &str) -> Result<PathBuf> {
+    if !plain_name(world) {
+        return Err(anyhow!("Nom de monde refusé"));
+    }
+    let path = dir.join("saves").join(world);
+    if !path.is_dir() {
+        return Err(anyhow!("Le monde « {world} » n'existe pas dans cette instance"));
+    }
+    Ok(path)
+}
+
+/// Les mondes de l'instance, le plus récemment joué d'abord.
+#[tauri::command]
+pub async fn horizon_worlds(instance_id: String) -> Result<Vec<WorldView>, String> {
+    let saves = game_dir(&instance_id).join("saves");
+    let mut worlds: Vec<WorldView> = std::fs::read_dir(saves)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|e| e.path().is_dir())
+        .filter_map(|e| {
+            let folder = e.file_name().to_str()?.to_string();
+            let modified = e.metadata().ok()?.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?.as_secs();
+            plain_name(&folder).then_some(WorldView { folder, modified })
+        })
+        .collect();
+    worlds.sort_by(|a, b| b.modified.cmp(&a.modified));
+    Ok(worlds)
+}
+
+fn datapack_settings(world: &Path) -> serde_json::Value {
+    std::fs::read(world.join(DATAPACK_SETTINGS))
+        .ok()
+        .and_then(|b| serde_json::from_slice(&b).ok())
+        .filter(|v: &serde_json::Value| v.is_object())
+        .unwrap_or_else(|| serde_json::json!({}))
+}
+
+/// Pose ou retire `file/<nom>` de la liste des packs éteints du monde (celle
+/// que tient `/datapack disable`). `None` : l'oublier des deux listes.
+fn set_datapack(world: &Path, file: &str, enabled: Option<bool>) -> Result<()> {
+    let mut settings = datapack_settings(world);
+    let id = format!("file/{file}");
+    for key in ["enabled", "disabled"] {
+        // `get_mut` et pas `settings[key]`, qui créerait la clé à `null`.
+        if let Some(list) = settings.get_mut(key).and_then(|l| l.as_array_mut()) {
+            list.retain(|v| v.as_str() != Some(id.as_str()));
+        }
+    }
+    if enabled == Some(false) {
+        let list = settings.as_object_mut().unwrap().entry("disabled").or_insert_with(|| serde_json::json!([]));
+        if let Some(list) = list.as_array_mut() {
+            list.push(id.into());
+        }
+    }
+    write_whole(&world.join(DATAPACK_SETTINGS), &serde_json::to_vec_pretty(&settings)?)
+}
+
+fn datapack_description(path: &Path) -> Option<String> {
+    let file = std::fs::File::open(path).ok()?;
+    let mut zip = zip::ZipArchive::new(file).ok()?;
+    let mut text = String::new();
+    zip.by_name("pack.mcmeta").ok()?.take(256 * 1024).read_to_string(&mut text).ok()?;
+    let meta: serde_json::Value = serde_json::from_str(&text).ok()?;
+    let description = &meta["pack"]["description"];
+    Some(match description {
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Object(o) => o.get("text").and_then(|t| t.as_str()).unwrap_or_default().to_string(),
+        serde_json::Value::Array(a) => a.iter().filter_map(|p| p.as_str().or_else(|| p.get("text")?.as_str())).collect::<String>(),
+        _ => String::new(),
+    })
+}
+
+/// Les packs de données `.zip` de tous les mondes de l'instance.
+#[tauri::command]
+pub async fn horizon_datapacks(instance_id: String) -> Result<Vec<DataPackView>, String> {
+    let dir = game_dir(&instance_id);
+    let index = index(false).await.ok();
+    tokio::task::spawn_blocking(move || {
+        let by_hash: HashMap<String, String> = index
+            .iter()
+            .flat_map(|i| i.projects.iter())
+            .filter(|p| p.kind == "datapack")
+            .flat_map(|p| p.versions.iter().map(move |v| (v.file.sha256.to_ascii_lowercase(), p.id.clone())))
+            .collect();
+        let mut out = Vec::new();
+        for world in std::fs::read_dir(dir.join("saves")).into_iter().flatten().flatten() {
+            let Some(folder) = world.file_name().to_str().map(str::to_string) else { continue };
+            let off: Vec<String> = datapack_settings(&world.path())["disabled"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect();
+            for path in files_in(&world.path().join("datapacks"), "zip") {
+                let file = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
+                let Some(description) = datapack_description(&path) else { continue };
+                let project = std::fs::read(&path).ok().and_then(|b| by_hash.get(&sha256_hex(&b)).cloned());
+                out.push(DataPackView {
+                    enabled: !off.contains(&format!("file/{file}")),
+                    world: folder.clone(),
+                    file,
+                    description,
+                    project,
+                });
+            }
+        }
+        out.sort_by_key(|p| (p.world.to_lowercase(), p.file.to_lowercase()));
+        out
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+/// Allume ou éteint un pack de données ; le jeu le lit à l'ouverture du monde.
+#[tauri::command]
+pub async fn horizon_datapack_toggle(instance_id: String, world: String, file: String, enabled: bool) -> Result<(), String> {
+    let world = world_dir(&game_dir(&instance_id), &world).map_err(|e| e.to_string())?;
+    if !plain_name(&file) || !world.join("datapacks").join(&file).is_file() {
+        return Err("Pack de données introuvable".into());
+    }
+    set_datapack(&world, &file, Some(enabled)).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn horizon_datapack_delete(instance_id: String, world: String, file: String) -> Result<(), String> {
+    let world = world_dir(&game_dir(&instance_id), &world).map_err(|e| e.to_string())?;
+    if !plain_name(&file) {
+        return Err("Nom de fichier refusé".into());
+    }
+    std::fs::remove_file(world.join("datapacks").join(&file)).map_err(|e| e.to_string())?;
+    set_datapack(&world, &file, None).map_err(|e| e.to_string())
+}
+
 /// Installe un projet du registre (et les mods dont il a besoin), l'allume,
 /// et rend la liste de ce qui a été installé.
 #[tauri::command]
@@ -686,8 +1079,9 @@ pub async fn horizon_content_install(
     version: Option<String>,
     loader_version: String,
     replace: Option<String>,
+    world: Option<String>,
 ) -> Result<Vec<String>, String> {
-    install(&app, &instance_id, &project_id, version.as_deref(), &loader_version, replace.as_deref())
+    install(&app, &instance_id, &project_id, version.as_deref(), &loader_version, replace.as_deref(), world.as_deref())
         .await
         .map_err(|e| e.to_string())
 }
@@ -699,10 +1093,52 @@ async fn install(
     version: Option<&str>,
     loader_version: &str,
     replace: Option<&str>,
+    world: Option<&str>,
 ) -> Result<Vec<String>> {
     let index = index(true).await?;
     let support = support(loader_version).await;
     let dir = game_dir(instance_id);
+
+    // Un pack de données va dans un monde ; un modpack pose ses mods et ses
+    // réglages. Ni l'un ni l'autre n'entraîne de dépendances.
+    let project = index
+        .projects
+        .iter()
+        .find(|p| p.id == project_id && OFFERED.contains(&p.kind.as_str()))
+        .ok_or_else(|| anyhow!("« {project_id} » n'est pas dans le registre d'Horizon"))?;
+    if project.kind == "datapack" || project.kind == "modpack" {
+        let chosen = match version {
+            Some(v) => project.versions.iter().find(|x| x.version == v),
+            None => project.versions.iter().find(|x| compatible(&project.kind, x, &support)),
+        }
+        .ok_or_else(|| anyhow!("Aucune version de {} ne s'installe sur cette instance", project.name))?;
+        if project.kind == "datapack" {
+            let world = world_dir(&dir, world.ok_or_else(|| anyhow!("Choisis le monde où mettre ce pack de données"))?)?;
+            let bytes = fetch_checked(app, &index, project, chosen).await?;
+            check_contents(project, chosen, &bytes)?;
+            if !plain_name(&chosen.file.name) || !chosen.file.name.to_ascii_lowercase().ends_with(".zip") {
+                return Err(anyhow!("Nom de fichier refusé"));
+            }
+            let datapacks = world.join("datapacks");
+            if let Some(old) = replace.filter(|n| plain_name(n) && *n != chosen.file.name) {
+                let _ = std::fs::remove_file(datapacks.join(old));
+                let _ = set_datapack(&world, old, None);
+            }
+            write_whole(&datapacks.join(&chosen.file.name), &bytes)?;
+            // Un pack du même nom éteint autrefois resterait éteint.
+            set_datapack(&world, &chosen.file.name, None)?;
+            return Ok(vec![project.id.clone()]);
+        }
+        let bytes = fetch_checked(app, &index, project, chosen).await?;
+        check_contents(project, chosen, &bytes)?;
+        let (mut mods, native) = install_modpack(app, &index, &dir, project, chosen, &bytes).await?;
+        if native {
+            #[cfg(not(target_os = "android"))]
+            super::native::prefetch(app.clone(), loader_version.to_string());
+        }
+        mods.insert(0, project.id.clone());
+        return Ok(mods);
+    }
     let mut queue: Vec<(String, Option<String>)> = vec![(project_id.to_string(), version.map(str::to_string))];
     let mut done: Vec<String> = Vec::new();
     let mut native = false;
@@ -713,7 +1149,7 @@ async fn install(
         let project = index
             .projects
             .iter()
-            .find(|p| p.id == id && OFFERED.contains(&p.kind.as_str()))
+            .find(|p| p.id == id && OFFERED.contains(&p.kind.as_str()) && p.kind != "datapack" && p.kind != "modpack")
             .ok_or_else(|| anyhow!("« {id} » n'est pas dans le registre d'Horizon"))?;
         let chosen = match &wanted {
             Some(v) => project.versions.iter().find(|x| &x.version == v),
@@ -874,6 +1310,67 @@ mod tests {
         assert!(!allowed_url("https://github.com/alice/mymod/raw/main/mymod.hmod", "mymod.hmod"));
         assert!(!allowed_url("https://github.com/alice/mymod/releases/download/v1/other.hmod", "mymod.hmod"));
         assert!(!allowed_url("https://github.com/alice/../releases/download/v1/x.hmod", "x.hmod"));
+    }
+
+    fn zip_of(files: &[(&str, &[u8])]) -> Vec<u8> {
+        use std::io::Write;
+        let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        for (name, data) in files {
+            zip.start_file(*name, zip::write::SimpleFileOptions::default()).unwrap();
+            zip.write_all(data).unwrap();
+        }
+        zip.finish().unwrap().into_inner()
+    }
+
+    const PACK: &str = "format = 1\nid = \"cozy\"\nname = \"Cozy\"\nversion = \"1.0.0\"\ngame = \"26.3\"\n\
+        [[mods]]\nid = \"coords_hud\"\nversion = \"0.1.0\"\nsha256 = \"f891bde88f4b841fd35c4f3305bc8904b671ebe9d5ad28d5aecc57e8b23fc3ce\"\non = false\n";
+
+    /// Le `.hpack` de leur référence : ses réglages s'écrivent sans écraser
+    /// ceux du joueur, et un chemin hors de la liste refuse le pack entier.
+    #[test]
+    fn modpack_et_ses_reglages() {
+        let bytes = zip_of(&[
+            ("horizon-modpack.toml", PACK.as_bytes()),
+            ("overrides/options.txt", b"renderDistance:8\n"),
+            ("overrides/resourcepacks/Cozy Look.zip", b"zip"),
+            ("overrides/horizon-mods/.horizon-mod-data/coords_hud/corner.txt", b"top"),
+        ]);
+        let pack = read_modpack(&bytes).unwrap();
+        assert_eq!(pack.mods.len(), 1);
+        assert!(!pack.mods[0].on);
+        let dir = std::env::temp_dir().join(format!("yf-hpack-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("options.txt"), "renderDistance:16\n").unwrap();
+        assert_eq!(extract_overrides(&bytes, &pack, &dir).unwrap(), 2);
+        assert_eq!(std::fs::read_to_string(dir.join("options.txt")).unwrap(), "renderDistance:16\n");
+        assert!(dir.join("horizon-mods/.horizon-mod-data/coords_hud/corner.txt").is_file());
+        let _ = std::fs::remove_dir_all(&dir);
+
+        for bad in ["overrides/mods/evil.jar", "overrides/../x.txt", "overrides/horizon-mods/.horizon-mod-data/other/x", "extra.txt"] {
+            let bytes = zip_of(&[("horizon-modpack.toml", PACK.as_bytes()), (bad, b"x")]);
+            assert!(read_modpack(&bytes).is_err(), "{bad}");
+        }
+        let unknown = PACK.replace("game = \"26.3\"", "game = \"26.3\"\nextra = 1");
+        assert!(read_modpack(&zip_of(&[("horizon-modpack.toml", unknown.as_bytes())])).is_err());
+    }
+
+    /// `datapacks.json` : éteindre ajoute à `disabled`, rallumer retire, et
+    /// les autres clés du jeu restent.
+    #[test]
+    fn packs_de_donnees_eteints() {
+        let world = std::env::temp_dir().join(format!("yf-datapack-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&world);
+        std::fs::create_dir_all(&world).unwrap();
+        std::fs::write(world.join(DATAPACK_SETTINGS), r#"{"enabled":["vanilla","file/a.zip"],"other":1}"#).unwrap();
+        set_datapack(&world, "a.zip", Some(false)).unwrap();
+        let v = datapack_settings(&world);
+        assert_eq!(v["disabled"], serde_json::json!(["file/a.zip"]));
+        assert_eq!(v["enabled"], serde_json::json!(["vanilla"]));
+        assert_eq!(v["other"], 1);
+        set_datapack(&world, "a.zip", Some(true)).unwrap();
+        assert_eq!(datapack_settings(&world)["disabled"], serde_json::json!([]));
+        let _ = std::fs::remove_dir_all(&world);
     }
 
     #[test]

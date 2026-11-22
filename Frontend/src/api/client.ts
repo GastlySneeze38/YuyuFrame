@@ -4,7 +4,7 @@ import type { ApiReceivedInvite, DiscordLink, FriendEvent, FriendList, FriendSet
 import type { LocalCrashReport, LocalCrashSummary, RemoteCrashSummary } from '@/types/crash'
 import type { ApiBoard, ApiFriendCompetitive, ApiHistoryPage, ApiOverview, ApiPass, ApiSummary, ModeKey } from '@/lib/competitive'
 import type { BackupDetail, BackupOverview, BackupSettings, BackupSummary, InstanceBackupSettings } from '@/types/backup'
-import type { HorizonInstalled, HorizonNativeReport, HorizonNativeStatus, HorizonRegistry } from '@/types/horizon'
+import type { HorizonDataPack, HorizonInstalled, HorizonInstalledPack, HorizonNativeReport, HorizonNativeStatus, HorizonRegistry, HorizonWorld } from '@/types/horizon'
 import type { AuthStatus, CompatResult, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, HealthCheck, JavaReport, JavaStatus, JvmProfile, LoaderVersion, McOption, OptionsSummary, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PackInfo, PackKind, PollResponse, SaveInfo, OptionsLinkInfo, ScanResult, SharedOptionsStatus, ShareExport, ShareLinkStatus, ShareImport, SharePreview, ShareScan, ShareSource, StatsData, StatsQuery, ReferencedMod, SyncDiff, SyncInstance, SyncManifest, SystemMemoryInfo, Version } from '@/types'
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -1111,8 +1111,18 @@ export const api = {
       invoke<HorizonRegistry>('horizon_registry', { loaderVersion }),
     installed: (instanceId: string, loaderVersion: string) =>
       invoke<HorizonInstalled[]>('horizon_content_list', { instanceId, loaderVersion }),
-    install: (instanceId: string, projectId: string, loaderVersion: string, version?: string, replace?: string) =>
-      invoke<string[]>('horizon_content_install', { instanceId, projectId, version, loaderVersion, replace }),
+    /** `world` : le dossier du monde, pour un pack de données. */
+    install: (instanceId: string, projectId: string, loaderVersion: string, version?: string, replace?: string, world?: string) =>
+      invoke<string[]>('horizon_content_install', { instanceId, projectId, version, loaderVersion, replace, world }),
+    worlds: (instanceId: string) => invoke<HorizonWorld[]>('horizon_worlds', { instanceId }),
+    datapacks: (instanceId: string) => invoke<HorizonDataPack[]>('horizon_datapacks', { instanceId }),
+    datapackToggle: (instanceId: string, world: string, file: string, enabled: boolean) =>
+      invoke<void>('horizon_datapack_toggle', { instanceId, world, file, enabled }),
+    datapackRemove: (instanceId: string, world: string, file: string) =>
+      invoke<void>('horizon_datapack_delete', { instanceId, world, file }),
+    modpacks: (instanceId: string) => invoke<HorizonInstalledPack[]>('horizon_modpack_list', { instanceId }),
+    modpackRemove: (instanceId: string, packId: string) =>
+      invoke<void>('horizon_modpack_remove', { instanceId, packId }),
     toggle: (instanceId: string, file: string, enabled: boolean, loaderVersion: string) =>
       invoke<void>('horizon_content_toggle', { instanceId, file, enabled, loaderVersion }),
     remove: (instanceId: string, file: string) =>
