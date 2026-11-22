@@ -134,7 +134,7 @@ jobs:
 
       - name: Install Rust for Android and cargo-ndk
         run: |
-          rustup toolchain install stable --profile minimal --target aarch64-linux-android
+          rustup toolchain install stable --profile minimal --component rust-src --target aarch64-linux-android
           rustup default stable
           cargo install cargo-ndk --version 3.5.4 --locked
 
