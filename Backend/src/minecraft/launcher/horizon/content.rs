@@ -567,7 +567,12 @@ fn list(dir: &Path, index: Option<&Index>, support: &Support) -> Vec<InstalledVi
                 revoked: index.and_then(|i| i.revoked_reason(&id, &sha)),
                 made_for: manifest.as_ref().and_then(|m| m.native.clone()),
                 changes_game: manifest.as_ref().is_some_and(|m| m.changes_game),
-                icon: manifest.as_ref().and_then(|m| m.icon.clone()),
+                // L'icône de l'archive, sinon celle du registre : beaucoup de
+                // shaders n'embarquent pas d'`icon.png`.
+                icon: manifest
+                    .as_ref()
+                    .and_then(|m| m.icon.clone())
+                    .or_else(|| from_registry.and_then(|(p, _)| p.icon.clone()).filter(|u| u.starts_with("https://"))),
                 project: from_registry.map(|(p, _)| p.id.clone()),
                 size: bytes.len() as u64,
                 enabled,

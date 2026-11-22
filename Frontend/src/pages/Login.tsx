@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { openExternal as open } from '@/lib/openExternal'
-import { getCurrentWindow, currentMonitor, PhysicalPosition, PhysicalSize } from '@tauri-apps/api/window'
+import { getCurrentWindow, currentMonitor, LogicalSize, PhysicalPosition, PhysicalSize } from '@tauri-apps/api/window'
 import { SkinViewer, WalkingAnimation } from 'skinview3d'
 import { api } from '@/api/client'
 import { skinPreview } from '@/lib/skinCache'
@@ -28,6 +28,9 @@ const OVERLAY_WIDTH = 380
 const OVERLAY_HEIGHT = 340
 const OVERLAY_CONFIRM_HEIGHT = 460
 const OVERLAY_MARGIN = 24
+/** La taille minimale de la fenêtre (`tauri.conf.json`), remise en quittant le panneau. */
+const WINDOW_MIN_WIDTH = 900
+const WINDOW_MIN_HEIGHT = 560
 
 export default function Login() {
   const t = useT()
@@ -84,6 +87,10 @@ export default function Login() {
         position: await win.outerPosition(),
       }
       const { size, position } = await computeOverlayGeometry(OVERLAY_HEIGHT)
+      // La fenêtre a une taille minimale (900 × 560, `tauri.conf.json`) : sans
+      // la lever, le panneau de 380 px restait large de 900, collé au bord
+      // droit de l'écran, et le code s'affichait hors de l'écran.
+      await win.setMinSize(null)
       await win.setSize(size)
       await win.setPosition(position)
       await win.setAlwaysOnTop(true)
@@ -112,6 +119,7 @@ export default function Login() {
     setOverlayActive(false)
     try {
       await win.setAlwaysOnTop(false)
+      await win.setMinSize(new LogicalSize(WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT))
       if (saved) {
         await win.setSize(saved.size)
         await win.setPosition(saved.position)

@@ -5,6 +5,8 @@ import { useT } from '@/i18n'
 import { formatBytes } from '@/lib/format'
 import { showError } from '@/stores/useErrorToast'
 import type { Instance, PackInfo, PackKind } from '@/types'
+import type { HorizonInstalled } from '@/types/horizon'
+import { HorizonIcon } from './HorizonModsPanel'
 import { DeleteButton, ShelfPanel, prettyName, queueIcon, tintFor, useFileDrop, useStackCapacity } from './shared'
 import { Chip, PanelTitle } from './ModsPanel'
 
@@ -40,14 +42,37 @@ export function PacksPanel({ instance, running, open, onOpen, onClose }: {
   const [packs, setPacks] = useState<PackInfo[] | null>(null)
   const [shaders, setShaders] = useState<PackInfo[] | null>(null)
   const [tab, setTab] = useState<PackKind>('resourcepack')
+  // Horizon : ses shaders `.hshader` (un seul utilisé à la fois), en plus des
+  // packs `.zip`. Les packs de ressources de son registre sont des `.zip`.
+  const horizon = instance.loader === 'horizon'
+  const loaderVersion = instance.loader_version ?? ''
+  const [hshaders, setHshaders] = useState<HorizonInstalled[]>([])
 
   useEffect(() => {
     let cancelled = false
-    setPacks(null); setShaders(null)
+    setPacks(null); setShaders(null); setHshaders([])
     api.packs.list(id, 'resourcepack').then((l) => { if (!cancelled) setPacks(l) }).catch(() => { if (!cancelled) setPacks([]) })
     api.packs.list(id, 'shader').then((l) => { if (!cancelled) setShaders(l) }).catch(() => { if (!cancelled) setShaders([]) })
+    if (horizon) {
+      api.horizon.installed(id, loaderVersion)
+        .then((l) => { if (!cancelled) setHshaders(l.filter((i) => i.kind === 'shader')) })
+        .catch(() => {})
+    }
     return () => { cancelled = true }
-  }, [id, running])
+  }, [id, running, horizon, loaderVersion])
+
+  const pickShader = async (s: HorizonInstalled) => {
+    try {
+      await api.horizon.pickShader(id, s.enabled ? null : s.file)
+      setHshaders((l) => l.map((x) => ({ ...x, enabled: x.file === s.file ? !s.enabled : false })))
+    } catch (e) { showError(e) }
+  }
+  const removeHshader = async (s: HorizonInstalled) => {
+    try {
+      await api.horizon.remove(id, s.file)
+      setHshaders((l) => l.filter((x) => x.file !== s.file))
+    } catch (e) { showError(e) }
+  }
 
   const setList = (kind: PackKind, fn: (l: PackInfo[]) => PackInfo[]) =>
     (kind === 'shader' ? setShaders : setPacks)((l) => fn(l ?? []))
@@ -80,16 +105,19 @@ export function PacksPanel({ instance, running, open, onOpen, onClose }: {
   const res = packs ?? []
   const sh = shaders ?? []
   const loading = packs === null || shaders === null
-  const total = res.length + sh.length
+  const shCount = sh.length + hshaders.length
+  const total = res.length + shCount
 
   // Les deux groupes se partagent la place de la pile, shaders d'abord servis
   // d'une place s'il y en a (sinon ils disparaîtraient derrière les packs).
   const [stackRef, capacity] = useStackCapacity(THUMB, OVERLAP)
-  const shSlots = sh.length > 0 ? Math.min(sh.length, Math.max(1, Math.floor(capacity / 3))) : 0
-  const resSlots = Math.max(0, capacity - shSlots - (sh.length > 0 ? 1 : 0))
+  const shSlots = shCount > 0 ? Math.min(shCount, Math.max(1, Math.floor(capacity / 3))) : 0
+  const resSlots = Math.max(0, capacity - shSlots - (shCount > 0 ? 1 : 0))
   const resShown = res.slice(0, resSlots)
-  const shShown = sh.slice(0, shSlots)
-  const hidden = total - resShown.length - shShown.length
+  // Le shader Horizon utilisé passe en premier.
+  const hShown = [...hshaders].sort((a, b) => Number(b.enabled) - Number(a.enabled)).slice(0, shSlots)
+  const shShown = sh.slice(0, Math.max(0, shSlots - hShown.length))
+  const hidden = total - resShown.length - shShown.length - hShown.length
 
   const openOn = (kind: PackKind) => { setTab(kind); if (!open) onOpen() }
   const fullScreen = () => { onClose(); navigate('/instances?content=packs-installed') }
@@ -108,9 +136,21 @@ export function PacksPanel({ instance, running, open, onOpen, onClose }: {
             {resShown.map((p, i) => (
               <Thumb key={p.name} instanceId={id} pack={p} first={i === 0} index={resShown.length - i} onClick={() => openOn('resourcepack')} />
             ))}
-            {shShown.length > 0 && resShown.length > 0 && <span className="mx-2 h-5 w-px flex-shrink-0 bg-[rgba(255,255,255,0.1)]" />}
+            {shShown.length + hShown.length > 0 && resShown.length > 0 && <span className="mx-2 h-5 w-px flex-shrink-0 bg-[rgba(255,255,255,0.1)]" />}
+            {hShown.map((s, i) => (
+              <button
+                key={s.file}
+                type="button"
+                title={s.name}
+                onClick={(e) => { e.stopPropagation(); openOn('shader') }}
+                className="relative flex-shrink-0 transition-transform duration-150 ease-out hover:z-10 hover:-translate-y-0.5 active:scale-95"
+                style={{ marginLeft: i === 0 ? 0 : -OVERLAP, zIndex: hShown.length + shShown.length - i }}
+              >
+                <HorizonIcon item={{ ...s, enabled: true }} size={THUMB} round ring />
+              </button>
+            ))}
             {shShown.map((p, i) => (
-              <Thumb key={p.name} instanceId={id} pack={p} first={i === 0} index={shShown.length - i} round onClick={() => openOn('shader')} />
+              <Thumb key={p.name} instanceId={id} pack={p} first={i === 0 && hShown.length === 0} index={shShown.length - i} round onClick={() => openOn('shader')} />
             ))}
             {hidden > 0 && <span className="ml-1.5 flex-shrink-0 text-[12px] font-semibold tabular-nums text-[rgba(255,255,255,0.45)]">+{hidden}</span>}
           </>
@@ -123,7 +163,7 @@ export function PacksPanel({ instance, running, open, onOpen, onClose }: {
     <ShelfPanel open={open} onToggle={open ? onClose : onOpen} header={header} dropping={dropping} headerRef={headerRef}>
       <div className="flex flex-shrink-0 items-center gap-1.5 p-2.5 pb-2">
         <Chip on={tab === 'resourcepack'} onClick={() => setTab('resourcepack')}>{t('home.shelf.resourcepacks')} <b className="font-semibold">{res.length}</b></Chip>
-        <Chip on={tab === 'shader'} onClick={() => setTab('shader')}>{t('home.shelf.shaders')} <b className="font-semibold">{sh.length}</b></Chip>
+        <Chip on={tab === 'shader'} onClick={() => setTab('shader')}>{t('home.shelf.shaders')} <b className="font-semibold">{shCount}</b></Chip>
         <button
           type="button"
           onClick={() => { onClose(); navigate(`/instances?content=${tab === 'shader' ? 'packs-shader' : 'packs-resourcepack'}`) }}
@@ -145,6 +185,27 @@ export function PacksPanel({ instance, running, open, onOpen, onClose }: {
       )}
 
       <div className="min-h-0 flex-1 overflow-y-auto px-1.5">
+        {/* Shaders Horizon : un seul utilisé à la fois, choisi ici. */}
+        {tab === 'shader' && hshaders.map((s) => (
+          <div key={s.file} className="group flex h-10 items-center gap-2.5 rounded-lg px-2 transition-colors duration-150 hover:bg-[rgba(255,255,255,0.04)]" title={s.file}>
+            <HorizonIcon item={{ ...s, enabled: true }} size={26} round />
+            <span className="flex min-w-0 flex-1 items-baseline gap-2">
+              <span className="truncate text-[13px] font-medium text-[rgba(255,255,255,0.9)]">{s.name}</span>
+              {s.version && <span className="flex-shrink-0 text-[11.5px] text-[rgba(255,255,255,0.35)]">{s.version}</span>}
+            </span>
+            <DeleteButton label={t('home.shelf.delete')} confirmLabel={t('home.shelf.confirmDelete')} disabled={running} onConfirm={() => void removeHshader(s)} />
+            <button
+              type="button"
+              disabled={running}
+              onClick={() => void pickShader(s)}
+              className={`h-7 flex-shrink-0 rounded-md px-2.5 text-[11px] font-bold transition-colors duration-150 disabled:opacity-50 ${
+                s.enabled ? 'bg-[rgb(var(--accent)/0.3)] text-white' : 'bg-[rgba(255,255,255,0.06)] text-[rgba(255,255,255,0.6)] hover:bg-[rgba(255,255,255,0.1)]'
+              }`}
+            >
+              {s.enabled ? t('mods.horizon.inUse') : t('mods.horizon.use')}
+            </button>
+          </div>
+        ))}
         {current.map((p) => (
           <div key={p.name} className="group flex h-10 items-center [contain-intrinsic-size:auto_40px] [content-visibility:auto] gap-2.5 rounded-lg px-2 transition-colors duration-150 hover:bg-[rgba(255,255,255,0.04)]" title={p.name}>
             <Cover instanceId={id} pack={p} size={26} round={tab === 'shader'} />
@@ -153,7 +214,7 @@ export function PacksPanel({ instance, running, open, onOpen, onClose }: {
             <DeleteButton label={t('home.shelf.delete')} confirmLabel={t('home.shelf.confirmDelete')} disabled={running} onConfirm={() => void remove(p)} />
           </div>
         ))}
-        {!loading && current.length === 0 && (
+        {!loading && current.length === 0 && !(tab === 'shader' && hshaders.length > 0) && (
           <div className="py-6 text-center text-[12.5px] text-[rgba(255,255,255,0.35)]">
             {tab === 'shader' ? t('home.shelf.noShaders') : t('home.shelf.noPacks')}
           </div>
