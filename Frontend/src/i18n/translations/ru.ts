@@ -965,6 +965,7 @@ export const ru: TranslationSchema = {
     p2pComingSoon: 'P2P скоро',
     launching: 'В ИГРЕ...',
     preparingLaunch: 'Подготовка к запуску',
+    launchAnother: 'Запустить ещё один Minecraft на этой сборке',
     inGame: 'В игре',
     stopGame: 'Остановить игру',
     cancelling: 'Отмена...',

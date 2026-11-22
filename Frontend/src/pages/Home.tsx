@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { Variants } from 'framer-motion'
-import { EASE_OUT, SNAP, press } from '@/lib/motion'
+import { EASE_OUT, SNAP, press, pressIf } from '@/lib/motion'
 import { P2P_ENABLED } from '@/config/features'
 import { api } from '@/api/client'
 import { skinPreview } from '@/lib/skinCache'
@@ -497,8 +497,12 @@ export default function Home() {
 
   useTauriEvent<{ instance_id: string; message: string }>('launch_error', ({ instance_id, message }) => {
     showError(message)
-    setInstanceRunning(instance_id, false)
     resetLaunchUi(instance_id)
+    // Une partie de plus qui échoue laisse la première tourner : le Rust dit
+    // ce qui tourne encore, plutôt que de supposer l'instance arrêtée.
+    api.launch.running()
+      .then((ids) => setInstanceRunning(instance_id, ids.includes(instance_id)))
+      .catch(() => setInstanceRunning(instance_id, false))
   })
 
   // `game_crashed` est écouté dans App.tsx, pas ici : il ouvre désormais une
@@ -582,6 +586,24 @@ export default function Home() {
   // Wrapper sans argument — passé tel quel à onClick du bouton principal, qui
   // lui injecterait sinon l'événement du clic à la place de `connectServer`.
   const handleLaunch = () => launch()
+
+  // Un Minecraft de plus sur l'instance en jeu (même dossier, compte actif),
+  // sans limite. Sa progression s'affiche sur le même bloc que la première.
+  const [launchingExtra, setLaunchingExtra] = useState(false)
+  const launchExtra = async () => {
+    const instanceId = selectedInstanceId
+    if (!instanceId || !username || launchingExtra) return
+    setLaunchingExtra(true)
+    setProgress(instanceId, { current: 0, total: 100, message: t('home.preparingLaunch') })
+    try {
+      await api.launch.startExtra(instanceId, avoidBetaDependencies, showConsole, isAgentEnabled(instanceId))
+    } catch (e) {
+      showError(e instanceof Error ? e.message : typeof e === 'string' ? e : t('home.launchError'))
+      setProgress(instanceId, null)
+    } finally {
+      setLaunchingExtra(false)
+    }
+  }
 
   const handleServerClick = (server: SavedServer) => {
     api.analytics.track('server_card_clicked', { instance_id: selectedInstanceId })
@@ -984,13 +1006,31 @@ export default function Home() {
             {gameRunning ? (
               // Même emplacement et même hauteur que le bouton Jouer : l'étape
               // en cours, le pourcentage, le temps écoulé, puis « En jeu ».
-              <LaunchProgress
-                key={selectedInstanceId ?? ''}
-                progress={progress}
-                cancelling={cancelling}
-                onCancel={handleCancelLaunch}
-                toneClass={`${launchBtnBg} ${launchBtnShadow}`}
-              />
+              <>
+                <LaunchProgress
+                  key={selectedInstanceId ?? ''}
+                  progress={progress}
+                  cancelling={cancelling}
+                  onCancel={handleCancelLaunch}
+                  toneClass={`${launchBtnBg} ${launchBtnShadow}`}
+                />
+                {/* Un Minecraft de plus sur la même instance, une fois le
+                    premier en jeu (pas pendant un lancement en cours). */}
+                {!progress && (
+                  <motion.button
+                    {...pressIf(!launchingExtra)}
+                    onClick={() => void launchExtra()}
+                    disabled={launchingExtra}
+                    title={t('home.launchAnother')}
+                    aria-label={t('home.launchAnother')}
+                    className="flex h-[clamp(38px,6.6vh,52px)] w-[clamp(38px,6.6vh,52px)] flex-shrink-0 items-center justify-center rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] text-[rgba(255,255,255,0.6)] transition-colors duration-150 hover:border-[rgb(var(--accent)/0.5)] hover:text-white disabled:cursor-wait disabled:opacity-50"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" className="h-[42%] w-[42%]">
+                      <path d="M12 5v14M5 12h14" />
+                    </svg>
+                  </motion.button>
+                )}
+              </>
             ) : (
               <span className="relative flex flex-1">
 

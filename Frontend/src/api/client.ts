@@ -835,6 +835,10 @@ export const api = {
      *  `agentStatus`). Omis = avec, comme avant l'arrivée du choix. */
     start: (instanceId: string, avoidBeta = true, showConsole = true, connectServer?: string, useAgent = true) =>
       invoke<void>('launch_game', { instanceId, avoidBeta, showConsole, connectServer, useAgent }),
+    /** Un Minecraft de plus sur une instance qui tourne déjà : même dossier,
+     *  compte actif. Le Rust lui donne sa propre clé de partie (`state::instance_of`). */
+    startExtra: (instanceId: string, avoidBeta = true, showConsole = true, useAgent = true) =>
+      invoke<void>('launch_game', { instanceId, avoidBeta, showConsole, useAgent, extra: true }),
     startP2p: (instanceId: string, avoidBeta = true, showConsole = true, connectServer?: string, useAgent = true) =>
       invoke<void>('launch_game', { instanceId, p2p: true, avoidBeta, showConsole, connectServer, useAgent }),
     /** Ce que le client intégré peut faire sur cette version — et ce qui

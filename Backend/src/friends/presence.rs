@@ -149,7 +149,7 @@ async fn current(state: &SharedState) -> Value {
     for id in running {
         let row = {
             let conn = db.lock().await;
-            db::instance_get(&conn, &id, user_id).ok().flatten()
+            db::instance_get(&conn, crate::state::instance_of(&id), user_id).ok().flatten()
         };
         let Some(row) = row else { continue };
         let game = games().as_ref().and_then(|m| m.get(&id).cloned()).unwrap_or_default();

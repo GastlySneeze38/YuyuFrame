@@ -117,6 +117,9 @@ pub async fn launch_game(
     avoid_beta: Option<bool>,
     show_console: Option<bool>,
     connect_server: Option<String>,
+    // Une partie de plus sur une instance qui tourne déjà (bouton « Lancer un
+    // autre Minecraft » de l'accueil) : même dossier, même compte actif.
+    extra: Option<bool>,
 ) -> Result<(), String> {
     // Token rafraîchi s'il expire bientôt — voir account::fresh_session pour
     // ce qui bloque (session révoquée) ou non (Microsoft injoignable).
@@ -124,9 +127,23 @@ pub async fn launch_game(
         .await?
         .ok_or("Aucun compte Minecraft actif — ajoute ou sélectionne un compte")?;
 
-    if state.read().await.is_instance_running(&instance_id) {
-        return Err(format!("L'instance {} est déjà en cours", instance_id));
-    }
+    let extra = extra.unwrap_or(false);
+    // La clé de la partie (`state::instance_of`) : l'instance elle-même si
+    // elle est libre, sinon `<id>~2`, `<id>~3`… Sans `extra`, une instance qui
+    // tourne déjà est refusée comme avant : un double clic sur « Jouer » ne
+    // doit pas lancer deux jeux.
+    let run_id = {
+        let s = state.read().await;
+        if !extra && s.is_instance_running(&instance_id) {
+            return Err(format!("L'instance {} est déjà en cours", instance_id));
+        }
+        if !s.running_instances.contains(&instance_id) {
+            instance_id.clone()
+        } else {
+            (2u32..).map(|n| format!("{instance_id}~{n}")).find(|k| !s.running_instances.contains(k)).unwrap_or_default()
+        }
+    };
+    let is_extra = run_id != instance_id;
 
     if state.read().await.compat_running.contains(&instance_id) {
         return Err("Un essai de compatibilité tourne déjà sur cette instance".to_string());
@@ -176,7 +193,9 @@ pub async fn launch_game(
     // premiers caractères aurait fait collisionner leurs labels de fenêtre.
     // La fin est toujours le suffixe aléatoire, garanti unique.
     let tail_len = 8.min(instance_id.len());
-    let window_label = format!("mc-console-{}", &instance_id[instance_id.len() - tail_len..]);
+    // Une partie de plus a sa propre console (`…-2`), sans fermer celle de la première.
+    let run_suffix = run_id.split_once('~').map(|(_, n)| format!("-{n}")).unwrap_or_default();
+    let window_label = format!("mc-console-{}{run_suffix}", &instance_id[instance_id.len() - tail_len..]);
     let show_console = show_console.unwrap_or(true);
     let console_ready = if show_console {
         if let Some(existing) = app.get_webview_window(&window_label) {
@@ -209,8 +228,8 @@ pub async fn launch_game(
     let (cancel_tx, cancel_rx) = tokio::sync::watch::channel(false);
     {
         let mut s = state.write().await;
-        s.running_instances.insert(instance_id.clone());
-        s.launch_cancel.insert(instance_id.clone(), cancel_tx);
+        s.running_instances.insert(run_id.clone());
+        s.launch_cancel.insert(run_id.clone(), cancel_tx);
         crate::state::RUNNING_GAMES.store(s.running_instances.len(), std::sync::atomic::Ordering::Relaxed);
     }
     let _ = app.emit("game_state", serde_json::json!({
@@ -252,7 +271,10 @@ pub async fn launch_game(
         // sauvegarder pendant que le jeu écrit déjà dans le monde donnerait
         // une copie incohérente — mais jamais fatal : une erreur ici
         // n'empêche pas de jouer.
-        crate::backup::commands::before_launch(&state_clone, &instance.id, &instance.name).await;
+        // Pas pour une partie de plus : la première écrit déjà dans les mondes.
+        if !is_extra {
+            crate::backup::commands::before_launch(&state_clone, &instance.id, &instance.name).await;
+        }
 
         let started_at = chrono::Utc::now().timestamp();
 
@@ -292,7 +314,7 @@ pub async fn launch_game(
         // jeu », en tâche de fond : le jeu ne les attend pas et se lance même
         // s'ils échouent. Coupé dès que la partie se termine.
         // Le compte de la partie est suivi : il peut changer en jeu (voir `game_link`).
-        let presence = super::presence::spawn(state_clone.clone(), super::game_link::track(&instance_id, session.clone()));
+        let presence = super::presence::spawn(state_clone.clone(), super::game_link::track(&run_id, session.clone()));
 
         let window_size = instance
             .window_custom
@@ -339,6 +361,7 @@ pub async fn launch_game(
             avoid_beta.unwrap_or(true),
             &window_label,
             &instance_id,
+            &run_id,
             &instance.name,
             session_id,
             connect_server.as_deref(),
@@ -355,7 +378,7 @@ pub async fn launch_game(
         )
         .await };
         presence.abort();
-        super::game_link::untrack(&instance_id);
+        super::game_link::untrack(&run_id);
 
         match launched {
             Ok(warnings) if !warnings.is_empty() => {
@@ -404,10 +427,11 @@ pub async fn launch_game(
             let _ = db::session_end_if_open(&db, sid, ended_at, ended_at - started_at);
         }
 
-        {
+        // L'instance reste « en jeu » tant qu'une autre de ses parties tourne.
+        let still_running = {
             let mut s = state_clone.write().await;
-            s.running_instances.remove(&instance_id);
-            s.launch_cancel.remove(&instance_id);
+            s.running_instances.remove(&run_id);
+            s.launch_cancel.remove(&run_id);
             crate::state::RUNNING_GAMES.store(s.running_instances.len(), std::sync::atomic::Ordering::Relaxed);
             // Les amis voient la fin de la partie au prochain signal, qui part maintenant.
             crate::friends::presence::poke();
@@ -419,11 +443,16 @@ pub async fn launch_game(
             if !s.any_running() {
                 tokio::task::spawn_blocking(crate::integrations::discord::set_idle);
             }
-        }
+            s.is_instance_running(&instance_id)
+        };
         // Déposée si la fenêtre a été fermée au lancement : c'est cet
         // événement qui remet l'interface à zéro et déclenche la demande
         // d'avis, et il tombe exactement pendant le seul moment où plus
-        // personne n'écoute (voir app::pending).
+        // personne n'écoute (voir app::pending). Rien tant qu'une autre
+        // partie de l'instance tourne : elle est toujours « en jeu ».
+        if still_running {
+            return;
+        }
         crate::app::pending::emit_or_stash(&app, "game_state", serde_json::json!({
             "running": false,
             "instance_id": &instance_id,
@@ -452,7 +481,11 @@ pub async fn launch_game(
 /// montage plutôt que de la déduire d'événements qu'elle n'a pas entendus.
 #[tauri::command]
 pub async fn running_instances(state: tauri::State<'_, SharedState>) -> Result<Vec<String>, String> {
-    Ok(state.read().await.running_instances.iter().cloned().collect())
+    // Des instances, pas des parties : plusieurs parties d'une même instance
+    // ne la font apparaître qu'une fois.
+    let s = state.read().await;
+    let ids: std::collections::BTreeSet<String> = s.running_instances.iter().map(|run| crate::state::instance_of(run).to_string()).collect();
+    Ok(ids.into_iter().collect())
 }
 
 /// Liste les serveurs multijoueur enregistrés dans `servers.dat` de
@@ -516,9 +549,16 @@ pub async fn cancel_launch(
     instance_id: String,
 ) -> Result<(), String> {
     let s = state.read().await;
+    // La partie la plus récente de l'instance : pendant le lancement d'un
+    // Minecraft de plus, « Annuler » arrête celui-là, jamais le premier qui
+    // est déjà en jeu.
+    let run_number = |run: &str| run.split_once('~').and_then(|(_, n)| n.parse::<u32>().ok()).unwrap_or(1);
     let tx = s
         .launch_cancel
-        .get(&instance_id)
+        .iter()
+        .filter(|(run, _)| crate::state::instance_of(run) == instance_id)
+        .max_by_key(|(run, _)| run_number(run))
+        .map(|(_, tx)| tx)
         .ok_or("Aucun lancement en cours pour cette instance")?;
     let _ = tx.send(true);
     Ok(())

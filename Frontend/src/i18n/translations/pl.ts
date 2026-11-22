@@ -966,6 +966,7 @@ export const pl: TranslationSchema = {
     p2pComingSoon: 'P2P wkrótce',
     launching: 'W GRZE...',
     preparingLaunch: 'Przygotowanie uruchomienia',
+    launchAnother: 'Uruchom kolejnego Minecrafta na tej instancji',
     inGame: 'W grze',
     stopGame: 'Zatrzymaj grę',
     cancelling: 'Anulowanie...',

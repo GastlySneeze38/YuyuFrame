@@ -165,9 +165,18 @@ pub fn set_window_open(open: bool) {
     WINDOW_OPEN.store(open, std::sync::atomic::Ordering::Relaxed);
 }
 
+/// L'instance d'une partie. `running_instances` tient des **clés de partie** :
+/// l'identifiant de l'instance pour la première, `<id>~2`, `<id>~3`… pour les
+/// suivantes lancées sur la même instance (`launch_game(extra)`). Un
+/// identifiant d'instance ne contient jamais `~` (`instances::crud::gen_id`).
+pub fn instance_of(run: &str) -> &str {
+    run.split_once('~').map_or(run, |(id, _)| id)
+}
+
 impl AppState {
+    /// Une partie au moins tourne sur cette instance.
     pub fn is_instance_running(&self, id: &str) -> bool {
-        self.running_instances.contains(id)
+        self.running_instances.iter().any(|run| instance_of(run) == id)
     }
     pub fn any_running(&self) -> bool {
         !self.running_instances.is_empty()

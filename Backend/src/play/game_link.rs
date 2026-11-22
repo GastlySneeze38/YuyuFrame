@@ -93,6 +93,9 @@ pub struct Context {
     pub state: SharedState,
     pub app: tauri::AppHandle,
     pub instance_id: String,
+    /// La partie (`state::instance_of`) : plusieurs peuvent tourner sur la
+    /// même instance, chacune avec son compte suivi et son activité.
+    pub run_id: String,
     /// Partagé avec le repli par la sortie du jeu : « prêt » n'est émis qu'une fois.
     pub ready_sent: Arc<AtomicBool>,
     pub launch_start: std::time::Instant,
@@ -389,12 +392,12 @@ async fn answer(ctx: &Context, question: &str) -> String {
                 false => None,
             };
             // Le compte Minecraft de la partie : le jeu lit son classement sous ce compte.
-            let account = current_uuid(&ctx.instance_id).filter(|u| !u.is_empty() && !u.contains('\t'));
+            let account = current_uuid(&ctx.run_id).filter(|u| !u.is_empty() && !u.contains('\t'));
             format!("token\t{}\t{}\t{}", visible as u8, token.as_deref().unwrap_or("-"), account.as_deref().unwrap_or("-"))
         }
         "accounts" => match crate::account::minecraft::list_accounts(&ctx.state).await {
             Ok(list) => {
-                let mut line = format!("accounts\t{}", current_uuid(&ctx.instance_id).as_deref().unwrap_or("-"));
+                let mut line = format!("accounts\t{}", current_uuid(&ctx.run_id).as_deref().unwrap_or("-"));
                 for account in list {
                     line.push_str(&format!("\t{}\t{}\t{}", field(&account.mc_uuid), field(&account.mc_username), account.is_offline as u8));
                 }
@@ -407,7 +410,7 @@ async fn answer(ctx: &Context, question: &str) -> String {
             // de la liste, dont le jeu veut afficher la tête.
             let skin = match parts.next().filter(|uuid| !uuid.is_empty()) {
                 Some(uuid) => crate::account::skins::host::game_skin(&ctx.state, uuid, false).await,
-                None => match current_uuid(&ctx.instance_id) {
+                None => match current_uuid(&ctx.run_id) {
                     Some(uuid) => crate::account::skins::host::game_skin(&ctx.state, &uuid, true).await,
                     None => None,
                 },
@@ -427,7 +430,7 @@ async fn answer(ctx: &Context, question: &str) -> String {
             let fields: Vec<&str> = parts.collect();
             match crate::friends::presence::parse_game_line(&fields) {
                 Some(activity) => {
-                    crate::friends::presence::set_game(&ctx.instance_id, activity);
+                    crate::friends::presence::set_game(&ctx.run_id, activity);
                     "ok".to_string()
                 }
                 None => error("Activité illisible"),
@@ -550,7 +553,7 @@ async fn switch_account(ctx: &Context, uuid: &str) -> String {
         offline as u8,
         field(&session.access_token),
     );
-    publish(&ctx.instance_id, session);
+    publish(&ctx.run_id, session);
     line
 }
 

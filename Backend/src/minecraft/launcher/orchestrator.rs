@@ -67,6 +67,10 @@ pub async fn download_and_launch(
     avoid_beta: bool,
     console_label: &str,
     instance_id: &str,
+    // La partie (`state::instance_of`) : l'instance pour la première, une clé
+    // à part pour chaque partie de plus sur la même instance. Seul le canal
+    // du jeu s'en sert (compte suivi, activité) ; le reste parle de l'instance.
+    run_id: &str,
     // Nom affiché de l'instance — sert au rapport de plantage, qui doit
     // rester lisible même une fois l'instance supprimée.
     instance_name: &str,
@@ -613,6 +617,7 @@ pub async fn download_and_launch(
             state: app.state::<crate::state::SharedState>().inner().clone(),
             app: app.clone(),
             instance_id: instance_id.to_string(),
+            run_id: run_id.to_string(),
             ready_sent: ready_sent_link,
             launch_start,
         })

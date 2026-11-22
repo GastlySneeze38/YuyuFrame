@@ -965,6 +965,7 @@ export const fr = {
     p2pComingSoon: 'P2P bientôt disponible',
     launching: 'EN JEU...',
     preparingLaunch: 'Préparation du lancement',
+    launchAnother: 'Lancer un autre Minecraft sur cette instance',
     inGame: 'En jeu',
     stopGame: 'Arrêter la partie',
     cancelling: 'Annulation...',

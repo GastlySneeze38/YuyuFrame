@@ -127,6 +127,7 @@ pub async fn instance_compat_test(
         true,
         &console_label,
         &instance_id,
+        &instance_id,
         &cfg.instance.name,
         // Aucune ligne de statistiques : ce n'est pas une partie.
         None,
