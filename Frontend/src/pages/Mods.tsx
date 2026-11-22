@@ -25,7 +25,7 @@ import { TOOLBAR_ICON } from '@/components/mods/toolbarIcons'
 import { useIsMobile } from '@/mobile/useIsMobile'
 import { PacksTab } from '@/components/mods/PacksTab'
 import { OptionsTab } from '@/components/mods/OptionsTab'
-import { HorizonContentTab } from '@/components/mods/HorizonContentTab'
+import { HorizonContentTab, HorizonPacksTab } from '@/components/mods/HorizonContentTab'
 import {
   fetchCurseforgeSearch, fetchCurseforgeFiles, findFileForLoader, fetchCurseforgeInstalled, fetchCurseforgeModDetail,
   _curseforgeCache, type CurseforgeHit, type CurseforgeMatch,
@@ -1299,10 +1299,11 @@ export function ModsContent({ instance, initialTab }: {
             <ToolbarMenu
               label={t('mods.menuMods')}
               icon={TOOLBAR_ICON.mods}
-              active={tab === 'installed' || tab === 'browse'}
+              active={tab === 'installed' || tab === 'browse' || tab === 'modpack'}
               activeId={tab}
               items={[
                 { id: 'browse', icon: TOOLBAR_ICON.search, label: t('mods.horizon.browseMenu'), onSelect: () => setTab('browse') },
+                { id: 'modpack', icon: TOOLBAR_ICON.modpack, label: t('mods.installModpack'), onSelect: () => setTab('modpack') },
                 { id: 'installed', icon: TOOLBAR_ICON.list, label: t('mods.menuInstalledMods'), badge: horizonCount, onSelect: () => setTab('installed') },
               ]}
             />
@@ -1328,6 +1329,8 @@ export function ModsContent({ instance, initialTab }: {
             items={[
               { id: 'packs-shader', icon: TOOLBAR_ICON.star, label: t('mods.menuBrowseShaders'), onSelect: () => setTab('packs-shader') },
               { id: 'packs-resourcepack', icon: TOOLBAR_ICON.grid, label: t('mods.menuBrowseResourcepacks'), onSelect: () => setTab('packs-resourcepack') },
+              // Les packs de données ne viennent que du registre d'Horizon.
+              ...(isHorizon ? [{ id: 'packs-datapack', icon: TOOLBAR_ICON.modpack, label: t('mods.horizon.menuDatapacks'), onSelect: () => setTab('packs-datapack') }] : []),
               { id: 'packs-installed', icon: TOOLBAR_ICON.list, label: t('mods.menuInstalledPacks'), badge: packCount, onSelect: () => setTab('packs-installed') },
             ]}
           />
@@ -1484,12 +1487,20 @@ export function ModsContent({ instance, initialTab }: {
             et une incompatibilité vue là peut disparaître au fichier suivant. */}
         {tab === 'installed' && !isHorizon && !packInstallingHere && <ConflictBanner conflicts={conflicts} instanceId={instanceId} />}
 
-        {isHorizon && (tab === 'installed' || tab === 'browse') ? (
+        {isHorizon && (tab === 'installed' || tab === 'browse' || tab === 'modpack') ? (
           <HorizonContentTab
             instance={instance}
             mode={tab}
             onBrowse={() => setTab('browse')}
             onCount={setHorizonCount}
+          />
+        ) : isHorizon && tab.startsWith('packs-') ? (
+          // Horizon : d'abord ce qui est fait pour lui (son registre), ensuite
+          // Modrinth, qui n'est pas garanti.
+          <HorizonPacksTab
+            instance={instance}
+            mode={tab === 'packs-installed' ? 'installed' : tab === 'packs-shader' ? 'shader' : tab === 'packs-datapack' ? 'datapack' : 'resourcepack'}
+            onInstalledCountChange={setPackCount}
           />
         ) : tab === 'installed' ? (
           <InstalledTab

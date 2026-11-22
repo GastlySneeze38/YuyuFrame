@@ -81,20 +81,24 @@ async function resolvePackFile(slug: string, gameVersion: string): Promise<{ url
 }
 
 export function PacksTab({
-  instanceId, mcVersion, mode, onInstalledCountChange,
+  instanceId, mcVersion, mode, onInstalledCountChange, query: externalQuery,
 }: {
   instanceId: string
   mcVersion: string
   mode: PacksMode
   /** Remonte le nombre de packs installés pour le compteur du menu. */
   onInstalledCountChange?: (count: number) => void
+  /** Recherche tenue par l'écran qui l'englobe (Horizon : une barre pour
+   *  ses packs et ceux de Modrinth) : le champ d'ici est alors masqué. */
+  query?: string
 }) {
   const t = useT()
   const mobile = useIsMobile()
   const [showFilters, setShowFilters] = useState(false)
   const [installed, setInstalled] = useState<PackInfo[]>([])
   const [loading, setLoading] = useState(true)
-  const [query, setQuery] = useState('')
+  const [ownQuery, setQuery] = useState('')
+  const query = externalQuery ?? ownQuery
   const [results, setResults] = useState<ModrinthHit[]>([])
   const [searching, setSearching] = useState(false)
   const [page, setPage] = useState(1)
@@ -171,6 +175,7 @@ export function PacksTab({
   // geste : la remettre à 1 dans un effet lancerait d'abord une requête sur
   // l'ancienne page, pour rien.
   const changeQuery = (q: string) => { setQuery(q); setPage(1) }
+  useEffect(() => { setPage(1) }, [externalQuery])
   const changeCategories = (next: string[]) => { setCategories(next); setPage(1) }
 
   // La pagination est en bas de la grille : la page suivante se lit du haut.
@@ -337,8 +342,8 @@ export function PacksTab({
 
   return (
     <div ref={topRef} className="flex flex-col gap-3">
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1">
+      <div className={`flex items-center gap-2 ${externalQuery !== undefined && !mobile ? 'hidden' : ''}`}>
+        <div className={`relative flex-1 ${externalQuery !== undefined ? 'hidden' : ''}`}>
           <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2">
             <SearchIcon size={14} color="rgba(255,255,255,0.3)" />
           </span>

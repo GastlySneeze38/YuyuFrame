@@ -92,6 +92,8 @@ export interface ModrinthVersionEntry {
 export type Tab =
   | 'installed' | 'browse' | 'modpack'
   | 'packs-installed' | 'packs-resourcepack' | 'packs-shader'
+  /** Horizon seulement : les packs de données de son registre. */
+  | 'packs-datapack'
   | 'options'
 
 // Cache module-level : évite de rappeler Modrinth à chaque ouverture du panel

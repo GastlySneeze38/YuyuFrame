@@ -35,6 +35,14 @@ export const fr = {
     },
     horizon: {
       browseMenu: 'Parcourir le registre d’Horizon',
+      badge: 'Horizon',
+      nativeBadge: 'Natif',
+      latest: 'Dernière',
+      menuDatapacks: 'Packs de données',
+      packsHorizonTitle: 'Faits pour Horizon',
+      packsHorizonHint: 'Publiés dans le registre d’Horizon : ils fonctionnent à coup sûr.',
+      packsOtherTitle: 'Modrinth',
+      packsOtherHint: 'Faits pour Minecraft Java : beaucoup ne fonctionnent pas, ou pas entièrement, sur Horizon.',
       searchPlaceholder: 'Chercher un mod, un shader, un auteur…',
       kinds: {
         all: 'Tout',

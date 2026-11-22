@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { api } from '@/api/client'
-import { press, pressIf } from '@/lib/motion'
+import { SNAP, press, pressIf } from '@/lib/motion'
 import { formatBytes, formatDate, formatDownloadCount } from '@/lib/format'
 import { horizonVersionName } from '@/lib/horizonVersion'
 import { openExternal } from '@/lib/openExternal'
@@ -14,6 +14,12 @@ import { RichDescription } from '@/components/ui/RichDescription'
 import { ModalShell } from '@/components/ui/ModalShell'
 import { Toggle } from '@/components/ui/Toggle'
 import { Pagination } from '@/components/ui/Pagination'
+import { CloseButton } from '@/components/ui/CloseButton'
+import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
+import { SkeletonRows } from '@/components/ui/Skeleton'
+import { SearchIcon } from '@/components/ui/icons/SearchIcon'
+import { PlugIcon } from '@/components/ui/icons/PlugIcon'
+import { PacksTab } from './PacksTab'
 import type { Instance } from '@/types'
 import type {
   HorizonDataPack, HorizonInstalled, HorizonInstalledPack, HorizonKind, HorizonLeftOut, HorizonNativeReport,
@@ -21,8 +27,15 @@ import type {
 } from '@/types/horizon'
 
 /**
- * Le contenu d'une instance Horizon tiré de son registre (`horizon-mods`) :
- * mods de contenu, mods natifs, shaders Horizon, packs de ressources.
+ * Le contenu d'une instance Horizon tiré de son registre (`horizon-mods`).
+ *
+ * Deux écrans, comme pour une instance Java :
+ * - **Mods** (`HorizonContentTab`) : les mods et mods natifs, les modpacks
+ *   `.hpack` ; cartes et fiche au rendu de celles de Modrinth.
+ * - **Packs** (`HorizonPacksTab`) : shaders, packs de ressources, packs de
+ *   données. Les packs du registre d'Horizon passent **d'abord**, ils sont
+ *   faits pour lui ; ceux de Modrinth viennent dessous, séparés et signalés
+ *   comme non garantis — un pack Java peut ne pas marcher sur Horizon.
  *
  * Les mods natifs sont du code Rust compilé sur la machine du joueur au
  * lancement : on demande l'accord une fois (`NativeConsent`) avant d'en
@@ -34,6 +47,7 @@ import type {
 const PAGE_SIZE = 24
 type KindFilter = 'all' | 'mod' | 'native' | 'shader' | 'resourcepack' | 'datapack' | 'modpack'
 type Sort = 'popular' | 'recent' | 'name'
+type Section = 'mods' | 'native' | 'modpacks' | 'shaders' | 'datapacks'
 
 const KIND_OF: Record<HorizonKind, KindFilter> = {
   'mod': 'mod',
@@ -61,12 +75,8 @@ function loadRegistry(loaderVersion: string, fresh = false): Promise<HorizonProj
   return found
 }
 
-export function HorizonContentTab({ instance, mode, onBrowse, onCount }: {
-  instance: Instance
-  mode: 'installed' | 'browse'
-  onBrowse: () => void
-  onCount?: (n: number) => void
-}) {
+/** Ce que l'instance a du registre, l'état des mods natifs, et l'accord. */
+function useHorizonContent(instance: Instance) {
   const loaderVersion = instance.loader_version ?? ''
   const [installed, setInstalled] = useState<HorizonInstalled[]>([])
   const [status, setStatus] = useState<HorizonNativeStatus | null>(null)
@@ -89,11 +99,10 @@ export function HorizonContentTab({ instance, mode, onBrowse, onCount }: {
       setReport(rep)
       setPacks(mp)
       setDatapacks(dp)
-      onCount?.(list.length + mp.length + dp.length)
     } catch (e) {
       showError(e)
     }
-  }, [instance.id, loaderVersion, onCount])
+  }, [instance.id, loaderVersion])
 
   useEffect(() => { void reload() }, [reload])
   useTauriEvent<HorizonNativeReport>('horizon_native_report', (r) => {
@@ -106,50 +115,205 @@ export function HorizonContentTab({ instance, mode, onBrowse, onCount }: {
     setConsent(() => action)
   }, [status?.allowed])
 
-  return (
-    <>
-      {mode === 'browse' ? (
-        <Browse instance={instance} installed={installed} packs={packs} onChanged={reload} withConsent={withConsent} />
-      ) : (
-        <Installed
-          instance={instance}
-          items={installed}
-          packs={packs}
-          datapacks={datapacks}
-          status={status}
-          report={report}
-          onChanged={reload}
-          onBrowse={onBrowse}
-          withConsent={withConsent}
+  const consentModal = (
+    <AnimatePresence>
+      {consent && status && (
+        <NativeConsent
+          downloadBytes={status.download_bytes}
+          onCancel={() => setConsent(null)}
+          onAllow={async () => {
+            const action = consent
+            setConsent(null)
+            try {
+              await api.horizon.nativeAllow(true)
+              setStatus({ ...status, allowed: true })
+              await action()
+            } catch (e) {
+              showError(e)
+            }
+          }}
         />
       )}
-      <AnimatePresence>
-        {consent && status && (
-          <NativeConsent
-            downloadBytes={status.download_bytes}
-            onCancel={() => setConsent(null)}
-            onAllow={async () => {
-              const action = consent
-              setConsent(null)
-              try {
-                await api.horizon.nativeAllow(true)
-                setStatus({ ...status, allowed: true })
-                await action()
-              } catch (e) {
-                showError(e)
-              }
-            }}
-          />
-        )}
-      </AnimatePresence>
+    </AnimatePresence>
+  )
+
+  return { installed, status, report, packs, datapacks, reload, withConsent, consentModal }
+}
+
+/** Le menu Mods d'une instance Horizon : parcourir, modpacks, installés. */
+export function HorizonContentTab({ instance, mode, onBrowse, onCount }: {
+  instance: Instance
+  mode: 'installed' | 'browse' | 'modpack'
+  onBrowse: () => void
+  onCount?: (n: number) => void
+}) {
+  const c = useHorizonContent(instance)
+  const mods = c.installed.filter((i) => i.kind !== 'shader')
+  useEffect(() => { onCount?.(mods.length + c.packs.length) }, [mods.length, c.packs.length, onCount])
+  return (
+    <>
+      {mode === 'installed' ? (
+        <Installed
+          instance={instance}
+          sections={['mods', 'native', 'modpacks']}
+          items={c.installed}
+          packs={c.packs}
+          datapacks={c.datapacks}
+          status={c.status}
+          report={c.report}
+          onChanged={c.reload}
+          onBrowse={onBrowse}
+          withConsent={c.withConsent}
+        />
+      ) : (
+        <Browse
+          key={mode}
+          instance={instance}
+          kinds={mode === 'modpack' ? ['modpack'] : ['mod', 'native-mod']}
+          chips={mode === 'modpack' ? [] : ['all', 'mod', 'native']}
+          installed={c.installed}
+          packs={c.packs}
+          onChanged={c.reload}
+          withConsent={c.withConsent}
+        />
+      )}
+      {c.consentModal}
     </>
+  )
+}
+
+/**
+ * Le menu Packs d'une instance Horizon. Shaders et packs de ressources : une
+ * seule recherche, puis deux blocs l'un sous l'autre — le registre d'Horizon
+ * (faits pour lui) d'abord, Modrinth ensuite, signalé comme non garanti. Les
+ * packs de données n'existent que dans le registre d'Horizon.
+ */
+export function HorizonPacksTab({ instance, mode, onInstalledCountChange }: {
+  instance: Instance
+  mode: 'installed' | 'shader' | 'resourcepack' | 'datapack'
+  onInstalledCountChange?: (count: number) => void
+}) {
+  const t = useT()
+  const c = useHorizonContent(instance)
+  const [query, setQuery] = useState('')
+  const [javaCount, setJavaCount] = useState(0)
+  const shaders = c.installed.filter((i) => i.kind === 'shader')
+  useEffect(() => {
+    onInstalledCountChange?.(javaCount + shaders.length + c.datapacks.length)
+  }, [javaCount, shaders.length, c.datapacks.length, onInstalledCountChange])
+  useEffect(() => { setQuery('') }, [mode])
+
+  if (mode === 'installed') {
+    const horizonCount = shaders.length + c.datapacks.length
+    return (
+      <div className="flex flex-col gap-5">
+        {horizonCount > 0 && (
+          <SourceBlock source="horizon">
+            <Installed
+              instance={instance}
+              sections={['shaders', 'datapacks']}
+              items={c.installed}
+              packs={c.packs}
+              datapacks={c.datapacks}
+              status={c.status}
+              report={null}
+              onChanged={c.reload}
+              withConsent={c.withConsent}
+            />
+          </SourceBlock>
+        )}
+        {horizonCount > 0 && javaCount > 0 && <div className="h-px bg-[rgba(255,255,255,0.07)]" />}
+        <div className={horizonCount > 0 && javaCount === 0 ? 'hidden' : ''}>
+          <PacksTab instanceId={instance.id} mcVersion={instance.mc_version} mode="installed" onInstalledCountChange={setJavaCount} />
+        </div>
+      </div>
+    )
+  }
+
+  if (mode === 'datapack') {
+    return (
+      <Browse
+        key={mode}
+        instance={instance}
+        kinds={['datapack']}
+        chips={[]}
+        installed={c.installed}
+        packs={c.packs}
+        onChanged={c.reload}
+        withConsent={c.withConsent}
+      />
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="relative">
+        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2">
+          <SearchIcon size={14} color="rgba(255,255,255,0.3)" />
+        </span>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={t(mode === 'shader' ? 'packs.searchShaders' : 'packs.searchResourcepacks')}
+          enterKeyHint="search"
+          className="h-10 w-full rounded-xl border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.05)] pl-9 pr-3 text-sm text-white outline-none focus:border-[rgb(var(--accent)/0.6)]"
+        />
+      </div>
+      <SourceBlock source="horizon">
+        <Browse
+          key={mode}
+          instance={instance}
+          kinds={mode === 'shader' ? ['shader', 'shaderpack'] : ['resourcepack']}
+          chips={[]}
+          query={query}
+          installed={c.installed}
+          packs={c.packs}
+          onChanged={c.reload}
+          withConsent={c.withConsent}
+        />
+      </SourceBlock>
+      <div className="h-px bg-[rgba(255,255,255,0.07)]" />
+      <SourceBlock source="modrinth">
+        <PacksTab instanceId={instance.id} mcVersion={instance.mc_version} mode={mode} query={query} />
+      </SourceBlock>
+    </div>
+  )
+}
+
+/** Le titre d'un bloc de packs : d'où ils viennent, et ce que ça garantit. */
+function SourceBlock({ source, children }: { source: 'horizon' | 'modrinth'; children: React.ReactNode }) {
+  const t = useT()
+  const horizon = source === 'horizon'
+  return (
+    <section className="flex flex-col gap-3">
+      <div className="flex items-start gap-2.5">
+        <span className={`mt-[3px] flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full ${horizon ? 'bg-[rgba(74,222,128,0.15)] text-[rgb(134,239,172)]' : 'bg-[rgba(250,204,21,0.14)] text-[rgba(250,204,21,0.9)]'}`}>
+          <svg viewBox="0 0 24 24" fill="currentColor" width={12} height={12}>
+            <path d={horizon ? 'M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z' : 'M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z'} />
+          </svg>
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-bold text-white">{t(horizon ? 'mods.horizon.packsHorizonTitle' : 'mods.horizon.packsOtherTitle')}</p>
+          <p className="text-[11.5px] text-[rgba(255,255,255,0.45)]">{t(horizon ? 'mods.horizon.packsHorizonHint' : 'mods.horizon.packsOtherHint')}</p>
+        </div>
+      </div>
+      {children}
+    </section>
   )
 }
 
 // ── Parcourir ────────────────────────────────────────────────────────────────
 
-function Browse({ instance, installed, packs, onChanged, withConsent }: {
+/**
+ * Les projets du registre de sortes `kinds`. `chips` : les filtres proposés
+ * (aucun pour une seule sorte). `query` : recherche tenue par l'écran qui
+ * l'englobe (packs : une barre pour Horizon et Modrinth), sinon la sienne.
+ */
+function Browse({ instance, kinds, chips, query: externalQuery, installed, packs, onChanged, withConsent }: {
   instance: Instance
+  kinds: HorizonKind[]
+  chips: KindFilter[]
+  query?: string
   installed: HorizonInstalled[]
   packs: HorizonInstalledPack[]
   onChanged: () => Promise<void>
@@ -159,7 +323,8 @@ function Browse({ instance, installed, packs, onChanged, withConsent }: {
   const loaderVersion = instance.loader_version ?? ''
   const [projects, setProjects] = useState<HorizonProject[] | null>(null)
   const [failed, setFailed] = useState(false)
-  const [query, setQuery] = useState('')
+  const [ownQuery, setQuery] = useState('')
+  const query = externalQuery ?? ownQuery
   const [kind, setKind] = useState<KindFilter>('all')
   const [sort, setSort] = useState<Sort>('popular')
   const [page, setPage] = useState(1)
@@ -188,14 +353,15 @@ function Browse({ instance, installed, packs, onChanged, withConsent }: {
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase()
     const list = (projects ?? []).filter((p) =>
-      (kind === 'all' || KIND_OF[p.kind] === kind)
+      kinds.includes(p.kind)
+      && (kind === 'all' || KIND_OF[p.kind] === kind)
       && (!q || p.name.toLowerCase().includes(q) || p.summary.toLowerCase().includes(q)
         || p.tags.some((tag) => tag.includes(q)) || p.authors.some((a) => a.toLowerCase().includes(q))))
     return [...list].sort((a, b) =>
       sort === 'name' ? a.name.localeCompare(b.name)
         : sort === 'recent' ? b.updated.localeCompare(a.updated)
           : b.downloads - a.downloads)
-  }, [projects, query, kind, sort])
+  }, [projects, kinds, query, kind, sort])
 
   useEffect(() => { setPage(1) }, [query, kind, sort])
   const pageCount = Math.max(1, Math.ceil(shown.length / PAGE_SIZE))
@@ -221,53 +387,58 @@ function Browse({ instance, installed, packs, onChanged, withConsent }: {
     else await run()
   }
 
-  const kinds: KindFilter[] = ['all', 'mod', 'native', 'shader', 'resourcepack', 'datapack', 'modpack']
+  const chipClass = (active: boolean) =>
+    `rounded-lg text-[11px] font-semibold transition-all duration-150 h-7 px-2.5 border ${
+      active
+        ? 'bg-[rgb(var(--accent)/0.35)] border-[rgb(var(--accent)/0.7)] text-[rgba(255,255,255,0.95)]'
+        : 'bg-[rgba(0,0,0,0.3)] border-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.4)]'
+    }`
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={t('mods.horizon.searchPlaceholder')}
-          className="h-9 min-w-[220px] flex-1 rounded-lg border border-line-soft bg-bg-card px-3 text-[13px] text-white outline-none placeholder:text-[rgba(255,255,255,0.35)] focus:border-[rgb(var(--accent)/0.6)]"
-        />
-        <div className="flex overflow-hidden rounded-lg border border-line-soft">
-          {kinds.map((k) => (
-            <button
-              key={k}
-              onClick={() => setKind(k)}
-              className={`h-9 px-3 text-[12px] font-semibold transition-colors duration-150 ${
-                kind === k ? 'bg-[rgb(var(--accent)/0.25)] text-white' : 'text-[rgba(255,255,255,0.55)] hover:bg-[rgba(255,255,255,0.05)]'
-              }`}
-            >
+      {externalQuery === undefined && (
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2">
+              <SearchIcon size={15} color="rgba(255,255,255,0.3)" />
+            </span>
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t('mods.horizon.searchPlaceholder')}
+              enterKeyHint="search"
+              className="h-10 w-full rounded-xl border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.05)] pl-9 pr-4 text-sm text-white outline-none focus:border-[rgb(var(--accent)/0.6)]"
+            />
+          </div>
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as Sort)}
+            className="h-10 flex-shrink-0 rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(255,255,255,0.04)] px-3 text-[12px] font-semibold text-[rgba(255,255,255,0.7)] outline-none"
+          >
+            <option value="popular">{t('mods.horizon.sort.popular')}</option>
+            <option value="recent">{t('mods.horizon.sort.recent')}</option>
+            <option value="name">{t('mods.horizon.sort.name')}</option>
+          </select>
+        </div>
+      )}
+      {chips.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {chips.map((k) => (
+            <motion.button {...press} key={k} onClick={() => setKind(k)} className={chipClass(kind === k)}>
               {t(`mods.horizon.kinds.${k}`)}
-            </button>
+            </motion.button>
           ))}
         </div>
-        <select
-          value={sort}
-          onChange={(e) => setSort(e.target.value as Sort)}
-          className="h-9 rounded-lg border border-line-soft bg-bg-card px-2 text-[12px] text-white outline-none"
-        >
-          <option value="popular">{t('mods.horizon.sort.popular')}</option>
-          <option value="recent">{t('mods.horizon.sort.recent')}</option>
-          <option value="name">{t('mods.horizon.sort.name')}</option>
-        </select>
-      </div>
+      )}
 
       {failed ? (
         <p className="py-10 text-center text-[13px] text-[rgba(255,255,255,0.5)]">{t('mods.horizon.unreachable')}</p>
       ) : projects === null ? (
-        <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fill,minmax(260px,1fr))]">
-          {Array.from({ length: 9 }, (_, i) => (
-            <div key={i} className="skeleton h-[118px] rounded-xl" />
-          ))}
-        </div>
+        <SkeletonRows count={externalQuery === undefined ? 6 : 2} className="flex flex-col gap-2.5" rowClassName="h-[76px] rounded-2xl" />
       ) : shown.length === 0 ? (
-        <p className="py-10 text-center text-[13px] text-[rgba(255,255,255,0.5)]">{t('mods.horizon.empty')}</p>
+        <p className="py-6 text-center text-[13px] text-[rgba(255,255,255,0.45)]">{t('mods.horizon.empty')}</p>
       ) : (
-        <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fill,minmax(260px,1fr))]">
+        <div className="flex flex-col gap-2">
           {pageItems.map((p) => (
             <ProjectCard
               key={p.id}
@@ -311,18 +482,20 @@ function Browse({ instance, installed, packs, onChanged, withConsent }: {
   )
 }
 
+/** Les pastilles à côté du nom, comme « Modrinth » sur ses cartes : la
+ *  source, et « natif » pour un mod compilé sur la machine. */
 function KindBadge({ kind }: { kind: HorizonKind }) {
   const t = useT()
-  const native = kind === 'native-mod'
+  const pill = 'flex-shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.03em]'
   return (
-    <span
-      title={native ? t('mods.horizon.nativeHint') : undefined}
-      className={`rounded px-1.5 py-px text-[10px] font-bold uppercase tracking-wide ${
-        native ? 'bg-[rgba(250,204,21,0.14)] text-[rgba(250,204,21,0.9)]' : 'bg-[rgba(255,255,255,0.07)] text-[rgba(255,255,255,0.55)]'
-      }`}
-    >
-      {t(`mods.horizon.kinds.${KIND_OF[kind]}`)}
-    </span>
+    <>
+      <span className={`${pill} bg-[rgb(var(--accent)/0.2)] text-[rgb(var(--accent-text))]`}>{t('mods.horizon.badge')}</span>
+      {kind === 'native-mod' && (
+        <span title={t('mods.horizon.nativeHint')} className={`${pill} bg-[rgba(250,204,21,0.14)] text-[rgba(250,204,21,0.9)]`}>
+          {t('mods.horizon.nativeBadge')}
+        </span>
+      )}
+    </>
   )
 }
 
@@ -335,22 +508,24 @@ function InstallButton({ project, mine, busy, onInstall }: {
   const t = useT()
   const newest = project.versions[0]?.version
   const upToDate = mine && mine.version === newest
-  const label = busy ? t('mods.horizon.installing')
-    : upToDate ? t('mods.horizon.installed')
-      : mine ? t('mods.horizon.update')
-        : t('mods.horizon.install')
+  // Même bouton que les cartes Modrinth (`ModrinthCard`).
   return (
     <motion.button
       {...pressIf(!busy && !upToDate)}
       disabled={busy || !!upToDate}
       onClick={(e) => { e.stopPropagation(); onInstall() }}
-      className={`h-7 flex-shrink-0 rounded-md px-3 text-[11.5px] font-bold transition-colors duration-150 ${
-        upToDate ? 'cursor-default bg-[rgba(74,222,128,0.12)] text-[rgba(134,239,172,0.9)]'
-          : busy ? 'cursor-wait bg-[rgba(255,255,255,0.06)] text-[rgba(255,255,255,0.4)]'
-            : 'bg-[rgb(var(--accent))] text-white hover:bg-[rgb(var(--accent-hover))]'
+      className={`flex h-8 flex-shrink-0 items-center gap-1.5 rounded-xl border px-[14px] text-[12px] font-semibold transition-all duration-150 active:scale-95 ${
+        upToDate
+          ? 'cursor-not-allowed border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.05)] text-[rgba(255,255,255,0.3)]'
+          : busy
+            ? 'cursor-not-allowed border-[rgb(var(--accent)/0.5)] bg-[rgba(40,38,65,0.7)] text-[rgba(255,255,255,0.85)]'
+            : 'cursor-pointer border-[rgb(var(--accent)/0.5)] bg-[rgb(var(--accent)/0.3)] text-[rgba(255,255,255,0.85)] hover:bg-[rgb(var(--accent)/0.5)]'
       }`}
     >
-      {label}
+      {busy ? <ButtonSpinner size={12} trackColor="rgba(255,255,255,0.15)" />
+        : upToDate ? t('mods.installedButton')
+          : mine ? t('mods.horizon.update')
+            : t('mods.installButton')}
     </motion.button>
   )
 }
@@ -363,34 +538,38 @@ function ProjectCard({ project, mine, busy, onOpen, onInstall }: {
   onInstall: () => void
 }) {
   const t = useT()
+  // Le rendu exact d'une carte Modrinth (`ModrinthCard`) : même ligne, mêmes
+  // tailles, la pastille « Horizon » à la place de « Modrinth ».
   return (
-    <motion.div
-      {...press}
+    <div
       role="button"
       tabIndex={0}
       onClick={onOpen}
       onKeyDown={(e) => { if (e.key === 'Enter') onOpen() }}
-      className="flex cursor-pointer flex-col gap-2 rounded-xl border border-line-soft bg-bg-card p-3 transition-colors duration-150 hover:border-[rgb(var(--accent)/0.35)]"
+      className="flex cursor-pointer flex-col gap-2.5 rounded-2xl border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.03)] px-4 py-3 transition-all duration-150 hover:bg-[rgba(255,255,255,0.05)]"
     >
-      <div className="flex gap-3">
-        <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg bg-[rgba(255,255,255,0.05)]">
-          <RemoteImage src={project.icon} className="h-full w-full object-cover [image-rendering:pixelated]" />
+      <div className="flex items-center gap-3">
+        <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[rgba(255,255,255,0.06)]">
+          {project.icon ? (
+            <RemoteImage src={project.icon} alt={project.name} className="h-full w-full object-cover" />
+          ) : (
+            <PlugIcon size={20} color="rgba(255,255,255,0.2)" />
+          )}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[13.5px] font-bold text-white">{project.name}</p>
-          <p className="truncate text-[11px] text-[rgba(255,255,255,0.45)]">{project.authors.join(', ')}</p>
-          <p className="mt-0.5 line-clamp-2 text-[11.5px] leading-snug text-[rgba(255,255,255,0.65)]">{project.summary}</p>
+          <div className="flex items-center gap-1.5">
+            <p className="truncate text-[13px] font-semibold text-white">{project.name}</p>
+            <KindBadge kind={project.kind} />
+          </div>
+          <p className="mt-0.5 truncate text-[11px] text-[rgba(255,255,255,0.35)]">{project.summary}</p>
+          <p className="mt-[3px] text-[10px] text-[rgba(255,255,255,0.2)]">
+            {formatDownloadCount(project.downloads)} {t('mods.downloads')}
+            {project.authors.length > 0 && ` · ${project.authors.join(', ')}`}
+          </p>
         </div>
-      </div>
-      <div className="mt-auto flex items-center gap-2">
-        <KindBadge kind={project.kind} />
-        <span className="text-[11px] tabular-nums text-[rgba(255,255,255,0.4)]">
-          ↓ {formatDownloadCount(project.downloads)}
-        </span>
-        <div className="flex-1" />
         <InstallButton project={project} mine={mine} busy={busy} onInstall={onInstall} />
       </div>
-    </motion.div>
+    </div>
   )
 }
 
@@ -402,118 +581,167 @@ function ProjectDetail({ project, mine, busy, onClose, onInstall }: {
   onInstall: (version?: string) => void
 }) {
   const t = useT()
-  const [tab, setTab] = useState<'description' | 'versions'>('description')
+  // Même fiche que celle d'un mod Modrinth (`ModDetailModal`) : en-tête,
+  // onglets Versions puis Description, lignes de version identiques.
+  const [tab, setTab] = useState<'versions' | 'description'>('versions')
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+  const hint = project.kind === 'native-mod' ? t('mods.horizon.nativeHint')
+    : project.kind === 'datapack' ? t('mods.horizon.datapackHint')
+      : project.kind === 'modpack' ? t('mods.horizon.modpackHint')
+        : null
   return (
-    <ModalShell onClose={onClose} maxWidth="max-w-3xl">
-      <div className="flex max-h-[80vh] flex-col">
-        <div className="flex items-start gap-4 border-b border-line-soft p-5">
-          <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-xl bg-[rgba(255,255,255,0.05)]">
-            <RemoteImage src={project.icon} eager className="h-full w-full object-cover [image-rendering:pixelated]" />
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.6)] p-6 backdrop-blur-[4px]"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="flex h-[min(85vh,820px)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[rgb(var(--bg-card))] shadow-[0_24px_80px_rgba(0,0,0,0.6)]">
+        <div className="flex flex-shrink-0 items-start gap-4 px-6 pb-4 pt-6">
+          <div className="flex h-[60px] w-[60px] flex-shrink-0 items-center justify-center overflow-hidden rounded-[16px] bg-[rgba(255,255,255,0.06)]">
+            {project.icon ? <RemoteImage src={project.icon} eager className="h-full w-full object-cover" /> : <PlugIcon size={26} color="rgba(255,255,255,0.2)" />}
           </div>
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <h2 className="truncate text-[18px] font-black text-white">{project.name}</h2>
+            <div className="flex items-center gap-1.5">
+              <p className="truncate text-[18px] font-black text-white">{project.name}</p>
               <KindBadge kind={project.kind} />
             </div>
-            <p className="text-[12px] text-[rgba(255,255,255,0.5)]">
-              {project.authors.join(', ')}
-              {project.license && ` · ${t('mods.horizon.license', { license: project.license })}`}
-              {` · ${project.signed ? t('mods.horizon.signed') : t('mods.horizon.unsigned')}`}
-            </p>
-            <div className="mt-2 flex items-center gap-2">
-              <InstallButton project={project} mine={mine} busy={busy} onInstall={() => onInstall()} />
+            <p className="mt-0.5 line-clamp-2 text-[12.5px] text-[rgba(255,255,255,0.5)]">{project.summary}</p>
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <span className="flex items-center gap-1 text-[11px] text-[rgba(255,255,255,0.35)]">
+                <svg viewBox="0 0 24 24" fill="currentColor" width={11} height={11}><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" /></svg>
+                {formatDownloadCount(project.downloads)}
+              </span>
+              {project.categories.slice(0, 4).map((c) => (
+                <span key={c} className="rounded-full bg-[rgba(255,255,255,0.06)] px-2 py-0.5 text-[10px] text-[rgba(255,255,255,0.45)]">{c}</span>
+              ))}
+              <span className="rounded-full bg-[rgba(255,255,255,0.06)] px-2 py-0.5 text-[10px] text-[rgba(255,255,255,0.45)]">
+                {project.signed ? t('mods.horizon.signed') : t('mods.horizon.unsigned')}
+              </span>
+              {mine && (
+                <span className="rounded-full bg-[rgb(var(--accent)/0.2)] px-2 py-0.5 text-[10px] font-semibold text-[rgb(var(--accent-text))]">
+                  {t('mods.installedVersion', { version: mine.version })}
+                </span>
+              )}
               {project.source.startsWith('https://') && (
-                <button onClick={() => openExternal(project.source)} className="h-7 rounded-md px-2.5 text-[11.5px] font-semibold text-[rgba(255,255,255,0.6)] hover:bg-[rgba(255,255,255,0.06)]">
+                <button onClick={() => openExternal(project.source)} className="rounded-full px-2 py-0.5 text-[10px] font-semibold text-[rgba(255,255,255,0.5)] hover:bg-[rgba(255,255,255,0.06)] hover:text-white">
                   {t('mods.horizon.source')} ↗
                 </button>
               )}
             </div>
-            {project.kind === 'native-mod' && (
-              <p className="mt-2 text-[11.5px] text-[rgba(250,204,21,0.8)]">{t('mods.horizon.nativeHint')}</p>
-            )}
-            {(project.kind === 'datapack' || project.kind === 'modpack') && (
-              <p className="mt-2 text-[11.5px] text-[rgba(255,255,255,0.55)]">
-                {t(project.kind === 'datapack' ? 'mods.horizon.datapackHint' : 'mods.horizon.modpackHint')}
-              </p>
-            )}
           </div>
+          <CloseButton onClick={onClose} />
         </div>
-        <div className="flex gap-1 border-b border-line-soft px-5">
-          {(['description', 'versions'] as const).map((k) => (
+
+        {hint && (
+          <p className={`mx-6 mb-3 flex-shrink-0 rounded-xl px-3.5 py-2 text-[11.5px] ${
+            project.kind === 'native-mod'
+              ? 'border border-[rgba(250,204,21,0.22)] bg-[rgba(250,204,21,0.06)] text-[rgba(253,230,138,0.9)]'
+              : 'border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.03)] text-[rgba(255,255,255,0.6)]'
+          }`}>{hint}</p>
+        )}
+
+        <nav className="flex flex-shrink-0 gap-1 border-b border-[rgba(255,255,255,0.07)] px-6">
+          {(['versions', 'description'] as const).map((k) => (
             <button
               key={k}
               onClick={() => setTab(k)}
-              className={`relative h-10 px-3 text-[12.5px] font-semibold ${tab === k ? 'text-white' : 'text-[rgba(255,255,255,0.5)] hover:text-[rgba(255,255,255,0.75)]'}`}
+              className={`relative px-4 pb-3 pt-1 text-[13px] font-bold transition-colors ${tab === k ? 'text-white' : 'text-[rgba(255,255,255,0.4)] hover:text-[rgba(255,255,255,0.7)]'}`}
             >
-              {t(`mods.horizon.${k}`)}
-              {tab === k && <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-[rgb(var(--accent))]" />}
+              {t(k === 'versions' ? 'mods.tabs.versions' : 'mods.tabs.description')}
+              {tab === k && <motion.span layoutId="horizon-detail-tab" transition={SNAP} className="absolute inset-x-2 -bottom-px h-[2px] rounded-full bg-accent" />}
             </button>
           ))}
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-5">
-          {tab === 'description' ? (
-            <>
-              {project.screenshots.length > 0 && (
-                <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
-                  {project.screenshots.map((s) => (
-                    <div key={s} className="h-36 flex-shrink-0 overflow-hidden rounded-lg bg-[rgba(255,255,255,0.04)]">
-                      <RemoteImage src={s} className="h-full w-auto" />
-                    </div>
-                  ))}
-                </div>
-              )}
-              <RichDescription source={project.description} className="text-[13px] text-[rgba(255,255,255,0.8)]" />
-            </>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {project.versions.map((v) => (
-                <div key={v.version} className="flex items-start gap-3 rounded-lg border border-line-soft bg-[rgba(255,255,255,0.02)] p-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[13px] font-bold text-white">
-                      {v.version}
-                      {mine?.version === v.version && (
-                        <span className="ml-2 text-[11px] font-semibold text-[rgba(134,239,172,0.85)]">{t('mods.horizon.installed')}</span>
-                      )}
-                    </p>
-                    <p className="text-[11px] text-[rgba(255,255,255,0.45)]">
-                      {v.published} · {formatBytes(v.size)}
-                      {v.made_for && ` · ${t('mods.horizon.madeForCommit', { commit: v.made_for.slice(0, 7) })}`}
-                    </p>
-                    {v.changelog && <p className="mt-1 whitespace-pre-line text-[12px] text-[rgba(255,255,255,0.65)]">{v.changelog}</p>}
+        </nav>
+
+        {tab === 'description' ? (
+          <div className="min-h-0 flex-1 overflow-y-auto px-7 py-6">
+            {project.screenshots.length > 0 && (
+              <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
+                {project.screenshots.map((s) => (
+                  <div key={s} className="h-36 flex-shrink-0 overflow-hidden rounded-lg bg-[rgba(255,255,255,0.04)]">
+                    <RemoteImage src={s} className="h-full w-auto" />
                   </div>
-                  {mine?.version !== v.version && (
-                    <motion.button
-                      {...pressIf(!busy)}
-                      disabled={busy}
+                ))}
+              </div>
+            )}
+            {project.description.trim()
+              ? <RichDescription source={project.description} />
+              : <p className="text-[13px] text-[rgba(255,255,255,0.6)]">{project.summary}</p>}
+          </div>
+        ) : (
+          <div className="flex min-h-0 flex-1 flex-col gap-3 px-6 py-4">
+            <p className="flex-shrink-0 text-[11px] font-bold uppercase tracking-[0.06em] text-[rgba(255,255,255,0.4)]">
+              {t('mods.availableVersions')}
+            </p>
+            <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pr-1">
+              {project.versions.map((v, i) => {
+                const isInstalled = mine?.version === v.version
+                return (
+                  <div
+                    key={v.version}
+                    className={`flex items-center gap-3 rounded-xl border border-[rgba(255,255,255,0.06)] px-3 py-2 ${
+                      isInstalled ? 'bg-[rgb(var(--accent)/0.1)]' : 'bg-[rgba(255,255,255,0.03)]'
+                    }`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[12.5px] font-semibold text-white">{v.version}</span>
+                        {i === 0 && <span className="text-[9.5px] font-bold uppercase text-[rgba(74,222,128,0.85)]">{t('mods.horizon.latest')}</span>}
+                      </div>
+                      <p className="mt-0.5 text-[10.5px] text-[rgba(255,255,255,0.3)]">
+                        {v.published} · {formatBytes(v.size)}
+                        {v.made_for && ` · ${t('mods.horizon.madeForCommit', { commit: v.made_for.slice(0, 7) })}`}
+                      </p>
+                      {v.changelog && <p className="mt-1 line-clamp-3 whitespace-pre-line text-[11px] text-[rgba(255,255,255,0.5)]">{v.changelog}</p>}
+                    </div>
+                    <motion.button {...pressIf(!(isInstalled || busy))}
                       onClick={() => onInstall(v.version)}
-                      className="h-7 flex-shrink-0 rounded-md bg-[rgba(255,255,255,0.07)] px-3 text-[11.5px] font-semibold text-white hover:bg-[rgba(255,255,255,0.12)]"
+                      disabled={isInstalled || busy}
+                      className={`flex h-7 flex-shrink-0 items-center gap-1.5 rounded-lg border px-3 text-[11px] font-semibold transition-all duration-150 active:scale-95 ${
+                        isInstalled
+                          ? 'cursor-not-allowed border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.05)] text-[rgba(255,255,255,0.3)]'
+                          : busy
+                            ? 'cursor-not-allowed border-[rgb(var(--accent)/0.5)] bg-[rgba(40,38,65,0.7)] text-[rgba(255,255,255,0.85)]'
+                            : 'cursor-pointer border-[rgb(var(--accent)/0.5)] bg-[rgb(var(--accent)/0.3)] text-[rgba(255,255,255,0.85)]'
+                      }`}
                     >
-                      {t('mods.horizon.install')}
+                      {busy ? <ButtonSpinner size={12} trackColor="rgba(255,255,255,0.15)" />
+                        : isInstalled ? t('mods.installedBadge') : mine ? t('mods.switchButton') : t('mods.installButton')}
                     </motion.button>
-                  )}
-                </div>
-              ))}
+                  </div>
+                )
+              })}
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
-    </ModalShell>
+    </div>
   )
 }
 
 // ── Installés ────────────────────────────────────────────────────────────────
 
-function Installed({ instance, items, packs, datapacks, status, report, onChanged, onBrowse, withConsent }: {
+/** Ce qui est installé, limité aux `sections` de l'écran qui l'affiche
+ *  (Mods : mods, natifs, modpacks ; Packs : shaders Horizon, packs de données). */
+function Installed({ instance, sections, items: allItems, packs: allPacks, datapacks: allDatapacks, status, report, onChanged, onBrowse, withConsent }: {
   instance: Instance
+  sections: Section[]
   items: HorizonInstalled[]
   packs: HorizonInstalledPack[]
   datapacks: HorizonDataPack[]
   status: HorizonNativeStatus | null
   report: HorizonNativeReport | null
   onChanged: () => Promise<void>
-  onBrowse: () => void
+  onBrowse?: () => void
   withConsent: (action: () => Promise<void>) => Promise<void>
 }) {
+  const items = allItems.filter((i) =>
+    i.kind === 'mod' ? sections.includes('mods') : i.kind === 'native-mod' ? sections.includes('native') : sections.includes('shaders'))
+  const packs = sections.includes('modpacks') ? allPacks : []
+  const datapacks = sections.includes('datapacks') ? allDatapacks : []
   const t = useT()
   const loaderVersion = instance.loader_version ?? ''
   const [busy, setBusy] = useState<string | null>(null)
@@ -543,14 +771,14 @@ function Installed({ instance, items, packs, datapacks, status, report, onChange
   const hasNative = groups[1].list.some((i) => i.enabled)
 
   if (items.length === 0 && packs.length === 0 && datapacks.length === 0) {
-    return (
+    return onBrowse ? (
       <div className="flex flex-col items-center gap-3 py-16 text-center">
         <p className="text-[13px] text-[rgba(255,255,255,0.5)]">{t('mods.horizon.nothingInstalled')}</p>
         <motion.button {...press} onClick={onBrowse} className="h-9 rounded-lg bg-[rgb(var(--accent))] px-4 text-[12.5px] font-bold text-white hover:bg-[rgb(var(--accent-hover))]">
           {t('mods.horizon.browse')}
         </motion.button>
       </div>
-    )
+    ) : null
   }
 
   return (
