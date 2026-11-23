@@ -91,7 +91,8 @@ jobs:
   android:
     needs: release
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    # Moteur (~2 h), ses exporters, puis le launcher et Gradle.
+    timeout-minutes: 300
     permissions:
       contents: write
     env:
@@ -110,11 +111,13 @@ jobs:
         with:
           python-version: '3.12'
 
-      # javac et d8 pour le moteur, Gradle pour l'appli.
+      # JDK 25 pour le moteur : ses exporters sont compilés avec la version
+      # épinglée par research-lock.json (`java_major`). Gradle 8.14 ne tourne
+      # pas sur Java 25 : on repasse en 21 juste après le moteur.
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: '25'
 
       - uses: actions/setup-node@v4
         with:
@@ -134,8 +137,9 @@ jobs:
 
       - name: Install Rust for Android and cargo-ndk
         run: |
-          rustup toolchain install stable --profile minimal --component rust-src --target aarch64-linux-android
-          rustup default stable
+          # Le Rust épinglé par le moteur (tools/ci/rust-version), jamais « stable » :
+          # il compile sa bibliothèque standard avec des options internes au compilateur.
+          bash horizon-android/tools/ci/rustup_install.sh --profile minimal --component rust-src --target aarch64-linux-android
           cargo install cargo-ndk --version 3.5.4 --locked
 
       - uses: Swatinem/rust-cache@v2
@@ -160,6 +164,12 @@ jobs:
 
       - name: Build the engine
         run: python horizon-android/yuyu/build_engine.py --profile fast
+
+      # Gradle de l'appli Android.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
 
       - name: Install frontend deps
         working-directory: Launcher-Client/Frontend
