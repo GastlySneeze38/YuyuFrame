@@ -1,0 +1,136 @@
+name: iOS (test)
+
+# Build d'essai pour iPhone, lancé à la main seulement :
+#   gh workflow run ios.yml --repo GastlySneeze38/YuyuFrame
+#
+# Le .ipa n'est PAS signé : Sideloadly ou SideStore le signent à l'installation
+# avec un compte Apple gratuit. Ce workflow n'a donc besoin d'aucun secret.
+#
+# Il range le .ipa dans un seul brouillon, `ios-dev`, jamais publié et remplacé à
+# chaque build. Ce nom ne commence pas par `v` : il ne déclenche pas release.yml,
+# et le .ipa ne peut pas partir avec le .exe et l'APK d'une vraie version.
+on:
+  workflow_dispatch:
+    inputs:
+      engine_ref:
+        description: Branche, tag ou commit du moteur (YuyuFrame-Mobile)
+        required: false
+        default: main
+
+jobs:
+  ios:
+    runs-on: macos-latest
+    timeout-minutes: 240
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    env:
+      GH_REPO: ${{ github.repository }}
+      IPA_NAME: YuyuFrame-ios-dev.ipa
+      # Tauri exige une équipe Apple pour générer le projet. Celle-ci ne signe
+      # rien : la signature est coupée par le fichier xcconfig plus bas.
+      APPLE_DEVELOPMENT_TEAM: '0000000000'
+    steps:
+      # Côte à côte, comme dans le monorepo et le job Android de release.yml.
+      - uses: actions/checkout@v4
+        with:
+          path: Launcher-Client
+
+      - uses: actions/checkout@v4
+        with:
+          repository: GastlySneeze38/YuyuFrame-Mobile
+          ref: ${{ inputs.engine_ref }}
+          path: horizon-android
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Le Rust épinglé par le moteur, comme pour Android.
+      - name: Install Rust for iOS
+        run: bash horizon-android/tools/ci/rustup_install.sh --profile minimal --component rust-src --target aarch64-apple-ios
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ios
+          workspaces: |
+            horizon-android
+            Launcher-Client/Backend
+
+      - name: Install the iOS project generator
+        run: brew install xcodegen
+
+      - name: Install frontend deps
+        working-directory: Launcher-Client/Frontend
+        run: npm ci
+
+      # Le moteur n'est pas encore intégré à l'app iOS. Cette étape dit ce qui
+      # l'empêche de compiler, dans le résumé du run, sans bloquer la suite.
+      - name: Check the engine for iOS
+        continue-on-error: true
+        working-directory: horizon-android
+        run: |
+          set -o pipefail
+          status=0
+          cargo check -p horizon-client --target aarch64-apple-ios --keep-going 2>&1 | tee "$RUNNER_TEMP/engine.log" || status=$?
+          {
+            echo "## Moteur pour iOS"
+            if [ "$status" -eq 0 ]; then
+              echo "Le moteur compile pour iOS."
+            else
+              echo "Le moteur ne compile pas encore pour iOS :"
+              echo '```'
+              grep -E '^error' "$RUNNER_TEMP/engine.log" | sort | uniq -c | sort -rn | head -40
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+
+      - name: Generate the iOS project
+        working-directory: Launcher-Client/Backend
+        run: npx --prefix ../Frontend tauri ios init --ci
+
+      # Sans équipe réelle, l'export final de Tauri échoue forcément. Seule
+      # l'archive compte : le .ipa est fabriqué à partir d'elle à l'étape suivante.
+      - name: Build the app without signing it
+        working-directory: Launcher-Client/Backend
+        run: |
+          cat > "$RUNNER_TEMP/unsigned.xcconfig" <<'EOF'
+          CODE_SIGNING_ALLOWED = NO
+          CODE_SIGNING_REQUIRED = NO
+          CODE_SIGN_IDENTITY =
+          EOF
+          export XCODE_XCCONFIG_FILE="$RUNNER_TEMP/unsigned.xcconfig"
+          npx --prefix ../Frontend tauri ios build --ci --target aarch64 || echo "tauri ios build a échoué : on regarde si l'archive existe."
+          archive=$(find gen/apple/build -type d -name '*.xcarchive' | head -1)
+          test -n "$archive" || { echo "aucune archive produite : la compilation a échoué, voir plus haut"; exit 1; }
+          echo "ARCHIVE=$PWD/$archive" >> "$GITHUB_ENV"
+
+      - name: Package the .ipa
+        run: |
+          app=$(find "$ARCHIVE/Products/Applications" -maxdepth 1 -type d -name '*.app' | head -1)
+          test -n "$app" || { echo "aucune .app dans l'archive"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$app" "$RUNNER_TEMP/ipa/Payload/"
+          (cd "$RUNNER_TEMP/ipa" && zip -qry "$RUNNER_TEMP/$IPA_NAME" Payload)
+          ls -lh "$RUNNER_TEMP/$IPA_NAME"
+
+      # Gardé dans le run : si l'envoi au brouillon échoue, rien n'est à recompiler.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: yuyuframe-ios-dev
+          path: ${{ runner.temp }}/${{ env.IPA_NAME }}
+          retention-days: 7
+
+      - name: Put the .ipa in the ios-dev draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view ios-dev > /dev/null 2>&1; then
+            gh release create ios-dev --draft --target "$GITHUB_SHA" \
+              --title "iOS (build d'essai)" \
+              --notes "Brouillon de test, à ne pas publier. Le .ipa est remplacé à chaque build."
+          fi
+          gh release upload ios-dev "$RUNNER_TEMP/$IPA_NAME" --clobber
