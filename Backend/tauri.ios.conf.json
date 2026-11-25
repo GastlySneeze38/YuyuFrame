@@ -2,6 +2,9 @@
   "$schema": "https://schema.tauri.app/config/2",
   "bundle": {
     "resources": [],
-    "createUpdaterArtifacts": false
+    "createUpdaterArtifacts": false,
+    "iOS": {
+      "frameworks": ["SystemConfiguration"]
+    }
   }
 }
