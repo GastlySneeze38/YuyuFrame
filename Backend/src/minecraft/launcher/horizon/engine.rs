@@ -17,7 +17,12 @@ use crate::state::SharedState;
 /// « Launcher » du menu pause du jeu.
 #[tauri::command]
 pub async fn horizon_game_resume(app: tauri::AppHandle) -> Result<(), String> {
-    super::android::resume(&app).await.map_err(|e| e.to_string())
+    #[cfg(target_os = "android")]
+    let resumed = super::android::resume(&app).await;
+    // iOS : la fenêtre du jeu, cachée dans l'appli, revient devant.
+    #[cfg(target_os = "ios")]
+    let resumed = super::ios::resume(&app).await;
+    resumed.map_err(|e| e.to_string())
 }
 
 fn game_dir(instance_id: &str) -> Result<PathBuf, String> {

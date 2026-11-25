@@ -32,8 +32,9 @@ fn app_data_base() -> PathBuf {
         .clone()
 }
 
-/// Les fichiers privés de l'appli, là où le jeu Horizon lit `horizon-args.txt`.
-#[cfg(target_os = "android")]
+/// Les fichiers privés de l'appli, là où le jeu Horizon lit `horizon-args.txt`
+/// (Android) ou ses fichiers de session (iOS, où le jeu vit dans l'appli).
+#[cfg(any(target_os = "android", target_os = "ios"))]
 pub fn app_files_dir() -> PathBuf {
     app_data_base()
 }

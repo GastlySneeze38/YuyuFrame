@@ -136,11 +136,11 @@ impl Index {
 /// Les sortes qu'on propose. Un pack de données va dans un monde de
 /// l'instance ; un modpack `.hpack` installe ses mods et ses réglages dans
 /// l'instance ouverte.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 const OFFERED: [&str; 7] = ["mod", "native-mod", "shader", "shaderpack", "resourcepack", "datapack", "modpack"];
 /// Sur téléphone, pas de mods natifs : c'est du code compilé téléchargé, que
 /// le Play Store interdit (le moteur de l'APK ne les charge pas non plus).
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 const OFFERED: [&str; 6] = ["mod", "shader", "shaderpack", "resourcepack", "datapack", "modpack"];
 
 static CACHE: Mutex<Option<(std::time::Instant, Index)>> = Mutex::new(None);
@@ -211,7 +211,7 @@ fn default_support() -> Support {
 /// Ce que charge la version d'Horizon que prendrait une instance épinglée sur
 /// `pinned`, si elle est installée ; sinon l'API de contenu actuelle (0.2).
 pub async fn support(pinned: &str) -> Support {
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         let Some(dir) = super::release::installed_for(pinned) else { return default_support() };
         if let Some(found) = SUPPORT.lock().unwrap().as_ref().and_then(|m| m.get(&dir).cloned()) {
@@ -234,7 +234,7 @@ pub async fn support(pinned: &str) -> Support {
         SUPPORT.lock().unwrap().get_or_insert_with(HashMap::new).insert(dir, found.clone());
         found
     }
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     {
         let _ = pinned;
         default_support()
@@ -872,7 +872,7 @@ async fn install_modpack(app: &tauri::AppHandle, index: &Index, dir: &Path, proj
             .find(|p| p.id == m.id && (p.kind == "mod" || p.kind == "native-mod"))
             .and_then(|p| Some((p, p.versions.iter().find(|v| v.version == m.version && v.file.sha256.eq_ignore_ascii_case(&m.sha256))?)));
         let (p, v) = found.ok_or_else(|| anyhow!("{} demande {} {}, absent du registre", pack.name, m.id, m.version))?;
-        if cfg!(target_os = "android") && p.kind == "native-mod" {
+        if cfg!(any(target_os = "android", target_os = "ios")) && p.kind == "native-mod" {
             return Err(anyhow!("{} demande le mod natif {}, que le téléphone ne fait pas tourner", pack.name, p.name));
         }
         wanted.push((m, p, v));
@@ -1146,7 +1146,7 @@ async fn install(
         check_contents(project, chosen, &bytes)?;
         let (mut mods, native) = install_modpack(app, &index, &dir, project, chosen, &bytes).await?;
         if native {
-            #[cfg(not(target_os = "android"))]
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             super::native::prefetch(app.clone(), loader_version.to_string());
         }
         mods.insert(0, project.id.clone());
@@ -1214,7 +1214,7 @@ async fn install(
         done.push(id);
     }
     if native {
-        #[cfg(not(target_os = "android"))]
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         super::native::prefetch(app.clone(), loader_version.to_string());
     }
     Ok(done)
@@ -1227,10 +1227,10 @@ pub async fn horizon_content_toggle(app: tauri::AppHandle, instance_id: String, 
     let (id, native) = mod_id(&dir, &file).ok_or("Mod introuvable")?;
     set_enabled(&dir, &id, enabled).map_err(|e| e.to_string())?;
     if native && enabled {
-        #[cfg(not(target_os = "android"))]
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         super::native::prefetch(app, loader_version);
     }
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     let _ = (app, loader_version);
     Ok(())
 }

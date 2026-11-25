@@ -19,13 +19,17 @@
 #[cfg(target_os = "android")]
 pub mod android;
 pub mod content;
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 pub mod engine;
+#[cfg(target_os = "ios")]
+pub mod ios;
+#[cfg(any(target_os = "android", target_os = "ios"))]
+mod phone;
 
 /// Sur ordinateur, le jeu est le build officiel d'Horizon : les réglages et les
 /// fichiers passent par ses propres écrans. Les commandes existent pour que
 /// l'interface reste la même ; elles refusent.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub mod engine {
     const PHONE_ONLY: &str = "Disponible sur téléphone seulement";
     #[tauri::command]
@@ -72,12 +76,12 @@ pub mod engine {
         Err(PHONE_ONLY.into())
     }
 }
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub mod native;
 
-/// Sur téléphone, le moteur est celui de l'APK : pas de compilation de mods
+/// Sur téléphone, le moteur est celui de l'appli : pas de compilation de mods
 /// natifs. Les commandes existent pour que l'interface reste la même.
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 pub mod native {
     #[tauri::command]
     pub async fn horizon_native_status() -> Result<serde_json::Value, String> {
@@ -103,9 +107,9 @@ pub mod native {
         Ok(())
     }
 }
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod prepare;
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod release;
 
 use anyhow::Result;
@@ -117,17 +121,17 @@ use tokio::sync::watch;
 use crate::state::MinecraftSession;
 
 // Ce que seule la version ordinateur emploie (un processus lancé, sa sortie lue).
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use anyhow::anyhow;
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use std::process::Stdio;
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use tauri::Emitter;
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use tokio::io::{AsyncWriteExt, BufReader};
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use super::orchestrator::LAUNCH_CANCELLED_MSG;
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use super::progress::{log_to_console, set_progress_monotonic, spawn_game_output_pump, ProgressFloor};
 
 /// La valeur de `instances.loader` d'une instance Horizon.
@@ -139,9 +143,10 @@ pub const LOADER: &str = "horizon";
 pub const GAME_VERSION: &str = "26.3";
 
 /// Si Horizon peut être proposé pour cette version du jeu : sur Windows (ses
-/// versions publiées) et sur Android (le moteur rangé dans l'APK, `android.rs`).
+/// versions publiées), sur Android (le moteur rangé dans l'APK, `android.rs`)
+/// et sur iOS (le moteur lié dans l'appli, `ios.rs`).
 pub fn available_for(mc_version: &str) -> bool {
-    cfg!(any(target_os = "windows", target_os = "android")) && mc_version == GAME_VERSION
+    cfg!(any(target_os = "windows", target_os = "android", target_os = "ios")) && mc_version == GAME_VERSION
 }
 
 /// Ce que `play::launch` sait de la partie, et qu'Horizon utilise.
@@ -154,12 +159,12 @@ pub struct HorizonLaunch<'a> {
     pub session_id: Option<i64>,
     pub connect_server: Option<&'a str>,
     /// Taille de la fenêtre ; sans objet sur téléphone, où le jeu prend l'écran.
-    #[cfg_attr(target_os = "android", allow(dead_code))]
+    #[cfg_attr(any(target_os = "android", target_os = "ios"), allow(dead_code))]
     pub window_size: Option<(u32, u32)>,
     /// Version d'Horizon épinglée sur l'instance (`instances.loader_version`),
     /// vide = la recommandée.
     /// Sans objet sur téléphone : le moteur est celui de l'APK.
-    #[cfg_attr(target_os = "android", allow(dead_code))]
+    #[cfg_attr(any(target_os = "android", target_os = "ios"), allow(dead_code))]
     pub pinned: &'a str,
 }
 
@@ -175,8 +180,14 @@ pub async fn list_versions(app: &tauri::AppHandle) -> Vec<crate::minecraft::load
     }
 }
 
+/// Sur iOS, une seule version : le moteur lié dans l'appli (`ios.rs`).
+#[cfg(target_os = "ios")]
+pub async fn list_versions(_app: &tauri::AppHandle) -> Vec<crate::minecraft::loaders::LoaderVersion> {
+    vec![crate::minecraft::loaders::LoaderVersion { version: ios::ENGINE_VERSION.into(), stable: true, recommended: true }]
+}
+
 /// Les versions stables d'Horizon, pour le choix de l'onglet Installation.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub async fn list_versions(_app: &tauri::AppHandle) -> Vec<crate::minecraft::loaders::LoaderVersion> {
     let client = reqwest::Client::builder()
         .user_agent(concat!("YuyuFrame/", env!("CARGO_PKG_VERSION")))
@@ -190,16 +201,19 @@ pub async fn list_versions(_app: &tauri::AppHandle) -> Vec<crate::minecraft::loa
 
 /// Joue jusqu'à la fermeture du jeu. Sur ordinateur, installe et prépare
 /// Horizon d'abord ; sur Android le moteur est dans l'APK et se prépare seul
-/// au premier démarrage (`android.rs`).
+/// au premier démarrage (`android.rs`), sur iOS il est lié dans l'appli
+/// (`ios.rs`).
 pub async fn launch(app: tauri::AppHandle, run: HorizonLaunch<'_>, cancel: watch::Receiver<bool>) -> Result<()> {
     #[cfg(target_os = "android")]
     return android::launch(app, run, cancel).await;
-    #[cfg(not(target_os = "android"))]
+    #[cfg(target_os = "ios")]
+    return ios::launch(app, run, cancel).await;
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     desktop_launch(app, run, cancel).await
 }
 
 /// Installe et prépare Horizon si besoin, puis joue jusqu'à la fermeture du jeu.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 async fn desktop_launch(app: tauri::AppHandle, run: HorizonLaunch<'_>, cancel: watch::Receiver<bool>) -> Result<()> {
     let floor = Arc::new(ProgressFloor::new(run.instance_id));
     let client = Arc::new(
@@ -457,7 +471,7 @@ async fn desktop_launch(app: tauri::AppHandle, run: HorizonLaunch<'_>, cancel: w
 /// (jamais par-dessus un fichier existant), dans le dossier Horizon de
 /// l'instance. Format d'Horizon (`auth.rs`) : `name`, `uuid`,
 /// `access_token`, `user_type`, `xuid`.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 async fn write_session_file(home: &std::path::Path, session: &MinecraftSession) -> Result<std::path::PathBuf> {
     let dir = home.join("sessions");
     tokio::fs::create_dir_all(&dir).await?;
