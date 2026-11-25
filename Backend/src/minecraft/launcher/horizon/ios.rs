@@ -29,6 +29,24 @@ use crate::minecraft::launcher::progress::{log_to_console, set_progress_monotoni
 /// lui.
 pub const ENGINE_VERSION: &str = "0.9.0";
 
+/// Les fichiers à lui du jeu, hors de toute instance : caches, et la boîte de
+/// l'importation (`HORIZON_PRIVATE`, comme sur Android).
+pub fn private_dir() -> std::path::PathBuf {
+    crate::paths::app_files_dir().join("horizon")
+}
+
+/// Les ressources du vrai Minecraft préparées sur un PC (`transfer.rs`), que le
+/// jeu reçoit par `--resources`. iOS ne peut pas les préparer lui-même.
+pub fn resources_dir() -> std::path::PathBuf {
+    private_dir().join("resources")
+}
+
+/// Les ressources sont installées : `horizon-prepare` écrit ce fichier en
+/// dernier, et l'importation ne met le dossier en place qu'une fois vérifié.
+pub fn resources_ready() -> bool {
+    resources_dir().join("horizon-resources.json").is_file()
+}
+
 /// Fait tourner `f` sur le fil principal, celui d'UIKit et de la boucle de
 /// l'appli, et attend sa réponse : le moteur et ses fenêtres n'acceptent
 /// rien d'ailleurs.
@@ -64,6 +82,12 @@ pub async fn launch(app: tauri::AppHandle, run: HorizonLaunch<'_>, mut cancel: w
         ));
     }
 
+    if !resources_ready() {
+        return Err(anyhow!(
+            "Il manque les fichiers du jeu : prépare-les sur ton PC (Paramètres → Stockage → Exporter pour iPhone), puis importe-les ici (Paramètres → Stockage)"
+        ));
+    }
+
     let files = crate::paths::app_files_dir();
     let home = run.game_dir.join("horizon");
     tokio::fs::create_dir_all(&home).await?;
@@ -84,8 +108,18 @@ pub async fn launch(app: tauri::AppHandle, run: HorizonLaunch<'_>, mut cancel: w
     set_progress_monotonic(&app, &floor, 100, 100, &format!("Démarrage de {label}..."));
     log_to_console(&app, run.console_label, &format!("[Horizon] {label} — Minecraft {}", super::GAME_VERSION), "out");
 
-    let env = launch.env.clone();
-    let args = launch.arguments();
+    // Ce qu'Android pose de lui-même au démarrage du jeu (`android.rs`, `main`) :
+    // ses fichiers à lui, et ni le compteur de joueurs d'Horizon ni Discord.
+    let private = private_dir();
+    tokio::fs::create_dir_all(&private).await?;
+    let mut env = launch.env.clone();
+    env.extend([
+        ("HORIZON_PRIVATE".to_owned(), private.display().to_string()),
+        ("HORIZON_TELEMETRY_URL".to_owned(), "off".to_owned()),
+        ("HORIZON_NO_DISCORD".to_owned(), "1".to_owned()),
+    ]);
+    let mut args = launch.arguments();
+    args.extend(["--resources".to_owned(), resources_dir().display().to_string()]);
     let started = on_main_thread(&app, move || {
         // Le moteur lit ses variables dans le processus, qui est le nôtre ; le
         // fil principal est le seul à y toucher pendant ce temps.

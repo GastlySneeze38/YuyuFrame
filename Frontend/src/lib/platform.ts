@@ -20,6 +20,14 @@ export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in
  *  endroit où le moteur Horizon de l'APK et son API existent. */
 export const isAndroidApp = inTauri && typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent)
 
+/** L'appli iPhone ou iPad elle-même : le moteur Horizon y est lié dans l'appli,
+ *  et ses fichiers viennent d'un PC (`horizon/transfer.rs`). Un iPad récent se
+ *  présente comme un Mac : c'est l'écran tactile qui le trahit. */
+export const isIosApp = inTauri && typeof navigator !== 'undefined' && (
+  /iPhone|iPad|iPod/i.test(navigator.userAgent)
+  || (/Macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1)
+)
+
 export function osName(): string {
   const ua = typeof navigator === 'undefined' ? '' : navigator.userAgent
   if (/Android/i.test(ua)) return 'Android'

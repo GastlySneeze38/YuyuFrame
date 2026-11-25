@@ -199,6 +199,10 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         crate::minecraft::launcher::horizon::engine::horizon_files_path,
         crate::minecraft::launcher::horizon::engine::horizon_files_import,
         crate::minecraft::launcher::horizon::engine::horizon_game_resume,
+        // Les fichiers du jeu, préparés sur PC et emportés sur iPhone.
+        crate::minecraft::launcher::horizon::transfer::horizon_ios_resources_export,
+        crate::minecraft::launcher::horizon::transfer::horizon_ios_resources_status,
+        crate::minecraft::launcher::horizon::transfer::horizon_ios_resources_import,
         crate::minecraft::launcher::horizon::native::horizon_native_status,
         crate::minecraft::launcher::horizon::native::horizon_native_allow,
         crate::minecraft::launcher::horizon::native::horizon_native_prefetch,

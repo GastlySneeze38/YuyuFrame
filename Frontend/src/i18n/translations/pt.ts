@@ -25,6 +25,19 @@ export const pt: TranslationSchema = {
   },
 
   horizonEngine: {
+    iosResources: {
+      exportTitle: 'Arquivos do jogo para iPhone',
+      exportDesc: 'O iPhone não consegue preparar os arquivos do Minecraft de que o Horizon precisa. Exporte-os deste PC (uma instância Horizon precisa ter sido aberta aqui uma vez) e importe o arquivo no app do iPhone.',
+      exportButton: 'Exportar para iPhone',
+      exporting: 'Exportando… (várias centenas de MB)',
+      exported: 'Exportado ({{size}}). Envie este arquivo para o seu iPhone (AirDrop, iCloud Drive…).',
+      importTitle: 'Arquivos do jogo',
+      importDesc: 'O Horizon precisa dos arquivos do Minecraft preparados em um PC: no launcher do PC, Configurações → Armazenamento → Exportar para iPhone, depois importe o arquivo aqui.',
+      importButton: 'Importar os arquivos do jogo',
+      importing: 'Instalando… (cerca de um minuto)',
+      ready: 'Instalados: o jogo pode iniciar.',
+      missing: 'Ainda não instalados.',
+    },
     tab: 'Jogo no celular',
     filesTab: 'Arquivos',
     intro: 'O jogo lê essas configurações ao iniciar. Elas não mudam durante uma partida.',

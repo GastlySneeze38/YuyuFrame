@@ -12,6 +12,7 @@ import { formatRam } from '@/lib/format'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { Toggle } from '@/components/ui/Toggle'
 import { HorizonNativeSettings } from '@/components/mods/HorizonContentTab'
+import { HorizonIosResources } from '@/components/settings/HorizonIosResources'
 import type { SharedOptionsStatus } from '@/types'
 import { SettingsNav, useSectionSpy } from '@/components/settings/SettingsNav'
 import { PageGlow } from '@/components/PageGlow'
@@ -696,6 +697,7 @@ export default function Settings() {
               )}
 
               <HorizonNativeSettings />
+              <HorizonIosResources />
             </div>
           </SCard>
           </div>

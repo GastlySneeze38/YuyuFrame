@@ -25,6 +25,7 @@ pub mod engine;
 pub mod ios;
 #[cfg(any(target_os = "android", target_os = "ios"))]
 mod phone;
+pub mod transfer;
 
 /// Sur ordinateur, le jeu est le build officiel d'Horizon : les réglages et les
 /// fichiers passent par ses propres écrans. Les commandes existent pour que

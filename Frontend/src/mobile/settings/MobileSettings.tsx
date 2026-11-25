@@ -13,7 +13,8 @@ import { EASE_OUT } from '@/lib/motion'
 import { useT, LANGUAGES } from '@/i18n'
 import type { SharedOptionsStatus } from '@/types'
 import { TouchRange } from '@/mobile/ui/TouchRange'
-import { isAndroidApp } from '@/lib/platform'
+import { isAndroidApp, isIosApp } from '@/lib/platform'
+import { HorizonIosResources } from '@/components/settings/HorizonIosResources'
 
 const CUSTOM_RAM_PRESETS_GO = [9, 10, 12, 16, 24, 32]
 
@@ -357,6 +358,8 @@ function SectionBody({ id, p }: { id: string; p: Parameters<typeof MobileSetting
               </div>
             </div>
           )}
+          {/* iPhone : les fichiers du jeu, préparés sur un PC. */}
+          {isIosApp && <HorizonIosResources />}
         </div>
       )
 

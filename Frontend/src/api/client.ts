@@ -1140,6 +1140,12 @@ export const api = {
     nativePrefetch: (loaderVersion: string) => invoke<void>('horizon_native_prefetch', { loaderVersion }),
     nativeReport: (instanceId: string) => invoke<HorizonNativeReport | null>('horizon_native_report', { instanceId }),
     nativeClear: () => invoke<void>('horizon_native_clear'),
+    /** Les fichiers du jeu préparés sur PC et emportés sur iPhone
+     *  (`horizon/transfer.rs`) : l'export n'existe que sur ordinateur, l'état
+     *  et l'import que sur iPhone. `path` : celui rendu par le sélecteur. */
+    iosResourcesExport: (path: string) => invoke<number>('horizon_ios_resources_export', { path }),
+    iosResourcesStatus: () => invoke<boolean>('horizon_ios_resources_status'),
+    iosResourcesImport: (path: string) => invoke<void>('horizon_ios_resources_import', { path }),
   },
 
   /** Horizon sur téléphone, par l'API du moteur (`horizon/engine.rs`) : les

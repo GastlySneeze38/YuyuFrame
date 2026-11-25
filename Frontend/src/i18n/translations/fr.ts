@@ -24,6 +24,19 @@ export const fr = {
   // Horizon dans l'appli Android, par l'API du moteur : réglages du jeu,
   // fichiers d'une instance, ouverture directe du jeu.
   horizonEngine: {
+    iosResources: {
+      exportTitle: 'Fichiers du jeu pour iPhone',
+      exportDesc: 'L’iPhone ne peut pas préparer les fichiers de Minecraft dont Horizon a besoin. Exporte-les depuis ce PC (une instance Horizon doit avoir été lancée une fois ici), puis importe le fichier dans l’appli iPhone.',
+      exportButton: 'Exporter pour iPhone',
+      exporting: 'Export en cours… (plusieurs centaines de Mo)',
+      exported: 'Exporté ({{size}}). Envoie ce fichier sur ton iPhone (AirDrop, iCloud Drive…).',
+      importTitle: 'Fichiers du jeu',
+      importDesc: 'Horizon a besoin des fichiers de Minecraft préparés sur un PC : dans le launcher du PC, Paramètres → Stockage → Exporter pour iPhone, puis importe le fichier ici.',
+      importButton: 'Importer les fichiers du jeu',
+      importing: 'Installation… (une minute environ)',
+      ready: 'Installés : le jeu peut démarrer.',
+      missing: 'Pas encore installés.',
+    },
     tab: 'Jeu sur téléphone',
     filesTab: 'Fichiers',
     intro: 'Le jeu lit ces réglages à son lancement. Ils ne changent pas pendant une partie.',

@@ -24,6 +24,19 @@ export const ru: TranslationSchema = {
   },
 
   horizonEngine: {
+    iosResources: {
+      exportTitle: 'Файлы игры для iPhone',
+      exportDesc: 'iPhone не может сам подготовить файлы Minecraft, нужные Horizon. Экспортируйте их с этого ПК (здесь хотя бы раз должна быть запущена сборка Horizon), затем импортируйте файл в приложении на iPhone.',
+      exportButton: 'Экспорт для iPhone',
+      exporting: 'Экспорт… (несколько сотен МБ)',
+      exported: 'Экспортировано ({{size}}). Отправьте этот файл на iPhone (AirDrop, iCloud Drive…).',
+      importTitle: 'Файлы игры',
+      importDesc: 'Horizon нужны файлы Minecraft, подготовленные на ПК: в лаунчере на ПК Настройки → Хранилище → Экспорт для iPhone, затем импортируйте файл здесь.',
+      importButton: 'Импортировать файлы игры',
+      importing: 'Установка… (около минуты)',
+      ready: 'Установлены: игра может запуститься.',
+      missing: 'Ещё не установлены.',
+    },
     tab: 'Игра на телефоне',
     filesTab: 'Файлы',
     intro: 'Игра читает эти настройки при запуске. Во время партии они не меняются.',
