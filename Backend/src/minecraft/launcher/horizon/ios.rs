@@ -129,18 +129,19 @@ pub async fn launch(app: tauri::AppHandle, run: HorizonLaunch<'_>, mut cancel: w
         horizon_game::start_in_app(args)
     })
     .await;
-    let started = match started {
-        Ok(started) => started,
-        Err(e) => {
-            remove(session_file.as_deref()).await;
-            return Err(e);
-        }
+    let refused = match started {
+        Ok(Ok(())) => None,
+        Ok(Err(horizon_game::StartError::AlreadyStarted)) => Some(anyhow!(
+            "Le jeu a déjà été lancé dans l'appli : reviens-y par « Revenir au jeu ». Pour lancer une autre instance, ferme puis rouvre l'appli"
+        )),
+        Ok(Err(horizon_game::StartError::Failed(e))) => Some(anyhow!(
+            "Le jeu n'a pas pu démarrer : {e}. Ferme puis rouvre l'appli pour réessayer"
+        )),
+        Err(e) => Some(e),
     };
-    if !started {
+    if let Some(e) = refused {
         remove(session_file.as_deref()).await;
-        return Err(anyhow!(
-            "Le jeu tourne déjà dans l'appli : reviens-y par « Revenir au jeu ». Pour lancer une autre instance, ferme puis rouvre l'appli"
-        ));
+        return Err(e);
     }
     let _ = app.emit("game_ready", serde_json::json!({ "instance_id": run.instance_id }));
 
