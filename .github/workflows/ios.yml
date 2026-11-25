@@ -70,26 +70,35 @@ jobs:
         working-directory: Launcher-Client/Backend
         run: npx --prefix ../Frontend tauri ios init --ci
 
-      # Sans compte Apple, Xcode ne doit rien signer ni chercher de profil :
-      # Tauri lance xcodebuild avec -allowProvisioningUpdates et l'équipe
-      # factice, ce qui fait réclamer un compte (« No Accounts ») tant que la
-      # signature reste automatique. Le fichier xcconfig passe devant les
-      # réglages du projet : signature manuelle, sans équipe, sans profil.
-      # Le moteur est compilé ici, par la phase « Build Rust Code » du projet.
+      # Sans compte Apple, Xcode ne doit rien signer ni chercher de profil.
+      # Tauri lance `xcodebuild -allowProvisioningUpdates` avec l'équipe
+      # factice en signature automatique, d'où « No Accounts ». Il ne transmet
+      # pas XCODE_XCCONFIG_FILE à xcodebuild (environnement filtré), donc on
+      # passe par un xcodebuild à nous, placé devant dans le PATH : il retire
+      # -allowProvisioningUpdates et ajoute en ligne de commande, qui passe
+      # devant tout le reste, les réglages qui coupent la signature. L'export
+      # (-exportArchive) passe tel quel : il échoue sans signature, seule la
+      # .app compte. Le moteur est compilé ici, par la phase « Build Rust Code ».
       - name: Build the app without signing it
         working-directory: Launcher-Client/Backend
         run: |
-          cat > "$RUNNER_TEMP/unsigned.xcconfig" <<'EOF'
-          CODE_SIGNING_ALLOWED = NO
-          CODE_SIGNING_REQUIRED = NO
-          CODE_SIGN_IDENTITY =
-          CODE_SIGN_STYLE = Manual
-          DEVELOPMENT_TEAM =
-          PROVISIONING_PROFILE =
-          PROVISIONING_PROFILE_SPECIFIER =
-          CODE_SIGN_ENTITLEMENTS =
+          mkdir -p "$RUNNER_TEMP/bin"
+          cat > "$RUNNER_TEMP/bin/xcodebuild" <<'EOF'
+          #!/bin/bash
+          real=/usr/bin/xcodebuild
+          for a in "$@"; do
+            if [ "$a" = "-exportArchive" ]; then exec "$real" "$@"; fi
+          done
+          args=()
+          for a in "$@"; do
+            [ "$a" = "-allowProvisioningUpdates" ] || args+=("$a")
+          done
+          echo "[xcodebuild sans signature] ${args[*]}" >&2
+          exec "$real" "${args[@]}"             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=             CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= PROVISIONING_PROFILE=             PROVISIONING_PROFILE_SPECIFIER= CODE_SIGN_ENTITLEMENTS=
           EOF
-          export XCODE_XCCONFIG_FILE="$RUNNER_TEMP/unsigned.xcconfig"
+          chmod +x "$RUNNER_TEMP/bin/xcodebuild"
+          export PATH="$RUNNER_TEMP/bin:$PATH"
+          command -v xcodebuild
           npx --prefix ../Frontend tauri ios build --ci --target aarch64 || echo "tauri ios build a échoué : on regarde si l'appli existe quand même."
           # L'export final échoue sans signature ; seule la .app compte. Elle
           # est dans l'archive si Tauri a archivé, sinon dans les produits du build.
