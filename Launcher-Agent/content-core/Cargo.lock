@@ -1167,3 +1167,31 @@ checksum = "27bc9d5b815bc103f142aa054f561d9187d191692ec7c2d1e2b4737f8dbd7296"
 dependencies = [
  "zune-core",
 ]
+
+[[patch.unused]]
+name = "horizon-client"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "horizon-engine-api"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "horizon-game"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "libmimalloc-sys"
+version = "0.1.49"
+
+[[patch.unused]]
+name = "naga"
+version = "30.0.1"
+
+[[patch.unused]]
+name = "wgpu-hal"
+version = "30.0.1"
+
+[[patch.unused]]
+name = "winit"
+version = "0.30.13"

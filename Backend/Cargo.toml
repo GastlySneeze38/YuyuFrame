@@ -71,7 +71,9 @@ libp2p = { version = "0.53", features = [
     "identify", "relay", "dcutr", "request-response", "cbor", "macros",
 ] }
 futures = "0.3"
-sysinfo = "0.31"
+# Le système et les processus seulement (`System`, `Pid`) : sa partie réseau, inutile ici, ne
+# compile pas pour iOS (`RTM_IFINFO2`, absent de libc pour iOS).
+sysinfo = { version = "0.31", default-features = false, features = ["system", "multithread"] }
 discord-rich-presence = "1"
 fastnbt = "2"
 md-5 = "0.10"
