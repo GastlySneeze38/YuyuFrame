@@ -248,8 +248,8 @@ pub fn instance_all_ids(conn: &Connection) -> Result<Vec<String>> {
 
 /// Les versions d'Horizon épinglées par une instance, tous comptes
 /// confondus : la mise à jour automatique n'efface jamais l'une d'elles.
-/// Sans objet sur téléphone, où le moteur est celui de l'APK.
-#[cfg_attr(target_os = "android", allow(dead_code))]
+/// Sans objet sur téléphone, où le moteur est celui de l'appli.
+#[cfg_attr(any(target_os = "android", target_os = "ios"), allow(dead_code))]
 pub fn horizon_pinned_versions(conn: &Connection) -> Result<Vec<String>> {
     let mut stmt = conn.prepare(
         "SELECT DISTINCT loader_version FROM instances WHERE loader = 'horizon' AND loader_version != ''",

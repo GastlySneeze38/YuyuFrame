@@ -54,9 +54,9 @@ async fn current_skin(state: &SharedState, uuid: &str) -> Result<Option<db::Skin
 
 /// Le skin que le launcher fait porter à ce compte, quel qu'il soit (Microsoft
 /// compris) : son PNG sur le disque et s'il a les bras fins. `None` quand le
-/// compte n'en a choisi aucun ici. Pour le moteur Android, qui le porte en solo
-/// (`horizon-engine-api`, `skin::wear`).
-#[cfg(target_os = "android")]
+/// compte n'en a choisi aucun ici. Pour le moteur des téléphones, qui le porte
+/// en solo (`horizon-engine-api`, `skin::wear`).
+#[cfg(any(target_os = "android", target_os = "ios"))]
 pub async fn worn_skin(state: &SharedState, uuid: &str) -> Option<(PathBuf, bool)> {
     let skin = current_skin(state, uuid).await.ok()??;
     let path = skin_file(&skin).await.ok()?;
