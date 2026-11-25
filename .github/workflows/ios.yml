@@ -72,12 +72,17 @@ jobs:
       # Frontend/) : ENOENT. Même souci qu'Android (BuildTask.kt). On pose ici,
       # pour la CI seulement, un package.json dont le script `tauri` renvoie au
       # CLI du Frontend, comme la commande qu'on tape.
+      # Ce package.json fait aussi de Backend/ le dossier d'où Tauri lance
+      # `beforeBuildCommand` (`npm --prefix Frontend run build`, écrit pour
+      # Launcher-Client/) : un lien Backend/Frontend → ../Frontend le garde juste.
       - name: Point npm at the Tauri CLI
         working-directory: Launcher-Client/Backend
         run: |
           cat > package.json <<'EOF'
           { "private": true, "scripts": { "tauri": "npx --prefix ../Frontend tauri" } }
           EOF
+          ln -s ../Frontend Frontend
+          test -f Frontend/package.json
 
       - name: Generate the iOS project
         working-directory: Launcher-Client/Backend
