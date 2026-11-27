@@ -88,6 +88,22 @@ jobs:
         working-directory: Launcher-Client/Backend
         run: npx --prefix ../Frontend tauri ios init --ci
 
+      # `tauri ios init` pose les icônes par défaut de Tauri : les nôtres
+      # (icons/ios, mêmes noms que son Contents.json) ne sont recopiées que par
+      # `tauri icon`. On les met à leur place.
+      - name: Use the YuyuFrame icons
+        working-directory: Launcher-Client/Backend
+        run: |
+          set -euo pipefail
+          dest=$(find gen/apple -type d -name 'AppIcon.appiconset' | head -1)
+          test -n "$dest" || { echo "AppIcon.appiconset introuvable"; exit 1; }
+          cp -f icons/ios/*.png "$dest/"
+          # Chaque image que le catalogue demande doit exister.
+          grep -o '"filename"[^,}]*' "$dest/Contents.json" | sed 's/.*: *"\(.*\)"/\1/' | while read -r f; do
+            test -f "$dest/$f" || { echo "icône manquante : $f"; exit 1; }
+          done
+          ls "$dest"
+
       # Sans compte Apple, Xcode ne doit rien signer ni chercher de profil.
       # Tauri lance `xcodebuild -allowProvisioningUpdates` avec l'équipe
       # factice en signature automatique, d'où « No Accounts ». Il ne transmet
