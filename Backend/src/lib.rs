@@ -112,6 +112,7 @@ pub fn run() {
             // événement que le PC, donc le même chemin dans `App.tsx`.
             #[cfg(mobile)]
             {
+                use tauri::Emitter;
                 use tauri_plugin_deep_link::DeepLinkExt;
                 if let Ok(Some(urls)) = app.deep_link().get_current() {
                     if let Some(url) = urls.iter().find(|u| u.scheme() == "yuyuframe") {
