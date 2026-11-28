@@ -20,6 +20,10 @@ import { EASE, Field, Ghost, Item, Primary, Stagger, TextLink } from '../ui'
  * connecté (tapé, ou scanné en QR code sur téléphone), qui évite mot de
  * passe et second facteur. Un lien `yuyuframe://link/…` ouvert pendant que
  * l'écran est là se connecte tout seul.
+ *
+ * Le compte est obligatoire (2026-11-28) : « Continuer sans compte » n'est
+ * proposé que si le serveur ne répond pas (pas de réseau, panne), pour qu'on
+ * puisse quand même jouer hors ligne.
  */
 export function AccountStep({ onDone, onSkip }: { onDone: () => void; onSkip: () => void }) {
   const t = useT()
@@ -197,10 +201,6 @@ export function AccountStep({ onDone, onSkip }: { onDone: () => void; onSkip: ()
       <Primary type="submit" disabled={!auth.canSubmit} loading={auth.loading}>
         {submitLabel}
       </Primary>
-
-      <div className="flex justify-center">
-        <Ghost onClick={onSkip}>{t('onboarding.account.noAccount')}</Ghost>
-      </div>
 
       <PrivacyModal
         open={showPrivacy}

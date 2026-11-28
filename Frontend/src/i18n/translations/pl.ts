@@ -3051,6 +3051,7 @@ export const pl: TranslationSchema = {
     headline: {
       account: 'Twój launcher, twój świat.',
       microsoft: 'Połącz konto Minecraft.',
+      microsoftOffline: 'Wybierz swoją nazwę.',
       instance: 'Utwórz pierwszą instancję.',
       friends: 'Graj ze znajomymi.',
       profile: 'Wyróżnij się.',
@@ -3059,6 +3060,7 @@ export const pl: TranslationSchema = {
     lead: {
       account: 'Jedno konto, by mieć instancje, znajomych i postępy na wszystkich urządzeniach.',
       microsoft: 'Zaloguj się kontem Microsoft, na którym kupiłeś Minecrafta, aby grać online.',
+      microsoftOffline: 'Brak internetu: logowanie przez Microsoft jest niemożliwe. Nazwa offline pozwala grać od razu.',
       instance: 'Instancja to wersja gry z własnymi modami i ustawieniami. Zacznij od jednej, kolejne przyjdą.',
       friends: 'Dodaj znajomych ich kodem znajomego, by widzieć, w co grają, i dołączać jednym kliknięciem.',
       profile: 'Wybierz baner, kolor i bio, które znajomi zobaczą na twoim profilu.',
@@ -3072,6 +3074,10 @@ export const pl: TranslationSchema = {
       resend: 'Wyślij kod ponownie',
       wrongAccount: 'Nie to konto? Wyloguj się',
     },
+    offline: {
+      title: 'Serwer YuyuFrame nie odpowiada',
+      text: 'Brak połączenia albo serwer jest chwilowo niedostępny: konto YuyuFrame poczeka. Zaproponujemy je, gdy tylko serwer odpowie, a w międzyczasie możesz grać.',
+    },
     microsoft: {
       why: 'Konto Microsoft, na którym jest Minecraft. Hasło wpisujesz u Microsoftu, nigdy tutaj.',
       button: 'Zaloguj przez Microsoft',
@@ -3083,9 +3089,16 @@ export const pl: TranslationSchema = {
       openPage: 'Otwórz ponownie stronę logowania',
       codeHint: 'Wpisz ten kod na stronie Microsoft, która właśnie się otworzyła.',
       connectedAs: 'Zalogowano jako',
+      offlineLink: 'Graj na koncie offline',
+      offlineTitle: 'Konto offline',
+      offlineHint: 'Lokalna nazwa, bez konta Microsoft: do gry w pojedynkę, w sieci lokalnej lub na serwerach w trybie offline. Konto Microsoft możesz dodać później.',
+      offlineCreate: 'Utwórz konto offline',
+      backToMicrosoft: 'Jednak przez Microsoft',
+      microsoftLater: 'Konto Microsoft dodasz na ekranie Konta, gdy będziesz online.',
     },
     instance: {
       defaultName: 'Moja pierwsza instancja',
+      phoneHint: 'Gra jest w aplikacji: na telefonie Minecraft działa na Horizonie, przepisanym tak, by był lekki.',
       name: 'Nazwa',
       latest: 'Najnowsza',
       platform: 'Platforma',

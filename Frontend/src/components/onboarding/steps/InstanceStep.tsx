@@ -6,6 +6,8 @@ import { useLoadersFor } from '@/lib/loaderCompat'
 import { fallbackLoader, offeredLoaders } from '@/lib/loader'
 import { showError } from '@/stores/useErrorToast'
 import { useT } from '@/i18n'
+import { HORIZON_GAME_VERSION, isIosApp, isPhoneApp } from '@/lib/platform'
+import { HorizonIosResources } from '@/components/settings/HorizonIosResources'
 import type { Loader } from '@/types'
 import { Field, Ghost, Item, Primary, Stagger } from '../ui'
 
@@ -25,6 +27,69 @@ const LOADER_NAMES: Record<string, string> = {
  * paramètres ; tout le reste se règle ensuite dans l'instance.
  */
 export function InstanceStep({ onDone, onSkip }: { onDone: () => void; onSkip: () => void }) {
+  // Téléphone : le jeu est dans l'appli, et c'est Horizon en 26.3, rien
+  // d'autre. Pas de version ni de plateforme à choisir.
+  if (isPhoneApp) return <PhoneInstance onDone={onDone} />
+  return <DesktopInstance onDone={onDone} onSkip={onSkip} />
+}
+
+/**
+ * Téléphone (2026-11-28) : un nom, et c'est tout. Sur iPhone, les fichiers
+ * du jeu peuvent se télécharger tout de suite, pendant la suite de l'accueil
+ * (`lib/horizonResources.ts` : le téléchargement survit au changement
+ * d'étape).
+ */
+function PhoneInstance({ onDone }: { onDone: () => void }) {
+  const t = useT()
+  const addInstance = useStore((s) => s.addInstance)
+  const setSelectedInstanceId = useStore((s) => s.setSelectedInstanceId)
+  const defaultRam = useStore((s) => s.defaultRam)
+  const [name, setName] = useState(t('onboarding.instance.defaultName'))
+  const [busy, setBusy] = useState(false)
+
+  const create = async () => {
+    setBusy(true)
+    try {
+      const inst = await api.instances.create(name.trim() || t('onboarding.instance.defaultName'), HORIZON_GAME_VERSION, 'horizon', defaultRam)
+      addInstance(inst)
+      setSelectedInstanceId(inst.id)
+      onDone()
+    } catch (e) {
+      showError(e)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Stagger className="flex flex-col gap-4">
+      <Item>
+        <Field label={t('onboarding.instance.name')} value={name} onChange={setName} maxLength={48} onEnter={() => void create()} />
+      </Item>
+      <Item className="flex items-center gap-3 rounded-2xl border border-[rgb(var(--accent)/0.35)] bg-[rgb(var(--accent)/0.1)] p-3.5">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[rgb(var(--accent)/0.25)] text-[15px] font-black text-[rgb(var(--accent-text))]">
+          {HORIZON_GAME_VERSION}
+        </span>
+        <span className="min-w-0">
+          <span className="block text-[15px] font-bold text-white">Minecraft {HORIZON_GAME_VERSION} · Horizon</span>
+          <span className="block text-[13px] leading-snug text-white/60">{t('onboarding.instance.phoneHint')}</span>
+        </span>
+      </Item>
+      {isIosApp && (
+        <Item>
+          <HorizonIosResources />
+        </Item>
+      )}
+      <Item>
+        <Primary onClick={() => void create()} loading={busy}>
+          {busy ? t('onboarding.instance.creating') : t('onboarding.instance.create')}
+        </Primary>
+      </Item>
+    </Stagger>
+  )
+}
+
+function DesktopInstance({ onDone, onSkip }: { onDone: () => void; onSkip: () => void }) {
   const t = useT()
   const defaultRam = useStore((s) => s.defaultRam)
   const addInstance = useStore((s) => s.addInstance)

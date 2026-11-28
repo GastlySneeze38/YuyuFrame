@@ -40,6 +40,13 @@ export const isIosApp = inTauri && typeof navigator !== 'undefined' && (
  */
 export const isPhoneApp = isAndroidApp || isIosApp
 
+/**
+ * La seule version du jeu qu'une appli téléphone fait tourner : celle
+ * qu'Horizon recrée. **Même valeur que `GAME_VERSION`** de
+ * `Backend/src/minecraft/launcher/horizon/mod.rs` — à changer ensemble.
+ */
+export const HORIZON_GAME_VERSION = '26.3'
+
 export function osName(): string {
   const ua = typeof navigator === 'undefined' ? '' : navigator.userAgent
   if (/Android/i.test(ua)) return 'Android'

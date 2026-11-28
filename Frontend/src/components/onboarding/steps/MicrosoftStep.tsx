@@ -5,25 +5,67 @@ import { useStorePick } from '@/stores/useStore'
 import { openExternal } from '@/lib/openExternal'
 import { useT } from '@/i18n'
 import type { Account } from '@/types'
-import { EASE, Ghost, Item, Primary, Stagger, TextLink } from '../ui'
+import { EASE, Field, Ghost, Item, Primary, Stagger, TextLink } from '../ui'
 
-type Phase = 'idle' | 'starting' | 'waiting' | 'done' | 'error'
+type Phase = 'idle' | 'starting' | 'waiting' | 'done' | 'error' | 'offline'
+
+const USERNAME_RE = /^[A-Za-z0-9_]{1,16}$/
 
 /**
  * Le compte Minecraft, par code d'appareil — le même chemin que l'écran
  * Comptes (`pages/Login.tsx`), sans la fenêtre réduite : ici le code reste
  * en grand au milieu de l'écran pendant qu'on le tape dans le navigateur.
+ *
+ * Plus de « Plus tard » (2026-11-28) : on en sort avec un compte, Microsoft
+ * ou **hors ligne** (un pseudo local, `mc_add_offline`, comme la fenêtre de
+ * l'écran Comptes) — pour jouer seul, en réseau local, ou sans réseau.
+ *
+ * `offlineOnly` : pas d'internet du tout. L'écran de connexion Microsoft
+ * n'est pas montré (il ne pourrait qu'échouer) : l'étape ouvre directement
+ * sur le pseudo hors ligne, sans retour vers Microsoft.
  */
-export function MicrosoftStep({ onDone, onSkip }: { onDone: () => void; onSkip: () => void }) {
+export function MicrosoftStep({ onDone, offlineOnly = false }: { onDone: () => void; offlineOnly?: boolean }) {
   const t = useT()
   const { setAccounts, setUser } = useStorePick('setAccounts', 'setUser')
-  const [phase, setPhase] = useState<Phase>('idle')
+  const [phase, setPhase] = useState<Phase>(offlineOnly ? 'offline' : 'idle')
   const [code, setCode] = useState('')
   const [url, setUrl] = useState('')
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
   const [account, setAccount] = useState<{ name: string; uuid: string } | null>(null)
+  const [offlineName, setOfflineName] = useState('')
+  const [creating, setCreating] = useState(false)
   const poll = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  /** Les comptes relus et le compte actif posé, après une connexion ou un ajout. */
+  const settle = async () => {
+    const accs = await api.mc.accounts()
+    setAccounts(accs.map((a): Account => ({ username: a.mc_username, uuid: a.mc_uuid, is_offline: a.is_offline })))
+    const active = accs.find((a) => a.is_active)
+    if (active) {
+      setUser(active.mc_username, active.mc_uuid, active.is_offline)
+      setAccount({ name: active.mc_username, uuid: active.mc_uuid })
+    }
+    setPhase('done')
+  }
+
+  const createOffline = async () => {
+    if (!USERNAME_RE.test(offlineName) || creating) return
+    setCreating(true)
+    try {
+      const acc = await api.mc.addOffline(offlineName)
+      // Le compte créé devient le compte actif : c'est avec lui qu'on va jouer.
+      await api.mc.switch(acc.mc_uuid).catch(() => {})
+      await settle()
+      // Le compte ajouté n'est pas forcément devenu l'actif : c'est lui qu'on montre.
+      setUser(acc.mc_username, acc.mc_uuid, true)
+      setAccount({ name: acc.mc_username, uuid: acc.mc_uuid })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : typeof e === 'string' ? e : t('login.unknownError'))
+    } finally {
+      setCreating(false)
+    }
+  }
 
   const stop = () => {
     if (poll.current) clearInterval(poll.current)
@@ -53,14 +95,7 @@ export function MicrosoftStep({ onDone, onSkip }: { onDone: () => void; onSkip: 
           const r = await api.auth.poll()
           if (r.status === 'success' && r.username) {
             stop()
-            const accs = await api.mc.accounts()
-            setAccounts(accs.map((a): Account => ({ username: a.mc_username, uuid: a.mc_uuid, is_offline: a.is_offline })))
-            const active = accs.find((a) => a.is_active)
-            if (active) {
-              setUser(active.mc_username, active.mc_uuid, active.is_offline)
-              setAccount({ name: active.mc_username, uuid: active.mc_uuid })
-            }
-            setPhase('done')
+            await settle()
             // Le serveur garde la liste des comptes liés.
             api.yuyu.syncMinecraftAccounts().catch(() => {})
           } else if (r.status === 'error') {
@@ -148,6 +183,44 @@ export function MicrosoftStep({ onDone, onSkip }: { onDone: () => void; onSkip: 
             </Item>
           </Stagger>
         </motion.div>
+      ) : phase === 'offline' ? (
+        <motion.div key="offline" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.4, ease: EASE }}>
+          <Stagger className="flex flex-col gap-4">
+            <Item>
+              <h3 className="text-[16px] font-bold text-white">{t('onboarding.microsoft.offlineTitle')}</h3>
+              <p className="mt-1 text-[12.5px] leading-relaxed text-white/60 max-sm:text-[14px]">{t('onboarding.microsoft.offlineHint')}</p>
+            </Item>
+            <Item>
+              <Field
+                label={t('account.username')}
+                value={offlineName}
+                onChange={(v) => { setOfflineName(v); setError('') }}
+                placeholder="Steve"
+                maxLength={16}
+                autoFocus
+                onEnter={() => void createOffline()}
+              />
+              {offlineName && !USERNAME_RE.test(offlineName) && (
+                <p className="mt-1.5 text-[11.5px] text-red-300/90 max-sm:text-[13px]">{t('account.usernameError')}</p>
+              )}
+              {error && <p className="mt-1.5 text-[11.5px] text-red-300/90 max-sm:text-[13px]">{error}</p>}
+            </Item>
+            <Item>
+              <Primary onClick={() => void createOffline()} disabled={!USERNAME_RE.test(offlineName)} loading={creating}>
+                {t('onboarding.microsoft.offlineCreate')}
+              </Primary>
+            </Item>
+            {offlineOnly ? (
+              <Item>
+                <p className="text-center text-[11.5px] leading-relaxed text-white/45 max-sm:text-[13px]">{t('onboarding.microsoft.microsoftLater')}</p>
+              </Item>
+            ) : (
+              <Item className="flex justify-center">
+                <Ghost onClick={() => { setError(''); setPhase('idle') }}>{t('onboarding.microsoft.backToMicrosoft')}</Ghost>
+              </Item>
+            )}
+          </Stagger>
+        </motion.div>
       ) : (
         <motion.div key="idle" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.4, ease: EASE }}>
           <Stagger className="flex flex-col gap-4">
@@ -166,7 +239,7 @@ export function MicrosoftStep({ onDone, onSkip }: { onDone: () => void; onSkip: 
               </Primary>
             </Item>
             <Item className="flex justify-center">
-              <Ghost onClick={onSkip}>{t('onboarding.later')}</Ghost>
+              <Ghost onClick={() => { setError(''); setPhase('offline') }}>{t('onboarding.microsoft.offlineLink')}</Ghost>
             </Item>
           </Stagger>
         </motion.div>

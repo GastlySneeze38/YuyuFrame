@@ -3077,6 +3077,7 @@ export const fr = {
     headline: {
       account: 'Ton launcher, ton univers.',
       microsoft: 'Relie ton compte Minecraft.',
+      microsoftOffline: 'Choisis ton pseudo.',
       instance: 'Crée ta première instance.',
       friends: 'Joue avec tes amis.',
       profile: 'Fais-toi remarquer.',
@@ -3085,6 +3086,7 @@ export const fr = {
     lead: {
       account: 'Un compte pour retrouver tes instances, tes amis et ta progression sur tous tes appareils.',
       microsoft: 'Connecte le compte Microsoft avec lequel tu as acheté Minecraft pour jouer en ligne.',
+      microsoftOffline: 'Pas de connexion internet : la connexion Microsoft n’est pas possible. Un pseudo hors ligne te permet de jouer dès maintenant.',
       instance: 'Une instance, c’est une version du jeu avec ses propres mods et réglages. Commence par une, tu en feras d’autres.',
       friends: 'Ajoute tes amis avec leur code ami pour voir à quoi ils jouent et les rejoindre en un clic.',
       profile: 'Choisis la bannière, la couleur et la bio que tes amis verront sur ta fiche.',
@@ -3098,6 +3100,10 @@ export const fr = {
       resend: 'Renvoyer le code',
       wrongAccount: 'Pas le bon compte ? Se déconnecter',
     },
+    offline: {
+      title: 'Le serveur YuyuFrame ne répond pas',
+      text: 'Pas de connexion, ou serveur momentanément indisponible : ton compte YuyuFrame attendra. On te le proposera dès qu’il répondra, et tu peux jouer en attendant.',
+    },
     microsoft: {
       why: 'Le compte Microsoft qui possède Minecraft. Ton mot de passe se tape chez Microsoft, jamais ici.',
       button: 'Se connecter avec Microsoft',
@@ -3109,9 +3115,16 @@ export const fr = {
       openPage: 'Rouvrir la page de connexion',
       codeHint: 'Tape ce code sur la page Microsoft qui vient de s’ouvrir.',
       connectedAs: 'Connecté en tant que',
+      offlineLink: 'Jouer avec un compte hors ligne',
+      offlineTitle: 'Compte hors ligne',
+      offlineHint: 'Un pseudo local, sans compte Microsoft : pour jouer seul, en réseau local ou sur les serveurs en mode hors ligne. Tu pourras ajouter ton compte Microsoft plus tard.',
+      offlineCreate: 'Créer le compte hors ligne',
+      backToMicrosoft: 'Plutôt avec Microsoft',
+      microsoftLater: 'Tu pourras ajouter ton compte Microsoft depuis l’écran Comptes une fois connecté à internet.',
     },
     instance: {
       defaultName: 'Ma première instance',
+      phoneHint: 'Le jeu est dans l’appli : sur téléphone, Minecraft tourne avec Horizon, réécrit pour être léger.',
       name: 'Nom',
       latest: 'Dernière',
       platform: 'Plateforme',

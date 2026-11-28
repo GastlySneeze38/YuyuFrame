@@ -3050,6 +3050,7 @@ export const en: TranslationSchema = {
     headline: {
       account: 'Your launcher, your world.',
       microsoft: 'Link your Minecraft account.',
+      microsoftOffline: 'Pick your username.',
       instance: 'Create your first instance.',
       friends: 'Play with your friends.',
       profile: 'Make yourself stand out.',
@@ -3058,6 +3059,7 @@ export const en: TranslationSchema = {
     lead: {
       account: 'One account to find your instances, friends and progress on all your devices.',
       microsoft: 'Sign in with the Microsoft account you bought Minecraft with to play online.',
+      microsoftOffline: 'No internet connection: signing in with Microsoft isn’t possible. An offline username lets you play right now.',
       instance: 'An instance is a version of the game with its own mods and settings. Start with one, you’ll make more.',
       friends: 'Add your friends with their friend code to see what they’re playing and join them in one click.',
       profile: 'Pick the banner, color and bio your friends will see on your profile.',
@@ -3071,6 +3073,10 @@ export const en: TranslationSchema = {
       resend: 'Resend the code',
       wrongAccount: 'Wrong account? Sign out',
     },
+    offline: {
+      title: 'The YuyuFrame server isn’t responding',
+      text: 'No connection, or the server is briefly unavailable: your YuyuFrame account will wait. We’ll offer it again as soon as the server responds, and you can play in the meantime.',
+    },
     microsoft: {
       why: 'The Microsoft account that owns Minecraft. Your password is typed on Microsoft’s page, never here.',
       button: 'Sign in with Microsoft',
@@ -3082,9 +3088,16 @@ export const en: TranslationSchema = {
       openPage: 'Reopen the sign-in page',
       codeHint: 'Type this code on the Microsoft page that just opened.',
       connectedAs: 'Signed in as',
+      offlineLink: 'Play with an offline account',
+      offlineTitle: 'Offline account',
+      offlineHint: 'A local username, without a Microsoft account: to play alone, on a local network or on offline-mode servers. You can add your Microsoft account later.',
+      offlineCreate: 'Create the offline account',
+      backToMicrosoft: 'Use Microsoft instead',
+      microsoftLater: 'You can add your Microsoft account from the Accounts screen once you’re online.',
     },
     instance: {
       defaultName: 'My first instance',
+      phoneHint: 'The game is inside the app: on phones, Minecraft runs on Horizon, rewritten to be lightweight.',
       name: 'Name',
       latest: 'Latest',
       platform: 'Platform',

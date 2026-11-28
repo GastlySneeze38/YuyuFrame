@@ -115,6 +115,10 @@ interface ModalQueueStore {
   close: () => void
   /** Remet la mémoire à zéro (réglages → « revoir les messages »). */
   forgetAll: () => void
+  /** Retient une clé comme vue sans rien afficher : ce qui n'a pas de sens
+   *  pour quelqu'un qui vient d'installer l'appli (notes de la version qu'il
+   *  vient justement de télécharger). */
+  markSeen: (key: string) => void
 }
 
 export const useModalQueue = create<ModalQueueStore>()(
@@ -166,6 +170,11 @@ export const useModalQueue = create<ModalQueueStore>()(
       },
 
       forgetAll: () => set({ seen: [], seenNow: [] }),
+
+      markSeen: (key) => {
+        const { seen } = get()
+        if (!seen.includes(key)) set({ seen: [...seen, key] })
+      },
     }),
     {
       name: 'yuyu-modal-queue',

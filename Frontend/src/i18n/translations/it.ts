@@ -3050,6 +3050,7 @@ export const it: TranslationSchema = {
     headline: {
       account: 'Il tuo launcher, il tuo mondo.',
       microsoft: 'Collega il tuo account Minecraft.',
+      microsoftOffline: 'Scegli il tuo nome.',
       instance: 'Crea la tua prima istanza.',
       friends: 'Gioca con i tuoi amici.',
       profile: 'Fatti notare.',
@@ -3058,6 +3059,7 @@ export const it: TranslationSchema = {
     lead: {
       account: 'Un account per ritrovare istanze, amici e progressi su tutti i tuoi dispositivi.',
       microsoft: 'Accedi con l’account Microsoft con cui hai comprato Minecraft per giocare online.',
+      microsoftOffline: 'Nessuna connessione a internet: l’accesso con Microsoft non è possibile. Un nome offline ti permette di giocare subito.',
       instance: 'Un’istanza è una versione del gioco con mod e impostazioni proprie. Inizia con una, ne farai altre.',
       friends: 'Aggiungi i tuoi amici con il loro codice amico per vedere a cosa giocano e raggiungerli con un clic.',
       profile: 'Scegli il banner, il colore e la bio che i tuoi amici vedranno sul tuo profilo.',
@@ -3071,6 +3073,10 @@ export const it: TranslationSchema = {
       resend: 'Invia di nuovo il codice',
       wrongAccount: 'Account sbagliato? Esci',
     },
+    offline: {
+      title: 'Il server di YuyuFrame non risponde',
+      text: 'Nessuna connessione, o server momentaneamente non disponibile: il tuo account YuyuFrame aspetterà. Te lo riproporremo appena risponde, e intanto puoi giocare.',
+    },
     microsoft: {
       why: 'L’account Microsoft che possiede Minecraft. La password si inserisce da Microsoft, mai qui.',
       button: 'Accedi con Microsoft',
@@ -3082,9 +3088,16 @@ export const it: TranslationSchema = {
       openPage: 'Riapri la pagina di accesso',
       codeHint: 'Inserisci questo codice nella pagina Microsoft appena aperta.',
       connectedAs: 'Connesso come',
+      offlineLink: 'Gioca con un account offline',
+      offlineTitle: 'Account offline',
+      offlineHint: 'Un nome locale, senza account Microsoft: per giocare da solo, in rete locale o sui server in modalità offline. Potrai aggiungere il tuo account Microsoft più tardi.',
+      offlineCreate: 'Crea l’account offline',
+      backToMicrosoft: 'Meglio con Microsoft',
+      microsoftLater: 'Potrai aggiungere il tuo account Microsoft dalla schermata Account quando sarai online.',
     },
     instance: {
       defaultName: 'La mia prima istanza',
+      phoneHint: 'Il gioco è dentro l’app: sul telefono, Minecraft gira con Horizon, riscritto per essere leggero.',
       name: 'Nome',
       latest: 'Ultima',
       platform: 'Piattaforma',

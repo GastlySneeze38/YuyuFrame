@@ -22,6 +22,7 @@ import { useStore, type Lang } from '@/stores/useStore'
 import { background, politeInterval } from '@/lib/netQueue'
 import { ipLanguage, systemLanguage } from '@/i18n/detect'
 import { useModalQueue } from '@/stores/useModalQueue'
+import { accountPending, serverReachable, setAccountPending } from '@/lib/onboardingAccount'
 import { useSupportWatch, POLL_MS as SUPPORT_POLL_MS } from '@/stores/useSupportWatch'
 import { useCrashWatch } from '@/stores/useCrashWatch'
 import { listenFriendEvents, useFriends } from '@/stores/useFriends'
@@ -221,6 +222,10 @@ export default function App() {
   const [onboarding, setOnboarding] = useState(
     () => !isConsoleWindow && !useStore.getState().yuyuSignedIn && !useStore.getState().uuid,
   )
+  // Ce lancement ouvre sur l'accueil : appli tout juste installée (ou plus
+  // aucun compte). Les messages faits pour ceux qui avaient déjà l'appli —
+  // notes de version, « reconnecte-toi » — n'ont rien à lui dire.
+  const firstRunRef = useRef(onboarding)
   // Ouvert par Ctrl+Maj+O (développement) : toutes les étapes, même faites.
   const [onboardingPreview, setOnboardingPreview] = useState(false)
   useEffect(() => {
@@ -234,6 +239,30 @@ export default function App() {
   const pushModal = useModalQueue((s) => s.push)
   const navigate = useNavigate()
   const yuyuSignedIn = useStore((s) => s.yuyuSignedIn)
+
+  // Compte YuyuFrame laissé en attente faute de serveur (`lib/onboardingAccount`) :
+  // l'accueil revient le proposer dès que le serveur répond — au lancement,
+  // puis toutes les deux minutes tant que l'appli tourne.
+  useEffect(() => {
+    if (isConsoleWindow || onboarding || yuyuSignedIn) return
+    if (!accountPending()) return
+    let stopped = false
+    const probe = () => {
+      void serverReachable().then((up) => {
+        if (up && !stopped && !useStore.getState().yuyuSignedIn) setOnboarding(true)
+      })
+    }
+    probe()
+    const timer = window.setInterval(probe, 2 * 60_000)
+    return () => {
+      stopped = true
+      window.clearInterval(timer)
+    }
+  }, [onboarding, yuyuSignedIn])
+  useEffect(() => {
+    if (yuyuSignedIn) setAccountPending(false)
+  }, [yuyuSignedIn])
+
   const refreshSupportWatch = useSupportWatch((s) => s.refresh)
   const clearSupportWatch = useSupportWatch((s) => s.clear)
   const refreshCrashWatch = useCrashWatch((s) => s.refresh)
@@ -552,14 +581,19 @@ export default function App() {
     // se croit connecté le temps de s'en apercevoir, et la déconnexion
     // arriverait par un message d'erreur au lieu d'une explication. Marqué
     // avant le reste, pour la même raison que la ligne du dessus.
-    const { yuyuAuthVersion, setYuyuAuthVersion, clearYuyuSession } = useStore.getState()
+    const { yuyuAuthVersion, setYuyuAuthVersion, clearYuyuSession, yuyuSignedIn: hadSession } = useStore.getState()
     if (yuyuAuthVersion < YUYU_AUTH_VERSION) {
       setYuyuAuthVersion(YUYU_AUTH_VERSION)
-      clearYuyuSession()
-      // Côté Rust : oublie le jeton (coffre du système compris). L'appel de
-      // fermeture au serveur échouera sur une session déjà fermée, c'est prévu.
-      api.yuyu.logout().catch(() => {})
-      pushModal({ kind: 'yuyuReconnect', key: `yuyu-reconnect-${YUYU_AUTH_VERSION}`, data: null })
+      // Seulement pour qui AVAIT une session : une appli tout juste installée
+      // part aussi de 0 et n'a jamais été connectée, lui dire « tu as été
+      // déconnecté » serait faux (corrigé le 2026-11-28).
+      if (hadSession) {
+        clearYuyuSession()
+        // Côté Rust : oublie le jeton (coffre du système compris). L'appel de
+        // fermeture au serveur échouera sur une session déjà fermée, c'est prévu.
+        api.yuyu.logout().catch(() => {})
+        pushModal({ kind: 'yuyuReconnect', key: `yuyu-reconnect-${YUYU_AUTH_VERSION}`, data: null })
+      }
     }
     api.mc.accounts()
       .then((accs) => {
@@ -644,6 +678,13 @@ export default function App() {
       api.patchNotes.latest()
         .then((note) => {
           if (!note) return
+          // Appli tout juste installée : ces notes sont celles de la version
+          // qu'on vient de télécharger. Retenues comme lues, sans les montrer ;
+          // la suivante s'affichera normalement.
+          if (firstRunRef.current) {
+            useModalQueue.getState().markSeen(`patch-note-${note.id}`)
+            return
+          }
           pushModal({
             kind: 'patchNotes',
             key: `patch-note-${note.id}`,
