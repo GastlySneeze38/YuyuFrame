@@ -29,12 +29,14 @@ import { useDemo } from '@/stores/useDevFlags'
 import { demoFriends } from '@/lib/friendsDemo'
 import { demoData as competitiveDemo } from '@/lib/competitive'
 import { api } from '@/api/client'
-import { showError } from '@/stores/useErrorToast'
+import { showError, showNotice } from '@/stores/useErrorToast'
+import { t } from '@/i18n'
 import { AUTH_SYSTEM_VERSION, YUYU_AUTH_VERSION } from '@/config/authVersion'
 import { useTauriEvent } from '@/hooks/useTauriEvent'
 import { parseFriendUrl, parseInviteUrl, parseJoinUrl } from '@/lib/joinLink'
 import { inTauri } from '@/lib/platform'
 import { startHeadPreload } from '@/lib/headPreload'
+import { isLinkUrl, parseLinkCode, pushLinkCode } from '@/lib/deviceLink'
 import { matches as isMobileNow, useIsMobile } from '@/mobile/useIsMobile'
 import { finishSplash, splashActive, useSplashGone, useSplashRevealed } from '@/lib/bootSplash'
 import { DRAWER_ROOTS, NavDrawer } from '@/mobile/ui/NavDrawer'
@@ -246,6 +248,18 @@ export default function App() {
   // fenêtre de la même sorte est ouverte s'ajoute aux précédentes (le champ
   // `ShareLinkInput` compte ce qu'il a et ce qui manque).
   const handleDeepLink = (url: string) => {
+    // Le QR code d'un appareil déjà connecté (`yuyuframe://link/…`) : sans
+    // compte, l'écran d'accueil s'ouvre et s'en sert pour se connecter.
+    if (isLinkUrl(url)) {
+      const code = parseLinkCode(url)
+      if (!code) return
+      if (useStore.getState().yuyuSignedIn) showNotice(t('onboarding.link.alreadySignedIn'))
+      else {
+        setOnboarding(true)
+        pushLinkCode(code)
+      }
+      return
+    }
     const kind = shareLinkKind(url)
     // Un skin ne s'ouvre pas dans une fenêtre d'ici : il part dans l'éditeur,
     // qui le propose comme base de dessin (`lib/skinLink.ts`). Si l'éditeur

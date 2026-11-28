@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { api, type YuyuEmailResp } from '@/api/client'
 import { useStore } from '@/stores/useStore'
@@ -6,12 +6,20 @@ import { showApiError, showNotice } from '@/stores/useErrorToast'
 import { useYuyuAuth } from '@/components/account/useYuyuAuth'
 import { PrivacyModal } from '@/components/legal/PrivacyModal'
 import { useT } from '@/i18n'
+import { useIsMobile } from '@/mobile/useIsMobile'
+import { onLinkCode } from '@/lib/deviceLink'
+import { CodeEntry, QuickLinkButtons } from './QuickLink'
 import { EASE, Field, Ghost, Item, Primary, Stagger, TextLink } from '../ui'
 
 /**
  * Le compte YuyuFrame : connexion ou inscription (même logique que `/yuyu`,
  * `useYuyuAuth`), puis la confirmation de l'e-mail sur place — la fenêtre
  * imposée d'App.tsx se tait tant que cet écran est là.
+ *
+ * Au-dessus du formulaire, la voie rapide : le code d'un appareil déjà
+ * connecté (tapé, ou scanné en QR code sur téléphone), qui évite mot de
+ * passe et second facteur. Un lien `yuyuframe://link/…` ouvert pendant que
+ * l'écran est là se connecte tout seul.
  */
 export function AccountStep({ onDone, onSkip }: { onDone: () => void; onSkip: () => void }) {
   const t = useT()
@@ -26,8 +34,18 @@ export function AccountStep({ onDone, onSkip }: { onDone: () => void; onSkip: ()
     },
   })
   const { mode, isRegister, isForgot, isReset, isMfa, isRecovery } = auth
+  const mobile = useIsMobile()
+  // La saisie du code d'un autre appareil, à la place du formulaire.
+  const [byCode, setByCode] = useState(false)
+
+  // Un lien de connexion ouvert (cliqué, collé dans la barre…) : on s'en sert.
+  useEffect(() => onLinkCode((code) => void auth.redeemLink(code)), [auth.redeemLink])
 
   if (signedIn && needsEmail) return <VerifyEmail onDone={onDone} />
+
+  if (byCode) {
+    return <CodeEntry busy={auth.loading} onSubmit={auth.redeemLink} onBack={() => setByCode(false)} />
+  }
 
   if (mode === 'checking') {
     return (
@@ -56,6 +74,17 @@ export function AccountStep({ onDone, onSkip }: { onDone: () => void; onSkip: ()
       onSubmit={(e) => { e.preventDefault(); void auth.submit() }}
       className="flex flex-col gap-4"
     >
+      {!isRecovery && (
+        <>
+          <QuickLinkButtons mobile={mobile} onCode={() => setByCode(true)} onScanned={(code) => void auth.redeemLink(code)} />
+          <div className="flex items-center gap-3 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-white/35">
+            <span className="h-px flex-1 bg-white/10" />
+            {t('onboarding.link.or')}
+            <span className="h-px flex-1 bg-white/10" />
+          </div>
+        </>
+      )}
+
       {/* Connexion ↔ inscription : un onglet coulissant, le formulaire
           garde sa place et seuls les champs qui changent entrent/sortent. */}
       {!isRecovery ? (

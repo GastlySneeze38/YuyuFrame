@@ -182,6 +182,24 @@ export function useYuyuAuth({ asked, onSignedIn }: { asked?: string | null; onSi
     }
   }
 
+  /**
+   * Connexion par le code d'un autre appareil déjà connecté (tapé, collé ou
+   * scanné : `lib/deviceLink.ts`). Pas de mot de passe ni de second facteur,
+   * l'autre appareil les a passés. Rend `false` si le code est refusé.
+   */
+  const redeemLink = async (linkCode: string): Promise<boolean> => {
+    setLoading(true)
+    try {
+      finish(await api.yuyu.linkRedeem(linkCode))
+      return true
+    } catch (err) {
+      showApiError(err, t('common.serverUnreachable'))
+      return false
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const resendMfa = async () => {
     if (!mfa) return
     try {
@@ -223,7 +241,7 @@ export function useYuyuAuth({ asked, onSignedIn }: { asked?: string | null; onSi
     username, setUsername, password, setPassword, confirm, setConfirm,
     email, setEmail, code, setCode, mfa, loading,
     acceptPrivacy, setAcceptPrivacy,
-    submit, resendMfa,
+    submit, resendMfa, redeemLink,
     isRegister, isForgot, isReset, isMfa, isRecovery, canSubmit,
   }
 }

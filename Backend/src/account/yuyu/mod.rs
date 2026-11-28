@@ -15,6 +15,7 @@
 
 pub mod devices;
 pub mod email;
+pub mod link;
 pub mod password;
 pub mod profile;
 pub mod session;

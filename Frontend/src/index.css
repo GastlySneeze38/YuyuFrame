@@ -642,6 +642,12 @@ body {
   pointer-events: none;
 }
 
+/* Le temps qui reste à un code de connexion (LinkDeviceModal). */
+@keyframes link-countdown {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ob-drift, .ob-particle, .ob-sheen::after { animation: none; }
   .ob-particle { display: none; }

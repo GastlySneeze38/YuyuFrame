@@ -76,6 +76,9 @@ pub fn run() {
         .plugin(minecraft::launcher::horizon::android::init())
         // La page de connexion Microsoft dans l'appli (Kotlin `SignInPlugin`).
         .plugin(account::minecraft::sign_in_page::android::init());
+    // Le QR code de connexion d'un autre appareil (écran d'accueil).
+    #[cfg(mobile)]
+    let builder = builder.plugin(tauri_plugin_barcode_scanner::init());
     builder
         .plugin(tauri_plugin_deep_link::init())
         // Les liens externes, sur PC comme sur téléphone (`lib/openExternal.ts`).

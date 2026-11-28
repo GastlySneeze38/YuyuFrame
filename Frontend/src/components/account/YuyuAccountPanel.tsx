@@ -11,6 +11,7 @@ import { PlanBadge } from '@/components/plans/PlanBadge'
 import { PasswordChangeModal } from '@/components/account/PasswordChangeModal'
 import { EmailVerifyModal } from '@/components/account/EmailVerifyModal'
 import { TotpModal } from '@/components/account/TotpModal'
+import { LinkDeviceModal } from '@/components/account/LinkDeviceModal'
 import { StepUpField } from '@/components/account/StepUpField'
 import { showApiError, showNotice } from '@/stores/useErrorToast'
 import { errorMessage } from '@/lib/apiError'
@@ -39,6 +40,8 @@ export function YuyuAccountPanel() {
   } = useStorePick('yuyuSignedIn', 'yuyuUsername', 'yuyuEmail', 'yuyuPlan', 'yuyuPlanExpiresAt', 'yuyuLicenseState', 'clearYuyuSession')
   const [section, setSection] = useState<'email' | 'devices' | null>(null)
   const [showPassword, setShowPassword] = useState(false)
+  // Un code (QR et texte) pour connecter un autre appareil sans mot de passe.
+  const [showLink, setShowLink] = useState(false)
   const [showVerify, setShowVerify] = useState(false)
   const verificationRequired = useStore((s) => s.yuyuEmailVerificationRequired)
   const passwordProvisional = useStore((s) => s.yuyuPasswordResetRequired)
@@ -219,6 +222,20 @@ export function YuyuAccountPanel() {
           </motion.div>
         )}
 
+        {/* Connecter un autre appareil : QR code pour le téléphone, code à
+            taper sur un PC (écran d'accueil, étape du compte). */}
+        <motion.div variants={listItemVariants}>
+          <Row
+            label={t('linkDevice.row')}
+            value={t('linkDevice.rowHint')}
+            action={
+              <Button size="sm" onClick={() => setShowLink(true)}>
+                {t('linkDevice.show')}
+              </Button>
+            }
+          />
+        </motion.div>
+
         {/* Appareils connectés */}
         <motion.div variants={listItemVariants}>
           <Row
@@ -238,6 +255,7 @@ export function YuyuAccountPanel() {
 
       <AnimatePresence>
         {showPassword && <PasswordChangeModal onClose={() => setShowPassword(false)} />}
+        {showLink && <LinkDeviceModal onClose={() => setShowLink(false)} />}
         {/* Changement d'adresse en cours, ou confirmation demandée depuis
             l'avertissement ci-dessus. Tant que le compte n'a aucune adresse
             confirmée, la fenêtre garde ses sorties du mode imposé (changer

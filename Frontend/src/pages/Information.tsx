@@ -4,6 +4,8 @@ import { osName } from '@/lib/platform'
 import { openExternal as open } from '@/lib/openExternal'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { useT } from '@/i18n'
+import { useStore } from '@/stores/useStore'
+import { LinkDeviceModal } from '@/components/account/LinkDeviceModal'
 
 const FORGE_PATREON_URL = 'https://www.patreon.com/LexManos'
 const WEBSITE_URL = 'https://yuyuframe.eu'
@@ -27,6 +29,8 @@ export default function Information() {
     t('information.feature4'),
   ]
   const [info, setInfo] = useState<AppInfo | null>(null)
+  const signedIn = useStore((s) => s.yuyuSignedIn)
+  const [showLink, setShowLink] = useState(false)
 
   useEffect(() => {
     Promise.all([getName(), getVersion(), getTauriVersion()])
@@ -72,6 +76,33 @@ export default function Information() {
               </div>
             )}
           </div>
+
+          {/* L'autre appareil : connecté ici, on connecte le téléphone (ou un
+              autre PC) d'un scan, sans mot de passe. */}
+          <div className="flex items-center gap-4 rounded-2xl border border-white/[0.07] bg-white/[0.025] p-4 max-sm:flex-col max-sm:items-stretch">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[rgb(var(--accent)/0.18)] text-[rgb(var(--accent-text))] max-sm:hidden">
+              <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="7" y="2.5" width="10" height="19" rx="2.5" />
+                <path d="M11 18.5h2" />
+              </svg>
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[14px] font-bold text-white max-sm:text-[16px]">{t('linkDevice.infoTitle')}</p>
+              <p className="mt-0.5 text-[12px] leading-relaxed text-white/50 max-sm:text-[14px]">
+                {signedIn ? t('linkDevice.infoText') : t('linkDevice.infoSignIn')}
+              </p>
+            </div>
+            {signedIn && (
+              <button
+                type="button"
+                onClick={() => setShowLink(true)}
+                className="shrink-0 rounded-xl bg-[rgb(var(--accent))] px-4 py-2.5 text-[13px] font-bold text-white transition-transform duration-150 active:scale-[0.97] max-sm:h-12 max-sm:text-[15px]"
+              >
+                {t('linkDevice.show')}
+              </button>
+            )}
+          </div>
+          {showLink && <LinkDeviceModal onClose={() => setShowLink(false)} />}
 
           {/* Version détails */}
           {info && (

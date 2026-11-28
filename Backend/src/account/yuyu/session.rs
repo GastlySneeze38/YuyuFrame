@@ -118,6 +118,16 @@ pub async fn yuyu_mfa_verify(state: tauri::State<'_, SharedState>, mfa_token: St
     finish_sign_in(&state, &value).await
 }
 
+/// Connexion par le code d'un autre appareil déjà connecté (`link.rs`) : ni
+/// mot de passe ni second facteur, l'autre appareil les a déjà passés.
+/// Tirets et espaces du code sont ignorés par le serveur.
+#[tauri::command]
+pub async fn yuyu_link_redeem(state: tauri::State<'_, SharedState>, code: String) -> Result<SessionResp, String> {
+    let body = json!({ "code": code, "device": api::device_info() });
+    let value = api::post_public(&state, "/auth/link", body).await?;
+    finish_sign_in(&state, &value).await
+}
+
 /// Renvoie le code de connexion par e-mail.
 #[tauri::command]
 pub async fn yuyu_mfa_resend(state: tauri::State<'_, SharedState>, mfa_token: String) -> Result<(), String> {

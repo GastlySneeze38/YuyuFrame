@@ -33,6 +33,19 @@ export interface YuyuSessionResp {
 }
 
 /** État de l'e-mail du compte, tel que le serveur vient de le dire. */
+export interface LinkCode {
+  id: string
+  code: string
+  expires_in: number
+}
+
+export interface LinkStatus {
+  status: 'pending' | 'used' | 'expired'
+  session_id: string | null
+  device_name: string | null
+  os: string | null
+}
+
 export interface YuyuEmailResp {
   email: string | null
   verification_required: boolean
@@ -640,6 +653,13 @@ export const api = {
       invoke<void>('yuyu_reset_password', { login, code, newPassword }),
     listDevices: () => invoke<YuyuDevice[]>('yuyu_list_devices'),
     revokeDevice: (id: string) => invoke<void>('yuyu_revoke_device', { id }),
+    /** Connecter un autre appareil : un code de 5 minutes, à usage unique
+     *  (`components/account/LinkDeviceModal.tsx`). */
+    linkCreate: () => invoke<LinkCode>('yuyu_link_create'),
+    linkStatus: (id: string) => invoke<LinkStatus>('yuyu_link_status', { id }),
+    linkCancel: (id: string) => invoke<void>('yuyu_link_cancel', { id }),
+    /** Se connecter avec le code (ou le lien `yuyuframe://link/…`) d'un autre appareil. */
+    linkRedeem: (code: string) => invoke<YuyuSessionResp>('yuyu_link_redeem', { code }),
     /** Après ajout/retrait d'un compte Minecraft (sert au support). */
     syncMinecraftAccounts: () => invoke<void>('yuyu_sync_minecraft_accounts'),
   },

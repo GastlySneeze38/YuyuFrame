@@ -5,6 +5,10 @@
   "platforms": ["android", "iOS"],
   "windows": ["main"],
   "permissions": [
-    "notification:allow-is-permission-granted"
+    "notification:allow-is-permission-granted",
+    "barcode-scanner:allow-scan",
+    "barcode-scanner:allow-cancel",
+    "barcode-scanner:allow-check-permissions",
+    "barcode-scanner:allow-request-permissions"
   ]
 }
