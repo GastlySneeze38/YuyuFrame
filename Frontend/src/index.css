@@ -477,6 +477,39 @@ body {
   background: rgb(var(--border) / 0.8);
 }
 
+/* La colonne du compte YuyuFrame (écran Compte, `pages/Login.tsx`) : ses
+   cartes ont leur propre bord, une barre de 8 px collée contre elles et
+   courant jusqu'aux coins faisait tache. Ici seulement : une fine pilule
+   discrète, détachée des cartes (`pr-2.5` sur la colonne), qui s'arrête
+   avant le haut et le bas et ne s'affirme qu'au survol. La place est
+   réservée (`scrollbar-gutter`) : déplier les appareils ne décale rien. */
+.account-scroll {
+  scrollbar-gutter: stable;
+}
+.account-scroll::-webkit-scrollbar {
+  width: 10px;
+}
+.account-scroll::-webkit-scrollbar-track {
+  background: transparent;
+  margin-block: 12px;
+}
+.account-scroll::-webkit-scrollbar-thumb {
+  /* 4 px visibles : la bordure transparente mange le reste. */
+  border: 3px solid transparent;
+  background: rgb(255 255 255 / 0.1);
+  background-clip: padding-box;
+  border-radius: 999px;
+}
+.account-scroll:hover::-webkit-scrollbar-thumb {
+  background: rgb(255 255 255 / 0.18);
+  background-clip: padding-box;
+}
+.account-scroll::-webkit-scrollbar-thumb:hover,
+.account-scroll::-webkit-scrollbar-thumb:active {
+  background: rgb(var(--accent) / 0.55);
+  background-clip: padding-box;
+}
+
 /* Sur un écran tactile, aucune barre de défilement : aucune appli mobile
    n'en montre, on fait défiler au doigt. Le défilement, lui, reste. */
 @media (hover: none) and (pointer: coarse) {

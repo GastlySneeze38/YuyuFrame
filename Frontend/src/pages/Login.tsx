@@ -483,7 +483,7 @@ if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
           </div>
           {/* Tout tient sans défilement une fois replié ; déplier les
               appareils peut demander un peu de place, d'où le `min-h-0`. */}
-          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto pr-0.5">
+          <div className="account-scroll flex min-h-0 flex-1 flex-col overflow-y-auto pr-2.5">
             <YuyuAccountPanel />
           </div>
         </motion.div>
