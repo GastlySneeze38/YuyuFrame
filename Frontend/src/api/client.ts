@@ -1166,6 +1166,9 @@ export const api = {
     iosResourcesExport: (path: string) => invoke<number>('horizon_ios_resources_export', { path }),
     iosResourcesStatus: () => invoke<boolean>('horizon_ios_resources_status'),
     iosResourcesImport: (path: string) => invoke<void>('horizon_ios_resources_import', { path }),
+    /** Télécharge et installe les fichiers du jeu depuis le serveur (iPhone),
+     *  progression par l'événement `horizon_resources_progress`. */
+    iosResourcesDownload: () => invoke<void>('horizon_ios_resources_download'),
   },
 
   /** Horizon sur téléphone, par l'API du moteur (`horizon/engine.rs`) : les

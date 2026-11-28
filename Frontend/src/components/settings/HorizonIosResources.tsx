@@ -4,6 +4,9 @@ import { api } from '@/api/client'
 import { showError } from '@/stores/useErrorToast'
 import { formatBytes } from '@/lib/format'
 import { isAndroidApp, isIosApp } from '@/lib/platform'
+import { useHorizonResources } from '@/lib/horizonResources'
+import { useStore } from '@/stores/useStore'
+import { ModalShell } from '@/components/ui/ModalShell'
 import { useT } from '@/i18n'
 
 /**
@@ -56,36 +59,109 @@ function DesktopExport() {
   )
 }
 
+/**
+ * iPhone (2026-11-28) : les fichiers se **téléchargent** depuis notre serveur
+ * (`lib/horizonResources.ts`), compte YuyuFrame connecté. L'importation d'un
+ * zip exporté depuis un PC reste, en secours (pas de réseau, serveur sans
+ * zip pour cette version).
+ */
 function IosImport() {
   const t = useT()
-  const [ready, setReady] = useState<boolean | null>(null)
-  const [busy, setBusy] = useState(false)
-  useEffect(() => { api.horizon.iosResourcesStatus().then(setReady).catch(() => {}) }, [])
+  const { ready, refresh } = useHorizonResources()
+  const [importing, setImporting] = useState(false)
+  useEffect(() => { void refresh() }, [refresh])
   const importFiles = async () => {
     const picked = await openDialog({ multiple: false, filters: [{ name: 'Zip', extensions: ['zip'] }] }).catch(() => null)
     if (!picked || Array.isArray(picked)) return
-    setBusy(true)
+    setImporting(true)
     try {
       await api.horizon.iosResourcesImport(picked)
-      setReady(true)
+      useHorizonResources.setState({ ready: true })
     } catch (e) {
       showError(e)
     } finally {
-      setBusy(false)
+      setImporting(false)
     }
   }
   return (
     <div className={BOX}>
       <p className="text-sm font-medium text-white">{t('horizonEngine.iosResources.importTitle')}</p>
-      <p className="text-[11px] text-white/40">{t('horizonEngine.iosResources.importDesc')}</p>
+      <p className="text-[11px] text-white/40">{t('horizonEngine.iosResources.downloadDesc')}</p>
       {ready !== null && (
         <p className={`text-[11px] ${ready ? 'text-[rgba(134,239,172,0.85)]' : 'text-white/55'}`}>
           {ready ? t('horizonEngine.iosResources.ready') : t('horizonEngine.iosResources.missing')}
         </p>
       )}
-      <button onClick={importFiles} disabled={busy} className={BUTTON}>
-        {busy ? t('horizonEngine.iosResources.importing') : t('horizonEngine.iosResources.importButton')}
+      <DownloadButton />
+      <button onClick={importFiles} disabled={importing} className={BUTTON}>
+        {importing ? t('horizonEngine.iosResources.importing') : t('horizonEngine.iosResources.importFile')}
       </button>
     </div>
+  )
+}
+
+/** Le bouton de téléchargement, ou sa progression tant qu'il tourne. */
+function DownloadButton({ onDone }: { onDone?: () => void }) {
+  const t = useT()
+  const signedIn = useStore((s) => s.yuyuSignedIn)
+  const { ready, downloading, progress, download } = useHorizonResources()
+  if (!signedIn) return <p className="text-[12px] text-white/55">{t('horizonEngine.iosResources.needSignIn')}</p>
+  if (downloading) {
+    const ratio = progress && progress.total > 0 ? Math.min(1, progress.done / progress.total) : null
+    return (
+      <div className="flex flex-col gap-1.5">
+        <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+          <div
+            className="h-full rounded-full bg-[rgb(var(--accent))] transition-[width] duration-300"
+            style={{ width: `${(ratio ?? 0) * 100}%` }}
+          />
+        </div>
+        <p className="text-[11px] tabular-nums text-white/55">
+          {ratio === null
+            ? t('horizonEngine.iosResources.downloadStarting')
+            : ratio < 1
+              ? t('horizonEngine.iosResources.downloading', { done: formatBytes(progress!.done), total: formatBytes(progress!.total) })
+              : t('horizonEngine.iosResources.importing')}
+        </p>
+      </div>
+    )
+  }
+  return (
+    <button
+      onClick={async () => { if (await download()) onDone?.() }}
+      className="self-stretch rounded-xl bg-[rgb(var(--accent))] px-4 py-2.5 text-[14px] font-semibold text-white transition-transform duration-150 active:scale-[0.98]"
+    >
+      {ready ? t('horizonEngine.iosResources.redownload') : t('horizonEngine.iosResources.downloadButton')}
+    </button>
+  )
+}
+
+/**
+ * Ouverte au lancement d'une instance Horizon sans fichiers (iPhone,
+ * `useMobileLaunch`) : les télécharger, puis le jeu démarre tout seul. Posée
+ * une fois, avec les événements du lancement (`NavDrawer`).
+ */
+export function HorizonResourcesSheet({ onReady }: { onReady: (instanceId: string, server?: string) => void }) {
+  const t = useT()
+  const { pending, dismiss, downloading } = useHorizonResources()
+  if (!pending || !isIosApp) return null
+  return (
+    <ModalShell title={t('horizonEngine.iosResources.importTitle')} onClose={dismiss}>
+      <div className="flex flex-col gap-3">
+        <p className="text-[14px] leading-relaxed text-white/70">{t('horizonEngine.iosResources.downloadDesc')}</p>
+        <p className="text-[12px] text-white/45">{t('horizonEngine.iosResources.launchAfter')}</p>
+        <DownloadButton
+          onDone={() => {
+            dismiss()
+            onReady(pending.instanceId, pending.server)
+          }}
+        />
+        {!downloading && (
+          <button onClick={dismiss} className="self-center px-3 py-1.5 text-[13px] text-white/50">
+            {t('common.cancel')}
+          </button>
+        )}
+      </div>
+    </ModalShell>
   )
 }

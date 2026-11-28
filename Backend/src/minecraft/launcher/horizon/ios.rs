@@ -84,7 +84,7 @@ pub async fn launch(app: tauri::AppHandle, run: HorizonLaunch<'_>, mut cancel: w
 
     if !resources_ready() {
         return Err(anyhow!(
-            "Il manque les fichiers du jeu : prépare-les sur ton PC (Paramètres → Stockage → Exporter pour iPhone), puis importe-les ici (Paramètres → Stockage)"
+            "Il manque les fichiers du jeu : télécharge-les dans Paramètres → Stockage"
         ));
     }
 

@@ -40,6 +40,8 @@ import { isLinkUrl, parseLinkCode, pushLinkCode } from '@/lib/deviceLink'
 import { matches as isMobileNow, useIsMobile } from '@/mobile/useIsMobile'
 import { finishSplash, splashActive, useSplashGone, useSplashRevealed } from '@/lib/bootSplash'
 import { DRAWER_ROOTS, NavDrawer } from '@/mobile/ui/NavDrawer'
+import { HorizonResourcesSheet } from '@/components/settings/HorizonIosResources'
+import { launchInstance } from '@/mobile/home/useMobileLaunch'
 import { KeptTabs } from '@/mobile/KeptTabs'
 
 // Chargées à la demande — évite de tout regrouper dans un seul chunk JS au
@@ -960,6 +962,9 @@ export default function App() {
           posé une fois ici, hors de la transition de page, et ouvert par le
           bouton ☰ des en-têtes. */}
       {mobile && !onboarding && <NavDrawer />}
+      {/* iPhone : télécharger les fichiers du jeu d'Horizon au lancement
+          d'une instance qui n'en a pas, puis la lancer. */}
+      {mobile && !onboarding && <HorizonResourcesSheet onReady={(id, server) => void launchInstance(id, server)} />}
     </div>
   )
 }

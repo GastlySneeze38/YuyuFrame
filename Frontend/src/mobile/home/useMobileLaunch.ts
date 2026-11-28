@@ -5,7 +5,8 @@ import { useTauriEvent } from '@/hooks/useTauriEvent'
 import { useStore } from '@/stores/useStore'
 import { showError, showNotice } from '@/stores/useErrorToast'
 import { t, useT } from '@/i18n'
-import { isPhoneApp } from '@/lib/platform'
+import { isIosApp, isPhoneApp } from '@/lib/platform'
+import { useHorizonResources } from '@/lib/horizonResources'
 
 /** Où en est le lancement d'une instance : un pourcentage et ce qui se passe. */
 export interface LaunchStep {
@@ -59,6 +60,15 @@ export function requestInstancePick() {
 export async function launchInstance(instanceId: string, connectServer?: string) {
   const store = useStore.getState()
   if (!store.username || store.isInstanceRunning(instanceId)) return
+  // iPhone : sans les fichiers du jeu, Horizon ne démarre pas. Plutôt qu'une
+  // erreur, la feuille qui les télécharge, puis relance (`HorizonResourcesSheet`).
+  if (isIosApp && store.instances.find((i) => i.id === instanceId)?.loader === 'horizon') {
+    const resources = useHorizonResources.getState()
+    if (!(resources.ready ?? (await resources.refresh()))) {
+      resources.ask(instanceId, connectServer)
+      return
+    }
+  }
   // Une étape à 0 % tout de suite : sans elle, entre l'appui et le premier
   // événement du Rust, l'instance passerait pour « en jeu » (anneau vert).
   setStep(instanceId, { percent: 0, message: t('home.launching') })
