@@ -167,6 +167,10 @@ const MOBILE_KEPT_TABS: Record<string, ComponentType> = {
 // Ici, `import.meta.env.DEV` vaut `false` à la compilation, la branche
 // disparaît, et le fichier avec elle.
 const DevModals = import.meta.env.DEV ? lazy(() => import('@/pages/DevModals')) : null
+// L'écran d'accueil du premier démarrage (components/onboarding/) : chargé
+// seulement quand il sert, c'est-à-dire sans aucun compte sur ce PC.
+const loadOnboarding = () => import('@/components/onboarding/Onboarding')
+const Onboarding = lazy(loadOnboarding)
 
 // Rien à montrer : une page qui n'est pas encore là laisse sa place vide le
 // temps d'un souffle. Un aplat sombre, lui, se voyait passer.
@@ -206,6 +210,15 @@ export default function App() {
   // le prochain démarrage ou la prochaine connexion. La page Compte garde
   // l'avertissement et le bouton pour confirmer.
   const [verifyLater, setVerifyLater] = useState(false)
+  // Ni compte YuyuFrame ni compte Minecraft : l'écran d'accueil par étapes
+  // prend toute la fenêtre jusqu'à ce qu'on en sorte. Décidé au démarrage
+  // (le magasin est relu tel qu'il a été enregistré), puis tenu : se
+  // connecter pendant l'accueil ne le referme pas, c'est lui qui finit.
+  const [onboarding, setOnboarding] = useState(
+    () => !isConsoleWindow && !useStore.getState().yuyuSignedIn && !useStore.getState().uuid,
+  )
+  // Ouvert par Ctrl+Maj+O (développement) : toutes les étapes, même faites.
+  const [onboardingPreview, setOnboardingPreview] = useState(false)
   useEffect(() => {
     if (!emailVerificationRequired) setVerifyLater(false)
   }, [emailVerificationRequired])
@@ -749,6 +762,11 @@ export default function App() {
     if (!import.meta.env.DEV || isConsoleWindow) return
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.shiftKey && (e.key === 'M' || e.key === 'm')) navigate('/dev/modals')
+      // Ctrl+Maj+O : l'écran d'accueil, pour le revoir sans tout déconnecter.
+      if (e.ctrlKey && e.shiftKey && (e.key === 'O' || e.key === 'o')) {
+        setOnboardingPreview(true)
+        setOnboarding(true)
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -769,7 +787,7 @@ export default function App() {
   useEffect(() => {
     if (!splashActive()) return
     const path = location.pathname === '/' ? '/home' : location.pathname
-    const load = FIRST_SCREENS[path]
+    const load = onboarding ? loadOnboarding : FIRST_SCREENS[path]
     void (load ? load().then(() => {}, () => {}) : Promise.resolve()).then(finishSplash)
     // Une seule fois, au démarrage.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -798,7 +816,9 @@ export default function App() {
           la file. Les invitations à rejoindre et le mot de passe imposé
           restent en dehors : la première répond à un geste immédiat (un clic
           sur le lien d'un ami), le second bloque tout le reste. */}
-      <ModalQueueHost />
+      {/* Pendant l'écran d'accueil, les modales de démarrage attendent dans
+          leur file : rien ne passe devant la première impression. */}
+      {!onboarding && <ModalQueueHost />}
       {joinRequest && (
         <JoinServerModal request={joinRequest} onClose={() => setJoinRequest(null)} />
       )}
@@ -820,14 +840,15 @@ export default function App() {
           }}
         />
       )}
-      <FleetNotices />
-      <InviteStack />
+      {!onboarding && <FleetNotices />}
+      {!onboarding && <InviteStack />}
       {passwordResetRequired && !passwordLater && (
         <PasswordChangeModal forced onClose={() => {}} onLater={() => setPasswordLater(true)} />
       )}
       {/* Après le mot de passe provisoire, jamais en même temps : le serveur
           les réclame dans cet ordre. */}
-      {emailVerificationRequired && !passwordResetRequired && !verifyLater && (
+      {/* L'écran d'accueil demande le code lui-même, à son étape. */}
+      {emailVerificationRequired && !passwordResetRequired && !verifyLater && !onboarding && (
         <EmailVerifyModal forced onClose={() => setVerifyLater(true)} />
       )}
       {/* Plus de `filter: brightness()` ici (2026-11-06) : remplacé par les
@@ -849,8 +870,21 @@ export default function App() {
         {/* Téléphone : les onglets visités restent montés et ne font que se
             masquer (mobile/KeptTabs). La transition ci-dessous ne sert
             alors qu'aux autres pages. */}
-        {splashGone && mobile && <KeptTabs tabs={MOBILE_KEPT_TABS} hold={!splashRevealed} />}
-        {splashGone && !(mobile && MOBILE_KEPT_TABS[location.pathname]) && (
+        {onboarding && splashGone && (
+          <Suspense fallback={RouteFallback}>
+            <Onboarding
+              ready={splashRevealed}
+              preview={onboardingPreview}
+              onFinished={() => {
+                setOnboarding(false)
+                setOnboardingPreview(false)
+                navigate('/home', { replace: true })
+              }}
+            />
+          </Suspense>
+        )}
+        {!onboarding && splashGone && mobile && <KeptTabs tabs={MOBILE_KEPT_TABS} hold={!splashRevealed} />}
+        {!onboarding && splashGone && !(mobile && MOBILE_KEPT_TABS[location.pathname]) && (
         <PageTransition instantBetween={mobile ? DRAWER_ROOTS : undefined} hold={!splashRevealed}>
           <ErrorBoundary resetKey={location.pathname}>
           <Suspense fallback={RouteFallback}>
@@ -911,7 +945,7 @@ export default function App() {
       {/* Le menu latéral du téléphone (remplace la barre d'onglets du bas) :
           posé une fois ici, hors de la transition de page, et ouvert par le
           bouton ☰ des en-têtes. */}
-      {mobile && <NavDrawer />}
+      {mobile && !onboarding && <NavDrawer />}
     </div>
   )
 }

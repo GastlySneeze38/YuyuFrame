@@ -586,3 +586,63 @@ body {
   .rich-text h4, .rich-text h5, .rich-text h6 { font-size: 15px; }
   .rich-text code, .rich-text table { font-size: 13px; }
 }
+
+/* ── Écran d'accueil du premier démarrage (components/onboarding/) ───────────
+   Tout ce qui tourne en continu est ici, en CSS : ça reste fluide pendant que
+   l'écran charge ou attend le réseau (pas de requestAnimationFrame). Seuls
+   `transform` et `opacity` bougent. */
+
+/* La lente dérive d'une capture : jamais immobile, jamais assez pour se voir. */
+@keyframes ob-drift {
+  0% { transform: scale(1.06) translate3d(0, 0, 0); }
+  100% { transform: scale(1.16) translate3d(-2.2%, -1.4%, 0); }
+}
+.ob-drift {
+  animation: ob-drift 34s cubic-bezier(0.45, 0, 0.55, 1) infinite alternate;
+  will-change: transform;
+}
+
+/* Les particules : de petits carrés qui montent, comme celles du jeu. */
+@keyframes ob-rise {
+  0% { transform: translate3d(0, 0, 0) rotate(0deg); opacity: 0; }
+  12% { opacity: var(--ob-o, 0.7); }
+  85% { opacity: var(--ob-o, 0.7); }
+  100% { transform: translate3d(var(--ob-dx, 20px), -105vh, 0) rotate(var(--ob-r, 90deg)); opacity: 0; }
+}
+.ob-particle {
+  position: absolute;
+  bottom: -12px;
+  animation: ob-rise var(--ob-t, 14s) linear infinite;
+  animation-delay: var(--ob-d, 0s);
+  transition: background-color 1.2s ease;
+}
+
+/* Le cercle de la dernière étape qui se trace, puis la coche. */
+@keyframes ob-draw {
+  to { stroke-dashoffset: 0; }
+}
+.ob-draw {
+  animation: ob-draw 0.9s cubic-bezier(0.65, 0, 0.35, 1) forwards;
+}
+.ob-draw-late {
+  animation: ob-draw 0.45s cubic-bezier(0.23, 1, 0.32, 1) 0.7s forwards;
+}
+
+/* Le code Microsoft qui attend : un liseré qui fait le tour, lentement. */
+@keyframes ob-sheen {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(220%); }
+}
+.ob-sheen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 30%, rgb(255 255 255 / 0.12) 50%, transparent 70%);
+  animation: ob-sheen 2.4s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ob-drift, .ob-particle, .ob-sheen::after { animation: none; }
+  .ob-particle { display: none; }
+}
