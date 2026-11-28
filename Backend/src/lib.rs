@@ -105,6 +105,33 @@ pub fn run() {
                 app::deep_link::set_pending(url);
             }
 
+            // Téléphone : pas d'arguments de lancement, c'est le système qui
+            // ouvre l'appli sur le lien (QR code lu par l'appareil photo, lien
+            // touché dans un message). Celui du démarrage attend l'interface
+            // comme sur PC ; ceux qui arrivent appli ouverte prennent le même
+            // événement que le PC, donc le même chemin dans `App.tsx`.
+            #[cfg(mobile)]
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                if let Ok(Some(urls)) = app.deep_link().get_current() {
+                    if let Some(url) = urls.iter().find(|u| u.scheme() == "yuyuframe") {
+                        app::deep_link::set_pending(url.to_string());
+                    }
+                }
+                let handle = app.handle().clone();
+                app.deep_link().on_open_url(move |event| {
+                    if let Some(url) = event.urls().iter().find(|u| u.scheme() == "yuyuframe") {
+                        // Sur iPhone, même le lien du démarrage arrive par
+                        // ici, parfois avant l'interface : il est aussi
+                        // déposé dans la boîte aux lettres, que l'interface
+                        // relève en se montant. Interface déjà là : seul
+                        // l'événement compte, la boîte n'est plus relue.
+                        app::deep_link::set_pending(url.to_string());
+                        let _ = handle.emit("deep_link_join", url.to_string());
+                    }
+                });
+            }
+
             // Enregistrement du scheme yuyuframe:// — en prod l'installeur
             // NSIS/WiX s'en charge automatiquement (plugin déclaré dans
             // tauri.conf.json), mais rien ne l'enregistre en dev (`cargo tauri

@@ -52,7 +52,10 @@
     "deep-link": {
       "desktop": {
         "schemes": ["yuyuframe"]
-      }
+      },
+      "mobile": [
+        { "scheme": ["yuyuframe"], "appLink": false }
+      ]
     },
     "updater": {
       "active": true,
