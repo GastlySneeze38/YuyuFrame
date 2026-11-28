@@ -5,7 +5,7 @@ import { useTauriEvent } from '@/hooks/useTauriEvent'
 import { useStore } from '@/stores/useStore'
 import { showError, showNotice } from '@/stores/useErrorToast'
 import { t, useT } from '@/i18n'
-import { isAndroidApp } from '@/lib/platform'
+import { isPhoneApp } from '@/lib/platform'
 
 /** Où en est le lancement d'une instance : un pourcentage et ce qui se passe. */
 export interface LaunchStep {
@@ -136,7 +136,7 @@ let openedOnStart = false
  */
 export function useOpenGameOnStart() {
   const ready = useStore((s) => {
-    if (!isAndroidApp || !s.openGameOnStart || !s.username) return null
+    if (!isPhoneApp || !s.openGameOnStart || !s.username) return null
     const instance = s.instances.find((i) => i.id === s.selectedInstanceId)
     return instance?.loader === 'horizon' ? instance.id : null
   })

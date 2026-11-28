@@ -5,7 +5,7 @@ import { SNAP, press, pressIf } from '@/lib/motion'
 import { formatBytes, formatDate, formatDownloadCount } from '@/lib/format'
 import { horizonVersionName } from '@/lib/horizonVersion'
 import { openExternal } from '@/lib/openExternal'
-import { isAndroidApp } from '@/lib/platform'
+import { isPhoneApp } from '@/lib/platform'
 import { useT } from '@/i18n'
 import { useStore, useStorePick } from '@/stores/useStore'
 import { showError } from '@/stores/useErrorToast'
@@ -156,7 +156,7 @@ export function HorizonContentTab({ instance, mode, onBrowse, onCount }: {
       {mode === 'installed' ? (
         <Installed
           instance={instance}
-          sections={isAndroidApp ? ['mods', 'modpacks'] : ['mods', 'native', 'modpacks']}
+          sections={isPhoneApp ?['mods', 'modpacks'] : ['mods', 'native', 'modpacks']}
           items={c.installed}
           packs={c.packs}
           datapacks={c.datapacks}
@@ -170,10 +170,11 @@ export function HorizonContentTab({ instance, mode, onBrowse, onCount }: {
         <Browse
           key={mode}
           instance={instance}
-          // Dans l'appli Android, pas de mods natifs : du code compilé
-          // téléchargé, que le Play Store interdit (le moteur ne les charge pas).
-          kinds={mode === 'modpack' ? ['modpack'] : isAndroidApp ? ['mod'] : ['mod', 'native-mod']}
-          chips={mode === 'modpack' || isAndroidApp ? [] : ['all', 'mod', 'native']}
+          // Sur téléphone, pas de mods natifs : du code compilé téléchargé,
+          // que le Play Store comme l'App Store interdisent (le moteur ne les
+          // charge pas).
+          kinds={mode === 'modpack' ? ['modpack'] : isPhoneApp ? ['mod'] : ['mod', 'native-mod']}
+          chips={mode === 'modpack' || isPhoneApp ?[] : ['all', 'mod', 'native']}
           installed={c.installed}
           packs={c.packs}
           onChanged={c.reload}

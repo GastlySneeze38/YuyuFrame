@@ -23,7 +23,7 @@ import { MobileImportFab, MobileModsToolbar, swipeOrder } from '@/components/mod
 import { SwipeTabs } from '@/mobile/ui/SwipeTabs'
 import { TOOLBAR_ICON } from '@/components/mods/toolbarIcons'
 import { useIsMobile } from '@/mobile/useIsMobile'
-import { isAndroidApp } from '@/lib/platform'
+import { isPhoneApp } from '@/lib/platform'
 import { PacksTab } from '@/components/mods/PacksTab'
 import { OptionsTab } from '@/components/mods/OptionsTab'
 import { HorizonContentTab, HorizonPacksTab } from '@/components/mods/HorizonContentTab'
@@ -109,7 +109,7 @@ export function ModsContent({ instance, initialTab }: {
   // et dans l'appli Android, dont le moteur charge les mods de contenu et
   // WebAssembly (pas les mods natifs). Pas dans l'aperçu téléphone d'un
   // navigateur, qui n'a aucun moteur derrière.
-  const isHorizon = loader === 'horizon' && (!mobile || isAndroidApp)
+  const isHorizon = loader === 'horizon' && (!mobile || isPhoneApp)
   const [horizonCount, setHorizonCount] = useState(0)
   const { avoidBetaDependencies, pinnedMods } = useStorePick('avoidBetaDependencies', 'pinnedMods')
 

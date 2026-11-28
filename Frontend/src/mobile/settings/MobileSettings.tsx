@@ -13,7 +13,7 @@ import { EASE_OUT } from '@/lib/motion'
 import { useT, LANGUAGES } from '@/i18n'
 import type { SharedOptionsStatus } from '@/types'
 import { TouchRange } from '@/mobile/ui/TouchRange'
-import { isAndroidApp, isIosApp } from '@/lib/platform'
+import { isIosApp, isPhoneApp } from '@/lib/platform'
 import { HorizonIosResources } from '@/components/settings/HorizonIosResources'
 
 const CUSTOM_RAM_PRESETS_GO = [9, 10, 12, 16, 24, 32]
@@ -274,9 +274,9 @@ function SectionBody({ id, p }: { id: string; p: Parameters<typeof MobileSetting
               checked={s.showConsole} onChange={() => s.setShowConsole(!s.showConsole)} />
           </Group>
 
-          {/* Appli Android : choisir entre ouvrir le launcher ou directement
+          {/* Appli téléphone : choisir entre ouvrir le launcher ou directement
               le jeu (l'instance Horizon choisie). */}
-          {isAndroidApp && (
+          {isPhoneApp && (
             <Group>
               <ToggleRow label={t('horizonEngine.openGameOnStart')} desc={t('horizonEngine.openGameOnStartDesc')}
                 checked={s.openGameOnStart} onChange={() => s.setOpenGameOnStart(!s.openGameOnStart)} />

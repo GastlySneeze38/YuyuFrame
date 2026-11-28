@@ -29,7 +29,7 @@ import { HorizonVersionPicker, horizonChoiceLabel } from './HorizonVersionPicker
 import { Field, Row, Separator } from './settingsParts'
 import { HorizonGameTab } from './HorizonGameTab'
 import { HorizonFilesTab } from './HorizonFilesTab'
-import { isAndroidApp } from '@/lib/platform'
+import { isPhoneApp } from '@/lib/platform'
 
 /**
  * Les réglages d'une instance, en un seul endroit.
@@ -156,7 +156,7 @@ export function InstanceSettingsModal({
   // instance vanilla à l'arrivée. Ces onglets ne sont donc pas proposés,
   // plutôt que de proposer des réglages sans effet.
   const isHorizon = instance.loader === 'horizon'
-  const phoneEngine = isHorizon && isAndroidApp
+  const phoneEngine = isHorizon && isPhoneApp
   const tabs = useMemo(
     () => [
       { id: 'general' as const, label: t('instancesPage.tabGeneral'), icon: <IconInfo /> },

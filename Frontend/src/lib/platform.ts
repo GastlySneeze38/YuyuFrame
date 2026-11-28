@@ -28,6 +28,18 @@ export const isIosApp = inTauri && typeof navigator !== 'undefined' && (
   || (/Macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1)
 )
 
+/**
+ * L'appli téléphone, Android ou iPhone : le moteur Horizon est dans l'appli,
+ * avec les mêmes réglages, fichiers et mods (`horizon/engine.rs`,
+ * `content.rs`, compilés pour les deux). C'est cette question-là que pose
+ * presque tout l'écran d'une instance Horizon ; `isAndroidApp` et `isIosApp`
+ * ne servent qu'à ce qui diffère vraiment (préparer les fichiers du jeu).
+ *
+ * Jusqu'au 2026-11-28, ces écrans testaient `isAndroidApp` seul : sur iPhone,
+ * une instance Horizon prenait les onglets et le contenu du PC.
+ */
+export const isPhoneApp = isAndroidApp || isIosApp
+
 export function osName(): string {
   const ua = typeof navigator === 'undefined' ? '' : navigator.userAgent
   if (/Android/i.test(ua)) return 'Android'
