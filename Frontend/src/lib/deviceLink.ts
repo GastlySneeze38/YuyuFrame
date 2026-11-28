@@ -50,10 +50,19 @@ export async function scanLinkCode(): Promise<string | null> {
 
 /** Un lien de connexion reçu avant que l'écran d'accueil ne soit là. */
 let pending: string | null = null
+let lastCode: string | null = null
+let lastAt = 0
 const listeners = new Set<(code: string) => void>()
 
 /** Un lien `yuyuframe://link/…` ouvert : l'écran d'accueil s'en sert. */
 export function pushLinkCode(code: string) {
+  // Au démarrage d'un téléphone, le même lien peut arriver deux fois (lien
+  // de lancement + événement) : un code ne sert qu'une fois, le second
+  // essai afficherait une erreur.
+  const now = Date.now()
+  if (code === lastCode && now - lastAt < 5000) return
+  lastCode = code
+  lastAt = now
   if (listeners.size === 0) pending = code
   listeners.forEach((l) => l(code))
 }

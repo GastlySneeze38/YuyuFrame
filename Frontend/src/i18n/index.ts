@@ -66,7 +66,13 @@ function getPath(obj: unknown, path: string): unknown {
 
 function interpolate(str: string, vars?: Record<string, string | number>): string {
   if (!vars) return str
-  return str.replace(/\{\{(\w+)\}\}/g, (_, key) => String(vars[key] ?? ''))
+  // `{{nom}}` est la forme des dictionnaires ; une partie des textes (mods
+  // d'Horizon, double authentification…) a été écrite en `{nom}` et
+  // s'affichait telle quelle. Les deux passent ; une accolade simple dont le
+  // nom n'est pas une variable donnée reste un texte.
+  return str
+    .replace(/\{\{(\w+)\}\}/g, (_, key) => String(vars[key] ?? ''))
+    .replace(/\{(\w+)\}/g, (whole, key) => (key in vars ? String(vars[key]) : whole))
 }
 
 /** Traduit `key` (chemin en pointillés, ex: "settings.lancement.ramLabel")

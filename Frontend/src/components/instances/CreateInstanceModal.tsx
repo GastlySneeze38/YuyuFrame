@@ -15,6 +15,8 @@ import { clearDraft, useDraftState } from '@/stores/useDrafts'
 import { NameInput, DescriptionInput, SubmitButton, VersionSelect, LoaderPicker } from './InstanceFormFields'
 import { PackPicker, type PackChoice } from './PackPicker'
 import { useT } from '@/i18n'
+import { isIosApp } from '@/lib/platform'
+import { HorizonIosResources } from '@/components/settings/HorizonIosResources'
 
 const DRAFT_KEY = 'create-instance'
 
@@ -294,9 +296,13 @@ export function CreateInstanceModal({
                   création, pas le découvrir au lancement. */}
               {loader === 'horizon' && (
                 <p className="rounded-xl border border-[rgba(79,209,197,0.3)] bg-[rgba(79,209,197,0.08)] px-3 py-2.5 text-[11.5px] leading-relaxed text-[rgba(255,255,255,0.7)]">
-                  {t('instancesPage.horizonHint')}
+                  {t(isIosApp ? 'instancesPage.horizonHintIos' : 'instancesPage.horizonHint')}
                 </p>
               )}
+              {/* iPhone : pas de préparation depuis Minecraft, les fichiers du
+                  jeu viennent d'un PC. On montre ici où ils en sont et le
+                  bouton pour les importer, au lieu de le découvrir au lancement. */}
+              {loader === 'horizon' && isIosApp && <HorizonIosResources />}
             </div>
 
             {/* Horizon n'a pas de réglage de mémoire : le proposer serait un
